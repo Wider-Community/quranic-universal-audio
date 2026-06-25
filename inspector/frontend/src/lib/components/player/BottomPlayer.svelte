@@ -13,6 +13,9 @@
      */
     import { onDestroy, onMount } from 'svelte';
 
+    import { localeStore, tr } from '$lib/i18n/locale-store';
+    import * as m from '$lib/paraglide/messages';
+
     import { clickOutside } from '../../actions/click-outside';
     import { fetchSurahsForDelivery, type SurahEntry } from '../../api/audio-surahs';
     import { setAdoptedSource, takeAdoptedSource } from '../../playback/adopt-signal';
@@ -585,6 +588,15 @@
         && surahNums.indexOf($playerContext.surahNum) < surahNums.length - 1;
     $: canDownload = $playerContext.surahNum !== null
         && !!urls[String($playerContext.surahNum)];
+
+    $: lang = $localeStore;
+    $: pickSurahLabel = tr(lang, m.common_player_pick_surah());
+    $: surahFallbackLabel = tr(
+        lang,
+        m.common_player_surah_fallback({ num: $playerContext.surahNum ?? 0 }),
+    );
+    $: speedTitle = tr(lang, m.common_player_speed_title());
+    $: downloadLabel = tr(lang, m.common_player_download_label());
 </script>
 
 <div class="player" class:has-reciter={$playerContext.reciter !== null}>
@@ -624,9 +636,9 @@
                         aria-haspopup="dialog"
                     >
                         {#if $playerContext.surahNum}
-                            {activeSurahName ?? `Surah ${$playerContext.surahNum}`}
+                            {activeSurahName ?? surahFallbackLabel}
                         {:else}
-                            Pick surah
+                            {pickSurahLabel}
                         {/if}
                     </button>
                     {#if surahPopoverOpen}
@@ -671,7 +683,7 @@
                     type="button"
                     class="speed-btn"
                     on:click={cycleSpeed}
-                    title="Playback speed"
+                    title={speedTitle}
                 >{$playerContext.speed}×</button>
 
                 <!-- Tab-specific cluster (Timestamps: analysis row). -->
@@ -683,8 +695,8 @@
                 class="download-btn"
                 on:click={downloadSurah}
                 disabled={!canDownload}
-                aria-label="Download surah"
-                title="Download surah"
+                aria-label={downloadLabel}
+                title={downloadLabel}
             >
                 <svg
                     width="16"

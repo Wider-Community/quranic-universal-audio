@@ -9,6 +9,9 @@
      * - `disabled` hard-locks the control (lock glyph, no pointer).
      * - `busy` shows an in-flight spinner and suppresses input.
      */
+    import { i18n } from '../i18n/locale.svelte';
+    import * as m from '../paraglide/messages';
+
     interface Props {
         checked: boolean;
         disabled?: boolean;
@@ -29,6 +32,9 @@
         onchange,
     }: Props = $props();
 
+    // Reading i18n.locale keeps the N/A marker + aria-label reactive on switch.
+    const naAriaLabel = $derived((i18n.locale, label ?? m.common_toggle_na_aria_label()));
+
     function fire(): void {
         if (disabled || busy || na) return;
         onchange?.(!checked);
@@ -43,7 +49,7 @@
 </script>
 
 {#if na}
-    <span class="toggle-na" {title} aria-label={label ?? 'Not applicable'}>N/A</span>
+    <span class="toggle-na" {title} aria-label={naAriaLabel}>{m.common_toggle_na_marker()}</span>
 {:else}
     <button
         type="button"

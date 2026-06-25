@@ -9,6 +9,8 @@
      *
      * Public data — shown to everyone. Hidden entirely when nothing is flagged.
      */
+    import { i18n } from '../../../lib/i18n/locale.svelte';
+    import * as m from '../../../lib/paraglide/messages';
     import type { TsFlagVerseCount } from '../../../lib/types/generated/schemas';
 
     let {
@@ -23,12 +25,15 @@
 
     let open = $state(false);
     const total = $derived(flags.reduce((sum, f) => sum + f.count, 0));
+
+    // Reading i18n.locale makes the accordion re-render on locale switch.
+    const summary = $derived((i18n.locale, m.ts_flagged_accordion_summary()));
 </script>
 
 {#if flags.length}
     <details class="tsval flagged" bind:open>
         <summary>
-            Flagged issues
+            {summary}
             <span class="count">{total}</span>
         </summary>
         <div class="rows">
@@ -38,7 +43,10 @@
                         type="button"
                         class="chip"
                         class:active={f.verse_key === activeVerse}
-                        aria-label={`Jump to flagged verse ${f.verse_key} (${f.count} ${f.count === 1 ? 'report' : 'reports'})`}
+                        aria-label={m.ts_flagged_accordion_chip_aria_label({
+                            verse: f.verse_key,
+                            count: f.count,
+                        })}
                         onclick={() => onselect(f.verse_key)}
                     >
                         {f.verse_key}

@@ -7,6 +7,9 @@
      */
     import { createEventDispatcher } from 'svelte';
 
+    import { localeStore, tr } from '$lib/i18n/locale-store';
+    import * as m from '$lib/paraglide/messages';
+
     import type { Axis } from '../../catalog/schema-descriptor';
     import FilterPill from '../FilterPill.svelte';
 
@@ -15,9 +18,11 @@
     export let perFacetCounts: Record<string, Record<string, number>>;
 
     const dispatch = createEventDispatcher<{ toggle: { axis: string; tag: string } }>();
+
+    $: filtersAriaLabel = tr($localeStore, m.common_picker_filters_aria_label());
 </script>
 
-<aside class="rail" aria-label="Secondary filters">
+<aside class="rail" aria-label={filtersAriaLabel}>
     {#each axes as axis (axis.key)}
         {@const counts = perFacetCounts[axis.key] ?? {}}
         {@const active = activeFilters[axis.key]}

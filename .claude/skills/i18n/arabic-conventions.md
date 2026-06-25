@@ -260,7 +260,7 @@ Arabic category boundaries (for `n`): **one** = 1; **two** = 2; **few** = 3–10
 
 Never approximate by reusing the English `one/other` pair for Arabic. A string like "23 reciters available to review" (PRODUCT.md's real-number example) must route through the plural machinery: e.g. `{n, plural, …} متاح للمراجعة` with the count phrase pluralized and the trailing predicate agreeing.
 
-> The on-disk message-format JSON shape for these is in `project-conventions.md` §5 (the `"match": { "count": "plural" }` + `"count=zero"`…`"count=other"` keys). This section is the *Arabic linguistic* spec; that section is the *file shape*.
+> The on-disk message-format JSON shape for these is in `project-conventions.md` §5 — the **array-of-one-variant** form (`declarations` + `selectors` + `match` keyed by `countPlural=zero…other`). This section is the *Arabic linguistic* spec; that section is the *file shape*.
 
 ---
 

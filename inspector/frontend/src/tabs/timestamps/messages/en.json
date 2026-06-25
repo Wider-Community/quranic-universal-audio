@@ -1,3 +1,73 @@
 {
-  "$schema": "https://inlang.com/schema/inlang-message-format"
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "ts_footer_analysis_group_aria_label": "Analysis tiers",
+  "ts_footer_loop_word_title": "Loop current word",
+  "ts_footer_toggle_letters_title": "Toggle letters",
+  "ts_footer_toggle_phonemes_title": "Toggle phonemes",
+  "ts_footer_shortcuts_guide_title": "Shortcuts & guide",
+  "ts_shortcuts_section_playback": "Playback",
+  "ts_shortcuts_section_navigation": "Navigation",
+  "ts_shortcuts_section_display": "Display",
+  "ts_shortcuts_section_interactions": "Interactions",
+  "ts_shortcuts_label_play_pause": "Play / pause",
+  "ts_shortcuts_label_seek_prev_next_ayah": "Seek prev / next ayah",
+  "ts_shortcuts_label_prev_next_word": "Prev / next word",
+  "ts_shortcuts_label_prev_next_ayah": "Prev / next ayah",
+  "ts_shortcuts_label_shuffle_jump": "Shuffle jump",
+  "ts_shortcuts_label_scroll_active": "Scroll active",
+  "ts_shortcuts_label_letters": "Letters",
+  "ts_shortcuts_label_phonemes": "Phonemes",
+  "ts_shortcuts_label_translations": "Translations",
+  "ts_shortcuts_label_seek_to_word": "Seek to word",
+  "ts_shortcuts_label_loop_word": "Loop word",
+  "ts_shortcuts_label_click_to_seek": "Click to seek",
+  "ts_footer_report_aria_label": "Report a timestamps issue on verse {verse}",
+  "ts_footer_report_aria_label_plain": "Report a timestamps issue",
+  "ts_footer_report_title": "Report a timestamps issue",
+  "ts_footer_report_button": "Report",
+  "ts_footer_shuffle_off_label": "Shuffle: off",
+  "ts_footer_shuffle_ayah_label": "Shuffle ayah (same reciter)",
+  "ts_footer_shuffle_both_label": "Shuffle reciter + ayah",
+  "ts_footer_picker_empty": "Pick a reciter",
+  "ts_footer_picker_listbox_aria_label": "Pick reciter",
+  "ts_footer_picker_search_placeholder": "Search reciters",
+  "ts_footer_picker_search_aria_label": "Search reciters",
+  "ts_footer_picker_no_results": "No results",
+  "ts_globe_button_title": "Translations",
+  "ts_globe_menu_aria_label": "Translation language",
+  "ts_globe_option_off": "Off",
+  "ts_translation_group_partial": "Partial · English mixed in",
+  "ts_translation_pill_partial": "partial",
+  "ts_flagmodal_title": "Report — verse {verse}",
+  "ts_flagmodal_lead": "Flag a timestamps issue on this verse.",
+  "ts_flagmodal_author_you": "You",
+  "ts_flagmodal_author_listener": "A listener",
+  "ts_flagmodal_author_anonymous": "Anonymous",
+  "ts_flagmodal_no_comment": "Flagged without a comment.",
+  "ts_flagmodal_edit_comment_label": "Edit your comment",
+  "ts_flagmodal_add_comment_label": "Add a comment (optional)",
+  "ts_flagmodal_textarea_placeholder": "Describe what looks off with the timestamps…",
+  "ts_flagmodal_remove_report": "Remove my report",
+  "ts_flagmodal_submit_report": "Submit report",
+  "ts_flagged_accordion_summary": "Flagged issues",
+  "ts_flagged_accordion_chip_aria_label": [
+    {
+      "declarations": [
+        "input count",
+        "input verse",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Jump to flagged verse {verse} ({count} report)",
+        "countPlural=other": "Jump to flagged verse {verse} ({count} reports)"
+      }
+    }
+  ],
+  "ts_validation_panel_summary": "Low-confidence verses",
+  "ts_validation_panel_chip_aria_label": "Jump to low-confidence verse {verse}",
+  "ts_unified_pause_bridge_stop_title": "Stop sign",
+  "ts_unified_pause_bridge_pause_title": "Pause"
 }

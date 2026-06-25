@@ -2,6 +2,9 @@
     /** Player transport controls: prev surah · -15s · play|pause · +15s · next surah. */
     import { createEventDispatcher } from 'svelte';
 
+    import { localeStore, tr } from '$lib/i18n/locale-store';
+    import * as m from '$lib/paraglide/messages';
+
     import LoadingSpinner from './LoadingSpinner.svelte';
 
     export let isPlaying = false;
@@ -19,33 +22,47 @@
         seekForward: void;
         toggle: void;
     }>();
+
+    $: lang = $localeStore;
+    $: prevSurahLabel = tr(lang, m.common_player_prev_surah_label());
+    $: seekBackLabel = tr(lang, m.common_player_seek_back_label());
+    $: seekForwardLabel = tr(lang, m.common_player_seek_forward_label());
+    $: nextSurahLabel = tr(lang, m.common_player_next_surah_label());
+    $: playToggleLabel = tr(
+        lang,
+        isLoading
+            ? m.common_player_loading_audio_label()
+            : isPlaying
+              ? m.common_action_pause()
+              : m.common_action_play(),
+    );
 </script>
 
 <div class="controls">
     <button
         type="button"
         class="btn"
-        aria-label="Previous surah"
+        aria-label={prevSurahLabel}
         disabled={!canStepBack}
         on:click={() => dispatch('prev')}
         on:pointerenter={() => dispatch('prevHover')}
         on:focus={() => dispatch('prevHover')}
     >⏮</button>
-    <button type="button" class="btn" aria-label="Back 15 seconds" on:click={() => dispatch('seekBack')}>«</button>
+    <button type="button" class="btn" aria-label={seekBackLabel} on:click={() => dispatch('seekBack')}>«</button>
     <button
         type="button"
         class="btn primary"
         class:loading={isLoading}
-        aria-label={isLoading ? 'Loading audio' : isPlaying ? 'Pause' : 'Play'}
+        aria-label={playToggleLabel}
         aria-busy={isLoading}
         disabled={!canPlay || isLoading}
         on:click={() => dispatch('toggle')}
     >{#if isLoading}<LoadingSpinner color="var(--accent-fg)" />{:else}{isPlaying ? '⏸' : '▶'}{/if}</button>
-    <button type="button" class="btn" aria-label="Forward 15 seconds" on:click={() => dispatch('seekForward')}>»</button>
+    <button type="button" class="btn" aria-label={seekForwardLabel} on:click={() => dispatch('seekForward')}>»</button>
     <button
         type="button"
         class="btn"
-        aria-label="Next surah"
+        aria-label={nextSurahLabel}
         disabled={!canStepForward}
         on:click={() => dispatch('next')}
         on:pointerenter={() => dispatch('nextHover')}

@@ -2,6 +2,23 @@
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "common_action_save": "حفظ",
   "common_action_cancel": "إلغاء",
+  "common_action_close": "إغلاق",
+  "common_action_retry": "إعادة المحاولة",
+  "common_action_try_again": "حاول مرة أخرى",
+  "common_action_dismiss": "تجاهل",
+  "common_action_clear_all": "مسح الكل",
+  "common_action_change": "تغيير",
+  "common_action_back": "→ رجوع",
+  "common_action_continue": "متابعة",
+  "common_action_submit": "إرسال",
+  "common_action_play": "تشغيل",
+  "common_action_pause": "إيقاف مؤقت",
+  "common_action_ok": "حسناً",
+  "common_status_saving": "جارٍ الحفظ…",
+  "common_status_submitting": "جارٍ الإرسال…",
+  "common_state_loading": "جارٍ التحميل…",
+  "common_label_optional": "اختياري",
+  "common_label_optional_paren": "(اختياري)",
   "common_auth_sign_in": "تسجيل الدخول",
   "common_auth_sign_out": "تسجيل الخروج",
   "common_auth_sign_in_with_hf": "تسجيل الدخول عبر Hugging Face",
@@ -15,5 +32,184 @@
   "common_signin_save_title": "انتهت الجلسة",
   "common_signin_save_body": "انتهت جلستك قبل حفظ التغييرات. سجّل الدخول مرة أخرى للمتابعة.",
   "common_signin_claim_expired_title": "سجّل الدخول للمتابعة",
-  "common_signin_claim_expired_body": "انتهت جلستك. سجّل الدخول مرة أخرى لمتابعة المطالبة بالقرّاء."
+  "common_signin_claim_expired_body": "انتهت جلستك. سجّل الدخول مرة أخرى لمتابعة المطالبة بالقرّاء.",
+  "common_signin_default_title": "سجّل الدخول للمساهمة",
+  "common_signin_default_body": "سجّل الدخول عبر حساب Hugging Face للمطالبة بقارئ وتعديل المقاطع. نقرأ فقط اسم المستخدم والصورة الرمزية — لا شيء غير ذلك.",
+  "common_state_available_for_request": "متاح للطلب",
+  "common_state_requested": "مطلوب",
+  "common_state_available_for_review": "متاح للمراجعة",
+  "common_state_under_review": "تحت المراجعة",
+  "common_state_published": "منشور",
+  "common_state_discarded": "مهمَل",
+  "common_player_pick_surah": "اختر سورة",
+  "common_player_surah_fallback": "سورة {num}",
+  "common_player_speed_title": "سرعة التشغيل",
+  "common_player_download_label": "تنزيل السورة",
+  "common_player_missing_words_pill": "كلمات ناقصة",
+  "common_player_missing_words_list": "الكلمات الناقصة: {words}",
+  "common_player_missing_words_none": "هذه الآية تنقصها كلمات",
+  "common_player_recitation_display_group": "عرض التلاوة",
+  "common_player_upcoming_visibility_label": "تبديل ظهور النص القادم",
+  "common_player_upcoming_text_title": "النص القادم: {state}",
+  "common_player_upcoming_state_full": "كامل",
+  "common_player_upcoming_state_hidden": "مخفي",
+  "common_player_upcoming_state_dim": "خافت",
+  "common_player_granularity_toggle_label": "تبديل الكلمة / الحرف",
+  "common_player_granularity_char_title": "حرفاً بحرف",
+  "common_player_granularity_word_title": "كلمة بكلمة",
+  "common_player_motion_toggle_label": "تبديل حركة الشريط",
+  "common_player_motion_snap_title": "الانتقال إلى الآية",
+  "common_player_motion_glide_title": "انسياب متواصل",
+  "common_player_collapse_line_title": "طي السطر",
+  "common_player_expand_line_title": "توسيع السطر",
+  "common_player_text_size_color_group": "حجم النص ولونه",
+  "common_player_highlight_color_label": "لون التمييز",
+  "common_player_size_down_label": "تصغير حجم النص",
+  "common_player_size_down_title": "نص أصغر",
+  "common_player_size_up_label": "تكبير حجم النص",
+  "common_player_size_up_title": "نص أكبر",
+  "common_player_bookmarks_group": "العلامات المرجعية",
+  "common_player_bookmark_remove_title": "إزالة العلامة المرجعية",
+  "common_player_bookmark_add_title": "إضافة علامة مرجعية لهذه الآية",
+  "common_player_bookmarks_panel_open": "فتح لوحة العلامات المرجعية",
+  "common_player_prev_surah_label": "السورة السابقة",
+  "common_player_seek_back_label": "للخلف 15 ثانية",
+  "common_player_loading_audio_label": "جارٍ تحميل الصوت",
+  "common_player_seek_forward_label": "للأمام 15 ثانية",
+  "common_player_next_surah_label": "السورة التالية",
+  "common_player_pick_reciter_prompt": "اختر قارئاً للبدء",
+  "common_player_switch_combination_label": "تبديل المجموعة",
+  "common_player_progress_label": "موضع التشغيل",
+  "common_player_surah_picker_label": "منتقي السور",
+  "common_player_surah_filter_placeholder": "تصفية السور…",
+  "common_player_surah_no_matches": "لا توجد نتائج",
+  "common_picker_default_title": "اختر قارئاً",
+  "common_picker_search_placeholder": "ابحث عن القرّاء — الاسم بالعربية أو الإنجليزية",
+  "common_picker_loading": "جارٍ التحميل…",
+  "common_picker_no_matches": "لا توجد نتائج. جرّب تصفية أو بحثاً مختلفاً.",
+  "common_picker_section_your_active_claims": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=zero": "لا مطالبات نشطة لك",
+        "countPlural=one": "مطالبتك النشطة",
+        "countPlural=two": "مطالبتاك النشطتان",
+        "countPlural=few": "مطالباتك النشطة",
+        "countPlural=many": "مطالباتك النشطة",
+        "countPlural=other": "مطالباتك النشطة"
+      }
+    }
+  ],
+  "common_picker_load_error_fallback": "تعذّر تحميل القرّاء",
+  "common_picker_filters_aria_label": "تصفية ثانوية",
+  "common_picker_hint_navigate": "تنقّل",
+  "common_picker_hint_select": "اختيار",
+  "common_picker_hint_close": "إغلاق",
+  "common_picker_hint_search": "بحث",
+  "common_picker_review_ready_badge": "جاهز",
+  "common_picker_review_ready_title": "معلّم كجاهز للمراجعة",
+  "common_picker_review_claimed_by_title": "مطالب به من قبل {login}",
+  "common_picker_tab_all": "الكل",
+  "common_picker_tabs_aria_label": "الحالة",
+  "common_claim_confirm_release_first_title": "حرّر مطالبتك الحالية أولاً",
+  "common_claim_confirm_release_first_body": "لديك بالفعل مطالبة على {name}. يمكنك العمل على قارئ واحد في كل مرة — ألغِ المطالبة (أو علّمها كجاهزة) قبل المطالبة بآخر.",
+  "common_claim_confirm_title": "المطالبة بهذه التلاوة للمراجعة؟",
+  "common_claim_confirm_body": "ستتيح لك المطالبة بهذه التلاوة تعديل مقاطعها وإصلاحها بشكل مستقل. يمكنك الاحتفاظ بمطالبة واحدة في كل مرة، تحرّر عند الانتهاء من التعديل وتعليمها كجاهزة. يمكنك أيضاً إلغاء المطالبة في أي وقت أو الانتقال إلى أخرى.",
+  "common_claim_confirm_busy": "جارٍ المطالبة…",
+  "common_claim_confirm_cta": "تأكيد",
+  "common_claim_button_label": "مطالبة بالمراجعة",
+  "common_bookmarks_panel_aria_label": "العلامات المرجعية",
+  "common_bookmarks_heading": "العلامات المرجعية",
+  "common_bookmarks_conn_dev_stub_title": "بديل تطوير محلي — ليس تسجيل دخول حقيقياً عبر Quran.Foundation. لا حساب ولا رمز معني.",
+  "common_bookmarks_conn_dev_stub_label": "⚙ بديل التطوير (محلي فقط)",
+  "common_bookmarks_conn_synced_title": "متزامن مع Quran.Foundation",
+  "common_bookmarks_conn_synced_label": "● متزامن",
+  "common_bookmarks_disconnect": "قطع الاتصال",
+  "common_bookmarks_connect_dev_stub": "اتصال (بديل تطوير)",
+  "common_bookmarks_conn_hint_dev": "محفوظ محلياً. اتصل للمزامنة عبر تطبيقات Quran.com.",
+  "common_bookmarks_connect_qf": "الاتصال بـ Quran.Foundation",
+  "common_bookmarks_conn_hint_anon": "يفتح علامة تبويب جديدة لتسجيل الدخول. تحفظ العلامات المرجعية محلياً حتى ذلك الحين.",
+  "common_bookmarks_empty": "لا توجد علامات مرجعية بعد. افتح آية في الطوابع الزمنية واضغط ☆ لحفظها.",
+  "common_bookmarks_item_surah_fallback": "سورة {surah}",
+  "common_bookmarks_item_ayah": "آية {ayah}",
+  "common_bookmarks_remove_title": "إزالة العلامة المرجعية",
+  "common_info_index_aria_label": "الانتقال إلى القسم",
+  "common_reciter_row_play_aria_label": "تشغيل {name}",
+  "common_reciter_row_combination_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=zero": "لا مجموعات",
+        "countPlural=one": "مجموعة واحدة",
+        "countPlural=two": "مجموعتان",
+        "countPlural=few": "{count} مجموعات",
+        "countPlural=many": "{count} مجموعة",
+        "countPlural=other": "{count} مجموعة"
+      }
+    }
+  ],
+  "common_reciter_row_riwayah_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=zero": "لا روايات",
+        "countPlural=one": "رواية واحدة",
+        "countPlural=two": "روايتان",
+        "countPlural=few": "{count} روايات",
+        "countPlural=many": "{count} رواية",
+        "countPlural=other": "{count} رواية"
+      }
+    }
+  ],
+  "common_reciter_row_style_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=zero": "لا أساليب",
+        "countPlural=one": "أسلوب واحد",
+        "countPlural=two": "أسلوبان",
+        "countPlural=few": "{count} أساليب",
+        "countPlural=many": "{count} أسلوباً",
+        "countPlural=other": "{count} أسلوب"
+      }
+    }
+  ],
+  "common_search_input_placeholder": "بحث",
+  "common_search_input_count_label": "{count} من {total}",
+  "common_select_no_results": "لا توجد نتائج",
+  "common_toggle_na_marker": "غير منطبق",
+  "common_toggle_na_aria_label": "غير منطبق",
+  "common_chip_multiselect_placeholder": "بحث…",
+  "common_chip_multiselect_all_added": "أضيف الكل",
+  "common_chip_multiselect_no_matches": "لا توجد نتائج",
+  "common_chip_multiselect_remove_aria_label": "إزالة {label}",
+  "common_external_links_nav_aria_label": "روابط المشروع",
+  "common_external_links_releases_label": "الإصدارات",
+  "common_external_links_dataset_label": "مجموعة البيانات",
+  "common_speed_control_label": "السرعة:",
+  "common_picker_switch_reciter_title": "تغيير القارئ"
 }

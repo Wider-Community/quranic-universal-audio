@@ -12,6 +12,8 @@
      * their own comment across refreshes.
      */
     import Modal from '../../../lib/components/Modal.svelte';
+    import { i18n } from '../../../lib/i18n/locale.svelte';
+    import * as m from '../../../lib/paraglide/messages';
     import { can } from '../../../lib/stores/capabilities';
     import { currentUser } from '../../../lib/stores/current-user';
     import type { TsFlagComment } from '../../../lib/types/generated/schemas';
@@ -41,6 +43,18 @@
     let loadKey = $state('');
 
     const myComment = $derived(comments.find((c) => c.mine) ?? null);
+
+    // Reading i18n.locale makes the modal re-render (and its m.*() calls
+    // re-evaluate) when the locale switches.
+    const title = $derived((i18n.locale, m.ts_flagmodal_title({ verse: verseKey })));
+    const commentLabel = $derived(
+        (i18n.locale,
+        myComment ? m.ts_flagmodal_edit_comment_label() : m.ts_flagmodal_add_comment_label()),
+    );
+    const submitLabel = $derived(
+        (i18n.locale,
+        myComment ? m.common_action_save() : m.ts_flagmodal_submit_report()),
+    );
 
     function anonTokenIfNeeded(): string | null {
         return $currentUser.hf_user_id === null ? getAnonToken() : null;
@@ -98,7 +112,7 @@
 
     function authorLabel(c: TsFlagComment): string {
         if (!c.author) return '';
-        return c.author.login ?? 'Anonymous';
+        return c.author.login ?? m.ts_flagmodal_author_anonymous();
     }
 
     function fmtDate(iso: string): string {
@@ -114,14 +128,14 @@
     }
 </script>
 
-<Modal {open} size="narrow" title={`Report — verse ${verseKey}`} on:close={onclose}>
+<Modal {open} size="narrow" {title} on:close={onclose}>
     <div class="ts-flag-modal">
         <p class="lead">
-            Flag a timestamps issue on this verse.
+            {m.ts_flagmodal_lead()}
         </p>
 
         {#if loading}
-            <p class="muted">Loading…</p>
+            <p class="muted">{m.common_state_loading()}</p>
         {:else if comments.length}
             <ul class="comments">
                 {#each comments as c, i (i)}
@@ -130,16 +144,16 @@
                             {#if $canSeeIdentity && authorLabel(c)}
                                 <span class="author">{authorLabel(c)}</span>
                             {:else if c.mine}
-                                <span class="author">You</span>
+                                <span class="author">{m.ts_flagmodal_author_you()}</span>
                             {:else}
-                                <span class="author muted">A listener</span>
+                                <span class="author muted">{m.ts_flagmodal_author_listener()}</span>
                             {/if}
                             <span class="when">{fmtDate(c.updated_at)}</span>
                         </div>
                         {#if c.comment}
                             <p class="body">{c.comment}</p>
                         {:else}
-                            <p class="body muted">Flagged without a comment.</p>
+                            <p class="body muted">{m.ts_flagmodal_no_comment()}</p>
                         {/if}
                     </li>
                 {/each}
@@ -147,11 +161,11 @@
         {/if}
 
         <label class="field">
-            <span class="label">{myComment ? 'Edit your comment' : 'Add a comment (optional)'}</span>
+            <span class="label">{commentLabel}</span>
             <textarea
                 bind:value={draft}
                 rows="3"
-                placeholder="Describe what looks off with the timestamps…"
+                placeholder={m.ts_flagmodal_textarea_placeholder()}
             ></textarea>
         </label>
     </div>
@@ -160,15 +174,15 @@
         <div class="footer-row">
             {#if myComment}
                 <button type="button" class="btn-text danger" onclick={removeMine} disabled={saving}>
-                    Remove my report
+                    {m.ts_flagmodal_remove_report()}
                 </button>
             {:else}
                 <span></span>
             {/if}
             <div class="footer-actions">
-                <button type="button" class="btn-text" onclick={onclose} disabled={saving}>Cancel</button>
+                <button type="button" class="btn-text" onclick={onclose} disabled={saving}>{m.common_action_cancel()}</button>
                 <button type="button" class="btn-primary" onclick={submit} disabled={saving}>
-                    {myComment ? 'Save' : 'Submit report'}
+                    {submitLabel}
                 </button>
             </div>
         </div>

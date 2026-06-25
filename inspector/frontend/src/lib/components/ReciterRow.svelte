@@ -11,6 +11,9 @@
      */
     import { createEventDispatcher } from 'svelte';
 
+    import { localeStore, tr } from '$lib/i18n/locale-store';
+    import * as m from '$lib/paraglide/messages';
+
     import type { PublicDelivery, PublicReciter } from '../types/generated/schemas';
     import { BUCKET_PRIORITY, type PublicBucket } from '../types/public-bucket';
     import { countryName } from '../utils/delivery-label';
@@ -42,6 +45,11 @@
     $: riwayahCount = new Set(visibleDeliveries.map((d) => d.riwayah)).size;
     $: styleCount = new Set(visibleDeliveries.map((d) => d.style)).size;
 
+    $: playAriaLabel = tr($localeStore, m.common_reciter_row_play_aria_label({ name: reciter.name }));
+    $: combinationLabel = tr($localeStore, m.common_reciter_row_combination_count({ count: combinationCount }));
+    $: riwayahLabel = tr($localeStore, m.common_reciter_row_riwayah_count({ count: riwayahCount }));
+    $: styleLabel = tr($localeStore, m.common_reciter_row_style_count({ count: styleCount }));
+
     function computeVisibleBuckets(dels: PublicDelivery[]): PublicBucket[] {
         const present = new Set<PublicBucket>(dels.map((d) => d.bucket));
         const nonSuppressible = [...present].filter((b) => !SUPPRESSIBLE.has(b));
@@ -67,7 +75,7 @@
         <button
             type="button"
             class="play"
-            aria-label="Play {reciter.name}"
+            aria-label={playAriaLabel}
             on:click={onPlay}
             disabled={combinationCount === 0}
         >▶</button>
@@ -96,18 +104,9 @@
 
     <div class="right">
         {#if combinationCount > 0}
-            <span class="pill">
-                <span class="pill-n">{combinationCount}</span>
-                {combinationCount === 1 ? 'combination' : 'combinations'}
-            </span>
-            <span class="pill">
-                <span class="pill-n">{riwayahCount}</span>
-                {riwayahCount === 1 ? 'riwayah' : 'riwayahs'}
-            </span>
-            <span class="pill">
-                <span class="pill-n">{styleCount}</span>
-                {styleCount === 1 ? 'style' : 'styles'}
-            </span>
+            <span class="pill">{combinationLabel}</span>
+            <span class="pill">{riwayahLabel}</span>
+            <span class="pill">{styleLabel}</span>
         {/if}
     </div>
 </div>
@@ -207,11 +206,6 @@
         border: 1px solid var(--border-quiet);
         border-radius: var(--r-2);
         white-space: nowrap;
-    }
-    .pill-n {
-        font-family: var(--font-mono);
-        font-variant-numeric: tabular-nums;
-        color: var(--text-primary);
     }
     @media (max-width: 720px) {
         .pill { font-size: 10.5px; padding: 1px 6px; }

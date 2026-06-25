@@ -4,11 +4,17 @@
     contribution action (claim, save, etc.).
 -->
 <script lang="ts">
+    import { localeStore, tr } from '$lib/i18n/locale-store';
+    import * as m from '$lib/paraglide/messages';
+
     import { signIn } from '../api/auth-client';
     import { closeSignInModal, signInModal } from '../stores/sign-in-modal';
 
-    $: title = $signInModal.context?.title ?? 'Sign in to contribute';
-    $: body = $signInModal.context?.body ?? 'Sign in with your Hugging Face account to claim a reciter and edit segments. We only read your username and avatar — nothing else.';
+    $: lang = $localeStore;
+    $: title = $signInModal.context?.title ?? tr(lang, m.common_signin_default_title());
+    $: body = $signInModal.context?.body ?? tr(lang, m.common_signin_default_body());
+    $: continueLabel = tr(lang, m.common_auth_continue_with_hf());
+    $: cancelLabel = tr(lang, m.common_action_cancel());
 
     function _onContinue() {
         const returnPath = $signInModal.returnPath ?? '/';
@@ -39,14 +45,14 @@
             <p class="sign-in-body">{body}</p>
             <div class="sign-in-actions">
                 <button type="button" class="sign-in-cta" on:click={_onContinue}>
-                    Continue with Hugging Face
+                    {continueLabel}
                 </button>
                 <button
                     type="button"
                     class="sign-in-dismiss"
                     on:click={closeSignInModal}
                 >
-                    Cancel
+                    {cancelLabel}
                 </button>
             </div>
         </div>

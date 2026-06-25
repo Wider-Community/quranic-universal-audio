@@ -19,6 +19,8 @@
      * previously reached (a regressed delivery — e.g. un-published back to
      * under-review — only shows dates for its current position and below).
      */
+    import { i18n } from '../../../lib/i18n/locale.svelte';
+    import * as m from '../../../lib/paraglide/messages';
     import type { PublicDelivery } from '../../../lib/types/generated/schemas';
     import { PUBLIC_BUCKET_LABELS, type PublicBucket } from '../../../lib/types/public-bucket';
 
@@ -74,6 +76,7 @@
     }
 
     const items = $derived.by<TimelineItem[]>(() => {
+        void i18n.locale; // re-derive labels/tooltips on locale switch
         const axis: TimelineItem[] = AXIS.map((b, i) => {
             const reached = i <= currentIdx;
             const entries = bucketDates[b] ?? [];
@@ -88,9 +91,13 @@
             }
             const visits = reached ? entries.length : 0;
             const tooltip = visits > 1
-                ? `${PUBLIC_BUCKET_LABELS[b]} — entered ${visits}×:\n${entries.map(fmtDateTime).join('\n')}`
+                ? m.dashboard_timeline_tooltip_entered_count({
+                      label: PUBLIC_BUCKET_LABELS[b](),
+                      count: visits,
+                      dates: entries.map(fmtDateTime).join('\n'),
+                  })
                 : '';
-            return { id: b, label: PUBLIC_BUCKET_LABELS[b], reached, current: i === currentIdx, date, visits, tooltip };
+            return { id: b, label: PUBLIC_BUCKET_LABELS[b](), reached, current: i === currentIdx, date, visits, tooltip };
         });
 
         // Conditional 5th node — timestamp regenerations (every TS generation
@@ -100,21 +107,24 @@
             const visits = tsRefreshDates.length;
             axis.push({
                 id: 'ts_refreshed',
-                label: 'Timestamps refreshed',
+                label: m.dashboard_timeline_node_ts_refreshed(),
                 reached: true,
                 current: false,
                 date: fmtDate(latest),
                 visits,
                 tooltip: visits > 1
-                    ? `Timestamps refreshed — ${visits}×:\n${tsRefreshDates.map(fmtDateTime).join('\n')}`
-                    : `Timestamps refreshed ${fmtDateTime(latest)}`,
+                    ? m.dashboard_timeline_tooltip_ts_refreshed_count({
+                          count: visits,
+                          dates: tsRefreshDates.map(fmtDateTime).join('\n'),
+                      })
+                    : m.dashboard_timeline_tooltip_ts_refreshed_single({ datetime: fmtDateTime(latest) }),
             });
         }
         return axis;
     });
 </script>
 
-<div class="timeline" role="list" aria-label="Combination lifecycle">
+<div class="timeline" role="list" aria-label={m.dashboard_timeline_aria_label()}>
     <div class="axis"></div>
     <ol class="nodes" style="grid-template-columns: repeat({items.length}, 1fr)">
         {#each items as item, i (item.id)}
@@ -130,7 +140,7 @@
                     <div class="label">{item.label}</div>
                     {#if item.date}
                         <div class="date">
-                            {item.date}{#if item.visits > 1}<span class="repeat" aria-label="entered {item.visits} times">×{item.visits}</span>{/if}
+                            {item.date}{#if item.visits > 1}<span class="repeat" aria-label={m.dashboard_timeline_repeat_aria_label({ count: item.visits })}>×{item.visits}</span>{/if}
                         </div>
                     {:else}
                         <div class="date faint">—</div>

@@ -1,3 +1,77 @@
 {
-  "$schema": "https://inlang.com/schema/inlang-message-format"
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "ts_footer_analysis_group_aria_label": "مستويات التحليل",
+  "ts_footer_loop_word_title": "كرّر الكلمة الحالية",
+  "ts_footer_toggle_letters_title": "إظهار الحروف",
+  "ts_footer_toggle_phonemes_title": "إظهار الأصوات",
+  "ts_footer_shortcuts_guide_title": "الاختصارات والدليل",
+  "ts_shortcuts_section_playback": "التشغيل",
+  "ts_shortcuts_section_navigation": "التنقل",
+  "ts_shortcuts_section_display": "العرض",
+  "ts_shortcuts_section_interactions": "التفاعلات",
+  "ts_shortcuts_label_play_pause": "تشغيل / إيقاف مؤقت",
+  "ts_shortcuts_label_seek_prev_next_ayah": "الانتقال إلى الآية السابقة / التالية",
+  "ts_shortcuts_label_prev_next_word": "الكلمة السابقة / التالية",
+  "ts_shortcuts_label_prev_next_ayah": "الآية السابقة / التالية",
+  "ts_shortcuts_label_shuffle_jump": "قفزة عشوائية",
+  "ts_shortcuts_label_scroll_active": "تمرير إلى النشط",
+  "ts_shortcuts_label_letters": "الحروف",
+  "ts_shortcuts_label_phonemes": "الأصوات",
+  "ts_shortcuts_label_translations": "الترجمات",
+  "ts_shortcuts_label_seek_to_word": "الانتقال إلى الكلمة",
+  "ts_shortcuts_label_loop_word": "تكرار الكلمة",
+  "ts_shortcuts_label_click_to_seek": "انقر للانتقال",
+  "ts_footer_report_aria_label": "الإبلاغ عن مشكلة في الطوابع الزمنية للآية {verse}",
+  "ts_footer_report_aria_label_plain": "الإبلاغ عن مشكلة في الطوابع الزمنية",
+  "ts_footer_report_title": "الإبلاغ عن مشكلة في الطوابع الزمنية",
+  "ts_footer_report_button": "إبلاغ",
+  "ts_footer_shuffle_off_label": "العشوائية: متوقفة",
+  "ts_footer_shuffle_ayah_label": "آية عشوائية (القارئ نفسه)",
+  "ts_footer_shuffle_both_label": "قارئ وآية عشوائيان",
+  "ts_footer_picker_empty": "اختر قارئاً",
+  "ts_footer_picker_listbox_aria_label": "اختر قارئاً",
+  "ts_footer_picker_search_placeholder": "ابحث في القرّاء",
+  "ts_footer_picker_search_aria_label": "ابحث في القرّاء",
+  "ts_footer_picker_no_results": "لا نتائج",
+  "ts_globe_button_title": "الترجمات",
+  "ts_globe_menu_aria_label": "لغة الترجمة",
+  "ts_globe_option_off": "متوقفة",
+  "ts_translation_group_partial": "جزئية · مع إنجليزية ممزوجة",
+  "ts_translation_pill_partial": "جزئية",
+  "ts_flagmodal_title": "إبلاغ — الآية {verse}",
+  "ts_flagmodal_lead": "أبلغ عن مشكلة في الطوابع الزمنية لهذه الآية.",
+  "ts_flagmodal_author_you": "أنت",
+  "ts_flagmodal_author_listener": "مستمع",
+  "ts_flagmodal_author_anonymous": "مجهول",
+  "ts_flagmodal_no_comment": "تم الإبلاغ دون تعليق.",
+  "ts_flagmodal_edit_comment_label": "تعديل تعليقك",
+  "ts_flagmodal_add_comment_label": "إضافة تعليق (اختياري)",
+  "ts_flagmodal_textarea_placeholder": "صف ما يبدو غير صحيح في الطوابع الزمنية…",
+  "ts_flagmodal_remove_report": "إزالة بلاغي",
+  "ts_flagmodal_submit_report": "إرسال البلاغ",
+  "ts_flagged_accordion_summary": "المشكلات المبلغ عنها",
+  "ts_flagged_accordion_chip_aria_label": [
+    {
+      "declarations": [
+        "input count",
+        "input verse",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=zero": "الانتقال إلى الآية المبلغ عنها {verse} (لا بلاغات)",
+        "countPlural=one": "الانتقال إلى الآية المبلغ عنها {verse} (بلاغ واحد)",
+        "countPlural=two": "الانتقال إلى الآية المبلغ عنها {verse} (بلاغان)",
+        "countPlural=few": "الانتقال إلى الآية المبلغ عنها {verse} ({count} بلاغات)",
+        "countPlural=many": "الانتقال إلى الآية المبلغ عنها {verse} ({count} بلاغاً)",
+        "countPlural=other": "الانتقال إلى الآية المبلغ عنها {verse} ({count} بلاغ)"
+      }
+    }
+  ],
+  "ts_validation_panel_summary": "آيات منخفضة الثقة",
+  "ts_validation_panel_chip_aria_label": "الانتقال إلى الآية منخفضة الثقة {verse}",
+  "ts_unified_pause_bridge_stop_title": "علامة وقف",
+  "ts_unified_pause_bridge_pause_title": "وقف مؤقت"
 }

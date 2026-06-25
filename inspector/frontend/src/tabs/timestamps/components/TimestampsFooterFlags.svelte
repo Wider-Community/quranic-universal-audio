@@ -11,6 +11,8 @@
      * add/edit their own. The button lights up when the playing verse already
      * carries reports.
      */
+    import { i18n } from '../../../lib/i18n/locale.svelte';
+    import * as m from '../../../lib/paraglide/messages';
     import { can } from '../../../lib/stores/capabilities';
     import { playerContext } from '../../../lib/stores/player-context';
     import { selectedVerse } from '../stores/verse';
@@ -28,6 +30,12 @@
     const disabled = $derived(!curSlug || !curVerse);
     const flaggedVerseKeys = $derived(new Set($tsFlaggedVerses.map((f) => f.verse_key)));
     const isFlagged = $derived(!!curVerse && flaggedVerseKeys.has(curVerse));
+    const reportAriaLabel = $derived(
+        (i18n.locale,
+        curVerse
+            ? m.ts_footer_report_aria_label({ verse: curVerse })
+            : m.ts_footer_report_aria_label_plain()),
+    );
 
     function openReport(): void {
         if (disabled) return;
@@ -52,8 +60,8 @@
         class:flagged={isFlagged}
         {disabled}
         onclick={openReport}
-        aria-label={`Report a timestamps issue${curVerse ? ` on verse ${curVerse}` : ''}`}
-        title="Report a timestamps issue"
+        aria-label={reportAriaLabel}
+        title={m.ts_footer_report_title()}
     >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path
@@ -64,7 +72,7 @@
                 stroke-linejoin="round"
             />
         </svg>
-        <span>Report</span>
+        <span>{m.ts_footer_report_button()}</span>
     </button>
 
     {#if snapSlug && snapVerse}

@@ -15,12 +15,18 @@
 <script lang="ts">
     import { createEventDispatcher, onDestroy } from 'svelte';
 
+    import { localeStore, tr } from '$lib/i18n/locale-store';
+    import * as m from '$lib/paraglide/messages';
+
     export let value = '';
-    export let placeholder = 'Search';
+    export let placeholder: string | undefined = undefined;
     export let count: number | null = null;
     export let total: number | null = null;
     export let ariaLabel: string | undefined = undefined;
     export let debounceMs = 0;
+
+    // Default placeholder is the localized "Search"; callers may override it.
+    $: effectivePlaceholder = placeholder ?? tr($localeStore, m.common_search_input_placeholder());
 
     let inputEl: HTMLInputElement | null = null;
     export function focus(): void { inputEl?.focus(); }
@@ -60,7 +66,10 @@
 
     onDestroy(() => { if (timer) clearTimeout(timer); });
 
-    $: countLabel = count !== null && total !== null ? `${count} of ${total}` : null;
+    $: countLabel =
+        count !== null && total !== null
+            ? tr($localeStore, m.common_search_input_count_label({ count, total }))
+            : null;
 </script>
 
 <div class="search-input">
@@ -74,8 +83,8 @@
         bind:this={inputEl}
         type="search"
         autocomplete="off"
-        {placeholder}
-        aria-label={ariaLabel ?? placeholder}
+        placeholder={effectivePlaceholder}
+        aria-label={ariaLabel ?? effectivePlaceholder}
         value={display}
         on:input={onInput}
     />

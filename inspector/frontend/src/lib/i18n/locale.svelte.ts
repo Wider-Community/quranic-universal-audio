@@ -28,7 +28,10 @@ registerRuneSetter((loc) => {
     _locale = loc as Locale;
 });
 
-const RTL: ReadonlySet<string> = new Set(['ar']);
+// Strings-only pass: the layout stays LTR (Arabic text still renders RTL within
+// its boxes via the bidi algorithm). The RTL layout workflow re-adds 'ar' here
+// once the physical->logical CSS conversion + time-axis dir="ltr" islands land.
+const RTL: ReadonlySet<string> = new Set<string>();
 
 function applyDocument(loc: Locale): void {
     const el = document.documentElement;

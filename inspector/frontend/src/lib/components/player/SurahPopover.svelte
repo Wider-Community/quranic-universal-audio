@@ -5,6 +5,9 @@
      */
     import { createEventDispatcher, onMount, tick } from 'svelte';
 
+    import { localeStore, tr } from '$lib/i18n/locale-store';
+    import * as m from '$lib/paraglide/messages';
+
     import { getSurahInfo, surahInfoReady, surahOptionText } from '../../utils/surah-info';
 
     export let surahNums: number[] = [];
@@ -55,16 +58,20 @@
             pick(filtered[0]!.n);
         }
     }
+
+    $: pickerLabel = tr($localeStore, m.common_player_surah_picker_label());
+    $: filterPlaceholder = tr($localeStore, m.common_player_surah_filter_placeholder());
+    $: noMatches = tr($localeStore, m.common_player_surah_no_matches());
 </script>
 
-<div class="wrap" role="dialog" aria-label="Surah picker">
+<div class="wrap" role="dialog" aria-label={pickerLabel}>
     <input
         bind:this={inputEl}
         bind:value={query}
         on:keydown={onKeydown}
         class="search"
         type="text"
-        placeholder="Filter surahs…"
+        placeholder={filterPlaceholder}
         autocomplete="off"
     />
     <div class="grid" role="listbox">
@@ -86,7 +93,7 @@
                 </span>
             </button>
         {:else}
-            <div class="empty">No matches</div>
+            <div class="empty">{noMatches}</div>
         {/each}
     </div>
 </div>

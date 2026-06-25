@@ -195,26 +195,38 @@ Pass data through Paraglide **message params**, never string concatenation that 
 
 English has 2 plural forms; **Arabic has 6** (`zero`, `one`, `two`, `few`, `many`, `other`). Use the message-format **match/variant** syntax so each locale supplies its own complete set. A missing category falls through to `other` and reads wrong in Arabic — supply all six in `ar.json`. (Arabic category boundaries are in `arabic-conventions.md` §10.)
 
-```jsonc
-// en.json — 2 forms
-"segments_validation_issue_count": {
-  "match": { "count": "plural" },
-  "count=0":    "No issues",
-  "count=one":  "{count} issue",
-  "count=other":"{count} issues"
-}
+> 🚨 **The plural value is an ARRAY containing one variant object** — the exact shape below, verified against `@inlang/plugin-message-format@4.4.0`. Do **not** use the flat `{ "match": { "count": "plural" }, "count=one": … }` form: the plugin does **not** recognize it as a variant, silently flattens each `count=…` sub-key into a *separate* message (`…_count_one`, `…_match_count`), and the wired `m.key()` function is **never generated** — `paraglide:compile` succeeds, so the breakage only surfaces as a downstream type/resolve error on the call site. Every plural uses `declarations` (`input <var>` for each placeholder + `local countPlural = count: plural`), `selectors`, and a `match` keyed by `countPlural=<category>`.
 
-// ar.json — all 6 forms
-"segments_validation_issue_count": {
-  "match": { "count": "plural" },
-  "count=zero": "لا توجد مشاكل",
-  "count=one":  "مشكلة واحدة",
-  "count=two":  "مشكلتان",
-  "count=few":  "{count} مشاكل",
-  "count=many": "{count} مشكلة",
-  "count=other":"{count} مشكلة"
-}
+```jsonc
+// en.json — English categories: one, other
+"segments_validation_issue_count": [
+  {
+    "declarations": ["input count", "local countPlural = count: plural"],
+    "selectors": ["countPlural"],
+    "match": {
+      "countPlural=one":   "{count} issue",
+      "countPlural=other": "{count} issues"
+    }
+  }
+]
+
+// ar.json — all 6 Arabic categories: zero, one, two, few, many, other
+"segments_validation_issue_count": [
+  {
+    "declarations": ["input count", "local countPlural = count: plural"],
+    "selectors": ["countPlural"],
+    "match": {
+      "countPlural=zero": "لا توجد مشاكل",
+      "countPlural=one":  "مشكلة واحدة",
+      "countPlural=two":  "مشكلتان",
+      "countPlural=few":  "{count} مشاكل",
+      "countPlural=many": "{count} مشكلة",
+      "countPlural=other":"{count} مشكلة"
+    }
+  }
+]
 ```
+For a message with extra interpolation alongside the count, declare each one: `"declarations": ["input count", "input ranges", "local countPlural = count: plural"]` and reference `{ranges}` inside the variant strings.
 ```svelte
 <span>{m.segments_validation_issue_count({ count })}</span>
 ```

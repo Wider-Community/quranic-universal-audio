@@ -1,6 +1,7 @@
 import { fireEvent, render, waitFor } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import * as m from '$lib/paraglide/messages';
 import { fetchAdminReviews } from '../../../api/admin-reviews';
 import { currentUser, resetCurrentUser } from '../../../stores/current-user';
 import type { PublicDelivery, PublicReciter } from '../../../types/generated/schemas';
@@ -114,7 +115,7 @@ describe('CombinationPicker', () => {
     it('emits a non-null delivery on first row click', async () => {
         const selected: CombinationSelection[] = [];
         const { baseElement } = render(CombinationPicker, {
-            props: { open: true, title: 'Switch reciter' },
+            props: { open: true, title: m.common_picker_switch_reciter_title() },
             events: {
                 select: (e: CustomEvent<CombinationSelection>) => {
                     selected.push(e.detail);
@@ -140,7 +141,7 @@ describe('CombinationPicker', () => {
 
     it('states the bucket once per group head, not on every grouped row', async () => {
         const { baseElement } = render(CombinationPicker, {
-            props: { open: true, title: 'Switch reciter' },
+            props: { open: true, title: m.common_picker_switch_reciter_title() },
         });
 
         await waitFor(() => {
@@ -176,7 +177,7 @@ describe('CombinationPicker', () => {
         });
 
         const { baseElement } = render(CombinationPicker, {
-            props: { open: true, title: 'Switch reciter' },
+            props: { open: true, title: m.common_picker_switch_reciter_title() },
         });
 
         const status = await waitFor(() => {
@@ -195,7 +196,7 @@ describe('CombinationPicker', () => {
     it('omits review status and skips the admin fetch without reviews.view', async () => {
         // currentUser stays anonymous (no capabilities) via afterEach reset.
         const { baseElement } = render(CombinationPicker, {
-            props: { open: true, title: 'Switch reciter' },
+            props: { open: true, title: m.common_picker_switch_reciter_title() },
         });
 
         await waitFor(() => {

@@ -20,6 +20,7 @@
     import { createEventDispatcher, onMount, tick } from 'svelte';
     import { get } from 'svelte/store';
 
+    import * as m from '$lib/paraglide/messages';
     import { clickOutside } from '../../../../lib/actions/click-outside';
     import { markReadyBypass } from '../../../../lib/api/claims-client';
     import type { ReciterTask } from '../../../../lib/api/reciter-task';
@@ -750,7 +751,7 @@
 {#if pickerOpen}
     <CombinationPicker
         open={pickerOpen}
-        title="Switch reciter"
+        title={m.common_picker_switch_reciter_title()}
         on:select={onPickerSelect}
         on:close={() => (pickerOpen = false)}
     />

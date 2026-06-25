@@ -9,6 +9,9 @@
     hit a 409. Owners may hold multiple claims, so the warning is skipped for them.
 -->
 <script lang="ts">
+    import { localeStore, tr } from '$lib/i18n/locale-store';
+    import * as m from '$lib/paraglide/messages';
+
     import { loadCatalog } from '../../tabs/dashboard/stores/catalog-data';
     import { claim } from '../api/claims-client';
     import { refreshReciterTask } from '../api/reciter-task';
@@ -18,6 +21,7 @@
 
     let busy = false;
 
+    $: lang = $localeStore;
     $: state = $claimConfirmModal;
     $: slug = state.slug;
 
@@ -30,6 +34,14 @@
             ? $currentUser.active_claim
             : null;
     $: otherClaimName = otherClaim ? titleCaseSlug(otherClaim) : '';
+
+    $: releaseFirstTitle = tr(lang, m.common_claim_confirm_release_first_title());
+    $: releaseFirstBody = tr(lang, m.common_claim_confirm_release_first_body({ name: otherClaimName }));
+    $: okLabel = tr(lang, m.common_action_ok());
+    $: confirmTitle = tr(lang, m.common_claim_confirm_title());
+    $: confirmBody = tr(lang, m.common_claim_confirm_body());
+    $: confirmCtaLabel = tr(lang, busy ? m.common_claim_confirm_busy() : m.common_claim_confirm_cta());
+    $: cancelLabel = tr(lang, m.common_action_cancel());
 
     async function _onConfirm() {
         if (busy || !slug) return;
@@ -74,23 +86,16 @@
             aria-labelledby="claim-confirm-title"
         >
             {#if otherClaim}
-                <h2 id="claim-confirm-title" class="claim-title">Release your current claim first</h2>
-                <p class="claim-body">
-                    You already hold a claim on <strong>{otherClaimName}</strong>. You can work on
-                    one reciter at a time — unclaim it (or mark it ready) before claiming another.
-                </p>
+                <h2 id="claim-confirm-title" class="claim-title">{releaseFirstTitle}</h2>
+                <p class="claim-body">{releaseFirstBody}</p>
                 <div class="claim-actions">
                     <button type="button" class="claim-dismiss" on:click={closeClaimConfirm}>
-                        OK
+                        {okLabel}
                     </button>
                 </div>
             {:else}
-                <h2 id="claim-confirm-title" class="claim-title">Claim this recitation for review?</h2>
-                <p class="claim-body">
-                    Claiming this recitation will let you edit and fix its segments independently. You can hold one
-                    claim at a time, released when you finish editing and mark it as ready. You can also
-                    unclaim at any time or switch to a different one.
-                </p>
+                <h2 id="claim-confirm-title" class="claim-title">{confirmTitle}</h2>
+                <p class="claim-body">{confirmBody}</p>
                 <div class="claim-actions">
                     <button
                         type="button"
@@ -98,10 +103,10 @@
                         disabled={busy}
                         on:click={_onConfirm}
                     >
-                        {busy ? 'Claiming…' : 'Confirm'}
+                        {confirmCtaLabel}
                     </button>
                     <button type="button" class="claim-dismiss" on:click={closeClaimConfirm}>
-                        Cancel
+                        {cancelLabel}
                     </button>
                 </div>
             {/if}
@@ -141,9 +146,6 @@
         margin: 0 0 16px;
         font-size: 0.95rem;
         line-height: 1.45;
-    }
-    .claim-body strong {
-        color: #f5f7ff;
     }
     .claim-actions {
         display: flex;

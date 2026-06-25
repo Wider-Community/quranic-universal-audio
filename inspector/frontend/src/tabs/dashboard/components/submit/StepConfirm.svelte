@@ -11,6 +11,8 @@
      */
     import { fade } from 'svelte/transition';
 
+    import { localeStore, tr } from '$lib/i18n/locale-store';
+    import * as m from '$lib/paraglide/messages';
     import { submitWizard, type Attestations } from '../../stores/submit-wizard';
 
     type Item = { key: keyof Attestations; text: string };
@@ -25,30 +27,23 @@
         }));
     }
 
-    const BASE_ITEMS: Item[] = [
-        {
-            key: 'distribution_rights',
-            text: 'To the best of my knowledge, I have the reciter’s permission or the distribution rights to share these recordings publicly.',
-        },
-        {
-            key: 'links_verified',
-            text: 'I have verified that links work and play the correct chapters, and that the metadata is accurate.',
-        },
-        {
-            key: 'storage_rights',
-            text: 'I grant Quranic Universal Audio the right to download, process, distribute, and store this audio permanently, under CC By 4.0 license',
-        },
-    ];
-    const PLAYLIST_ITEM: Item = {
+    $: lang = $localeStore;
+    $: lede = tr(lang, m.dashboard_submit_confirm_lede());
+    $: baseItems = [
+        { key: 'distribution_rights', text: tr(lang, m.dashboard_submit_attest_distribution_rights()) },
+        { key: 'links_verified', text: tr(lang, m.dashboard_submit_attest_links_verified()) },
+        { key: 'storage_rights', text: tr(lang, m.dashboard_submit_attest_storage_rights()) },
+    ] satisfies Item[];
+    $: playlistItem = {
         key: 'playlist_public',
-        text: 'If this is my own playlist, I agree to keep it public so everyone can benefit from the audio and timings.',
-    };
+        text: tr(lang, m.dashboard_submit_attest_playlist_public()),
+    } satisfies Item;
 
-    $: items = isPlaylist ? [...BASE_ITEMS, PLAYLIST_ITEM] : BASE_ITEMS;
+    $: items = isPlaylist ? [...baseItems, playlistItem] : baseItems;
 </script>
 
 <div class="step" in:fade={{ duration: 180 }}>
-    <p class="lede">A few confirmations before we queue this for review.</p>
+    <p class="lede">{lede}</p>
 
     <ul class="checks">
         {#each items as item (item.key)}

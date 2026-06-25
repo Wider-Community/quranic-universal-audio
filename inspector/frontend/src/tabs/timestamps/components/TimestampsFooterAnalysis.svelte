@@ -10,6 +10,8 @@
      */
     import { get } from 'svelte/store';
 
+    import { i18n } from '$lib/i18n/locale.svelte';
+    import * as m from '$lib/paraglide/messages';
     import { clickOutside } from '../../../lib/actions/click-outside';
     import { dashPort } from '../../../lib/playback/dash-port';
     import { ControlIcon } from '../../../lib/recitation-animation';
@@ -21,6 +23,13 @@
     import TranslationGlobe from './TranslationGlobe.svelte';
 
     let guideOpen = $state(false);
+
+    // Attribute labels gated on i18n.locale so they re-render on a locale switch.
+    const groupAria = $derived((i18n.locale, m.ts_footer_analysis_group_aria_label()));
+    const loopTitle = $derived((i18n.locale, m.ts_footer_loop_word_title()));
+    const lettersTitle = $derived((i18n.locale, m.ts_footer_toggle_letters_title()));
+    const phonemesTitle = $derived((i18n.locale, m.ts_footer_toggle_phonemes_title()));
+    const guideTitle = $derived((i18n.locale, m.ts_footer_shortcuts_guide_title()));
 
     function persist(key: string, v: boolean): void {
         try { localStorage.setItem(key, String(v)); } catch { /* ignore */ }
@@ -48,48 +57,52 @@
         key?: string;
         label: string;
     };
-    const SHORTCUTS: { title: string; rows: GuideRow[] }[] = [
-        { title: 'Playback', rows: [
-            { key: 'Space', label: 'Play / pause' },
-            { key: '← / →', label: 'Seek prev / next ayah' },
-            { key: '↑ / ↓', label: 'Prev / next word' },
-        ] },
-        { title: 'Navigation', rows: [
-            { key: '[ / ]', label: 'Prev / next ayah' },
-            { key: 'R', label: 'Shuffle jump' },
-            { key: 'J', label: 'Scroll active' },
-        ] },
-        { title: 'Display', rows: [
-            { icon: 'letters', key: 'L', label: 'Letters' },
-            { icon: 'phonemes', key: 'P', label: 'Phonemes' },
-            { icon: 'globe', label: 'Translations' },
-        ] },
-        { title: 'Interactions', rows: [
-            { key: 'Click', label: 'Seek to word' },
-            { img: '/icons/loop.svg', key: 'Dbl-click', label: 'Loop word' },
-            { key: 'Waveform', label: 'Click to seek' },
-        ] },
-    ];
+    // Reading i18n.locale makes this $derived (and the inline title/aria-label
+    // calls below) re-run when the locale switches.
+    const SHORTCUTS = $derived<{ title: string; rows: GuideRow[] }[]>(
+        (i18n.locale, [
+            { title: m.ts_shortcuts_section_playback(), rows: [
+                { key: 'Space', label: m.ts_shortcuts_label_play_pause() },
+                { key: '← / →', label: m.ts_shortcuts_label_seek_prev_next_ayah() },
+                { key: '↑ / ↓', label: m.ts_shortcuts_label_prev_next_word() },
+            ] },
+            { title: m.ts_shortcuts_section_navigation(), rows: [
+                { key: '[ / ]', label: m.ts_shortcuts_label_prev_next_ayah() },
+                { key: 'R', label: m.ts_shortcuts_label_shuffle_jump() },
+                { key: 'J', label: m.ts_shortcuts_label_scroll_active() },
+            ] },
+            { title: m.ts_shortcuts_section_display(), rows: [
+                { icon: 'letters', key: 'L', label: m.ts_shortcuts_label_letters() },
+                { icon: 'phonemes', key: 'P', label: m.ts_shortcuts_label_phonemes() },
+                { icon: 'globe', label: m.ts_shortcuts_label_translations() },
+            ] },
+            { title: m.ts_shortcuts_section_interactions(), rows: [
+                { key: 'Click', label: m.ts_shortcuts_label_seek_to_word() },
+                { img: '/icons/loop.svg', key: 'Dbl-click', label: m.ts_shortcuts_label_loop_word() },
+                { key: 'Waveform', label: m.ts_shortcuts_label_click_to_seek() },
+            ] },
+        ]),
+    );
 </script>
 
-<div class="tfa" role="group" aria-label="Analysis tiers">
+<div class="tfa" role="group" aria-label={groupAria}>
     <button
         type="button" class="icon-btn" class:on={$loopTarget !== null}
-        aria-pressed={$loopTarget !== null} title="Loop current word" onclick={toggleLoop}
+        aria-pressed={$loopTarget !== null} title={loopTitle} onclick={toggleLoop}
     ><img class="img-icon" src="/icons/loop.svg" alt="" aria-hidden="true" /></button>
     <button
         type="button" class="icon-btn" class:on={$showLetters}
-        aria-pressed={$showLetters} title="Toggle letters" onclick={toggleLetters}
+        aria-pressed={$showLetters} title={lettersTitle} onclick={toggleLetters}
     ><ControlIcon name="letters" /></button>
     <button
         type="button" class="icon-btn" class:on={$showPhonemes}
-        aria-pressed={$showPhonemes} title="Toggle phonemes" onclick={togglePhonemes}
+        aria-pressed={$showPhonemes} title={phonemesTitle} onclick={togglePhonemes}
     ><ControlIcon name="phonemes" /></button>
     <TranslationGlobe />
 
     <div class="guide-wrap" use:clickOutside={() => (guideOpen = false)}>
         <button
-            type="button" class="icon-btn" title="Shortcuts & guide"
+            type="button" class="icon-btn" title={guideTitle}
             aria-haspopup="dialog" aria-expanded={guideOpen}
             onclick={() => (guideOpen = !guideOpen)}
         ><ControlIcon name="help" size={15} /></button>

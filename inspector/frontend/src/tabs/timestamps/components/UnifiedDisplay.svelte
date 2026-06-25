@@ -16,6 +16,8 @@
     import { onDestroy, untrack } from 'svelte';
     import { get } from 'svelte/store';
 
+    import { localeStore, tr } from '../../../lib/i18n/locale-store';
+    import * as m from '../../../lib/paraglide/messages';
     import { ensureDashCovering } from '../../../lib/playback/dash-covering';
     import { dashPort } from '../../../lib/playback/dash-port';
     import type { PhonemeInterval, TsWord } from '../../../lib/types/ts-client';
@@ -100,6 +102,10 @@
         $loadedVerse?.data.words ?? [],
         $loadedVerse?.data.intervals ?? [],
     );
+
+    // Pause-bridge tooltip strings (legacy reactivity via $localeStore).
+    $: pauseStopTitle = tr($localeStore, m.ts_unified_pause_bridge_stop_title());
+    $: pausePauseTitle = tr($localeStore, m.ts_unified_pause_bridge_pause_title());
 
     // Reset previous-index cache when structure changes (new verse, etc.)
     $: rendered, (_prevActiveWordIdx = -1);
@@ -688,7 +694,7 @@
                 class="pause-bridge"
                 data-pause-start={block.pauseBridge.startSec}
                 data-pause-end={block.pauseBridge.endSec}
-                title={block.pauseBridge.mark ? 'Stop sign' : 'Pause'}
+                title={block.pauseBridge.mark ? pauseStopTitle : pausePauseTitle}
             >
                 {#if block.pauseBridge.mark}
                     <span class="pause-waqf" style={waqfRenderStyle(block.pauseBridge.mark)}

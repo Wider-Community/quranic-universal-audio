@@ -6,14 +6,18 @@
      * placeholders. The shape stays consumer-driven so the parent
      * component decides which facts to show.
      */
+    import { localeStore, tr } from '$lib/i18n/locale-store';
+    import * as m from '$lib/paraglide/messages';
+
     export let facts: { key: string; value: string | null }[] = [];
 
     $: shown = facts.filter((f) => f.value !== null && f.value !== '');
+    $: factsHeading = tr($localeStore, m.dashboard_facts_heading());
 </script>
 
 {#if shown.length > 0}
     <dl class="facts">
-        <dt class="head">Facts</dt>
+        <dt class="head">{factsHeading}</dt>
         {#each shown as f}
             <div class="row">
                 <dt class="key">{f.key}</dt>

@@ -15,6 +15,9 @@
      */
     import { tick } from 'svelte';
 
+    import { i18n } from '$lib/i18n/locale.svelte';
+    import * as m from '$lib/paraglide/messages';
+
     import { ensureDashCovering } from '../../playback/dash-covering';
     import { dashPort } from '../../playback/dash-port';
     import { exitLoop } from '../../playback/loop';
@@ -116,8 +119,12 @@
 
     const near = (a: number, b: number): boolean => Math.abs(a - b) < 0.001;
     const upcomingLabel = $derived(
-        near(config.unreachedOpacity, 0.8) ? 'full'
-        : near(config.unreachedOpacity, 0) ? 'hidden' : 'dim',
+        (i18n.locale,
+        near(config.unreachedOpacity, 0.8)
+            ? m.common_player_upcoming_state_full()
+            : near(config.unreachedOpacity, 0)
+              ? m.common_player_upcoming_state_hidden()
+              : m.common_player_upcoming_state_dim()),
     );
 
     // ---- published gate + live transport state ----
@@ -247,28 +254,28 @@
                 <span
                     class="nr-missing-pill"
                     title={activeMissingWords.length
-                        ? `Missing words: ${activeMissingWords.join(', ')}`
-                        : 'This verse is missing words'}
-                >missing words</span>
+                        ? m.common_player_missing_words_list({ words: activeMissingWords.join(', ') })
+                        : m.common_player_missing_words_none()}
+                >{m.common_player_missing_words_pill()}</span>
             {/if}
             {#if $recitationOpen}
-                <div class="nr-ctrls" role="group" aria-label="Recitation display">
+                <div class="nr-ctrls" role="group" aria-label={m.common_player_recitation_display_group()}>
                     <button
                         type="button" class="nr-btn"
-                        aria-label="Cycle upcoming text visibility"
-                        title={`Upcoming text: ${upcomingLabel}`}
+                        aria-label={m.common_player_upcoming_visibility_label()}
+                        title={m.common_player_upcoming_text_title({ state: upcomingLabel })}
                         onclick={cycleUpcoming}
                     ><ControlIcon name={eyeIconName(config)} size={18} /></button>
                     <button
                         type="button" class="nr-btn"
-                        aria-label="Toggle word / letter"
-                        title={config.granularity === 'char' ? 'Letter-by-letter' : 'Word-by-word'}
+                        aria-label={m.common_player_granularity_toggle_label()}
+                        title={config.granularity === 'char' ? m.common_player_granularity_char_title() : m.common_player_granularity_word_title()}
                         onclick={toggleGranularity}
                     ><ControlIcon name={granIconName(config)} /></button>
                     <button
                         type="button" class="nr-btn"
-                        aria-label="Toggle filmstrip motion"
-                        title={config.filmstripMotion === 'snap' ? 'Snap to ayah' : 'Continuous glide'}
+                        aria-label={m.common_player_motion_toggle_label()}
+                        title={config.filmstripMotion === 'snap' ? m.common_player_motion_snap_title() : m.common_player_motion_glide_title()}
                         onclick={cycleMotion}
                     ><ControlIcon name={motionIconName(config)} /></button>
                 </div>
@@ -278,7 +285,7 @@
                 type="button"
                 class="collapse-chip"
                 aria-expanded={$recitationOpen}
-                title={$recitationOpen ? 'Collapse line' : 'Expand line'}
+                title={$recitationOpen ? m.common_player_collapse_line_title() : m.common_player_expand_line_title()}
                 onclick={() => recitationOpen.set(!$recitationOpen)}
             >
                 <span class="chev" class:open={$recitationOpen} aria-hidden="true">
@@ -290,12 +297,12 @@
             </button>
 
             {#if $recitationOpen}
-                <div class="nr-ctrls" role="group" aria-label="Text size & color">
+                <div class="nr-ctrls" role="group" aria-label={m.common_player_text_size_color_group()}>
                     <div class="nr-swatch-wrap">
                         <button
                             type="button" class="nr-btn swatch"
-                            aria-label="Highlight color"
-                            title="Highlight color"
+                            aria-label={m.common_player_highlight_color_label()}
+                            title={m.common_player_highlight_color_label()}
                             style:color={config.highlightColor}
                             onclick={() => colorInput?.click()}
                         ><ControlIcon name="droplet" /></button>
@@ -311,15 +318,15 @@
                     </div>
                     <button
                         type="button" class="nr-btn"
-                        aria-label="Decrease text size"
-                        title="Smaller text"
+                        aria-label={m.common_player_size_down_label()}
+                        title={m.common_player_size_down_title()}
                         disabled={config.fontSizePx <= SIZE_MIN}
                         onclick={sizeDown}
                     ><ControlIcon name="size-down" size={16} /></button>
                     <button
                         type="button" class="nr-btn"
-                        aria-label="Increase text size"
-                        title="Larger text"
+                        aria-label={m.common_player_size_up_label()}
+                        title={m.common_player_size_up_title()}
                         disabled={config.fontSizePx >= SIZE_MAX}
                         onclick={sizeUp}
                     ><ControlIcon name="size-up" size={16} /></button>
@@ -343,16 +350,16 @@
         {#if config.filmstripShow && filmstripModel.cells.length}
             <div class="strip-wrap">
                 {#if isTimestamps}
-                    <div class="strip-bm" role="group" aria-label="Bookmarks">
+                    <div class="strip-bm" role="group" aria-label={m.common_player_bookmarks_group()}>
                         <button
                             type="button" class="strip-bm-btn" class:on={focusBookmarked}
                             disabled={!focusKey} aria-pressed={focusBookmarked}
-                            title={focusBookmarked ? 'Remove bookmark' : 'Bookmark this verse'}
+                            title={focusBookmarked ? m.common_player_bookmark_remove_title() : m.common_player_bookmark_add_title()}
                             onclick={toggleFocusBookmark}
                         ><ControlIcon name={focusBookmarked ? 'bookmark-filled' : 'bookmark'} size={16} /></button>
                         <button
                             type="button" class="strip-bm-btn"
-                            title="Open bookmarks panel" aria-label="Open bookmarks panel"
+                            title={m.common_player_bookmarks_panel_open()} aria-label={m.common_player_bookmarks_panel_open()}
                             onclick={toggleBookmarksPanel}
                         ><ControlIcon name="bookmarks-panel" size={16} /></button>
                     </div>

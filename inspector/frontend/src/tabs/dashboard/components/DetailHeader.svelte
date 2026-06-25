@@ -1,9 +1,16 @@
 <script lang="ts">
     /** Detail-page header — name + state pill + meta strip. */
+    import { localeStore, tr } from '$lib/i18n/locale-store';
+    import * as m from '$lib/paraglide/messages';
     import StatePill from '../../../lib/components/StatePill.svelte';
     import type { PublicReciter } from '../../../lib/types/generated/schemas';
 
     export let reciter: PublicReciter;
+
+    $: deliveryCount = tr(
+        $localeStore,
+        m.dashboard_detail_delivery_count({ count: reciter.deliveries_count }),
+    );
 </script>
 
 <header class="detail-header">
@@ -23,7 +30,7 @@
         {/if}
         {#if reciter.deliveries_count > 0}
             <span class="dot-sep">·</span>
-            <span>{reciter.deliveries_count} delivery{reciter.deliveries_count === 1 ? '' : ' deliveries'}</span>
+            <span>{deliveryCount}</span>
         {/if}
     </div>
 </header>

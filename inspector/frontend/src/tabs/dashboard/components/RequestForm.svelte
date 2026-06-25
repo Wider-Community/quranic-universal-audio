@@ -17,6 +17,8 @@
      */
     import { createEventDispatcher, onMount } from 'svelte';
 
+    import { localeStore, tr } from '../../../lib/i18n/locale-store';
+    import * as m from '../../../lib/paraglide/messages';
     import {
         fetchPendingRequest,
         type PendingRequest,
@@ -133,8 +135,7 @@
                 comments = pending.comments ?? '';
                 autoClaim = pending.auto_claim;
             } else {
-                pendingError =
-                    'No pending request for this combination (it may have been cleared).';
+                pendingError = m.dashboard_request_pending_cleared();
             }
         } catch (e) {
             pendingError = (e as Error).message;
@@ -227,7 +228,7 @@
     async function onSubmit(): Promise<void> {
         if (busy) return;
         if (invalidCountry) {
-            formError = 'Country must match a name from the dropdown, or be left blank.';
+            formError = m.dashboard_request_country_invalid();
             return;
         }
         formError = null;
@@ -258,15 +259,18 @@
 
     async function runReject(kind: 'soft' | 'hard'): Promise<void> {
         if (busy) return;
-        const verb = kind === 'soft' ? 'send back' : 'discard';
+        const verb =
+            kind === 'soft'
+                ? m.dashboard_request_reject_verb_send_back()
+                : m.dashboard_request_reject_verb_discard();
         const reason = window.prompt(
-            `Reason (≥10 chars) for ${verb}ing this request — recorded in the audit log:`,
+            m.dashboard_request_reject_reason_prompt({ verb }),
             '',
         );
         if (reason === null) return;
         const trimmed = reason.trim();
         if (trimmed.length < 10) {
-            window.alert('Reason must be at least 10 characters.');
+            window.alert(m.dashboard_request_reject_reason_too_short());
             return;
         }
         formError = null;
@@ -286,50 +290,83 @@
     }
 
     $: readOnly = mode === 'review';
-    $: title =
+    $: title = tr(
+        $localeStore,
         mode === 'create'
-            ? `Request ${reciter.name} (${delivery.riwayah} · ${delivery.style})`
-            : `Review request for ${reciter.name}`;
+            ? m.dashboard_request_title_create({
+                  name: reciter.name,
+                  riwayah: delivery.riwayah,
+                  style: delivery.style,
+              })
+            : m.dashboard_request_title_review({ name: reciter.name }),
+    );
+
+    // Static chrome labels — bound through `tr($localeStore, …)` so they
+    // re-evaluate when the locale switches (legacy Svelte-4 reactivity).
+    $: lang = $localeStore;
+    $: closeLabel = tr(lang, m.common_action_close());
+    $: guidelinesHeading = tr(lang, m.dashboard_request_guidelines_heading());
+    $: guidelineVerifyAudio = tr(lang, m.dashboard_request_guideline_verify_audio());
+    $: guidelinePickBest = tr(lang, m.dashboard_request_guideline_pick_best());
+    $: guidelineReview = tr(lang, m.dashboard_request_guideline_review());
+    $: fieldRiwayah = tr(lang, m.dashboard_request_field_riwayah());
+    $: fieldStyle = tr(lang, m.dashboard_request_field_style());
+    $: fieldEnglishName = tr(lang, m.dashboard_request_field_english_name());
+    $: fieldArabicName = tr(lang, m.dashboard_request_field_arabic_name());
+    $: fieldCountry = tr(lang, m.dashboard_request_field_country());
+    $: countryUnknown = tr(lang, m.dashboard_request_country_unknown());
+    $: countryPlaceholder = tr(lang, m.dashboard_request_country_placeholder());
+    $: fieldRecordingContext = tr(lang, m.dashboard_request_field_recording_context());
+    $: contextBlankOption = tr(lang, m.dashboard_request_context_blank_option());
+    $: fieldRecordingYear = tr(lang, m.dashboard_request_field_recording_year());
+    $: yearPlaceholder = tr(lang, m.dashboard_request_year_placeholder());
+    $: fieldComments = tr(lang, m.dashboard_request_field_comments());
+    $: optionalParen = tr(lang, m.common_label_optional_paren());
+    $: commentsPlaceholder = tr(lang, m.dashboard_request_comments_placeholder());
+    $: autoClaimLabel = tr(lang, m.dashboard_request_auto_claim_label());
+    $: autoClaimHintUnchecked = tr(lang, m.dashboard_request_auto_claim_hint_unchecked());
+    $: autoClaimHintOneAtATime = tr(lang, m.dashboard_request_auto_claim_hint_one_at_a_time());
+    $: nonHafsCallout = tr(lang, m.dashboard_request_non_hafs_callout());
+    $: cancelLabel = tr(lang, m.common_action_cancel());
+    $: submitInvalidCountryTitle = tr(lang, m.dashboard_request_submit_invalid_country_title());
+    $: submittingLabel = tr(lang, m.common_status_submitting());
+    $: submitButton = tr(lang, m.dashboard_request_submit_button());
+    $: rejectSoftButton = tr(lang, m.dashboard_request_reject_soft_button());
+    $: rejectHardButton = tr(lang, m.dashboard_request_reject_hard_button());
 </script>
 
 <section class="request-form" aria-label={title}>
     <header>
         <h3>{title}</h3>
-        <button class="close" type="button" on:click={() => dispatch('close')}>×</button>
+        <button
+            class="close"
+            type="button"
+            aria-label={closeLabel}
+            on:click={() => dispatch('close')}>×</button>
     </header>
 
     <div class="body">
     {#if mode === 'create'}
         <div class="intro">
-            <p class="intro-heading">Request Guidelines</p>
+            <p class="intro-heading">{guidelinesHeading}</p>
             <ul class="rules">
-                <li>
-                    Listen to some quick audio samples and verify the audio
-                    belongs to the correct reciter, style, and riwayah —
-                    and that quality is decent. Verify accurate metadata for this reciter combination
-                    and edit anything that looks wrong.
-                </li>
-                <li>
-                    If multiple combinations of this riwayah / style /
-                    context exist, pick the one with the highest coverage,
-                    followed by best channel audio quality, followed by highest bitrate.
-                    (Different channels may be serving the same
-                    recording or a different one — listen to compare.)
-                </li>
-                <li>
-                    An admin will review your submission. State changes to Available for Review / Under Review
-                    automatically once the alignment pipeline finishes.
-                </li>
+                <li>{guidelineVerifyAudio}</li>
+                <li>{guidelinePickBest}</li>
+                <li>{guidelineReview}</li>
             </ul>
         </div>
     {:else if pending && $isOwner}
         <p class="intro">
-            Submitted by <strong>@{pending.requester_login}</strong>
-            on {new Date(pending.submitted_at).toLocaleString()}.
+            {tr(lang, m.dashboard_request_submitted_by_owner({
+                login: pending.requester_login ?? '',
+                date: new Date(pending.submitted_at).toLocaleString(),
+            }))}
         </p>
     {:else if pending}
         <p class="intro">
-            Submitted on {new Date(pending.submitted_at).toLocaleString()}.
+            {tr(lang, m.dashboard_request_submitted_on({
+                date: new Date(pending.submitted_at).toLocaleString(),
+            }))}
         </p>
     {/if}
 
@@ -339,7 +376,7 @@
 
     <div class="grid">
         <label>
-            <span>Riwayah</span>
+            <span>{fieldRiwayah}</span>
             <select bind:value={riwayah} disabled={readOnly}>
                 {#each riwayatOptions as r (r.slug)}
                     <option value={r.slug}>{r.name}</option>
@@ -351,7 +388,7 @@
         </label>
 
         <label>
-            <span>Style</span>
+            <span>{fieldStyle}</span>
             <select bind:value={style} disabled={readOnly}>
                 {#each styleOptions as s (s.slug)}
                     <option value={s.slug}>{s.name}</option>
@@ -363,29 +400,29 @@
         </label>
 
         <label>
-            <span>English name</span>
+            <span>{fieldEnglishName}</span>
             <input type="text" bind:value={name_en} disabled={readOnly} />
         </label>
 
         <label class="rtl">
-            <span>Arabic name</span>
+            <span>{fieldArabicName}</span>
             <input type="text" bind:value={name_ar} dir="rtl" disabled={readOnly} />
         </label>
 
         <label>
             <span>
-                Country
+                {fieldCountry}
                 {#if countryCode}
                     <span class="label-meta">({countryCode})</span>
                 {:else if countryName}
-                    <span class="label-meta warn">(unknown)</span>
+                    <span class="label-meta warn">{countryUnknown}</span>
                 {/if}
             </span>
             <input
                 type="text"
                 list="request-form-countries"
                 bind:value={countryName}
-                placeholder="Start typing a country name…"
+                placeholder={countryPlaceholder}
                 disabled={readOnly}
                 on:focus={onCountryFocus}
                 on:blur={onCountryBlur}
@@ -393,9 +430,9 @@
         </label>
 
         <label>
-            <span>Recording context</span>
+            <span>{fieldRecordingContext}</span>
             <select bind:value={recording_context} disabled={readOnly}>
-                <option value="">— Leave blank if unsure</option>
+                <option value="">{contextBlankOption}</option>
                 {#each contextOptions as c (c.slug)}
                     <option value={c.slug}>{c.name}</option>
                 {/each}
@@ -406,18 +443,21 @@
         </label>
 
         <label>
-            <span>Recording year</span>
+            <span>{fieldRecordingYear}</span>
             <input
                 type="number"
                 min={MIN_RECORDING_YEAR}
                 max={MAX_RECORDING_YEAR}
-                placeholder="Leave blank if unsure"
+                placeholder={yearPlaceholder}
                 bind:value={recording_year}
                 disabled={readOnly}
             />
             {#if recording_year !== '' && (recording_year < MIN_RECORDING_YEAR || recording_year > MAX_RECORDING_YEAR)}
                 <span class="field-hint warn">
-                    Year must be between {MIN_RECORDING_YEAR} and {MAX_RECORDING_YEAR}.
+                    {tr(lang, m.dashboard_request_year_out_of_bounds({
+                        min: MIN_RECORDING_YEAR,
+                        max: MAX_RECORDING_YEAR,
+                    }))}
                 </span>
             {/if}
         </label>
@@ -430,14 +470,12 @@
     </datalist>
 
     <label class="comments">
-        <span>Comments {mode === 'create' ? '(optional)' : ''}</span>
+        <span>{fieldComments} {mode === 'create' ? optionalParen : ''}</span>
         <textarea
             bind:value={comments}
             maxlength="1000"
             rows="3"
-            placeholder={mode === 'create'
-                ? 'Anything the admin should know...'
-                : ''}
+            placeholder={mode === 'create' ? commentsPlaceholder : ''}
             disabled={readOnly}
         ></textarea>
     </label>
@@ -449,32 +487,23 @@
             disabled={readOnly}
         />
         <span class="auto-claim-text">
-            <span class="auto-claim-label">
-                Automatically assign me as reviewer to fix errors once
-                alignment is complete
-            </span>
-            <span class="auto-claim-hint">
-                If unchecked, another contributor can claim the reviewing.
-            </span>
-            <span class="auto-claim-hint">
-                You can hold one claim at a time — if you already have one
-                when alignment completes, this auto-claim is skipped.
-            </span>
+            <span class="auto-claim-label">{autoClaimLabel}</span>
+            <span class="auto-claim-hint">{autoClaimHintUnchecked}</span>
+            <span class="auto-claim-hint">{autoClaimHintOneAtATime}</span>
         </span>
     </label>
 
     {#if mode === 'create' && nonHafsRiwayah}
-        <p class="callout">
-            Non-hafs riwayahs are not supported at the moment, we aim to have this
-            ready soon inshallah. You can still make the request.
-        </p>
+        <p class="callout">{nonHafsCallout}</p>
     {/if}
 
     {#if conflict}
         <p class="warning">
-            Heads up: another delivery of {reciter.name} already uses
-            ({riwayah} · {style}). Submission is still allowed — the admin
-            will review and decide.
+            {tr(lang, m.dashboard_request_conflict_warning({
+                name: reciter.name,
+                riwayah,
+                style,
+            }))}
         </p>
     {/if}
 
@@ -485,7 +514,7 @@
 
     <footer>
         <button type="button" class="ghost" on:click={() => dispatch('close')}>
-            {mode === 'create' ? 'Cancel' : 'Close'}
+            {mode === 'create' ? cancelLabel : closeLabel}
         </button>
         {#if mode === 'create'}
             <button
@@ -493,9 +522,9 @@
                 class="primary"
                 on:click={onSubmit}
                 disabled={busy || invalidCountry}
-                title={invalidCountry ? 'Fix the country field first' : ''}
+                title={invalidCountry ? submitInvalidCountryTitle : ''}
             >
-                {busy ? 'Submitting…' : 'Submit request'}
+                {busy ? submittingLabel : submitButton}
             </button>
         {:else if pending && $isOwner}
             <div class="admin-actions">
@@ -505,7 +534,7 @@
                     on:click={onRejectSoft}
                     disabled={busy}
                 >
-                    Send back
+                    {rejectSoftButton}
                 </button>
                 <button
                     type="button"
@@ -513,7 +542,7 @@
                     on:click={onRejectHard}
                     disabled={busy}
                 >
-                    Discard
+                    {rejectHardButton}
                 </button>
             </div>
         {/if}

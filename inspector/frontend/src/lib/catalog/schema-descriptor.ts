@@ -83,7 +83,7 @@ export function buildSchemaDescriptor(deliveries: readonly PublicDelivery[]): Sc
             key: 'status',
             label: 'Status',
             tagsOf: (d) => [d.bucket],
-            options: STATUS_ORDER.map((b) => ({ key: b, label: STATUS_LABELS[b] })),
+            options: STATUS_ORDER.map((b) => ({ key: b, label: STATUS_LABELS[b]() })),
         },
         {
             key: 'riwayah',

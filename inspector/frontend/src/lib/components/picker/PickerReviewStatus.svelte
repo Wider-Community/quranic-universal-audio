@@ -10,20 +10,24 @@
      *
      * Renders nothing when there's neither a claimer nor a ready flag.
      */
+    import { i18n } from '../../i18n/locale.svelte';
+    import * as m from '../../paraglide/messages';
     import { initials } from '../../utils/initials';
 
     let { login, markedReady }: { login: string | null; markedReady: boolean } = $props();
 
     const hasReviewer = $derived(login !== null && login !== '');
+    // Read the ambient locale so the chrome below re-renders on switch.
+    const claimedByTitle = $derived((i18n.locale, m.common_picker_review_claimed_by_title({ login: login ?? '' })));
 </script>
 
 {#if hasReviewer || markedReady}
     <div class="review-status">
         {#if markedReady}
-            <span class="ready-badge" title="Marked ready for review">ready</span>
+            <span class="ready-badge" title={m.common_picker_review_ready_title()}>{m.common_picker_review_ready_badge()}</span>
         {/if}
         {#if hasReviewer}
-            <span class="reviewer" title={`Claimed by ${login}`}>
+            <span class="reviewer" title={claimedByTitle}>
                 <span class="avatar">{initials(login)}</span>
                 <span class="who">{login}</span>
             </span>

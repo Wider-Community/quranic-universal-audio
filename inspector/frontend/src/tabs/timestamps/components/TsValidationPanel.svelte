@@ -10,6 +10,8 @@
      * Decoupled from the Segments ValidationPanel (which is segments-store /
      * IssueRegistry coupled) — this only needs the sidecar doc + a select cb.
      */
+    import { i18n } from '../../../lib/i18n/locale.svelte';
+    import * as m from '../../../lib/paraglide/messages';
     import type { TsValidationDoc } from '../../../lib/types/generated/schemas';
     import { groupTsValidationVerses } from '../utils/validation-groups';
 
@@ -27,6 +29,9 @@
 
     const groups = $derived(groupTsValidationVerses(doc));
     const total = $derived(groups.reduce((sum, group) => sum + group.refs.length, 0));
+
+    // Reading i18n.locale makes the panel re-render on locale switch.
+    const summary = $derived((i18n.locale, m.ts_validation_panel_summary()));
     const groupKey = $derived(groups.map((group) => `${group.beam}:${group.refs.join(',')}`).join('|'));
 
     $effect(() => {
@@ -47,7 +52,7 @@
 {#if groups.length}
     <details class="tsval" bind:open>
         <summary>
-            Low-confidence verses
+            {summary}
             <span class="count">{total}</span>
         </summary>
         <div class="rows">
@@ -58,7 +63,7 @@
                         type="button"
                         class="chip"
                         class:active={ref === activeVerse}
-                        aria-label={`Jump to low-confidence verse ${ref}`}
+                        aria-label={m.ts_validation_panel_chip_aria_label({ verse: ref })}
                         onclick={() => onselect(ref)}
                     >
                         {ref}

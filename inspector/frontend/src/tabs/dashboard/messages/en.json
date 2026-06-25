@@ -1,3 +1,351 @@
 {
-  "$schema": "https://inlang.com/schema/inlang-message-format"
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "dashboard_activity_action_added": "added to catalog",
+  "dashboard_activity_action_requested": "has been requested",
+  "dashboard_activity_action_available_for_review": "is now available for review",
+  "dashboard_activity_action_under_review": "is now under review",
+  "dashboard_activity_action_published": "is now published",
+  "dashboard_activity_delete_prompt": "Delete this card from Recent Activity for everyone?\n\nReason (≥10 characters; recorded in the audit log):",
+  "dashboard_activity_delete_reason_too_short": "Reason must be at least 10 characters.",
+  "dashboard_activity_load_error_fallback": "Failed to load activity",
+  "dashboard_activity_delete_error_fallback": "Failed to delete",
+  "dashboard_activity_rail_aria_label": "Recent activity",
+  "dashboard_activity_heading": "Recent activity",
+  "dashboard_activity_event_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Last {count} event",
+        "countPlural=other": "Last {count} events"
+      }
+    }
+  ],
+  "dashboard_activity_empty": "No activity yet.",
+  "dashboard_activity_delete_aria_label": "Delete from public feed",
+  "dashboard_activity_delete_title": "Delete permanently from the public feed",
+  "dashboard_catalog_no_match": "No reciters match the current filters.",
+  "dashboard_catalog_search_placeholder": "Search reciters",
+  "dashboard_catalog_submit_recitation_button": "Submit recitation",
+  "dashboard_catalog_about_aria_label": "About this project",
+  "dashboard_catalog_about_title": "About this project",
+  "dashboard_catalog_sort_label": "Sort",
+  "dashboard_catalog_sort_status": "State",
+  "dashboard_catalog_sort_recent": "Recently updated",
+  "dashboard_catalog_sort_alphabetical": "A → Z",
+  "dashboard_catalog_sort_combinations": "Most combinations",
+  "dashboard_catalog_loading": "Loading reciters…",
+  "dashboard_catalog_filters_label": "Filters",
+  "dashboard_catalog_clear_filter_aria_label": "Clear filter",
+  "dashboard_catalog_clear_search_aria_label": "Clear search",
+  "dashboard_detail_delivery_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} delivery",
+        "countPlural=other": "{count} deliveries"
+      }
+    }
+  ],
+  "dashboard_facts_heading": "Facts",
+  "dashboard_timeline_node_ts_refreshed": "Timestamps refreshed",
+  "dashboard_timeline_tooltip_entered_count": "{label} — entered {count}×:\n{dates}",
+  "dashboard_timeline_tooltip_ts_refreshed_count": "Timestamps refreshed — {count}×:\n{dates}",
+  "dashboard_timeline_tooltip_ts_refreshed_single": "Timestamps refreshed {datetime}",
+  "dashboard_timeline_aria_label": "Combination lifecycle",
+  "dashboard_timeline_repeat_aria_label": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "entered {count} time",
+        "countPlural=other": "entered {count} times"
+      }
+    }
+  ],
+  "dashboard_detail_undiscard_prompt": "Reason (≥10 characters) for un-discarding this combination — recorded in the audit log:",
+  "dashboard_detail_reason_too_short": "Reason must be at least 10 characters.",
+  "dashboard_detail_undiscard_failed": "Un-discard failed: {message}",
+  "dashboard_detail_load_error_fallback": "Failed to load reciter",
+  "dashboard_detail_col_riwayah": "Riwayah",
+  "dashboard_detail_col_style": "Style",
+  "dashboard_detail_col_context": "Context",
+  "dashboard_detail_col_year": "Year",
+  "dashboard_detail_col_category": "Category",
+  "dashboard_detail_col_coverage": "Coverage",
+  "dashboard_detail_col_channel": "Channel",
+  "dashboard_detail_col_bitrate": "Bitrate",
+  "dashboard_detail_col_hours": "Total hours",
+  "dashboard_detail_region_aria_label": "Reciter detail",
+  "dashboard_detail_not_found": "Reciter not found.",
+  "dashboard_detail_no_combinations": "No combinations available.",
+  "dashboard_detail_col_play_aria_label": "Play",
+  "dashboard_detail_col_state": "State",
+  "dashboard_detail_group_matching": "Matching your filters",
+  "dashboard_detail_play_combination_aria_label": "Play this combination",
+  "dashboard_detail_open_source_title": "Open source",
+  "dashboard_detail_request_button": "Request",
+  "dashboard_detail_review_request_title": "Review submitted request",
+  "dashboard_detail_claim_review_title": "Claim this reciter to review and edit its segments",
+  "dashboard_detail_claim_review_button": "Claim review",
+  "dashboard_detail_group_other": "Other combinations",
+  "dashboard_detail_discarded_aria_label": "Discarded combinations",
+  "dashboard_detail_discarded_heading": "Discarded combinations",
+  "dashboard_detail_discarded_note_visibility": "Hidden from public view. Maintainers + owners only.",
+  "dashboard_detail_discarded_note_owner": "Owners can un-discard.",
+  "dashboard_detail_undiscard_button": "Un-discard",
+  "dashboard_email_prefs_scope_off": "Off",
+  "dashboard_email_prefs_scope_all": "All",
+  "dashboard_email_prefs_scope_choose": "Choose",
+  "dashboard_email_prefs_load_error_fallback": "Could not load your preferences.",
+  "dashboard_email_prefs_save_error_fallback": "Could not save. Try again.",
+  "dashboard_email_prefs_saved_toast": "Email preferences saved",
+  "dashboard_email_prefs_modal_title": "Email notifications",
+  "dashboard_email_prefs_intro": "Get an email when something you follow changes.",
+  "dashboard_email_prefs_send_to_label": "Send to",
+  "dashboard_email_prefs_email_placeholder": "you@example.com",
+  "dashboard_email_prefs_email_invalid": "Enter a valid email address.",
+  "dashboard_email_prefs_email_required": "Add an address to receive these emails.",
+  "dashboard_email_prefs_email_help": "Used only for the notifications below.",
+  "dashboard_email_prefs_group_contributions": "Your contributions",
+  "dashboard_email_prefs_request_processed_title": "Your request is processed",
+  "dashboard_email_prefs_request_processed_desc": "A reciter you requested is ready to review.",
+  "dashboard_email_prefs_request_processed_toggle_label": "Email me when my request is processed",
+  "dashboard_email_prefs_group_publishing": "Publishing",
+  "dashboard_email_prefs_recitation_published_title": "A recitation is published",
+  "dashboard_email_prefs_recitation_published_desc": "When a recitation gets timestamps.",
+  "dashboard_email_prefs_recitation_published_aria": "When a recitation is published",
+  "dashboard_email_prefs_timestamps_regenerated_title": "Timestamps are regenerated",
+  "dashboard_email_prefs_timestamps_regenerated_desc": "A reciter's word timings are rebuilt.",
+  "dashboard_email_prefs_timestamps_regenerated_aria": "When timestamps are regenerated",
+  "dashboard_email_prefs_chosen_reciters_label": "Chosen reciters",
+  "dashboard_email_prefs_chosen_reciters_help": "Used by both “Choose” settings above.",
+  "dashboard_email_prefs_add_reciter_placeholder": "Add a reciter…",
+  "dashboard_email_prefs_chosen_reciters_aria": "Chosen reciters",
+  "dashboard_email_prefs_chosen_reciters_empty_hint": "Search by name to add reciters.",
+  "dashboard_email_prefs_reciters_warn": "Add a reciter, or these stay off.",
+  "dashboard_email_prefs_github_release_title": "A new GitHub release",
+  "dashboard_email_prefs_github_release_desc": "A dataset release is cut and published.",
+  "dashboard_email_prefs_github_release_toggle_label": "Email me on a new GitHub release",
+  "dashboard_email_prefs_group_riwayahs": "Riwayahs you follow",
+  "dashboard_email_prefs_add_riwayah_placeholder": "Add a riwayah…",
+  "dashboard_email_prefs_riwayahs_aria": "Riwayahs you follow",
+  "dashboard_email_prefs_riwayahs_empty_hint": "Add a riwayah to choose what you're emailed about.",
+  "dashboard_email_prefs_riwayah_new_recitation_title": "A new recitation is published",
+  "dashboard_email_prefs_riwayah_new_recitation_desc": "In any riwayah you follow.",
+  "dashboard_email_prefs_riwayah_new_recitation_toggle_label": "Email me on a new recitation in a followed riwayah",
+  "dashboard_email_prefs_riwayah_first_available_title": "A riwayah becomes available",
+  "dashboard_email_prefs_riwayah_first_available_desc": "Its first ever recitation is published. Sent once.",
+  "dashboard_email_prefs_riwayah_first_available_toggle_label": "Email me when a followed riwayah first becomes available",
+  "dashboard_email_prefs_riwayahs_warn": "Add a riwayah above for these to take effect.",
+  "dashboard_email_prefs_unsaved_changes": "Unsaved changes",
+  "dashboard_email_prefs_all_saved": "All changes saved",
+  "dashboard_email_prefs_save_button": "Save changes",
+  "dashboard_notifs_nav_review_submission": "Review submission",
+  "dashboard_notifs_nav_review_in_segments": "Review in Segments",
+  "dashboard_notifs_nav_open_flagged_segment": "Open flagged segment",
+  "dashboard_notifs_nav_view_flagged_verse": "View flagged verse",
+  "dashboard_notifs_nav_view_reciter": "View reciter",
+  "dashboard_notifs_badge_edit_existing_combo": "Edit existing combo",
+  "dashboard_notifs_badge_new_riwayah_style": "New riwāyah / style",
+  "dashboard_notifs_badge_new_reciter": "New reciter",
+  "dashboard_notifs_badge_has_notes": "Has notes",
+  "dashboard_notifs_badge_flag_comment": "Flag · comment",
+  "dashboard_notifs_badge_flag_reply": "Flag · reply",
+  "dashboard_notifs_badge_timestamps_report": "Timestamps · report",
+  "dashboard_notifs_reporter_anonymous": "an anonymous listener",
+  "dashboard_notifs_reported_by_with_body": "{body}\n— reported by {who}",
+  "dashboard_notifs_reported_by": "Reported by {who}",
+  "dashboard_notifs_rail_aria_label": "My notifications",
+  "dashboard_notifs_rail_heading": "My notifications",
+  "dashboard_notifs_email_button_title": "Manage email notifications",
+  "dashboard_notifs_email_button_label": "Email",
+  "dashboard_notifs_unread_aria": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} unread",
+        "countPlural=other": "{count} unread"
+      }
+    }
+  ],
+  "dashboard_notifs_view_aria": "Notifications view",
+  "dashboard_notifs_view_active": "Active",
+  "dashboard_notifs_view_archive": "Archive",
+  "dashboard_notifs_archive_empty": "Nothing archived.",
+  "dashboard_notifs_restore_aria": "Restore",
+  "dashboard_notifs_restore_title": "Restore to active",
+  "dashboard_notifs_loading": "Loading…",
+  "dashboard_notifs_empty": "No notifications.",
+  "dashboard_request_pending_cleared": "No pending request for this combination (it may have been cleared).",
+  "dashboard_request_country_invalid": "Country must match a name from the dropdown, or be left blank.",
+  "dashboard_request_reject_reason_prompt": "Reason (≥10 chars) for {verb} this request — recorded in the audit log:",
+  "dashboard_request_reject_verb_send_back": "sending back",
+  "dashboard_request_reject_verb_discard": "discarding",
+  "dashboard_request_reject_reason_too_short": "Reason must be at least 10 characters.",
+  "dashboard_request_title_create": "Request {name} ({riwayah} · {style})",
+  "dashboard_request_title_review": "Review request for {name}",
+  "dashboard_request_guidelines_heading": "Request Guidelines",
+  "dashboard_request_guideline_verify_audio": "Listen to some quick audio samples and verify the audio belongs to the correct reciter, style, and riwayah — and that quality is decent. Verify accurate metadata for this reciter combination and edit anything that looks wrong.",
+  "dashboard_request_guideline_pick_best": "If multiple combinations of this riwayah / style / context exist, pick the one with the highest coverage, followed by best channel audio quality, followed by highest bitrate. (Different channels may be serving the same recording or a different one — listen to compare.)",
+  "dashboard_request_guideline_review": "An admin will review your submission. State changes to Available for Review / Under Review automatically once the alignment pipeline finishes.",
+  "dashboard_request_submitted_by_owner": "Submitted by @{login} on {date}.",
+  "dashboard_request_submitted_on": "Submitted on {date}.",
+  "dashboard_request_field_riwayah": "Riwayah",
+  "dashboard_request_field_style": "Style",
+  "dashboard_request_field_english_name": "English name",
+  "dashboard_request_field_arabic_name": "Arabic name",
+  "dashboard_request_field_country": "Country",
+  "dashboard_request_country_unknown": "(unknown)",
+  "dashboard_request_country_placeholder": "Start typing a country name…",
+  "dashboard_request_field_recording_context": "Recording context",
+  "dashboard_request_context_blank_option": "— Leave blank if unsure",
+  "dashboard_request_field_recording_year": "Recording year",
+  "dashboard_request_year_placeholder": "Leave blank if unsure",
+  "dashboard_request_year_out_of_bounds": "Year must be between {min} and {max}.",
+  "dashboard_request_field_comments": "Comments",
+  "dashboard_request_comments_placeholder": "Anything the admin should know...",
+  "dashboard_request_auto_claim_label": "Automatically assign me as reviewer to fix errors once alignment is complete",
+  "dashboard_request_auto_claim_hint_unchecked": "If unchecked, another contributor can claim the reviewing.",
+  "dashboard_request_auto_claim_hint_one_at_a_time": "You can hold one claim at a time — if you already have one when alignment completes, this auto-claim is skipped.",
+  "dashboard_request_non_hafs_callout": "Non-hafs riwayahs are not supported at the moment, we aim to have this ready soon inshallah. You can still make the request.",
+  "dashboard_request_conflict_warning": "Heads up: another delivery of {name} already uses ({riwayah} · {style}). Submission is still allowed — the admin will review and decide.",
+  "dashboard_request_submit_invalid_country_title": "Fix the country field first",
+  "dashboard_request_submit_button": "Submit request",
+  "dashboard_request_reject_soft_button": "Send back",
+  "dashboard_request_reject_hard_button": "Discard",
+  "dashboard_submit_failed_fallback": "Submission failed.",
+  "dashboard_submit_queued_toast": "Thanks — your submission is queued for review.",
+  "dashboard_submit_wizard_aria": "Submit a recitation",
+  "dashboard_submit_wizard_title": "Submit a recitation",
+  "dashboard_submit_stepper_aria": "Progress",
+  "dashboard_submit_step_reciter": "Reciter",
+  "dashboard_submit_step_source": "Source",
+  "dashboard_submit_step_details": "Details",
+  "dashboard_submit_step_confirm": "Confirm",
+  "dashboard_submit_request_button": "Request",
+  "dashboard_submit_reciter_mode_aria": "Reciter mode",
+  "dashboard_submit_mode_existing_combo_label": "Existing combination",
+  "dashboard_submit_mode_existing_combo_hint": "edit metadata or request alignment",
+  "dashboard_submit_mode_existing_reciter_label": "Existing reciter",
+  "dashboard_submit_mode_existing_reciter_hint": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "new combination · {count} catalogued",
+        "countPlural=other": "new combination · {count} catalogued"
+      }
+    }
+  ],
+  "dashboard_submit_mode_new_label": "New reciter",
+  "dashboard_submit_mode_new_hint": "not in the catalog yet",
+  "dashboard_submit_open_detail_title": "Open this reciter's detail page",
+  "dashboard_submit_view_detail_button": "View detail",
+  "dashboard_submit_pick_combo_label": "Pick the combination to edit",
+  "dashboard_submit_combo_coverage": "{count}/114",
+  "dashboard_submit_combos_empty": "No combinations yet for this reciter — switch to \"Existing reciter\" to add the first.",
+  "dashboard_submit_already_covered_label": "Already covered (heads-up — pick a fresh combination on step 3)",
+  "dashboard_submit_reciter_field_label": "Reciter",
+  "dashboard_submit_reciter_search_placeholder": "Type a name in Arabic or Latin…",
+  "dashboard_submit_reciter_results_aria": "Reciter results",
+  "dashboard_submit_reciter_no_match": "No match. Try a partial name, or switch to \"New reciter\".",
+  "dashboard_submit_reciter_combos_unit": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "combo",
+        "countPlural=other": "combos"
+      }
+    }
+  ],
+  "dashboard_submit_new_dup_hint": "Please double-check this reciter isn’t already in the catalog — even under a slightly different spelling. Search “Existing reciter” first if unsure.",
+  "dashboard_submit_field_english_name": "English name",
+  "dashboard_submit_new_name_en_placeholder": "Abdul-Basit Abdus-Samad",
+  "dashboard_submit_field_arabic_name": "Arabic name",
+  "dashboard_submit_new_name_ar_placeholder": "عبد الباسط عبد الصمد",
+  "dashboard_submit_field_country": "Country",
+  "dashboard_submit_country_unknown": "(unknown)",
+  "dashboard_submit_country_placeholder": "Start typing a country name…",
+  "dashboard_submit_dup_matches_label": "Possibly already in the catalog",
+  "dashboard_submit_dup_use_this": "Use this →",
+  "dashboard_submit_source_method_aria": "Source method",
+  "dashboard_submit_source_links_label": "Direct links",
+  "dashboard_submit_source_links_hint": "114 URLs · paste, drop, or per chapter",
+  "dashboard_submit_source_playlist_label": "Playlist",
+  "dashboard_submit_source_playlist_hint": "YouTube · SoundCloud · Archive · Drive folder",
+  "dashboard_submit_csv_drop_copy": "Drop {csv} or {json}, or",
+  "dashboard_submit_csv_browse": "browse",
+  "dashboard_submit_example_csv_label": "CSV — header optional",
+  "dashboard_submit_example_json_label": "JSON",
+  "dashboard_submit_per_chapter_head": "Per chapter",
+  "dashboard_submit_link_count": "{count} / 114",
+  "dashboard_submit_per_chapter_row_placeholder": "https://…",
+  "dashboard_submit_links_invalid": "Some URLs are invalid (highlighted) — each must start with http(s)://",
+  "dashboard_submit_missing_label": "Missing",
+  "dashboard_submit_missing_coverage": [
+    {
+      "declarations": [
+        "input count",
+        "input ranges",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} of 114 — chapter {ranges}",
+        "countPlural=other": "{count} of 114 — chapters {ranges}"
+      }
+    }
+  ],
+  "dashboard_submit_playlist_url_label": "Playlist URL",
+  "dashboard_submit_playlist_url_placeholder": "YouTube, SoundCloud, Internet Archive, Google Drive folder, etc.",
+  "dashboard_submit_playlist_hint": "For a Drive folder, make sure it is public and name the files so chapter order is unambiguous (001.mp3 ... 114.mp3).",
+  "dashboard_submit_details_lede": "A little metadata so we know what we're aligning.",
+  "dashboard_submit_pick_one_option": "Pick one…",
+  "dashboard_submit_context_blank_option": "—",
+  "dashboard_submit_year_placeholder_dash": "—",
+  "dashboard_submit_details_conflict_warning": "Heads up: {name} already has ({riwayah} · {style}). Submission is still allowed — the admin will review and decide.",
+  "dashboard_submit_comments_placeholder": "Anything the reviewer should know…",
+  "dashboard_submit_auto_claim_label": "Auto-claim me as reviewer once alignment finishes",
+  "dashboard_submit_auto_claim_hint": "You hold one claim at a time. Skipped if you're already holding one.",
+  "dashboard_submit_confirm_lede": "A few confirmations before we queue this for review.",
+  "dashboard_submit_attest_distribution_rights": "To the best of my knowledge, I have the reciter’s permission or the distribution rights to share these recordings publicly.",
+  "dashboard_submit_attest_links_verified": "I have verified that links work and play the correct chapters, and that the metadata is accurate.",
+  "dashboard_submit_attest_storage_rights": "I grant Quranic Universal Audio the right to download, process, distribute, and store this audio permanently, under CC By 4.0 license",
+  "dashboard_submit_attest_playlist_public": "If this is my own playlist, I agree to keep it public so everyone can benefit from the audio and timings."
 }

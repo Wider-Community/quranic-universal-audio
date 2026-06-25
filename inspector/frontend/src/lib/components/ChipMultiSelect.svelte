@@ -10,6 +10,8 @@
      * Generic — the email-prefs modal uses one instance for reciters and one
      * for riwayahs. The caller owns the value list via `onchange`.
      */
+    import { i18n } from '../i18n/locale.svelte';
+    import * as m from '../paraglide/messages';
     import type { SelectOption } from '../types/ui';
     import { filterByFields } from '../utils/fuzzy-match';
 
@@ -27,7 +29,7 @@
         options,
         selected,
         onchange,
-        placeholder = 'Search…',
+        placeholder = m.common_chip_multiselect_placeholder(),
         emptyHint,
         ariaLabel,
         disabled = false,
@@ -43,6 +45,14 @@
     const selectedSet = $derived(new Set(selected));
     const available = $derived(options.filter((o) => !selectedSet.has(o.value)));
     const matches = $derived(filterByFields(available, query, (o) => [o.label]));
+
+    // Reading i18n.locale keeps the empty-menu copy reactive on switch.
+    const emptyMenuLabel = $derived(
+        (i18n.locale,
+        available.length === 0
+            ? m.common_chip_multiselect_all_added()
+            : m.common_chip_multiselect_no_matches()),
+    );
 
     function add(value: string): void {
         if (disabled || selectedSet.has(value)) return;
@@ -98,7 +108,9 @@
                 <button
                     type="button"
                     class="chip-x"
-                    aria-label={`Remove ${labelOf.get(value) ?? value}`}
+                    aria-label={m.common_chip_multiselect_remove_aria_label({
+                        label: labelOf.get(value) ?? value,
+                    })}
                     {disabled}
                     onclick={() => remove(value)}>×</button>
             </span>
@@ -123,7 +135,7 @@
         <div class="menu" role="listbox" aria-label={ariaLabel}>
             {#if matches.length === 0}
                 <div class="menu-empty">
-                    {available.length === 0 ? 'All added' : 'No matches'}
+                    {emptyMenuLabel}
                 </div>
             {:else}
                 {#each matches.slice(0, 60) as opt, i (opt.value)}

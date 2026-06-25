@@ -7,6 +7,8 @@
 
     import { createEventDispatcher, onMount } from 'svelte';
 
+    import { localeStore, tr } from '../i18n/locale-store';
+    import * as m from '../paraglide/messages';
     import type { SelectOption } from '../types/ui';
     import { filterByFields } from '../utils/fuzzy-match';
 
@@ -32,6 +34,8 @@
 
     // Re-filter when options change
     $: if (options) filter(inputValue);
+
+    $: noResultsLabel = tr($localeStore, m.common_select_no_results());
 
     function filter(q: string): void {
         filtered = filterByFields(options, q, o => [o.label, o.group]);
@@ -136,7 +140,7 @@
                 </div>
             {/each}
             {#if filtered.length === 0}
-                <div class="ss-empty">No results</div>
+                <div class="ss-empty">{noResultsLabel}</div>
             {/if}
         </div>
     {/if}

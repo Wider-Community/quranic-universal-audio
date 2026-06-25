@@ -9,9 +9,14 @@
      */
     import { onMount } from 'svelte';
 
+    import { localeStore, tr } from '$lib/i18n/locale-store';
+    import * as m from '$lib/paraglide/messages';
+
     import StatePill from '../StatePill.svelte';
     import type { InlineToken } from './info-doc';
     import { overviewDoc } from './overview';
+
+    $: indexAriaLabel = tr($localeStore, m.common_info_index_aria_label());
 
     let rootEl: HTMLDivElement | undefined;
     let navEl: HTMLElement | undefined;
@@ -132,7 +137,7 @@
 {#snippet inline(tokens: InlineToken[])}{#each tokens as t, i (i)}{#if t.href}<a href={t.href} target="_blank" rel="noopener noreferrer">{#if t.bold}<strong>{t.text}</strong>{:else}{t.text}{/if}</a>{:else if t.bold}<strong>{t.text}</strong>{:else}{t.text}{/if}{/each}{/snippet}
 
 {#if sections.length > 1}
-    <nav class="info-index" aria-label="Jump to section" bind:this={navEl}>
+    <nav class="info-index" aria-label={indexAriaLabel} bind:this={navEl}>
         {#each sections as s, i (s.slug)}
             {#if i > 0}<span class="info-index-sep" aria-hidden="true">·</span>{/if}
             <button
