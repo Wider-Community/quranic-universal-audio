@@ -30,9 +30,9 @@ const DEFAULT_RENDER: HarakaRender = { scale: 1.4, shiftEm: 0, raiseEm: 0 };
 /** Codepoint-hex → calibration for single small-cell marks (short vowels +
  *  tanwins, incl. the open DK tanwin forms 8f0-8f2). Tuned against DigitalKhatt.
  *  The dagger-alef renders as a FULL madd cell (no entry). An iqlab tanwīn is
- *  TWO cells (haraka + a standalone mini-meem); the mini-meem glyphs (6e2 above,
- *  6ed below) carry their OWN calibration since the meem ink sits differently
- *  from a haraka. */
+ *  TWO cells (haraka + a standalone mini-meem); the mini-meem always renders
+ *  BELOW (6ed) — `cellGlyph` normalises the above form to it — and carries its
+ *  OWN calibration since the meem ink sits differently from a haraka. */
 const BY_CODEPOINT: Record<string, HarakaRender> = {
     '64e': { scale: 1.01, shiftEm: -0.11, raiseEm: -0.335 }, // fatha
     '64f': { scale: 0.9, shiftEm: -0.11, raiseEm: -0.215 }, // damma
@@ -43,8 +43,7 @@ const BY_CODEPOINT: Record<string, HarakaRender> = {
     '8f0': { scale: 1.15, shiftEm: -0.145, raiseEm: -0.345 }, // fathatan open (DK U+08F0)
     '8f1': { scale: 0.79, shiftEm: -0.205, raiseEm: -0.24 }, // dammatan open (U+08F1)
     '8f2': { scale: 1.13, shiftEm: -0.11, raiseEm: -0.355 }, // kasratan open (U+08F2)
-    '6e2': { scale: 0.8, shiftEm: -0.035, raiseEm: -0.275 }, // mini-meem above (iqlab, U+06E2)
-    '6ed': { scale: 0.81, shiftEm: -0.09, raiseEm: -0.27 }, // mini-meem below (iqlab, U+06ED)
+    '6ed': { scale: 0.81, shiftEm: -0.09, raiseEm: -0.25 }, // mini-meem below (iqlab, U+06ED — all iqlab meems)
 };
 
 /** Calibration for a glyph keyed by its leading codepoint. */
