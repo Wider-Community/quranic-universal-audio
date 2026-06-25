@@ -1,0 +1,20 @@
+# graphify-out/ holds the generated knowledge graph — a local/CI build artifact,
+# not source. Everything here is git-ignored; rebuild with `graphify update .`
+# (AST) or `/graphify` (full), or download the CI artifact. Only this file is tracked.
+
+# Machine-specific (absolute interpreter/scan paths)
+.graphify_python
+.graphify_root
+# Per-run token/cost log
+cost.json
+# Local extraction cache (large, machine-local; speeds up `graphify update`)
+cache/
+# Generated graph + outputs (rebuilt on demand / by CI)
+graph.json
+graph.html
+GRAPH_REPORT.md
+manifest.json
+.graphify_labels.json
+wiki/
+# Dated backup snapshots (graphify backup_if_protected)
+[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/

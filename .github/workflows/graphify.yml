@@ -1,0 +1,37 @@
+# Rebuilds the structural (AST) knowledge graph on every merge to main and
+# publishes it as a downloadable artifact. The graph is NOT committed (it is
+# git-ignored) — keeping the large graph.json out of git history and making
+# parallel branches conflict-free, since the rebuild always runs on the merged
+# tree (so cross-branch relationships are recovered, not lost in a JSON union).
+#
+# Semantic/inferred edges are NOT refreshed here (that needs an LLM). Regenerate
+# those locally with `/graphify`, or add a `graphify extract . --backend gemini`
+# step with a GEMINI_API_KEY secret for a full structural + semantic build.
+name: knowledge-graph
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install graphifyy
+      - name: Rebuild structural graph (AST only — no API key)
+        run: graphify update . --force
+      - name: Publish graph artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: knowledge-graph
+          path: |
+            graphify-out/graph.json
+            graphify-out/GRAPH_REPORT.md
+          if-no-files-found: error
