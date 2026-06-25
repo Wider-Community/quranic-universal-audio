@@ -29,7 +29,6 @@
         FATHA,
         firstMark,
         implicitMaddGlyph,
-        MADDAH,
         MEEM,
         MEEM_HI,
         MEEM_LO,
@@ -40,6 +39,13 @@
         SUKUN,
     } from '../utils/tajweed-script';
     import { isBridgeTag, tajweedColorVar } from '../utils/tajweed-colors';
+    import {
+        iqlabNoonMiniMeem,
+        iqlabNoonSilentBase,
+        shedSilahMaddah,
+        silahMaddahSources,
+        wearSilahMaddah,
+    } from '../utils/cell-special-cases';
     import { waqfRenderStyle } from '../utils/waqf-render';
     import {
         showLetters,
@@ -631,16 +637,9 @@
                 droppedSilahSrc.add(c.sourceLetterIndex);
             }
         }
-        // Silah-madd: the phonemizer merges the maddah onto the bearing letter's
-        // grapheme (هٓ), but it visually belongs on the mini-waw/yaa silah carrier
-        // (هۥٓ). Track the source letter so the base sheds the maddah glyph and its
-        // dropped silah carrier gains it (resolved in pushFullGrapheme via glyphOverride).
-        const silahMaddahSrc = new Set<number>();
-        for (const c of cells) {
-            if (c.role === 'base' && c.chars.includes(MADDAH) && droppedSilahSrc.has(c.sourceLetterIndex)) {
-                silahMaddahSrc.add(c.sourceLetterIndex);
-            }
-        }
+        // Silah-madd carriers (see cell-special-cases): the maddah the phonemizer
+        // merged onto the bearing letter is shed there + re-worn by its carrier.
+        const silahMaddahSrc = silahMaddahSources(cells, droppedSilahSrc);
         // Folded letters already emitted as a full cell (the ىٰ maksura+dagger fold).
         const consumedFold = new Set<number>();
 
@@ -880,23 +879,12 @@
                     if (foldIdx != null && consumedFold.has(foldIdx)) continue; // maksura+dagger half
                     curBase = newGroup('base');
                     if (c.tag === 'iqlab_noon') {
-                        // Iqlab noon: the نْ falls silent (greyed, inert) and its nasal
-                        // sounds on a mini-meem stacked above it — synthesized here because
-                        // the phonemizer only stamps a meem cell for tanwīn iqlab, not noon.
-                        // The meem owns the nasal (the click/loop + tooltip target) and the
-                        // lone iqlab underline; the ن itself sounds + carries nothing.
-                        pushFullGrapheme(curBase, { ...c, phonemeIndices: [], tag: null, shareGroup: null }, false);
-                        pushSmall(curBase, {
-                            chars: MEEM_HI,
-                            role: 'tanween',
-                            status: 'inserted',
-                            phonemeIndices: c.phonemeIndices,
-                            sourceLetterIndex: c.sourceLetterIndex,
-                            tag: 'iqlab_noon',
-                            shareGroup: null,
-                        });
+                        // Iqlab noon → silent ن + a synthesized stacked mini-meem (see
+                        // cell-special-cases): the meem owns the nasal + the iqlab underline.
+                        pushFullGrapheme(curBase, iqlabNoonSilentBase(c), false);
+                        pushSmall(curBase, iqlabNoonMiniMeem(c));
                     } else if (silahMaddahSrc.has(c.sourceLetterIndex)) {
-                        pushFullGrapheme(curBase, c, true, { glyphOverride: c.chars.replace(MADDAH, '') });
+                        pushFullGrapheme(curBase, c, true, { glyphOverride: shedSilahMaddah(c.chars) });
                     } else {
                         pushFullGrapheme(curBase, c, true);
                     }
@@ -923,13 +911,13 @@
                         // already opened (the ḥaraka is emitted first); else a fresh one.
                         const cg = carrierGroupBySrc.get(c.sourceLetterIndex)
                             ?? (lv ? vowelGroupFor(c.shareGroup!) : newGroup('vowel'));
-                        // A silah carrier bearing a madd takes the maddah the phonemizer
-                        // merged onto its bearing letter (هٓ → ه + ۥٓ).
+                        // A silah carrier bearing a madd wears the maddah shed by its
+                        // bearing letter (هٓ → ه + ۥٓ) — see cell-special-cases.
                         pushFullGrapheme(
                             cg,
                             c,
                             false,
-                            silahMaddahSrc.has(c.sourceLetterIndex) ? { glyphOverride: c.chars + MADDAH } : {},
+                            silahMaddahSrc.has(c.sourceLetterIndex) ? { glyphOverride: wearSilahMaddah(c.chars) } : {},
                         );
                         carrierGroupBySrc.set(c.sourceLetterIndex, cg);
                     }
@@ -1014,15 +1002,14 @@
     // Only length marks (ː / ASCII :) are detached modifiers; ˤ is integral to
     // the consonant symbol (rˤ, dˤ, sˤ, tˤ, ðˤ) and must stay in the base.
     const PHONE_MOD_RE = /([ː:]+)$/u;
-    // The emphatic open vowel (heavy `a` after an istiʿlāʾ consonant) is stamped
-    // `aˤ` (optionally with a length mark) in the shard, but DISPLAYS as a plain
-    // `a` — the emphasis is a quality of the vowel, not a separate symbol the way
-    // a consonant emphatic is. Display-only: the shard keeps `aˤ`.
-    const EMPHATIC_A_RE = /^aˤ([ː:]*)$/u;
+    // Only the SHORT emphatic open vowel `aˤ` (heavy `a` after an istiʿlāʾ
+    // consonant) DISPLAYS as a plain `a` — the emphasis is a vowel quality, not a
+    // separate symbol like a consonant emphatic. The LONG emphatic `aˤ:` keeps its
+    // ˤ (the emphasis stays on a held vowel). Display-only: the shard keeps `aˤ`.
+    const EMPHATIC_A_RE = /^aˤ$/u;
     function splitPhone(phone: string | undefined): { base: string; mod: string } {
         if (!phone || phone === 'sil' || phone === 'sp') return { base: phone ?? '', mod: '' };
-        const ea = EMPHATIC_A_RE.exec(phone);
-        if (ea) return { base: 'a', mod: ea[1] ?? '' };
+        if (EMPHATIC_A_RE.test(phone)) return { base: 'a', mod: '' };
         const m = PHONE_MOD_RE.exec(phone);
         return m ? { base: phone.slice(0, -m[0].length), mod: m[0] } : { base: phone, mod: '' };
     }
