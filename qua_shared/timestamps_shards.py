@@ -66,7 +66,11 @@ _SEGMENT_META_PROVENANCE = (
 # v8 adds an OPTIONAL 8th cell slot ``phoneme_rule_tags`` (per-phoneme tag list
 # parallel to ``phoneme_indices``) for muqattaat cells whose phonemes carry
 # distinct tajweed; readers tolerate its absence so v5-v7 shards keep working.
-SEGMENT_SCHEMA_VERSION = 8
+# v9 adds an OPTIONAL 9th cell slot ``secondary_tags`` (extra rules that co-occur
+# on the grapheme but lost the single-``tag`` pick — ``["tafkheem"]`` on a heavy
+# madd/qalqala cell), so a renderer can stack the heaviness badge; when only it is
+# present the 8th slot is padded ``None``. Readers tolerate its absence (v5-v8).
+SEGMENT_SCHEMA_VERSION = 9
 
 
 def _filter_mfa_failures(failures: list[dict] | None, chapter: int) -> list[dict]:

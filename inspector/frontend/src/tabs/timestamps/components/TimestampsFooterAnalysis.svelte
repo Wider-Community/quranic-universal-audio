@@ -18,10 +18,11 @@
     import { loopTarget } from '../stores/playback';
     import { loadedVerse } from '../stores/verse';
     import { findWordAt } from '../utils/loop-target';
-    import { tajweedColorVar } from '../utils/tajweed-colors';
+    import TajweedSettingsPanel from './TajweedSettingsPanel.svelte';
     import TranslationGlobe from './TranslationGlobe.svelte';
 
     let guideOpen = $state(false);
+    let tajweedOpen = $state(false);
 
     function persist(key: string, v: boolean): void {
         try { localStorage.setItem(key, String(v)); } catch { /* ignore */ }
@@ -72,35 +73,10 @@
         ] },
     ];
 
-    // Tajweed-rule colour legend — each row mirrors the per-cell underline badge
-    // (the swatch pulls its hue from the canonical tajweed-colors map so the legend
-    // can never drift from what the cells actually render). The bracketed figure is
-    // the rule's length in ḥarakāt.
-    type LegendRow = { label: string; dur: string; tag: string };
-    const TAJWEED: { title: string; rows: LegendRow[] }[] = [
-        { title: 'Ghunnah', rows: [
-            { label: 'Ghunnah', dur: '2', tag: 'noon_ghunnah' },
-            { label: 'Idgham Ghunnah', dur: '2', tag: 'idgham_ghunnah_noon' },
-            { label: 'Idgham Shafawi', dur: '2', tag: 'idgham_shafawi' },
-            { label: 'Ikhfaa', dur: '2', tag: 'ikhfaa_noon' },
-            { label: 'Ikhfaa Shafawi', dur: '2', tag: 'ikhfaa_shafawi' },
-            { label: 'Iqlab', dur: '2', tag: 'iqlab_noon' },
-            { label: 'Izhar', dur: '1', tag: 'izhar_halqi' },
-            { label: 'Izhar Shafawi', dur: '1', tag: 'izhar_shafawi' },
-        ] },
-        { title: 'Madd', rows: [
-            { label: 'Lazim', dur: '6', tag: 'madd_lazim' },
-            { label: 'Jaiz', dur: '2/4/5', tag: 'madd_jaiz_munfasil' },
-            { label: 'Wajib', dur: '4/5', tag: 'madd_wajib_muttasil' },
-            { label: "'Arid", dur: '2/4/6', tag: 'madd_arid_lissukun' },
-            { label: 'Leen', dur: '2/4/6', tag: 'madd_leen' },
-        ] },
-    ];
-
-    // Keep the drop-up on-screen: it's anchored to the help button, but on a
-    // narrow window the footer overflows and the button slides off the right
-    // edge, dragging the popup (and the Madd column) with it. Shift it left so
-    // its right edge clears the viewport, and only cap its width as a last resort.
+    // Keep the drop-up on-screen: it's anchored to its button, but on a narrow
+    // window the footer overflows and the button slides off the right edge,
+    // dragging the popup with it. Shift it left so its right edge clears the
+    // viewport, and only cap its width as a last resort.
     function keepInView(node: HTMLElement) {
         const margin = 8;
         const place = (): void => {
@@ -131,6 +107,20 @@
         type="button" class="icon-btn" class:on={$showPhonemes}
         aria-pressed={$showPhonemes} title="Toggle phonemes" onclick={togglePhonemes}
     ><ControlIcon name="phonemes" /></button>
+
+    <div class="guide-wrap" use:clickOutside={() => (tajweedOpen = false)}>
+        <button
+            type="button" class="icon-btn" class:on={tajweedOpen} title="Tajweed rules & colours"
+            aria-haspopup="dialog" aria-expanded={tajweedOpen}
+            onclick={() => (tajweedOpen = !tajweedOpen)}
+        ><ControlIcon name="tajweed" /></button>
+        {#if tajweedOpen}
+            <div class="guide-pop" use:keepInView>
+                <TajweedSettingsPanel />
+            </div>
+        {/if}
+    </div>
+
     <TranslationGlobe />
 
     <div class="guide-wrap" use:clickOutside={() => (guideOpen = false)}>
@@ -154,20 +144,6 @@
                                     {/if}
                                     {#if r.key}<kbd>{r.key}</kbd>{/if}
                                     <span class="g-label">{r.label}</span>
-                                </div>
-                            {/each}
-                        </div>
-                    {/each}
-                </div>
-                <div class="guide-legend">
-                    {#each TAJWEED as col (col.title)}
-                        <div class="guide-sec tj-col">
-                            <h4>{col.title}</h4>
-                            {#each col.rows as r (r.label)}
-                                <div class="tj-row">
-                                    <span class="tj-swatch" style:--tj-badge={tajweedColorVar(r.tag)}></span>
-                                    <span class="g-label">{r.label}</span>
-                                    <span class="tj-dur">[{r.dur}]</span>
                                 </div>
                             {/each}
                         </div>
@@ -235,49 +211,6 @@
         grid-template-columns: 1fr 1fr;
         gap: var(--s-3) var(--s-4);
         min-width: 360px;
-    }
-    .guide-legend {
-        flex: 0 0 auto;
-        display: flex;
-        align-items: stretch;
-        gap: var(--s-3);
-        padding-left: var(--s-3);
-        border-left: 1px solid var(--border-quiet);
-    }
-    /* Distribute the rows over the popup's full height so both legend columns
-     * line up with the taller shortcut columns instead of leaving a gap below. */
-    .tj-col {
-        min-width: 0;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-    }
-    .tj-row {
-        display: flex;
-        align-items: center;
-        gap: var(--s-2);
-        margin-bottom: 2px;
-        font-size: var(--fs-meta);
-        color: var(--text-secondary);
-        white-space: nowrap;
-    }
-    /* A miniature resting cell carrying only its tajweed underline badge —
-     * the exact treatment the analysis-row cells use (inset-box-shadow channel). */
-    .tj-swatch {
-        flex: 0 0 auto;
-        width: 22px;
-        height: 16px;
-        background: var(--canvas-inset);
-        border: 1px solid var(--border-quiet);
-        border-radius: var(--r-1);
-        box-shadow: inset 0 -2px 0 var(--tj-badge);
-    }
-    .tj-dur {
-        flex: 0 0 auto;
-        font-family: var(--font-mono);
-        font-size: 10px;
-        color: var(--text-faint);
-        font-variant-numeric: tabular-nums;
     }
     .guide-sec h4 {
         margin: 0 0 4px;

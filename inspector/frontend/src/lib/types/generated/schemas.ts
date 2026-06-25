@@ -2007,6 +2007,7 @@ export interface TsShardCell {
   tag?: string | null;
   share_group?: number | null;
   phoneme_rule_tags?: (string | null)[] | null;
+  secondary_tags?: string[] | null;
 }
 /**
  * The decompressed body of one chapter shard: ``_meta`` + ``segments[]``.

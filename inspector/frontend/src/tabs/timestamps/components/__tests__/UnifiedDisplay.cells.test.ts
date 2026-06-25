@@ -21,6 +21,7 @@ import type {
     TsVerseData,
     TsWord,
 } from '../../../../lib/types/ts-client';
+import { resetAllTajweed, setRuleEnabled } from '../../stores/tajweed-settings';
 import { loadedVerse } from '../../stores/verse';
 import { TS_CLICK_DELAY_MS } from '../../utils/constants';
 
@@ -48,6 +49,13 @@ function mount(words: TsWord[], intervals: PhonemeInterval[]) {
     return render(UnifiedDisplay);
 }
 
+/** True when any rendered cell carries a tajweed underline (an inline box-shadow). */
+function anyBadge(container: HTMLElement): boolean {
+    return Array.from(
+        container.querySelectorAll<HTMLElement>('.mega-letter,.mega-phoneme,.haraka-cell,.bridge-letter'),
+    ).some((e) => e.style.boxShadow !== '');
+}
+
 describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
     beforeEach(() => {
         dashPort.attachElement(
@@ -57,6 +65,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
     });
     afterEach(() => {
         cleanup();
+        resetAllTajweed(); // izhar / madd-ṭabīʿī default off — undo any per-test enable
         loadedVerse.set(null);
         dashPort.attachElement(null);
     });
@@ -246,15 +255,15 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         const meem = Array.from(container.querySelectorAll<HTMLElement>('.haraka-cell'))
             .find((c) => c.querySelector('.g')!.textContent === 'ۭ')!; // above-form input renders below
         // haraka (vowel) uncoloured
-        expect(haraka.dataset.tj).toBeUndefined();
+        expect(haraka.style.boxShadow).toBe('');
         // mini-meem cell coloured iqlab
-        expect(meem.dataset.tj).toBe('1');
-        expect(meem.style.getPropertyValue('--tj-badge')).toContain('iqlab');
+        expect(meem.style.boxShadow).not.toBe('');
+        expect(meem.style.boxShadow).toContain('iqlab');
         // the vowel phoneme (idx 1) is NOT coloured; the nasal phoneme (idx 2) IS.
-        expect(container.querySelector<HTMLElement>('.mega-phoneme[data-index="1"]')!.dataset.tj).toBeUndefined();
+        expect(container.querySelector<HTMLElement>('.mega-phoneme[data-index="1"]')!.style.boxShadow).toBe('');
         const nasal = container.querySelector<HTMLElement>('.mega-phoneme[data-index="2"]')!;
-        expect(nasal.dataset.tj).toBe('1');
-        expect(nasal.style.getPropertyValue('--tj-badge')).toContain('iqlab');
+        expect(nasal.style.boxShadow).not.toBe('');
+        expect(nasal.style.boxShadow).toContain('iqlab');
     });
 
     it('iqlab noon: the ن falls silent, a synthesized mini-meem owns the nasal + the lone iqlab underline', () => {
@@ -285,20 +294,20 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             .find((l) => l.textContent === 'ن')!;
         expect(noon).toBeTruthy();
         expect(noon.classList.contains('silent')).toBe(true);
-        expect(noon.dataset.tj).toBeUndefined();
+        expect(noon.style.boxShadow).toBe('');
         // The synthesized mini-meem (low-meem glyph, pinned top) carries the iqlab underline...
         const meem = Array.from(container.querySelectorAll<HTMLElement>('.haraka-cell'))
             .find((c) => c.querySelector('.g')!.textContent === 'ۭ')!;
         expect(meem).toBeTruthy();
         expect(meem.classList.contains('pin-top')).toBe(true);
-        expect(meem.dataset.tj).toBe('1');
-        expect(meem.style.getPropertyValue('--tj-badge')).toContain('iqlab');
+        expect(meem.style.boxShadow).not.toBe('');
+        expect(meem.style.boxShadow).toContain('iqlab');
         // ...and owns the nasal timing (the click/loop target), not the ن.
         expect(meem.dataset.cellTimed).toBe('1');
         expect(meem.dataset.cellStart).toBe('0.2');
         expect(meem.dataset.diaLoopIdx).toBe('2');
         // The nasal phoneme (idx 2) is iqlab-coloured + aligns under the meem.
-        expect(container.querySelector<HTMLElement>('.mega-phoneme[data-index="2"]')!.dataset.tj).toBe('1');
+        expect(container.querySelector<HTMLElement>('.mega-phoneme[data-index="2"]')!.style.boxShadow).not.toBe('');
     });
 
     it('renders an implicit madd as a FULL cell with an inserted affordance', () => {
@@ -906,7 +915,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         const word = w(
             [{ char: 'ق', start: 0, end: 0.1, silent: false }, { char: 'د', start: 0.15, end: 0.3, silent: false }],
             [
-                base(0, [0], { chars: 'ق', tag: 'qalqala' }), // ق owns only q (idx 0), not Q
+                base(0, [0], { chars: 'ق', tag: 'qalqala_sughra' }), // ق owns only q (idx 0), not Q
                 { chars: 'ْ', role: 'haraka', status: 'present', phonemeIndices: [], sourceLetterIndex: 0, tag: null, shareGroup: null }, // sukūn
                 base(1, [2], { chars: 'د' }),
             ],
@@ -925,7 +934,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
     });
 
     it('qalqala: a non-qalqala consonant ignores a following Q echo (no over-extend)', () => {
-        // Guard: only a tag==='qalqala' cell unions the Q. A plain consonant followed
+        // Guard: only a qalqala-tagged cell unions the Q. A plain consonant followed
         // by a Q in intervals[] keeps its own [start,end].
         const intervals: PhonemeInterval[] = [
             { phone: 'q', start: 0, end: 0.1 },
@@ -1076,7 +1085,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         }
     });
 
-    // --- Tajweed-rule colour badges (data-tj + --tj-badge) ------------------
+    // --- Tajweed-rule underlines (per-cell box-shadow stack) ----------------
 
     it('madd: badges the carrier grapheme + its phoneme box, NOT the haraka', () => {
         const intervals: PhonemeInterval[] = [
@@ -1094,13 +1103,13 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         const { container } = mount([word], intervals);
         const carrier = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter'))
             .find((e) => e.textContent === 'ا')!;
-        expect(carrier.dataset.tj).toBe('1');
-        expect(carrier.style.getPropertyValue('--tj-badge')).toContain('madd-wajib');
+        expect(carrier.style.boxShadow).not.toBe('');
+        expect(carrier.style.boxShadow).toContain('madd-wajib');
         // the haraka co-lights but is NOT coloured (madd = carrier grapheme only)
         const haraka = container.querySelector<HTMLElement>('.haraka-cell')!;
-        expect(haraka.dataset.tj).toBeUndefined();
+        expect(haraka.style.boxShadow).toBe('');
         // the long-vowel phoneme box is badged
-        expect(container.querySelector<HTMLElement>('.mega-phoneme[data-index="1"]')!.dataset.tj).toBe('1');
+        expect(container.querySelector<HTMLElement>('.mega-phoneme[data-index="1"]')!.style.boxShadow).not.toBe('');
     });
 
     it('tanwīn idgham: both letter cells badged; the phoneme badge is the single bridge tile', () => {
@@ -1123,13 +1132,13 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [2],
         );
         const { container } = mount([wordN, wordN1], intervals);
-        expect(container.querySelector<HTMLElement>('.haraka-cell')!.dataset.tj).toBe('1'); // tanwīn source
+        expect(container.querySelector<HTMLElement>('.haraka-cell')!.style.boxShadow).not.toBe(''); // tanwīn source
         const meem = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter'))
             .find((e) => e.textContent === 'م')!;
-        expect(meem.dataset.tj).toBe('1');                                                  // receiver, via group
-        expect(container.querySelector<HTMLElement>('.crossword-bridge .mega-phoneme')!.dataset.tj).toBe('1');
+        expect(meem.style.boxShadow).not.toBe('');                                                  // receiver, via group
+        expect(container.querySelector<HTMLElement>('.crossword-bridge .mega-phoneme')!.style.boxShadow).not.toBe('');
         // the source tanwīn's own vowel box is NOT badged (its merger is the bridge)
-        expect(container.querySelector<HTMLElement>('.mega-phoneme[data-index="1"]')!.dataset.tj).toBeUndefined();
+        expect(container.querySelector<HTMLElement>('.mega-phoneme[data-index="1"]')!.style.boxShadow).toBe('');
     });
 
     it('idgham shafawi: both mīms badged + the single bridge tile', () => {
@@ -1155,10 +1164,10 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         const meems = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter'))
             .filter((e) => e.textContent === 'م');
         expect(meems.length).toBe(2);
-        expect(meems.every((m) => m.dataset.tj === '1')).toBe(true);
+        expect(meems.every((m) => m.style.boxShadow !== '')).toBe(true);
         const bridge = container.querySelector<HTMLElement>('.crossword-bridge .mega-phoneme')!;
-        expect(bridge.dataset.tj).toBe('1');
-        expect(bridge.style.getPropertyValue('--tj-badge')).toContain('idgham-shafawi');
+        expect(bridge.style.boxShadow).not.toBe('');
+        expect(bridge.style.boxShadow).toContain('idgham-shafawi');
     });
 
     it('Allah dagger: arid-badged at waqf (carrier only, not the fatḥa); uncoloured continuing', () => {
@@ -1176,13 +1185,13 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         );
         // continuing → allah_dagger_alef → no badge
         let c = mount([mk('allah_dagger_alef')], intervals).container;
-        expect(c.querySelector<HTMLElement>('.mega-letter.implicit')!.dataset.tj).toBeUndefined();
+        expect(c.querySelector<HTMLElement>('.mega-letter.implicit')!.style.boxShadow).toBe('');
         cleanup();
         // stopping → madd_arid_lissukun → dagger badged, fatḥa not
         c = mount([mk('madd_arid_lissukun')], intervals).container;
         const dagger = c.querySelector<HTMLElement>('.mega-letter.implicit')!;
-        expect(dagger.dataset.tj).toBe('1');
-        expect(dagger.style.getPropertyValue('--tj-badge')).toContain('madd-arid');
+        expect(dagger.style.boxShadow).not.toBe('');
+        expect(dagger.style.boxShadow).toContain('madd-arid');
         // the dropped fatḥa STILL groups + co-lights with the arid dagger (it must NOT
         // fall back to the lām's base group greyed — daggerBySrc keys off the implicit
         // madd, not the allah_dagger_alef tag, so the arid waqf case still co-lights).
@@ -1194,10 +1203,10 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(fatha.classList.contains('dia-dropped')).toBe(false); // co-lit, not greyed
         expect(fatha.dataset.cellTimed).toBe('1');
         expect(fatha.dataset.cellStart).toBe('0.15'); // the dagger's ā interval
-        expect(fatha.dataset.tj).toBeUndefined(); // colour is carrier-only
+        expect(fatha.style.boxShadow).toBe(''); // colour is carrier-only
     });
 
-    it('no badge for ṭabīʿī madd, nor for bila-ghunnah idgham + its receiver', () => {
+    it('no underline for an untagged madd carrier (no rule on the cell)', () => {
         const tabiiIv: PhonemeInterval[] = [
             { phone: 'q', start: 0, end: 0.1 }, { phone: 'a:', start: 0.1, end: 0.4 },
         ];
@@ -1210,9 +1219,10 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             ],
             [0, 1],
         );
-        expect(mount([tabii], tabiiIv).container.querySelector('[data-tj]')).toBeNull();
-        cleanup();
+        expect(anyBadge(mount([tabii], tabiiIv).container)).toBe(false);
+    });
 
+    it('bila-ghunnah idgham underlines the source tanwīn, its receiver, and the bridge', () => {
         const bilaIv: PhonemeInterval[] = [
             { phone: 'b', start: 0, end: 0.1 }, { phone: 'i', start: 0.1, end: 0.2 },
             { phone: 'rˤrˤ', start: 0.2, end: 0.5, bridge: 'idgham_bila_ghunnah_tanween' },
@@ -1230,10 +1240,54 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [base(0, [2], { chars: 'ر', shareGroup: 7 })],
             [2],
         );
-        expect(mount([bN, bN1], bilaIv).container.querySelector('[data-tj]')).toBeNull();
+        const { container } = mount([bN, bN1], bilaIv);
+        // source tanwīn cell (the haraka) underlines bila-ghunnah
+        expect(container.querySelector<HTMLElement>('.haraka-cell')!.style.boxShadow).toContain('idgham-bila');
+        // receiver ر picks the colour up via its share group
+        const recv = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter')).find((e) => e.textContent === 'ر')!;
+        expect(recv.style.boxShadow).toContain('idgham-bila');
+        // the merged bridge tile underlines too
+        expect(container.querySelector<HTMLElement>('.crossword-bridge .mega-phoneme')!.style.boxShadow).toContain('idgham-bila');
+    });
+
+    it('stacks tafkheem above its base rule — qalqala below, tafkheem the upper bar', () => {
+        const iv: PhonemeInterval[] = [
+            { phone: 'q', start: 0, end: 0.1 }, { phone: 'Q', start: 0.1, end: 0.15 },
+        ];
+        const word = w(
+            [{ char: 'ق', start: 0, end: 0.15, silent: false }],
+            [base(0, [0], { chars: 'ق', tag: 'qalqala_sughra', secondaryTags: ['tafkheem'] })],
+            [0],
+        );
+        const { container } = mount([word], iv);
+        const letter = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter')).find((e) => e.textContent === 'ق')!;
+        const shadow = letter.style.boxShadow;
+        expect(shadow).toContain('var(--tj-qalqala)');
+        expect(shadow).toContain('var(--tj-tafkheem)');
+        // qalqala is listed first (bottom bar), tafkheem second (above it)
+        expect(shadow.indexOf('qalqala')).toBeLessThan(shadow.indexOf('tafkheem'));
+        // the tooltip names both rules, ms line first
+        expect(letter.dataset.tjRules).toBe('Qalqala Sughra\nTafkheem');
+    });
+
+    it('a silent-rule letter (lām shamsiyyah) shows a rule tooltip with no underline', () => {
+        const iv: PhonemeInterval[] = [{ phone: 'ʃ', start: 0, end: 0.2 }];
+        const word = w(
+            [{ char: 'ل', start: null, end: null, silent: true }, { char: 'ش', start: 0, end: 0.2, silent: false }],
+            [
+                { chars: 'ل', role: 'base', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 0, tag: 'lam_shamsiyah', shareGroup: null },
+                base(1, [0], { chars: 'ش' }),
+            ],
+            [0],
+        );
+        const { container } = mount([word], iv);
+        const lam = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter')).find((e) => e.textContent === 'ل')!;
+        expect(lam.style.boxShadow).toBe(''); // silent rule → no underline
+        expect(lam.dataset.tjRules).toBe('Lam Shamsiyyah');
     });
 
     it('iẓhar (synthesized): untagged sakin noon badges letter + phoneme in halqi blue', () => {
+        setRuleEnabled('izhar', true); // iẓhar is an opt-in (default off) rule
         // مِنْ — a sakin nūn (no own haraka, just a sukūn) that SOUNDS: untagged →
         // synthesized izhar_halqi. Both the ن letter and its n phoneme underline.
         const intervals: PhonemeInterval[] = [
@@ -1253,14 +1307,15 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         const { container } = mount([word], intervals);
         const noon = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter'))
             .find((e) => e.textContent === 'ن')!;
-        expect(noon.dataset.tj).toBe('1');
-        expect(noon.style.getPropertyValue('--tj-badge')).toContain('izhar-halqi');
+        expect(noon.style.boxShadow).not.toBe('');
+        expect(noon.style.boxShadow).toContain('izhar-halqi');
         const nPhone = container.querySelector<HTMLElement>('.mega-phoneme[data-index="2"]')!;
-        expect(nPhone.dataset.tj).toBe('1');
-        expect(nPhone.style.getPropertyValue('--tj-badge')).toContain('izhar-halqi');
+        expect(nPhone.style.boxShadow).not.toBe('');
+        expect(nPhone.style.boxShadow).toContain('izhar-halqi');
     });
 
     it('iẓhar shafawi (synthesized): untagged sakin meem badges in the shafawi blue', () => {
+        setRuleEnabled('izhar_shafawi', true); // iẓhar shafawi is opt-in (default off)
         const intervals: PhonemeInterval[] = [
             { phone: 'h', start: 0, end: 0.1 }, { phone: 'u', start: 0.1, end: 0.2 },
             { phone: 'm', start: 0.2, end: 0.4 },
@@ -1278,8 +1333,8 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         const { container } = mount([word], intervals);
         const meem = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter'))
             .find((e) => e.textContent === 'م')!;
-        expect(meem.dataset.tj).toBe('1');
-        expect(meem.style.getPropertyValue('--tj-badge')).toContain('izhar-shafawi');
+        expect(meem.style.boxShadow).not.toBe('');
+        expect(meem.style.boxShadow).toContain('izhar-shafawi');
     });
 
     it('no iẓhar for a VOWELED noon (not sakin) nor a mushaddad noon (ghunnah)', () => {
@@ -1295,7 +1350,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             ],
             [0, 1],
         );
-        expect(mount([word], intervals).container.querySelector('[data-tj]')).toBeNull();
+        expect(anyBadge(mount([word], intervals).container)).toBe(false);
     });
 
     it('ghunnah merger bridge: an uncoloured idgham rule whose receiver sounds a nasal still badges the bridge phoneme', () => {
@@ -1323,11 +1378,11 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         const { container } = mount([wordN, wordN1], intervals);
         const meem = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter'))
             .find((e) => e.textContent === 'مّ')!;
-        expect(meem.dataset.tj).toBe('1');
-        expect(meem.style.getPropertyValue('--tj-badge')).toContain('ghunnah');
+        expect(meem.style.boxShadow).not.toBe('');
+        expect(meem.style.boxShadow).toContain('ghunnah');
         const bridge = container.querySelector<HTMLElement>('.crossword-bridge .mega-phoneme')!;
-        expect(bridge.dataset.tj).toBe('1');
-        expect(bridge.style.getPropertyValue('--tj-badge')).toContain('ghunnah');
+        expect(bridge.style.boxShadow).not.toBe('');
+        expect(bridge.style.boxShadow).toContain('ghunnah');
     });
 
     it('iltiqaa: the shortened carrier (no phones) greys like any silent letter', () => {
@@ -1379,8 +1434,8 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         };
         for (const tag of ['ikhfaa_tanween', 'iqlab_tanween']) {
             const c = mk(tag);
-            expect(c.querySelector<HTMLElement>('.mega-phoneme[data-index="4"]')!.dataset.tj).toBe('1'); // nasal
-            expect(c.querySelector<HTMLElement>('.mega-phoneme[data-index="3"]')!.dataset.tj).toBeUndefined(); // vowel
+            expect(c.querySelector<HTMLElement>('.mega-phoneme[data-index="4"]')!.style.boxShadow).not.toBe(''); // nasal
+            expect(c.querySelector<HTMLElement>('.mega-phoneme[data-index="3"]')!.style.boxShadow).toBe(''); // vowel
             cleanup();
         }
     });
@@ -1415,28 +1470,28 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         // The letter underline uses the cell main tag (madd_lazim) — on the لٓ carrier.
         const carrier = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter'))
             .find((e) => e.textContent === 'لٓ')!;
-        expect(carrier.dataset.tj).toBe('1');
-        expect(carrier.style.getPropertyValue('--tj-badge')).toContain('madd-lazim');
+        expect(carrier.style.boxShadow).not.toBe('');
+        expect(carrier.style.boxShadow).toContain('madd-lazim');
         // Per-phoneme colours: l uncoloured, aː = madd-lazim hue, m = idgham-shafawi hue.
         const ph = (i: number) => container.querySelector<HTMLElement>(`.mega-phoneme[data-index="${i}"]`)!;
-        expect(ph(1).dataset.tj).toBeUndefined();
-        expect(ph(2).dataset.tj).toBe('1');
-        expect(ph(2).style.getPropertyValue('--tj-badge')).toContain('madd-lazim');
-        expect(ph(3).dataset.tj).toBe('1');
-        const shafawi = ph(3).style.getPropertyValue('--tj-badge');
+        expect(ph(1).style.boxShadow).toBe('');
+        expect(ph(2).style.boxShadow).not.toBe('');
+        expect(ph(2).style.boxShadow).toContain('madd-lazim');
+        expect(ph(3).style.boxShadow).not.toBe('');
+        const shafawi = ph(3).style.boxShadow;
         expect(shafawi).toContain('idgham-shafawi');
         // The merged nasal hue is DISTINCT from the long-vowel madd hue.
-        expect(shafawi).not.toBe(ph(2).style.getPropertyValue('--tj-badge'));
+        expect(shafawi).not.toBe(ph(2).style.boxShadow);
     });
 
-    it('muqattaat: ṭabīʿī and qalqala per-phoneme tags map to NO colour (locked palette)', () => {
-        // A muqattaat cell may emit madd_tabii / qalqala as phonemeRuleTags, but the
-        // FE palette leaves them uncoloured — those phonemes get no badge while a
-        // coloured rule on the same cell still paints its phoneme.
+    it('muqattaat: per-phoneme tags each colour their own phoneme (madd ṭabīʿī off by default)', () => {
+        // A muqattaat cell colours each phoneme by its OWN per-phoneme rule. qalqala
+        // and ikhfaa are on by default; madd ṭabīʿī is a default-off rule, so its
+        // phoneme stays bare unless the user enables it.
         const intervals: PhonemeInterval[] = [
             { phone: 'd', start: 0, end: 0.1 },     // qalqala consonant (kāf/sād family stand-in)
-            { phone: 'a:', start: 0.1, end: 0.5 },  // ṭabīʿī long vowel
-            { phone: 'n', start: 0.5, end: 0.8 },   // ikhfaa nasal (coloured)
+            { phone: 'a:', start: 0.1, end: 0.5 },  // ṭabīʿī long vowel (default-off rule)
+            { phone: 'n', start: 0.5, end: 0.8 },   // ikhfaa nasal
         ];
         const word = w(
             [{ char: 'د', start: 0, end: 0.8, silent: false }],
@@ -1445,19 +1500,16 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
                 {
                     chars: 'دٓ', role: 'madd', status: 'present', phonemeIndices: [0, 1, 2],
                     sourceLetterIndex: 0, tag: 'madd_tabii', shareGroup: null,
-                    phonemeRuleTags: ['qalqala', 'madd_tabii', 'ikhfaa_noon'],
+                    phonemeRuleTags: ['qalqala_sughra', 'madd_tabii', 'ikhfaa_noon'],
                 },
             ],
             [0, 1, 2],
         );
         const { container } = mount([word], intervals);
         const ph = (i: number) => container.querySelector<HTMLElement>(`.mega-phoneme[data-index="${i}"]`)!;
-        // qalqala + ṭabīʿī → no badge.
-        expect(ph(0).dataset.tj).toBeUndefined();
-        expect(ph(1).dataset.tj).toBeUndefined();
-        // the coloured rule on the same cell still paints its phoneme.
-        expect(ph(2).dataset.tj).toBe('1');
-        expect(ph(2).style.getPropertyValue('--tj-badge')).toContain('ikhfaa');
+        expect(ph(0).style.boxShadow).toContain('qalqala'); // qalqala ṣughrā coloured
+        expect(ph(1).style.boxShadow).toBe('');             // madd ṭabīʿī off by default
+        expect(ph(2).style.boxShadow).toContain('ikhfaa');  // ikhfaa coloured
     });
 
     it('muqattaat with NO base cell (كٓهيعٓصٓ-style) renders carrier underlines + per-cell phonemes', () => {
@@ -1495,18 +1547,18 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         const letter = (ch: string) =>
             Array.from(container.querySelectorAll<HTMLElement>('.mega-letter')).find((e) => e.textContent === ch)!;
         // Both carriers render with their madd-lazim underline (NOT dropped to a tag-less fallback).
-        expect(letter('كٓ').dataset.tj).toBe('1');
-        expect(letter('كٓ').style.getPropertyValue('--tj-badge')).toContain('madd-lazim');
-        expect(letter('عٓ').dataset.tj).toBe('1');
-        expect(letter('عٓ').style.getPropertyValue('--tj-badge')).toContain('madd-lazim');
+        expect(letter('كٓ').style.boxShadow).not.toBe('');
+        expect(letter('كٓ').style.boxShadow).toContain('madd-lazim');
+        expect(letter('عٓ').style.boxShadow).not.toBe('');
+        expect(letter('عٓ').style.boxShadow).toContain('madd-lazim');
         // Per-phoneme: kāf aː + ʿayn leen-glide j = madd-lazim; ŋ = ikhfaa; consonants uncoloured.
         const ph = (i: number) => container.querySelector<HTMLElement>(`.mega-phoneme[data-index="${i}"]`)!;
-        expect(ph(0).dataset.tj).toBeUndefined(); // k
-        expect(ph(1).style.getPropertyValue('--tj-badge')).toContain('madd-lazim'); // aː
-        expect(ph(2).dataset.tj).toBeUndefined(); // f
-        expect(ph(3).dataset.tj).toBeUndefined(); // ʕ
-        expect(ph(5).style.getPropertyValue('--tj-badge')).toContain('madd-lazim'); // j leen-glide
-        expect(ph(6).style.getPropertyValue('--tj-badge')).toContain('ikhfaa'); // ŋ
+        expect(ph(0).style.boxShadow).toBe(''); // k
+        expect(ph(1).style.boxShadow).toContain('madd-lazim'); // aː
+        expect(ph(2).style.boxShadow).toBe(''); // f
+        expect(ph(3).style.boxShadow).toBe(''); // ʕ
+        expect(ph(5).style.boxShadow).toContain('madd-lazim'); // j leen-glide
+        expect(ph(6).style.boxShadow).toContain('ikhfaa'); // ŋ
     });
 
     // --- Cross-word merger carrier timing (idgham / shafawi) ----------------
@@ -1599,6 +1651,7 @@ describe('UnifiedDisplay — per-grapheme phoneme alignment', () => {
     });
     afterEach(() => {
         cleanup();
+        resetAllTajweed(); // izhar / madd-ṭabīʿī default off — undo any per-test enable
         loadedVerse.set(null);
         dashPort.attachElement(null);
     });
@@ -1798,7 +1851,7 @@ describe('UnifiedDisplay — per-grapheme phoneme alignment', () => {
         const word = w(
             [{ char: 'ق', start: 0, end: 0.15, silent: false }, { char: 'د', start: 0.15, end: 0.3, silent: false }],
             [
-                base(0, [0], { tag: 'qalqala' }), // ق owns only q (idx 0), not the Q echo
+                base(0, [0], { tag: 'qalqala_sughra' }), // ق owns only q (idx 0), not the Q echo
                 { chars: 'ْ', role: 'haraka', status: 'present', phonemeIndices: [], sourceLetterIndex: 0, tag: null, shareGroup: null }, // sukūn
                 base(1, [2]), // د owns d (idx 2)
             ],

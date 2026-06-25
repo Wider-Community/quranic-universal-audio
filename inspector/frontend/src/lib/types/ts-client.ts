@@ -68,12 +68,19 @@ export interface TsCell {
      *  distinct tajweed (schema v8, 8th shard slot). Absent → null, and the FE
      *  falls back to the single-`tag` colouring. */
     phonemeRuleTags?: (string | null)[] | null;
+    /** extra rules co-occurring on this grapheme that lost the single-`tag` pick
+     *  (in practice `['tafkheem']` on a heavy madd/qalqala cell) — the renderer
+     *  stacks them as additional badges on `tag` (schema v9, 9th shard slot).
+     *  Absent → null. */
+    secondaryTags?: string[] | null;
 }
 
 /** A raw positional shard cell row (the 6th word slot) —
  *  `[chars, role, status, phoneme_indices, source_letter_index, tag?, share_group?,
- *   phoneme_rule_tags?]`. `phoneme_indices` are word-local indexable-phone indices;
- *  the optional 8th slot `phoneme_rule_tags` is parallel to them (schema v8). */
+ *   phoneme_rule_tags?, secondary_tags?]`. `phoneme_indices` are word-local
+ *  indexable-phone indices; the optional 8th slot `phoneme_rule_tags` (schema v8)
+ *  is parallel to them; the optional 9th slot `secondary_tags` (schema v9) is the
+ *  heaviness-stack list (slot 8 padded null when only it is present). */
 export type TsShardCellRow = [
     string,
     string,
@@ -83,13 +90,15 @@ export type TsShardCellRow = [
     (string | null)?,
     (number | null)?,
     ((string | null)[] | null)?,
+    (string[] | null)?,
 ];
 
 /** Read a positional shard cell row by name — the FE mirror of
  *  `qua_shared/ts_shard_cells.parse_cell`, so no consumer unpacks `row[0..7]`
  *  inline. `phonemeIndices` stay WORD-LOCAL here; the caller maps them to the
  *  verse-flat `intervals[]`. The optional 8th slot `phoneme_rule_tags` (v8) is
- *  read here too — v5-v7 rows lack it and parse to null. */
+ *  read here too — v5-v7 rows lack it and parse to null. The 9th slot
+ *  `secondary_tags` (v9) is read likewise; older rows parse to null. */
 export function parseShardCell(row: TsShardCellRow): TsCell {
     return {
         chars: row[0],
@@ -100,6 +109,7 @@ export function parseShardCell(row: TsShardCellRow): TsCell {
         tag: (row[5] ?? null) as string | null,
         shareGroup: (row[6] ?? null) as number | null,
         phonemeRuleTags: (row[7] ?? null) as (string | null)[] | null,
+        secondaryTags: (row[8] ?? null) as string[] | null,
     };
 }
 

@@ -63,8 +63,10 @@ def test_parse_cell_tolerates_minimal_and_trailing():
     # 5-slot minimal (tag/share_group default to None)
     c = ts_shard_cells.parse_cell(["م", "tanween", "dropped", [], 1])
     assert c.tag is None and c.share_group is None
-    # a future trailing slot (beyond the 8th) is ignored, not an error
-    c2 = ts_shard_cells.parse_cell(["م", "tanween", "dropped", [], 1, None, None, None, "future"])
+    # a future trailing slot (beyond the 9th) is ignored, not an error
+    c2 = ts_shard_cells.parse_cell(
+        ["م", "tanween", "dropped", [], 1, None, None, None, None, "future"]
+    )
     assert c2.source_letter_index == 1
     with pytest.raises(ValueError):
         ts_shard_cells.parse_cell(["م", "haraka"])  # < 5 slots
@@ -94,6 +96,26 @@ def test_parse_cell_absent_phoneme_rule_tags_is_none():
     # an explicit null 8th slot also normalizes to None.
     c8_null = ts_shard_cells.parse_cell(["ا", "madd", "present", [3], 1, "madd_lazim", 2, None])
     assert c8_null.phoneme_rule_tags is None
+
+
+def test_parse_cell_reads_secondary_tags_slot():
+    # v9 9th slot: heaviness stacked on the primary tag (a heavy madd/qalqala cell).
+    c = ts_shard_cells.parse_cell(
+        ["ا", "madd", "present", [3], 1, "madd_arid_lissukun", None, None, ["tafkheem"]]
+    )
+    assert c.secondary_tags == ["tafkheem"]
+    # slot 7 padded None (only the secondary present) → phoneme_rule_tags stays None.
+    assert c.phoneme_rule_tags is None
+
+
+def test_parse_cell_absent_secondary_tags_is_none():
+    # v5-v8 rows (no 9th slot) parse with secondary_tags=None; an empty list too.
+    c8 = ts_shard_cells.parse_cell(["ا", "madd", "present", [3], 1, "madd_lazim", 2, None])
+    assert c8.secondary_tags is None
+    c9_empty = ts_shard_cells.parse_cell(
+        ["ا", "madd", "present", [3], 1, "madd_lazim", 2, None, []]
+    )
+    assert c9_empty.secondary_tags is None
 
 
 def test_word_cells_tolerates_missing_slot():
@@ -134,6 +156,14 @@ def test_word_with_v8_phoneme_rule_tags_cell_round_trips():
     word = [1, 10, 200, [["ل", 10, 90, False]], phones, [cell]]
     model = TsShardWord.model_validate(word)
     # model_dump(mode="json") yields the on-disk list shape (tuples -> lists).
+    assert model.model_dump(mode="json") == word
+
+
+def test_word_with_v9_secondary_tags_cell_round_trips():
+    # A heavy cell WITH the 9th slot (slot 8 padded None) round-trips byte-equal.
+    cell = ["ا", "madd", "present", [0], 1, "madd_arid_lissukun", None, None, ["tafkheem"]]
+    word = [1, 10, 200, [["ا", 10, 90, False]], [["aˤ:", 10, 200]], [cell]]
+    model = TsShardWord.model_validate(word)
     assert model.model_dump(mode="json") == word
 
 

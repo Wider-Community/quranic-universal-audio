@@ -12,7 +12,7 @@
             | 'droplet'
             | 'motion-hybrid' | 'motion-snap'
             | 'size-down' | 'size-up'
-            | 'letters' | 'phonemes' | 'globe'
+            | 'letters' | 'phonemes' | 'globe' | 'tajweed'
             | 'bookmark' | 'bookmark-filled' | 'bookmarks-panel' | 'help';
         size?: number;
     }
@@ -73,6 +73,11 @@
             + '<line x1="16.8" y1="10" x2="16.8" y2="14"/>'
             + '<line x1="20" y1="7" x2="20" y2="17"/>'
             + '</g>',
+        // Tajweed rules: an Arabic letter over a thick colour underline (the
+        // per-cell tajweed bar this panel configures).
+        'tajweed':
+            `<text x="12" y="14" font-size="13" ${AR}>ب</text>`
+            + '<line x1="5" y1="19" x2="19" y2="19" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>',
         // Translations: a globe (languages).
         'globe':
             '<circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.8"/>'

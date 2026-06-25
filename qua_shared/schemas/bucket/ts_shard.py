@@ -72,17 +72,34 @@ PhoneTiming = list[str | int | bool]
 
 # Cell row (the 6th word slot): a per-character haraka/tanween cell.
 # ``[chars, role, status, phoneme_indices, source_letter_index, tag, share_group
-#   (, phoneme_rule_tags)]``.
+#   (, phoneme_rule_tags (, secondary_tags))]``.
 # ``role`` / ``status`` are the codegen-source enums (``bucket/cell_vocab``);
 # ``phoneme_indices`` are word-local indices over the word's indexable phones.
 # The optional 8th slot ``phoneme_rule_tags`` (schema v8) is a per-phoneme tag
 # list parallel to ``phoneme_indices`` (same length), each entry a rule key or
 # ``None`` — carries per-phoneme tajweed for cells whose phonemes diverge from
 # the cell ``tag`` (muqattaat: the long vowel gets its madd, a merged nasal gets
-# its idgham, etc.). Absent on v5-v7 shards (readers tolerate the missing slot).
+# its idgham, etc.). The optional 9th slot ``secondary_tags`` (schema v9) lists
+# extra rules that co-occur on the grapheme but lost the single-``tag`` pick (in
+# practice ``["tafkheem"]`` on a heavy madd/qalqala cell); when only it is present
+# the 8th slot is padded ``None`` to keep it position-stable. Both absent on older
+# shards (readers tolerate the missing slots).
 CellTiming = (
     tuple[str, CellRole, CellStatus, list[int], int, str | None, int | None]
-    | tuple[str, CellRole, CellStatus, list[int], int, str | None, int | None, list[str | None]]
+    | tuple[
+        str, CellRole, CellStatus, list[int], int, str | None, int | None, list[str | None] | None
+    ]
+    | tuple[
+        str,
+        CellRole,
+        CellStatus,
+        list[int],
+        int,
+        str | None,
+        int | None,
+        list[str | None] | None,
+        list[str],
+    ]
 )
 
 
@@ -121,6 +138,7 @@ class TsShardCell(BaseModel):
     tag: str | None = None
     share_group: int | None = None
     phoneme_rule_tags: list[str | None] | None = None
+    secondary_tags: list[str] | None = None
 
 
 class TsShardSegment(BaseModel):

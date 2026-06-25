@@ -2,9 +2,10 @@
 
 A shard word's optional 6th slot ``cells`` is a list of POSITIONAL rows
 ``[chars, role, status, phoneme_indices, source_letter_index, tag, share_group
-(, phoneme_rule_tags)]`` — see ``CellTiming`` in
+(, phoneme_rule_tags (, secondary_tags))]`` — see ``CellTiming`` in
 ``qua_shared/schemas/bucket/ts_shard.py``. The 8th slot ``phoneme_rule_tags``
-(schema v8) is optional; readers tolerate its absence on v5-v7 shards. They are the
+(schema v8) and 9th slot ``secondary_tags`` (schema v9) are optional; readers
+tolerate their absence on older shards. They are the
 per-character highlight tier from the phonemizer's
 ``character_phoneme_mappings()``. From the SDK annotator move, this includes
 ``role == 'base'`` (consonant) rows alongside ``haraka``/``tanween``/``madd`` —
@@ -22,7 +23,7 @@ rather than unpacking positionally, and MUST tolerate a word with no 6th slot
 (v3/v4 shards) — ``word_cells`` returns ``[]`` there. This mirrors
 ``ts_shard_letters`` and keeps a future trailing slot from breaking a reader.
 
-This 7-slot row is the SDK's shard projection (written by
+This row (7 base slots + optional trailing) is the SDK's shard projection (written by
 ``qua_sdk.components.timing.lib.cells._stamp_cells``, read here). It is a DIFFERENT
 contract from the phonemizer's ``Cell.to_list`` (a fuller 9-field dump in its own
 field order) — do not apply one's positions to the other.
@@ -48,6 +49,9 @@ class CellRow(NamedTuple):
     ``phoneme_rule_tags`` (schema v8, optional) is a per-phoneme tag list parallel
     to ``phoneme_indices`` (each entry a rule key or ``None``) for cells whose
     phonemes carry distinct tajweed (muqattaat); ``None`` on v5-v7 shards.
+    ``secondary_tags`` (schema v9, optional, 9th slot) lists extra rules that
+    co-occur on the grapheme but lost the single-``tag`` pick (in practice
+    ``["tafkheem"]`` on a heavy madd/qalqala cell); ``None`` on v5-v8 shards.
     """
 
     chars: str
@@ -58,15 +62,17 @@ class CellRow(NamedTuple):
     tag: str | None = None
     share_group: int | None = None
     phoneme_rule_tags: list[str | None] | None = None
+    secondary_tags: list[str] | None = None
 
 
 def parse_cell(row: object) -> CellRow:
     """Parse one positional cell row into a :class:`CellRow`.
 
-    Reads only the named positions and ignores any trailing slot beyond the 8th.
+    Reads only the named positions and ignores any trailing slot beyond the 9th.
     Raises ``ValueError`` on a row with fewer than the 5 required slots. The 8th
     slot ``phoneme_rule_tags`` (schema v8) is a per-phoneme tag list parallel to
-    ``phoneme_indices``; ``None`` when absent (v5-v7 shards).
+    ``phoneme_indices`` (``None`` when absent / padded); the 9th slot
+    ``secondary_tags`` (schema v9) is the heaviness-stack list (``None`` on v5-v8).
     """
     seq = tuple(row)  # type: ignore[call-overload]
     if len(seq) < 5:
@@ -79,6 +85,8 @@ def parse_cell(row: object) -> CellRow:
     share_group = seq[6] if len(seq) > 6 else None
     raw_rule_tags = seq[7] if len(seq) > 7 else None
     phoneme_rule_tags = list(raw_rule_tags) if raw_rule_tags is not None else None
+    raw_secondary = seq[8] if len(seq) > 8 else None
+    secondary_tags = list(raw_secondary) if raw_secondary else None
     return CellRow(
         str(chars),
         str(role),
@@ -88,6 +96,7 @@ def parse_cell(row: object) -> CellRow:
         tag,
         share_group,
         phoneme_rule_tags,
+        secondary_tags,
     )
 
 

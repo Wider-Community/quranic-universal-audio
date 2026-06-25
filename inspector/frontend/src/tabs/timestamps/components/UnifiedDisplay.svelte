@@ -38,7 +38,15 @@
         SHADDA,
         SUKUN,
     } from '../utils/tajweed-script';
-    import { isBridgeTag, tajweedColorVar } from '../utils/tajweed-colors';
+    import {
+        badgesForTags,
+        isBridgeTag,
+        silentTooltip,
+        tjRuleNames,
+        tjShadow,
+        type TjBadge,
+    } from '../utils/tajweed-rules';
+    import { isRuleEnabled, tajweedSettings, type TajweedSettings } from '../stores/tajweed-settings';
     import {
         applyHamzaWaslMadd,
         iqlabNoonMiniMeem,
@@ -100,8 +108,11 @@
         shareGroup: number | null;
         /** Flat interval indices this cell sounds — placed under its own column. */
         phoneIdx: number[];
-        /** Tajweed-rule badge colour (`var(--tj-*)`) or null — a static underline. */
-        tjColor: string | null;
+        /** Ordered tajweed underline badges (bottom→top, tafkheem on top) — composed
+         *  into a box-shadow at render, filtered by the live enable set. */
+        tjBadges: TjBadge[];
+        /** Silent-rule hover names (no underline) shown in the cell tooltip. */
+        silentRules: string[];
     }
 
     /** A SMALL diacritic cell — haraka / tanween / an iqlab tanwīn's own mini-meem
@@ -122,8 +133,10 @@
         inserted: boolean;
         /** Flat interval indices this cell sounds — placed under its own column. */
         phoneIdx: number[];
-        /** Tajweed-rule badge colour (`var(--tj-*)`) or null. */
-        tjColor: string | null;
+        /** Ordered tajweed underline badges (bottom→top, tafkheem on top). */
+        tjBadges: TjBadge[];
+        /** Silent-rule hover names (no underline) shown in the cell tooltip. */
+        silentRules: string[];
     }
 
     /** A rendered cell-group. `kind` drives the in-row order:
@@ -175,8 +188,8 @@
         interval: PhonemeInterval;
         /** Flat interval index (for highlight matching + click seek). */
         index: number;
-        /** Tajweed-rule badge colour (`var(--tj-*)`) or null — a static underline. */
-        tjColor: string | null;
+        /** Ordered tajweed underline badges (bottom→top, tafkheem on top). */
+        tjBadges: TjBadge[];
         /** DISPLAY-only phone override (the shard keeps `interval.phone`): a heavy
          *  ikhfaa nasal `ŋ` shown as `ŋˤ` before an istiʿlāʾ letter. Render sites
          *  prefer this over `interval.phone`; null/undefined → use the raw phone. */
@@ -194,6 +207,8 @@
             cellStart: number | null;
             cellEnd: number | null;
             wordIndex: number;
+            /** Silent-rule hover names (the iltiqaa-sākinayn connecting kasra). */
+            silentRules: string[];
         } | null;
     }
 
@@ -476,12 +491,15 @@
         return s === Infinity ? { start: null, end: null } : { start: s, end: e };
     }
 
+    /** Qalqala cell tags (ṣughrā mid-word, kubrā at a stop). */
+    const QALQALA_TAGS = new Set(['qalqala_sughra', 'qalqala_kubra']);
+
     /** A qalqala consonant's render-only echo `Q` immediately follows its phoneme
      *  in `intervals[]` but is in NO cell's indexable `phonemeIndices` (excluded by
      *  design — making it indexable would shift the indexable/bridge index space and
-     *  break shard byte-parity). For a `tag==='qalqala'` cell, return the `[start,end]`
-     *  of the `Q` directly after the cell's last own phoneme so its cell duration can
-     *  include the echo; null when there's no such echo. */
+     *  break shard byte-parity). For a qalqala cell, return the `[start,end]` of the
+     *  `Q` directly after the cell's last own phoneme so its cell duration can include
+     *  the echo; null when there's no such echo. */
     function _qalqalaEchoIv(
         indices: number[],
         intervals: PhonemeInterval[],
@@ -602,7 +620,7 @@
         intervals: PhonemeInterval[],
         shareUnions: Map<number, [number, number]>,
         nasalUnions: Map<number, [number, number]>,
-        idghamGroupColors: Map<number, string>,
+        idghamGroupTags: Map<number, string>,
         izharCellTag: Map<TsCell, string>,
         liftIltiqaa = false,
     ): RenderedGroup[] {
@@ -624,6 +642,20 @@
             (c) => c.role === 'base' || (c.role === 'madd' && c.chars !== ''),
         );
         const groups: RenderedGroup[] = [];
+
+        // A cell's underline stack: its own tag + secondary tafkheem + synthesized
+        // iẓhar + the cross-word idgham tag propagated to a merger receiver (its
+        // share group's source tag). Resolved to ≤2 bars (a base rule + tafkheem).
+        const cellBadges = (c: TsCell): TjBadge[] => {
+            const groupTag = c.shareGroup != null ? idghamGroupTags.get(c.shareGroup) : undefined;
+            return badgesForTags([c.tag, ...(c.secondaryTags ?? []), izharCellTag.get(c), groupTag]);
+        };
+        // A cell's silent-rule hover names (lām shamsiyyah, hamzat-waṣl, iltiqaa …) —
+        // these draw no underline, only a tooltip line.
+        const cellSilent = (c: TsCell): string[] => {
+            const n = silentTooltip(c.tag);
+            return n ? [n] : [];
+        };
 
         // Share-groups that contain a madd carrier = long-vowel units (the haraka
         // pairs with the carrier after it; its base renders separately).
@@ -720,10 +752,11 @@
                 renderStyle: harakaRenderStyle(sizeGlyph, extraShift),
                 inserted: opts.inserted ?? (c.chars === '' && c.status === 'inserted'),
                 phoneIdx: c.phonemeIndices,
-                // Diacritic cells colour from their OWN tag (tanwīn idgham/ikhfaa/
-                // iqlab) or the synthesized iẓhar colour (an untagged sounding
-                // tanwīn); a madd's haraka has no tag → uncoloured.
-                tjColor: tajweedColorVar(c.tag) ?? tajweedColorVar(izharCellTag.get(c)),
+                // Diacritic cells underline from their OWN tag (tanwīn idgham/ikhfaa/
+                // iqlab) or the synthesized iẓhar rule (an untagged sounding tanwīn);
+                // a madd's haraka has no tag → no underline.
+                tjBadges: cellBadges(c),
+                silentRules: cellSilent(c),
             });
             noteShare(g, c);
         };
@@ -751,7 +784,7 @@
             let start = ownStart;
             let end = ownEnd;
             const qalqalaEcho =
-                c.tag === 'qalqala' && ownEnd != null
+                QALQALA_TAGS.has(c.tag ?? '') && ownEnd != null
                     ? _qalqalaEchoIv(c.phonemeIndices, intervals)
                     : null;
             if (qalqalaEcho) {
@@ -806,9 +839,13 @@
                 lStart = lStart != null ? Math.min(lStart, qalqalaEcho[0]) : qalqalaEcho[0];
                 lEnd = Math.max(lEnd, qalqalaEcho[1]);
             }
+            // Own tag + secondary tafkheem + synthesized iẓhar + the propagated
+            // cross-word idgham (the receiving merged letter). A coloured-merge
+            // SOURCE keeps its glyph visible + underlined — never greyed silent.
+            const badges = cellBadges(c);
             g.full.push({
                 glyph,
-                silent,
+                silent: silent && badges.length === 0,
                 status: c.status,
                 tag: c.tag,
                 implicit: false,
@@ -824,12 +861,8 @@
                 letterIndex,
                 shareGroup: c.shareGroup,
                 phoneIdx: c.phonemeIndices,
-                // Own tag, else the synthesized iẓhar colour (untagged sakin
-                // noon/meem), else the cross-word idgham colour propagated from the
-                // source cell across the share_group (the receiving merged letter).
-                tjColor: tajweedColorVar(c.tag)
-                    ?? tajweedColorVar(izharCellTag.get(c))
-                    ?? (c.shareGroup != null ? idghamGroupColors.get(c.shareGroup) ?? null : null),
+                tjBadges: badges,
+                silentRules: cellSilent(c),
             });
             noteShare(g, c);
         };
@@ -853,9 +886,10 @@
                 letterIndex: -1,
                 shareGroup: c.shareGroup,
                 phoneIdx: c.phonemeIndices,
-                // Implicit madd (dagger/iwaḍ alef) — its own tag (madd_arid for the
-                // Allah dagger at waqf; madd_iwad is uncoloured).
-                tjColor: tajweedColorVar(c.tag),
+                // Implicit madd (dagger-alef of Allah / ʿiwaḍ alef) — both underline
+                // with the madd-ṭabīʿī rule.
+                tjBadges: cellBadges(c),
+                silentRules: cellSilent(c),
             });
             noteShare(g, c);
         };
@@ -983,7 +1017,8 @@
                 letterIndex: i,
                 shareGroup: null,
                 phoneIdx: [],
-                tjColor: null,
+                tjBadges: [],
+                silentRules: [],
             });
             return g;
         });
@@ -1144,23 +1179,75 @@
         // that block; one in a word's tail (idgham shafawi) bridges into the
         // next block. The generator placed the tag on the exact merger interval,
         // so there's nothing to disambiguate here.
+        // Share-group interval unions computed VERSE-WIDE (across all words' cells):
+        // a cross-word idgham tanwīn shares a group with the receiving word's base,
+        // so its highlight must span the haraka + the ghunnah/merger in the next
+        // word — a per-word union would miss the other side.
+        const allCells = words.flatMap((w) => w.cells ?? []);
+        const shareUnions = _shareUnions(allCells, intervals);
+        const nasalUnions = _nasalUnions(allCells, intervals);
+
+        // Iẓhar (synthesized): the DEFAULT rule for an untagged sounding sakin
+        // noon/meem/tanwīn. Resolved per-word (sakin-ness needs the word's voweling
+        // context) into a cell→tag map, fed to BOTH the phoneme-badge map (below) and
+        // the letter row (`cellGroupsFor`) so letter + phoneme underline together.
+        const izharCellTag = new Map<TsCell, string>();
+        for (const w of words) {
+            const cells = w?.cells ?? [];
+            const voweled = _voweledSrcSet(cells);
+            for (const c of cells) {
+                const t = _izharTag(c, voweled);
+                if (t) izharCellTag.set(c, t);
+            }
+        }
+
+        // Cross-word idgham SOURCE tag by share group, so a merger RECEIVER inherits
+        // the idgham underline from its (silent) source across the group.
+        const idghamGroupTags = new Map<number, string>();
+        for (const c of allCells) {
+            if (isBridgeTag(c.tag) && c.shareGroup != null) idghamGroupTags.set(c.shareGroup, c.tag!);
+        }
+
+        // Per-flat-index underline badges, built verse-wide — the single source for
+        // BOTH inline phoneme boxes and the cross-word bridge tile (a merger phone is
+        // the receiver's). A cell contributes its own tag + secondary tafkheem +
+        // synthesized iẓhar + the propagated idgham (group) tag, resolved to the ≤2-bar
+        // stack; a muqattaat cell colours each phoneme by its own per-phoneme rule; a
+        // tanwīn rule underlines only its nasal (the last phone).
+        const phonemeBadges = new Map<number, TjBadge[]>();
+        for (const c of allCells) {
+            if (c.phonemeRuleTags) {
+                c.phonemeIndices.forEach((fi, i) => {
+                    const b = badgesForTags([c.phonemeRuleTags![i]]);
+                    if (b.length) phonemeBadges.set(fi, b);
+                });
+                continue;
+            }
+            // A cross-word idgham SOURCE renders its merger as the bridge tile (and
+            // colours its own letter via cellBadges) — its inline phonemes (the
+            // tanwīn's short vowel) carry no badge. The receiver inherits the colour
+            // through its share group below.
+            if (isBridgeTag(c.tag)) continue;
+            const groupTag = c.shareGroup != null ? idghamGroupTags.get(c.shareGroup) : undefined;
+            const badges = badgesForTags([c.tag, ...(c.secondaryTags ?? []), izharCellTag.get(c), groupTag]);
+            if (!badges.length) continue;
+            const idxs = c.role === 'tanween' && c.phonemeIndices.length > 1
+                ? c.phonemeIndices.slice(-1)
+                : c.phonemeIndices;
+            for (const fi of idxs) phonemeBadges.set(fi, badges);
+        }
+
+        // Cross-word bridges baked into the shard: a phoneme carrying a `bridge` rule
+        // is the idgham merger fusing two words. Lift it into the gold tile at the
+        // boundary — a merger at a word's head renders before that block; one in a
+        // word's tail (idgham shafawi) bridges into the next block. The tile reuses the
+        // merger phone's badges (the receiver's own stack — idgham + its tafkheem),
+        // falling back to the raw bridge rule.
         const bridgeBeforeBlock = new Map<number, RenderedBridge>();
         const excluded = new Set<number>();
         // Words whose inserted iltiqaa-kasra cell was lifted into a bridge — its
         // small cell is then suppressed in the word's own letter row.
         const liftedIltiqaa = new Set<number>();
-        // A merged phone's OWN cell colour, keyed by flat interval index. A ghunnah
-        // merger (idgham mutajanisayn/mutaqaribayn whose receiving letter sounds a
-        // nasal — e.g. ٱرْكَب مَّعَنَا: ب→مّ, the مّ carries `meem_ghunnah`) has an
-        // UNCOLOURED bridge rule, so the bridge tile would drop the ghunnah hue. Fall
-        // back to the receiving cell's own tag colour so the bridge phoneme underlines
-        // in the same hue as its letter.
-        const cellTagColorByFlat = new Map<number, string>();
-        for (const c of words.flatMap((w) => w?.cells ?? [])) {
-            const color = tajweedColorVar(c.tag);
-            if (!color || isBridgeTag(c.tag)) continue;
-            for (const fi of c.phonemeIndices) cellTagColorByFlat.set(fi, color);
-        }
         for (let wi = 0; wi < words.length; wi++) {
             const word = words[wi];
             const indices = word?.phoneme_indices ?? [];
@@ -1172,8 +1259,7 @@
                     bridgeBeforeBlock.set(target, {
                         phonemes: [{
                             interval: intervals[pi]!, index: pi,
-                            tjColor: tajweedColorVar(intervals[pi]!.bridge)
-                                ?? cellTagColorByFlat.get(pi) ?? null,
+                            tjBadges: phonemeBadges.get(pi) ?? badgesForTags([intervals[pi]!.bridge]),
                         }],
                         letter: null,
                     });
@@ -1192,77 +1278,20 @@
                 && !bridgeBeforeBlock.has(wi + 1)) {
                 const iv = intervals[kpi];
                 const glyph = cellGlyph(kasra.chars, kasra.tag, iv.phone);
+                const sr = silentTooltip(kasra.tag);
                 bridgeBeforeBlock.set(wi + 1, {
-                    phonemes: [{ interval: iv, index: kpi, tjColor: null }],
+                    phonemes: [{ interval: iv, index: kpi, tjBadges: [] }],
                     letter: {
                         glyph,
                         style: harakaRenderStyle(glyph),
                         cellStart: iv.start,
                         cellEnd: iv.end,
                         wordIndex: wi,
+                        silentRules: sr ? [sr] : [],
                     },
                 });
                 excluded.add(kpi);
                 liftedIltiqaa.add(wi);
-            }
-        }
-
-        // Share-group interval unions computed VERSE-WIDE (across all words' cells):
-        // a cross-word idgham tanwīn shares a group with the receiving word's base,
-        // so its highlight must span the haraka + the ghunnah/merger in the next
-        // word — a per-word union would miss the other side.
-        const allCells = words.flatMap((w) => w.cells ?? []);
-        const shareUnions = _shareUnions(allCells, intervals);
-        const nasalUnions = _nasalUnions(allCells, intervals);
-
-        // Iẓhar (synthesized): the DEFAULT rule for an untagged sounding sakin
-        // noon/meem/tanwīn. Resolved per-word (sakin-ness needs the word's voweling
-        // context) into a cell→tag map, then fed to BOTH the phoneme colour map
-        // (below) and the letter row (`cellGroupsFor`) so letter + phoneme underline
-        // together, exactly like a real tagged rule.
-        const izharCellTag = new Map<TsCell, string>();
-        for (const w of words) {
-            const cells = w?.cells ?? [];
-            const voweled = _voweledSrcSet(cells);
-            for (const c of cells) {
-                const t = _izharTag(c, voweled);
-                if (t) izharCellTag.set(c, t);
-            }
-        }
-
-        // Tajweed-badge colour maps, built verse-wide from cell tags:
-        //  - phonemeColor: flat interval index → colour, for INLINE phoneme boxes
-        //    (madd carriers + single-cell ghunnah/ikhfaa/iqlab). Cross-word idgham
-        //    tags are skipped here — their merger is the bridge tile, coloured below.
-        //  - idghamGroupColors: share_group → colour, so a cross-word idgham's
-        //    receiving letter (no own tag) co-colours with its tagged source.
-        const phonemeColor = new Map<number, string>();
-        const idghamGroupColors = new Map<number, string>();
-        for (const c of words.flatMap((w) => w.cells ?? [])) {
-            // Muqattaat cell with per-phoneme tags (v8): colour each phoneme by its
-            // OWN rule, NOT the cell's letter-tier madd smeared across the cell. A
-            // per-phoneme tag that maps to no hue (madd_tabii / qalqala / tafkheem —
-            // locked uncoloured) simply leaves that phoneme unpainted.
-            if (c.phonemeRuleTags) {
-                c.phonemeIndices.forEach((fi, i) => {
-                    const pc = tajweedColorVar(c.phonemeRuleTags![i]);
-                    if (pc) phonemeColor.set(fi, pc);
-                });
-                continue;
-            }
-            const color = tajweedColorVar(c.tag) ?? tajweedColorVar(izharCellTag.get(c));
-            if (!color) continue;
-            if (isBridgeTag(c.tag)) {
-                if (c.shareGroup != null) idghamGroupColors.set(c.shareGroup, color);
-            } else {
-                // A ghunnah is ONE phoneme on the phoneme row. A tanwīn rule (ikhfaa/
-                // iqlab) AND an iẓhar tanwīn sound [short-vowel, nasal] — colour only
-                // the nasal (the last phoneme); the preceding vowel is the letter's,
-                // not the rule's. Every other rule already references a single phoneme.
-                const idxs = c.role === 'tanween' && c.phonemeIndices.length > 1
-                    ? c.phonemeIndices.slice(-1)
-                    : c.phonemeIndices;
-                for (const fi of idxs) phonemeColor.set(fi, color);
             }
         }
 
@@ -1281,13 +1310,13 @@
                     phonemes.push({
                         interval: iv,
                         index: pi,
-                        tjColor: phonemeColor.get(pi) ?? null,
+                        tjBadges: phonemeBadges.get(pi) ?? [],
                         displayPhone: _heavyIkhfaaDisplay(iv.phone, intervals[pi + 1]?.phone),
                     });
                 }
             }
 
-            const groups = cellGroupsFor(word, intervals, shareUnions, nasalUnions, idghamGroupColors, izharCellTag, liftedIltiqaa.has(wi));
+            const groups = cellGroupsFor(word, intervals, shareUnions, nasalUnions, idghamGroupTags, izharCellTag, liftedIltiqaa.has(wi));
             _buildColumns(groups, phonemes);
 
             blocks.push({
@@ -1736,8 +1765,9 @@
     }
 
     function onLetterEnter(e: MouseEvent, startSec: number | null, endSec: number | null): void {
-        if (startSec == null || endSec == null) return;
-        tsHoveredElement.set({ kind: 'letter', startSec, endSec });
+        // A silent letter (no timing) still raises its rule tooltip — but never
+        // publishes a waveform band.
+        if (startSec != null && endSec != null) tsHoveredElement.set({ kind: 'letter', startSec, endSec });
         _tipEnter(e, startSec, endSec);
     }
 
@@ -1864,19 +1894,34 @@
         return Math.round(((endSec - startSec) * 1000) / 10) * 10;
     }
 
-    function _tipShowAt(el: HTMLElement, ms: number): void {
+    /** Compose the tip text: the recited duration (when timed) plus the cell's
+     *  enabled tajweed rule names (from `data-tj-rules`), each on its own line. A
+     *  silent letter shows only its rule name(s). */
+    function _tipTextFor(el: HTMLElement, ms: number | null): string | null {
+        const lines: string[] = [];
+        if (ms != null) lines.push(`${ms} ms`);
+        const rules = el.dataset.tjRules;
+        if (rules) lines.push(rules);
+        return lines.length ? lines.join('\n') : null;
+    }
+
+    function _tipShowAt(el: HTMLElement, ms: number | null): void {
         if (!el.isConnected) return; // cell removed (verse change) before warmup fired
+        const text = _tipTextFor(el, ms);
+        if (!text) return;
         const r = el.getBoundingClientRect();
         tipX = r.left + r.width / 2;
         tipY = r.top;
-        tipText = `${ms} ms`;
+        tipText = text;
         _tipWarm = true;
     }
 
     function _tipEnter(e: MouseEvent, startSec: number | null, endSec: number | null): void {
         const el = e.currentTarget as HTMLElement | null;
-        if (!el || startSec == null || endSec == null) return;
-        const ms = _roundMs(startSec, endSec);
+        if (!el) return;
+        const ms = startSec != null && endSec != null ? _roundMs(startSec, endSec) : null;
+        // Nothing to show — neither a duration nor a rule name on this cell.
+        if (ms == null && !el.dataset.tjRules) return;
         if (_tipCoolTimer !== null) { clearTimeout(_tipCoolTimer); _tipCoolTimer = null; }
         if (_tipShowTimer !== null) { clearTimeout(_tipShowTimer); _tipShowTimer = null; }
         if (_tipWarm) _tipShowAt(el, ms);
@@ -1900,6 +1945,17 @@
         if (_tipShowTimer !== null) clearTimeout(_tipShowTimer);
         if (_tipCoolTimer !== null) clearTimeout(_tipCoolTimer);
     });
+
+    // ---- Tajweed underline + tooltip (reactive on the rule settings) ----------
+    // The cell box-shadow + tooltip rule names recompute when a rule's enable
+    // toggle flips (passed `$tajweedSettings` so the template tracks the dep);
+    // colour overrides apply via `--tj-*` CSS-var swaps with no re-render.
+    function tjShadowFor(badges: TjBadge[], settings: TajweedSettings): string {
+        return tjShadow(badges, (k) => isRuleEnabled(settings, k));
+    }
+    function tjTitleFor(badges: TjBadge[], silent: string[], settings: TajweedSettings): string {
+        return tjRuleNames(badges, silent, (k) => isRuleEnabled(settings, k));
+    }
 
     // DEV-only highlight-transition perf A/B/C harness (remove before merge).
     // Sets `data-ts-perf` on <html>; the variants live in timestamps.css.
@@ -1959,6 +2015,7 @@
                         data-cell-start={lt.cellStart}
                         data-cell-end={lt.cellEnd}
                         data-word-index={lt.wordIndex}
+                        data-tj-rules={lt.silentRules.join('\n') || null}
                         on:click={(e) => onCellClick(e, lt.cellStart)}
                         on:dblclick|stopPropagation
                         on:mouseenter={(e) => onCellEnter(e, lt.cellStart, lt.cellEnd)}
@@ -1980,8 +2037,8 @@
                             ph.interval.phone === 'sp'}
                         class:geminate={ph.interval.geminate_start}
                         data-index={ph.index}
-                        data-tj={ph.tjColor ? '1' : undefined}
-                        style:--tj-badge={ph.tjColor}
+                        style:box-shadow={tjShadowFor(ph.tjBadges, $tajweedSettings)}
+                        data-tj-rules={tjTitleFor(ph.tjBadges, [], $tajweedSettings) || null}
                         on:click={(e) => onPhonemeClick(e, ph.interval, ph.index, part.wordIndex)}
                         on:dblclick={(e) => onPhonemeDblClick(e, ph.interval, ph.index, part.wordIndex)}
                         on:mouseenter={(e) => onPhonemeEnter(e, ph.interval)}
@@ -2062,8 +2119,8 @@
                                             data-cell-start={f.cellStart}
                                             data-cell-end={f.cellEnd}
                                             data-word-index={block.wordIndex}
-                                            data-tj={f.tjColor ? '1' : undefined}
-                                            style:--tj-badge={f.tjColor}
+                                            style:box-shadow={tjShadowFor(f.tjBadges, $tajweedSettings)}
+                                            data-tj-rules={tjTitleFor(f.tjBadges, f.silentRules, $tajweedSettings) || null}
                                             on:click={(e) => onCellClick(e, f.cellStart)}
                                             on:dblclick|stopPropagation
                                             on:mouseenter={(e) => onCellEnter(e, f.cellStart, f.cellEnd)}
@@ -2077,9 +2134,11 @@
                                             class="mega-letter null-ts"
                                             class:silent={f.silent}
                                             style="grid-column:{ci + 1}; justify-self:stretch"
-                                            data-tj={f.tjColor ? '1' : undefined}
-                                            style:--tj-badge={f.tjColor}
+                                            style:box-shadow={tjShadowFor(f.tjBadges, $tajweedSettings)}
+                                            data-tj-rules={tjTitleFor(f.tjBadges, f.silentRules, $tajweedSettings) || null}
                                             on:click|stopPropagation
+                                            on:mouseenter={(e) => onCellEnter(e, null, null)}
+                                            on:mouseleave={onCellLeave}
                                             on:keydown={() => {}}
                                             role="button"
                                             tabindex="-1"
@@ -2100,8 +2159,8 @@
                                             data-letter-end={f.letterEnd}
                                             data-word-index={block.wordIndex}
                                             data-letter-index={f.letterIndex}
-                                            data-tj={f.tjColor ? '1' : undefined}
-                                            style:--tj-badge={f.tjColor}
+                                            style:box-shadow={tjShadowFor(f.tjBadges, $tajweedSettings)}
+                                            data-tj-rules={tjTitleFor(f.tjBadges, f.silentRules, $tajweedSettings) || null}
                                             on:click={(e) =>
                                                 onLetterClick(e, f.letterStart ?? 0, f.letterEnd ?? 0, block.wordIndex, f.letterIndex)}
                                             on:dblclick={(e) =>
@@ -2126,8 +2185,8 @@
                                             data-cell-end={c.cellEnd}
                                             data-word-index={block.wordIndex}
                                             data-dia-loop-idx={c.phoneIdx.length ? c.phoneIdx[0] : undefined}
-                                            data-tj={c.tjColor ? '1' : undefined}
-                                            style:--tj-badge={c.tjColor}
+                                            style:box-shadow={tjShadowFor(c.tjBadges, $tajweedSettings)}
+                                            data-tj-rules={tjTitleFor(c.tjBadges, c.silentRules, $tajweedSettings) || null}
                                             on:click={(e) => onDiacriticClick(e, c.cellStart, c.cellEnd, block.wordIndex, c.phoneIdx[0])}
                                             on:dblclick={(e) => onDiacriticDblClick(e, c.cellStart, c.cellEnd, block.wordIndex, c.phoneIdx[0])}
                                             on:mouseenter={(e) => onCellEnter(e, c.cellStart, c.cellEnd)}
@@ -2157,8 +2216,8 @@
                                                 ph.interval.phone === 'sp'}
                                             class:geminate={ph.interval.geminate_start}
                                             data-index={ph.index}
-                                            data-tj={ph.tjColor ? '1' : undefined}
-                                            style:--tj-badge={ph.tjColor}
+                                            style:box-shadow={tjShadowFor(ph.tjBadges, $tajweedSettings)}
+                                            data-tj-rules={tjTitleFor(ph.tjBadges, [], $tajweedSettings) || null}
                                             on:click={(e) => onPhonemeClick(e, ph.interval, ph.index, block.wordIndex)}
                                             on:dblclick={(e) => onPhonemeDblClick(e, ph.interval, ph.index, block.wordIndex)}
                                             on:mouseenter={(e) => onPhonemeEnter(e, ph.interval)}
@@ -2205,6 +2264,10 @@
         </div>
     {/each}
     {#if tipText}
-        <div class="cell-tip" dir="ltr" style="left:{tipX}px; top:{tipY}px;" aria-hidden="true">{tipText}</div>
+        <div class="cell-tip" dir="ltr" style="left:{tipX}px; top:{tipY}px;" aria-hidden="true">
+            {#each tipText.split('\n') as line (line)}
+                <div class:tip-rule={!line.endsWith(' ms')}>{line}</div>
+            {/each}
+        </div>
     {/if}
 </div>

@@ -78,6 +78,7 @@
         verseTranslations,
     } from './stores/display';
     import { tsLoading } from './stores/loading';
+    import { initTajweedSettings } from './stores/tajweed-settings';
     import { loadTsFlags, tsFlaggedVerses } from './stores/ts-flags';
     import { exitLoop, loopTarget } from './stores/playback';
     import { manualShuffleRequest, shuffleAyah, shuffleMode } from './stores/shuffle';
@@ -171,6 +172,7 @@
         if (sP !== null) showPhonemes.set(sP === 'true');
         if (sT !== null) showTranslations.set(sT === 'true');
         if (sLang) translationLanguage.set(sLang);
+        initTajweedSettings();
 
         try {
             const [, manifest] = await Promise.all([loadPublicCatalog(), loadManifest()]);
