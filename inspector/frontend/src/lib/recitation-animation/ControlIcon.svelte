@@ -18,7 +18,7 @@
             | 'droplet'
             | 'motion-hybrid' | 'motion-snap'
             | 'size-down' | 'size-up'
-            | 'letters' | 'phonemes' | 'globe' | 'tajweed'
+            | 'letters' | 'phonemes' | 'globe' | 'tajweed' | 'wipe'
             | 'bookmark' | 'bookmark-filled' | 'bookmarks-panel' | 'help';
         size?: number;
     }
@@ -79,6 +79,12 @@
             + '<line x1="16.8" y1="10" x2="16.8" y2="14"/>'
             + '<line x1="20" y1="7" x2="20" y2="17"/>'
             + '</g>',
+        // Continuous-highlight (karaoke wipe): a cell filling like liquid — a
+        // wave level inside the rounded cell, signalling the fill that tracks the
+        // voice across each cell (vs the discrete fill when off).
+        'wipe':
+            '<rect x="3.5" y="4.5" width="17" height="15" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/>'
+            + '<path d="M4.5 12.8q3.75-2.6 7.5 0t7.5 0L19.5 17.2a2.3 2.3 0 0 1-2.3 2.3L6.8 19.5a2.3 2.3 0 0 1-2.3-2.3Z" fill="currentColor"/>',
         // Translations: a globe (languages).
         'globe':
             '<circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.8"/>'

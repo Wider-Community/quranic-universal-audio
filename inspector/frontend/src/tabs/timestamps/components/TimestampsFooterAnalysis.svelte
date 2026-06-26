@@ -4,7 +4,9 @@
      * `center-trail` slot (just right of the speed button) when the Timestamps
      * tab is active.
      *
-     * A single flat row:  loop · letters · phonemes · translations(globe) · help
+     * A single flat row:  loop · letters · phonemes · wipe · tajweed ·
+     * translations(globe) · help. `wipe` toggles the continuous karaoke-style
+     * highlight (vs the discrete fill).
      * All operate on the shared player (dashPort) + timestamps display stores.
      * The help button opens the shortcuts/guide drop-up.
      */
@@ -14,7 +16,7 @@
     import { dashPort } from '../../../lib/playback/dash-port';
     import { ControlIcon } from '../../../lib/recitation-animation';
     import { LS_KEYS } from '../../../lib/utils/constants';
-    import { showLetters, showPhonemes } from '../stores/display';
+    import { highlightWipe, showLetters, showPhonemes } from '../stores/display';
     import { loopTarget } from '../stores/playback';
     import { loadedVerse } from '../stores/verse';
     import { findWordAt } from '../utils/loop-target';
@@ -32,6 +34,9 @@
     }
     function togglePhonemes(): void {
         showPhonemes.update((v) => { persist(LS_KEYS.TS_SHOW_PHONEMES, !v); return !v; });
+    }
+    function toggleWipe(): void {
+        highlightWipe.update((v) => !v); // self-persists (see stores/display)
     }
     function toggleLoop(): void {
         if (get(loopTarget)) { loopTarget.set(null); return; }
@@ -137,6 +142,10 @@
         type="button" class="icon-btn" class:on={$showPhonemes}
         aria-pressed={$showPhonemes} title="Toggle phonemes" onclick={togglePhonemes}
     ><ControlIcon name="phonemes" /></button>
+    <button
+        type="button" class="icon-btn" class:on={$highlightWipe}
+        aria-pressed={$highlightWipe} title="Continuous highlight (karaoke wipe)" onclick={toggleWipe}
+    ><ControlIcon name="wipe" /></button>
 
     <div class="guide-wrap" use:clickOutside={() => (tajweedOpen = false)}>
         <button

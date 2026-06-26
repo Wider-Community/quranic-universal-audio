@@ -30,6 +30,7 @@
     import { isRuleEnabled, tajweedSettings, type TajweedSettings } from '../stores/tajweed-settings';
     import { waqfRenderStyle } from '../utils/waqf-render';
     import {
+        highlightWipe,
         showLetters,
         showPhonemes,
         showTranslations,
@@ -175,6 +176,9 @@
         pauseBridges: HTMLElement[];
     }
     let _hc: HiCache | null = null;
+    // The active phoneme element (track mode sets its `--fill` per frame; phonemes
+    // light by index diff, not in the timed-cell loop, so we hold a reference).
+    let _trackPh: HTMLElement | null = null;
     function _rebuildHighlightCache(): void {
         if (!rootEl) { _hc = null; return; }
         const q = (s: string): HTMLElement[] => Array.from(rootEl.querySelectorAll<HTMLElement>(s));
@@ -225,6 +229,10 @@
     // such re-runs, which broke first-load reactivity wholesale.
     $: ($tsWaveformHoverTime, $loopTarget, untrack(() => updateHighlights()));
 
+    // Continuous-highlight mode is a root class the cell CSS reads; the per-frame
+    // `--fill` is written in `updateHighlights` only while this is on.
+    $: if (rootEl) rootEl.classList.toggle('hl-track', $highlightWipe);
+
 
 
 
@@ -253,6 +261,10 @@
         const portReady = !!dashPort.element;
         const portPaused = dashPort.paused;
         const hoverTime = get(tsWaveformHoverTime);
+
+        // Continuous karaoke wipe across the active cell (vs the discrete fill).
+        const trackOn = get(highlightWipe);
+        const leadSec = 0;
 
         // Cached node lists (rebuilt only on structural render) — never query the
         // DOM per frame; that regressed the animation to a laggy, trailing smear.
@@ -331,10 +343,22 @@
 
         // Phoneme highlights — diff-only
         if (currentIndex !== _prevActivePhonemeIdx) {
+            _trackPh = null;
             hc.phonemes.forEach((ph) => {
-                ph.classList.toggle('active', parseInt(ph.dataset.index ?? '-1') === currentIndex);
+                const on = parseInt(ph.dataset.index ?? '-1') === currentIndex;
+                ph.classList.toggle('active', on);
+                if (on) _trackPh = ph;
+                else ph.style.removeProperty('--fill');
             });
             _prevActivePhonemeIdx = currentIndex;
+        }
+        if (trackOn && _trackPh && currentIndex >= 0) {
+            const iv = intervals[currentIndex];
+            if (iv) {
+                const d = iv.end - iv.start;
+                const f = d > 0 ? (time + leadSec - iv.start) / d : 0;
+                _trackPh.style.setProperty('--fill', String(f < 0 ? 0 : f > 1 ? 1 : f));
+            }
         }
         hc.phonemes.forEach((ph) => {
             ph.classList.toggle('hover-preview', parseInt(ph.dataset.index ?? '-1') === hoverPhonemeIndex);
@@ -350,11 +374,21 @@
             const s = parseFloat(el.dataset.cellStart ?? 'NaN');
             const e = parseFloat(el.dataset.cellEnd ?? 'NaN');
             const wi = parseInt(el.dataset.wordIndex ?? '-1');
-            el.classList.toggle('active', time >= s && time < e);
+            const isActive = time >= s && time < e;
+            el.classList.toggle('active', isActive);
             el.classList.toggle(
                 'hover-preview',
                 hoverTime != null && wi === hoverWordIndex && hoverTime >= s && hoverTime < e,
             );
+            if (trackOn) {
+                if (isActive) {
+                    const d = e - s;
+                    const f = d > 0 ? (time + leadSec - s) / d : 0;
+                    el.style.setProperty('--fill', String(f < 0 ? 0 : f > 1 ? 1 : f));
+                } else if (el.style.getPropertyValue('--fill')) {
+                    el.style.removeProperty('--fill');
+                }
+            }
         });
 
         // Loop perma-highlight — outline the looped element on its tier. Only re-run
