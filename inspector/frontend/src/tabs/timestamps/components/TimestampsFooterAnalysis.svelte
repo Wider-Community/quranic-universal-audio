@@ -92,6 +92,36 @@
         window.addEventListener('resize', place);
         return { destroy: () => window.removeEventListener('resize', place) };
     }
+
+    // Centre the tajweed panel on the footer's play button (the centred transport
+    // column = true viewport centre), so its middle column lines up under play.
+    // Falls back to viewport-clamped if the wide box would overflow an edge.
+    function centerOnPlay(node: HTMLElement) {
+        const margin = 8;
+        const place = (): void => {
+            node.style.right = 'auto';
+            node.style.maxWidth = '';
+            const wrap = node.parentElement;
+            const controls = document.querySelector('.player .controls');
+            if (!wrap || !controls) return;
+            const wrapLeft = wrap.getBoundingClientRect().left;
+            const c = controls.getBoundingClientRect();
+            const w = node.offsetWidth;
+            if (w > window.innerWidth - margin * 2) {
+                node.style.maxWidth = `${window.innerWidth - margin * 2}px`;
+                node.style.left = `${Math.round(margin - wrapLeft)}px`;
+                return;
+            }
+            const vpLeft = Math.max(
+                margin,
+                Math.min(c.left + c.width / 2 - w / 2, window.innerWidth - margin - w),
+            );
+            node.style.left = `${Math.round(vpLeft - wrapLeft)}px`;
+        };
+        place();
+        window.addEventListener('resize', place);
+        return { destroy: () => window.removeEventListener('resize', place) };
+    }
 </script>
 
 <div class="tfa" role="group" aria-label="Analysis tiers">
@@ -115,7 +145,7 @@
             onclick={() => (tajweedOpen = !tajweedOpen)}
         ><ControlIcon name="tajweed" /></button>
         {#if tajweedOpen}
-            <div class="guide-pop" use:keepInView>
+            <div class="guide-pop" use:centerOnPlay>
                 <TajweedSettingsPanel />
             </div>
         {/if}
