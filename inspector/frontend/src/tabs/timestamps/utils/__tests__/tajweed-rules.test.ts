@@ -62,6 +62,17 @@ describe('tajweed-rules — badge stacking', () => {
         expect(badgesForTags(['tafkheem', 'idgham_bila_ghunnah_noon']).map((b) => b.legendKey)).toEqual(['idgham_bila', 'tafkheem']);
     });
 
+    it('stacks base < merge < tafkheem (a consonant idgham rides ON the target rule)', () => {
+        // ٱرْكَب مَّعَنَا: the receiving mīm sounds ghunnah (base) AND is the mutajānisayn
+        // target (merge) — the merge bar sits above ghunnah, tafkheem above that.
+        const b = badgesForTags(['meem_ghunnah', 'idgham_mutajanisayn_kamil', 'tafkheem']);
+        expect(b.map((x) => x.legendKey)).toEqual(['ghunnah', 'mutajanisayn', 'tafkheem']);
+        expect(b.map((x) => x.stack)).toEqual(['base', 'merge', 'top']);
+        expect(tjShadow(b, all)).toBe(
+            'inset 0 -2px 0 var(--tj-ghunnah), inset 0 -4px 0 var(--tj-mutajanisayn), inset 0 -6px 0 var(--tj-tafkheem)',
+        );
+    });
+
     it('marks qalqala kubrā for the taller fill', () => {
         expect(badgeForTag('qalqala_kubra')!.kubra).toBe(true);
         expect(badgeForTag('qalqala_sughra')!.kubra).toBe(false);
@@ -116,6 +127,12 @@ describe('tajweed-rules — tooltip names', () => {
         expect(tjRuleNames(badges, [], all)).toBe('Qalqala Kubra\nTafkheem');
         expect(tjRuleNames(badges, ['Iltiqa\' \'as-sakinayn'], (k) => k === 'qalqala'))
             .toBe('Qalqala Kubra\nIltiqa\' \'as-sakinayn');
+    });
+
+    it('dedups a name carried by both a badge and a silent name (the iwaḍ alef)', () => {
+        const b = badgesForTags(['madd_iwad']); // badge tooltip "Madd 'Iwad"
+        // even with madd-ṭabīʿī enabled, the badge + the always-on silent name collapse
+        expect(tjRuleNames(b, ["Madd 'Iwad"], all)).toBe("Madd 'Iwad");
     });
 
     it('maps the silent rules to display names', () => {

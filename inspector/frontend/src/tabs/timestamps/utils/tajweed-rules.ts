@@ -19,7 +19,7 @@
  * runtime by the settings store).
  */
 
-export type StackLayer = 'base' | 'top';
+export type StackLayer = 'base' | 'merge' | 'top';
 export type RuleCategory = 'ghunnah' | 'madd' | 'heaviness' | 'idgham';
 
 interface RuleDef {
@@ -31,8 +31,9 @@ interface RuleDef {
     /** hover tooltip name — may differ between tags sharing a legendKey
      *  (qalqala ṣughrā vs kubrā, mutajānisayn kāmil vs nāqiṣ). */
     tooltip: string;
-    /** which underline bar this rule occupies when stacked — tafkheem rides on
-     *  top of everything; all else is the base (bottom) bar. */
+    /** which underline bar this rule occupies when stacked (bottom→top):
+     *  `base` (the cell's own rule, e.g. ghunnah) < `merge` (a cross-word idgham
+     *  riding ON the target, e.g. mutajānisayn over a ghunnah) < `top` (tafkheem). */
     stack: StackLayer;
 }
 
@@ -59,7 +60,7 @@ const COLOR_RULES: Record<string, RuleDef> = {
     // ṭabīʿī + its structural aliases (the dagger-alef of Allah, the ʿiwaḍ alef)
     madd_tabii: { legendKey: 'madd_tabii', colorVar: '--tj-madd-tabii', tooltip: "Madd Tabi'i", stack: 'base' },
     allah_dagger_alef: { legendKey: 'madd_tabii', colorVar: '--tj-madd-tabii', tooltip: "Madd Tabi'i", stack: 'base' },
-    madd_iwad: { legendKey: 'madd_tabii', colorVar: '--tj-madd-tabii', tooltip: "Madd Tabi'i (Iwad)", stack: 'base' },
+    madd_iwad: { legendKey: 'madd_tabii', colorVar: '--tj-madd-tabii', tooltip: "Madd 'Iwad", stack: 'base' },
     // ── Heaviness ─────────────────────────────────────────────────────────────
     tafkheem: { legendKey: 'tafkheem', colorVar: '--tj-tafkheem', tooltip: 'Tafkheem', stack: 'top' },
     qalqala_sughra: { legendKey: 'qalqala', colorVar: '--tj-qalqala', tooltip: 'Qalqala Sughra', stack: 'base' },
@@ -67,10 +68,12 @@ const COLOR_RULES: Record<string, RuleDef> = {
     // ── Idgham (silent merges) ────────────────────────────────────────────────
     idgham_bila_ghunnah_noon: { legendKey: 'idgham_bila', colorVar: '--tj-idgham-bila', tooltip: 'Idgham bila Ghunnah', stack: 'base' },
     idgham_bila_ghunnah_tanween: { legendKey: 'idgham_bila', colorVar: '--tj-idgham-bila', tooltip: 'Idgham bila Ghunnah', stack: 'base' },
-    idgham_mutamathilayn: { legendKey: 'mutamathilayn', colorVar: '--tj-mutamathilayn', tooltip: 'Idgham Mutamathilayn', stack: 'base' },
-    idgham_mutaqaribayn: { legendKey: 'mutaqaribayn', colorVar: '--tj-mutaqaribayn', tooltip: 'Idgham Mutaqaribayn', stack: 'base' },
-    idgham_mutajanisayn_kamil: { legendKey: 'mutajanisayn', colorVar: '--tj-mutajanisayn', tooltip: 'Idgham Mutajanisayn Kamil', stack: 'base' },
-    idgham_mutajanisayn_naqis: { legendKey: 'mutajanisayn', colorVar: '--tj-mutajanisayn', tooltip: 'Idgham Mutajanisayn Naqis', stack: 'base' },
+    // The consonant idghams ride the `merge` layer — they sit ABOVE the target's own
+    // base rule (e.g. a ghunnah on the receiving mīm of ٱرْكَب مَّعَنَا) and below tafkheem.
+    idgham_mutamathilayn: { legendKey: 'mutamathilayn', colorVar: '--tj-mutamathilayn', tooltip: 'Idgham Mutamathilayn', stack: 'merge' },
+    idgham_mutaqaribayn: { legendKey: 'mutaqaribayn', colorVar: '--tj-mutaqaribayn', tooltip: 'Idgham Mutaqaribayn', stack: 'merge' },
+    idgham_mutajanisayn_kamil: { legendKey: 'mutajanisayn', colorVar: '--tj-mutajanisayn', tooltip: 'Idgham Mutajanisayn Kamil', stack: 'merge' },
+    idgham_mutajanisayn_naqis: { legendKey: 'mutajanisayn', colorVar: '--tj-mutajanisayn', tooltip: 'Idgham Mutajanisayn Naqis', stack: 'merge' },
     // ── Iẓhar (FE-synthesized fallback for a sounding sākin noon/meem/tanwīn) ──
     izhar_halqi: { legendKey: 'izhar', colorVar: '--tj-izhar-halqi', tooltip: 'Izhar Halqi', stack: 'base' },
     izhar_shafawi: { legendKey: 'izhar_shafawi', colorVar: '--tj-izhar-shafawi', tooltip: 'Izhar Shafawi', stack: 'base' },
@@ -107,21 +110,24 @@ export function badgeForTag(tag: string | null | undefined): TjBadge | null {
     return { ...def, kubra: tag === 'qalqala_kubra' };
 }
 
-/** Resolve a cell's candidate tags into its ordered underline stack: at most one
- *  base bar (the first colourable base rule in tag order — a cell's own tag wins
- *  over a propagated one) plus tafkheem on top. Bottom→top, so a renderer draws
- *  the base bar lowest and tafkheem above it. Empty when no tag is colourable. */
+/** Resolve a cell's candidate tags into its ordered underline stack (bottom→top):
+ *  at most one `base` bar (the first colourable base rule in tag order — a cell's
+ *  own tag wins over a propagated one), one `merge` bar (a cross-word idgham riding
+ *  on the target), and tafkheem on top. Empty when no tag is colourable. */
 export function badgesForTags(tags: (string | null | undefined)[]): TjBadge[] {
     let base: TjBadge | null = null;
+    let merge: TjBadge | null = null;
     let top: TjBadge | null = null;
     for (const t of tags) {
         const b = badgeForTag(t);
         if (!b) continue;
         if (b.stack === 'top') top ??= b;
+        else if (b.stack === 'merge') merge ??= b;
         else base ??= b;
     }
     const out: TjBadge[] = [];
     if (base) out.push(base);
+    if (merge) out.push(merge);
     if (top) out.push(top);
     return out;
 }
@@ -174,7 +180,12 @@ export function tjRuleNames(
     silent: string[],
     isEnabled: (legendKey: string) => boolean,
 ): string {
-    const names = [...badges.filter((b) => isEnabled(b.legendKey)).map((b) => b.tooltip), ...silent];
+    // Dedup so a name carried by BOTH a (toggle-gated) badge and an always-on silent
+    // name — the madd-ʿiwaḍ alef — collapses to one line.
+    const names = [...new Set([
+        ...badges.filter((b) => isEnabled(b.legendKey)).map((b) => b.tooltip),
+        ...silent,
+    ])];
     return names.join('\n');
 }
 

@@ -2003,6 +2003,41 @@ describe('UnifiedDisplay — per-grapheme phoneme alignment', () => {
         expect(source.style.boxShadow).toContain('var(--tj-mutamathilayn)');
     });
 
+    it('an idgham TARGET stacks the merge bar above its own ghunnah (ٱرْكَب مَّعَنَا → مّ)', () => {
+        // the receiving mīm sounds ghunnah (its own rule) AND is the mutajānisayn target
+        // (carried as a secondary `merge` tag): ghunnah bar below, mutajānisayn above.
+        const iv: PhonemeInterval[] = [{ phone: 'm̃', start: 0, end: 0.3 }];
+        const word = w(
+            [{ char: 'م', start: 0, end: 0.3, silent: false }],
+            [base(0, [0], { chars: 'مّ', tag: 'meem_ghunnah', secondaryTags: ['idgham_mutajanisayn_kamil'] })],
+            [0],
+        );
+        const { container } = mount([word], iv);
+        const meem = container.querySelector<HTMLElement>('.mega-letter:not(.implicit)')!;
+        const s = meem.style.boxShadow;
+        expect(s).toContain('var(--tj-ghunnah)');
+        expect(s).toContain('var(--tj-mutajanisayn)');
+        expect(s.indexOf('ghunnah')).toBeLessThan(s.indexOf('mutajanisayn')); // ghunnah below the merge
+    });
+
+    it('a within-word naqis TARGET underlines + names the rule (بَسَطتَ → ت)', () => {
+        const iv: PhonemeInterval[] = [
+            { phone: 'tˤ', start: 0, end: 0.15 }, { phone: 't', start: 0.15, end: 0.3 },
+        ];
+        const word = w(
+            [{ char: 'ط', start: 0, end: 0.15, silent: false }, { char: 'ت', start: 0.15, end: 0.3, silent: false }],
+            [
+                base(0, [0], { chars: 'ط', tag: 'idgham_mutajanisayn_naqis', secondaryTags: ['tafkheem'] }),
+                base(1, [1], { chars: 'ت', secondaryTags: ['idgham_mutajanisayn_naqis'] }),
+            ],
+            [0, 1],
+        );
+        const { container } = mount([word], iv);
+        const taa = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter')).find((e) => e.textContent === 'ت')!;
+        expect(taa.style.boxShadow).toContain('var(--tj-mutajanisayn)');
+        expect(taa.dataset.tjRules).toBe('Idgham Mutajanisayn Naqis');
+    });
+
     it('mutaqaribayn keeps its source SILENT but still underlines + names it (no co-light)', () => {
         // قُل رَّبِّ cross-word: the source ل does NOT co-light (no share group) → it stays
         // greyed, yet still draws its underline + tooltip.

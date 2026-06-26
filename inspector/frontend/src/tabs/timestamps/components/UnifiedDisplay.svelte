@@ -672,6 +672,10 @@
                 if ((c.role === 'haraka' || c.role === 'tanween') && c.status === 'dropped'
                     && c.phonemeIndices.length === 0 && cells[i + 1]?.tag === 'madd_iwad') {
                     extraSilent.set(c, "Madd 'Iwad");
+                } else if (c.role === 'madd' && c.tag === 'madd_iwad') {
+                    // The sounding iwaḍ ʾalif names the rule on hover even when its madd
+                    // underline (gated by the madd-ṭabīʿī toggle) is off — matching the fatḥa.
+                    extraSilent.set(c, "Madd 'Iwad");
                 } else if ((c.role === 'haraka' || c.role === 'tanween') && c.status === 'dropped'
                     && c.phonemeIndices.length === 0 && i > lastSounding) {
                     extraSilent.set(c, 'Waqf');
@@ -721,6 +725,17 @@
             ? _cellTiming(iwadAlef.phonemeIndices, intervals, null)
             : { start: null, end: null };
         const iwadIv: [number, number] | null = _iwadIv.start != null ? [_iwadIv.start, _iwadIv.end!] : null;
+        // The dropped fatḥatan whose compensating madd moved onto the next ʾalif at waqf
+        // — detected STRUCTURALLY (its own tag is cleared so it draws no underline; the
+        // ʾalif carries the bar). The renderer transforms it into a dashed fatḥa co-lit
+        // with the ʾalif (see the iwaḍ branch in the cell loop).
+        const iwadFathatan = new Set<TsCell>();
+        cells.forEach((c, i) => {
+            if ((c.role === 'tanween' || c.role === 'haraka') && c.status === 'dropped'
+                && c.phonemeIndices.length === 0 && cells[i + 1]?.tag === 'madd_iwad') {
+                iwadFathatan.add(c);
+            }
+        });
         const daggerBySrc = new Map<number, { group: RenderedGroup; iv: [number, number] }>();
         // و/ى waqf carrier → its vowel group, so the carrier's own dropped fatḥa
         // rejoins it silently (a double-sided [haraka, carrier, dropped-fatḥa] unit)
@@ -1000,10 +1015,11 @@
                     const dropped = c.phonemeIndices.length === 0;
                     if (c.shareGroup != null && longVowelSG.has(c.shareGroup)) {
                         pushSmall(vowelGroupFor(c.shareGroup), c); // long vowel — leaves its base
-                    } else if (dropped && c.tag === 'madd_iwad' && iwadIv) {
+                    } else if (dropped && iwadFathatan.has(c) && iwadIv) {
                         // dropped tanwīn at waqf → a fatḥa grouped + co-lit with the iwaḍ
                         // alef. The fatḥatan→fatḥa transform is "not in the rasm" — flag it
                         // inserted so the small fatḥa cell carries the muted dashed border.
+                        // (Detected structurally — its tag is cleared so it draws no bar.)
                         iwadGroup = iwadGroup ?? newGroup('vowel');
                         pushSmall(iwadGroup, c, { coLightIv: iwadIv, glyphOverride: FATHA, inserted: true });
                     } else if (dropped && daggerBySrc.has(c.sourceLetterIndex)) {
