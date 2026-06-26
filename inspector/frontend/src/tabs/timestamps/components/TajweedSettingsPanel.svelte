@@ -8,8 +8,7 @@
      * side-wrap. The Other column closes with two non-interactive keys explaining
      * the dashed (sounded-but-unwritten) and greyed (written-but-silent) cells. All
      * state lives in the `tajweed-settings` store; colours apply via `--tj-*`
-     * overrides, toggles drive the per-cell underline. `tajweedDump()` (devtools)
-     * prints the current palette + enables for promoting to shipped defaults.
+     * overrides, toggles drive the per-cell underline.
      */
     import { harakaRenderStyle } from '../utils/haraka-render';
     import { LEGEND, type LegendRow } from '../utils/tajweed-rules';

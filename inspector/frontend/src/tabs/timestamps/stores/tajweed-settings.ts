@@ -10,7 +10,7 @@
  * Defaults come from the rule registry (`tajweed-rules.ts`): everything on except
  * iẓhar and madd ṭabīʿī.
  */
-import { get, writable } from 'svelte/store';
+import { writable } from 'svelte/store';
 
 import { LS_KEYS } from '../../../lib/utils/constants';
 import { DEFAULT_ENABLED, LEGEND, LEGEND_KEYS } from '../utils/tajweed-rules';
@@ -81,33 +81,6 @@ export function initTajweedSettings(): void {
     const s = load();
     tajweedSettings.set(s);
     applyColorOverrides(s);
-    if (typeof window !== 'undefined') {
-        (window as Window & { tajweedDump?: typeof dumpTajweedConfig }).tajweedDump =
-            dumpTajweedConfig;
-         
-        console.info('[tajweed] run tajweedDump() to print the current colours + enables');
-    }
-}
-
-/**
- * Print the current effective colours + enable flags to the console as a
- * copy-pasteable block — for promoting a hand-tuned palette to the shipped
- * defaults (the `--tj-*` vars in `styles/base.css` + `DEFAULT_OFF` in
- * `tajweed-rules.ts`). Exposed as `window.tajweedDump()` for use from devtools.
- */
-export function dumpTajweedConfig(): void {
-    const s = get(tajweedSettings);
-    const root = typeof document !== 'undefined' ? getComputedStyle(document.documentElement) : null;
-    const colors: Record<string, string> = {};
-    const enabled: Record<string, boolean> = {};
-    for (const k of LEGEND_KEYS) {
-        enabled[k] = s[k]?.enabled ?? true;
-        const v = COLOR_VAR[k];
-        if (v) colors[v] = (s[k]?.color ?? (root ? root.getPropertyValue(v) : '')).trim();
-    }
-    const disabledByDefault = LEGEND_KEYS.filter((k) => !enabled[k]);
-     
-    console.log(JSON.stringify({ colors, enabled, disabledByDefault }, null, 2));
 }
 
 /** Whether a rule's underline is enabled (defaults to on for an unknown key). */

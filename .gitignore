@@ -38,3 +38,6 @@ htmlcov/
 
 # local v5 shard fixtures for inspector dev iteration (D3/D4)
 inspector/dev_fixtures/
+
+# diacritic-cell sizing playground — a local hand-tuned calibration prototype, not shipped
+inspector/frontend/design/prototypes/haraka-cells/

@@ -6,8 +6,8 @@
  * A lone haraka is a zero-width combining glyph whose ink sits at a different
  * size/offset in the em per mark, so the glyph size and centring offset cannot
  * be shared across marks. These values were tuned against the DigitalKhatt face
- * in the diacritic-cell sizing playground (`design/prototypes/haraka-cells/`),
- * keyed by the mark's codepoint (lowercase hex). They are the data the CSS reads
+ * in a local diacritic-cell sizing playground, keyed by the mark's codepoint
+ * (lowercase hex). They are the data the CSS reads
  * — `UnifiedDisplay` projects them onto the `--haraka-*` custom properties via
  * `harakaRenderStyle`, and the generic `.haraka-cell .g` rule consumes them
  * (`font-size: …*var(--haraka-scale)`, `transform: translate(var(--haraka-shift), var(--haraka-raise))`).

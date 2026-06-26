@@ -35,7 +35,7 @@
        underline, distinct from the playback highlight. Hand-tuned sRGB hex for
        legibility on the cell backgrounds (#0f0f23 rest / #1a1a3e active-word). The
        rule→colour map + legend live in tabs/timestamps/utils/tajweed-rules.ts; the
-       settings store overrides any of these per-rule at runtime (tajweedDump()). */
+       settings store overrides any of these per-rule at runtime. */
     --tj-madd-jaiz: #e189a8;        /* pink */
     --tj-madd-wajib: #cb4d8e;       /* magenta */
     --tj-madd-lazim: #a33729;       /* brick red */
