@@ -28,6 +28,7 @@
         publishHfBatch,
         refreshHfCatalog,
         type InFlightJob,
+        type PublishHfSettings,
         type ReleasePreviewResponse,
         type ReleaseStatusRow,
         type ReleasesStatusResponse,
@@ -381,12 +382,12 @@
     const selectableCount = $derived(filteredRows.filter(isSelectable).length);
 
     // ---- actions ----
-    async function onPublishBatch(): Promise<void> {
+    async function onPublishBatch(settings: PublishHfSettings): Promise<void> {
         if (batchBusy || selected.size === 0) return;
         batchBusy = true;
         batchError = null;
         try {
-            await publishHfBatch([...selected]);
+            await publishHfBatch([...selected], settings);
             clearSelection();
             refetch();   // the server cache is already busted; this gets the new in_flight
         } catch (e) {
