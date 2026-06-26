@@ -800,6 +800,140 @@ def _merge_ts_validation(path: Path, fresh: dict, refresh_chapters: set[int]) ->
     return fresh
 
 
+def _shift_word_times(w: dict, delta_sec: float) -> dict:
+    """Shift a recovered word (+ its letters/phones) by ``delta`` seconds, so a
+    verse-local time becomes the segment-local time ``_normalize_from_results``
+    re-bases by ``seg.time_start``. Null letter start/end (degraded) stay null."""
+    def _s(v):
+        return None if v is None else round(v + delta_sec, 4)
+
+    nw = dict(w)
+    nw["start"], nw["end"] = _s(w.get("start")), _s(w.get("end"))
+    if w.get("letters"):
+        nw["letters"] = [{**lt, "start": _s(lt.get("start")), "end": _s(lt.get("end"))}
+                         for lt in w["letters"]]
+    if w.get("phones"):
+        nw["phones"] = [{**p, "start": _s(p.get("start")), "end": _s(p.get("end"))}
+                        for p in w["phones"]]
+    return nw
+
+
+def _group_verse_items(segments: list, refresh_ayahs: set | None = None) -> list[dict]:
+    """Group a chapter's KEPT segments into whole-verse ITEMS, raw + faithful.
+
+    Walk kept segments in TIME order; a maximal run of consecutive segments
+    sharing one output verse-key is ONE item (continuous recitation incl.
+    mid-verse / partial repeats — concatenated). A verse revisited later (a
+    RETAKE) starts a separate item. No dedup — that is a publish-only concern.
+    Returns ``[{"vk", "seg_idxs":[...]}, ...]`` (indices into ``segments``).
+    """
+    kept = [
+        si for si, seg in enumerate(segments)
+        if build_mfa_ref(seg) is not None
+        and (refresh_ayahs is None
+             or (_seg_covered_ayahs(seg.get("matched_ref", "")) & refresh_ayahs))
+    ]
+    kept.sort(key=lambda si: segments[si].get("time_start", 0))
+    items: list[dict] = []
+    cur: dict | None = None
+    for si in kept:
+        vk = _matched_ref_to_output_key(segments[si].get("matched_ref", ""))
+        if vk is None:
+            continue
+        if cur and cur["vk"] == vk:
+            cur["seg_idxs"].append(si)
+        else:
+            if cur:
+                items.append(cur)
+            cur = {"vk": vk, "seg_idxs": [si]}
+    if cur:
+        items.append(cur)
+    return items
+
+
+def _align_whole_verse(
+    chapters_to_process: list,
+    beams: list[int],
+    *,
+    mfa_model_path,
+    mfa_dictionary_path,
+    padding: str,
+    word_boundary_allocation: dict | None,
+    refresh_ayahs: set | None = None,
+    sample_rate: int = 16000,
+) -> dict:
+    """Whole-verse alignment → the same ``results_by_beam`` the per-segment path
+    builds, so all downstream (``build_raw_v2`` → shards, ``ts_validation``)
+    is unchanged.
+
+    Each verse item is ONE ``align_verse`` pass over its contiguous audio span
+    (psil seeded at every segment boundary, split back per-segment); each
+    segment's words are shifted to segment-local time so the seg-offset rebase in
+    ``_normalize_from_results`` lands them back at chapter time. Per-occurrence,
+    raw and faithful to the audio as allocated; failures degrade per item.
+    """
+    import numpy as _np
+    from qua_sdk.components.timing.lib import resolve_word_boundary_allocation
+    from qua_sdk.components.timing.runtimes.mfa_local import MfaLocalAligner
+
+    aligner = MfaLocalAligner(str(mfa_model_path), str(mfa_dictionary_path),
+                              num_threads=1, use_pool=False)
+    log.info("whole-verse aligner: supports_psil=%s keep_q=%s",
+             aligner.supports_psil, aligner.keep_q)
+    wb = resolve_word_boundary_allocation(word_boundary_allocation)
+    results_by_beam: dict[int, dict[int, list]] = {b: {} for b in beams}
+
+    for ch_idx, chapter in chapters_to_process:
+        ch_ref = str(chapter.get("ref", ""))
+        audio_src = chapter.get("audio", "")
+        if not audio_src:
+            log.warning("ch%s: no audio source, skipping", ch_ref)
+            continue
+        try:
+            audio_file = download_audio(audio_src) if _is_url(audio_src) else Path(audio_src)
+            audio_i16 = load_audio_int16(audio_file)
+            if _is_url(audio_src):
+                audio_file.unlink()
+        except Exception as e:
+            log.warning("ch%s: audio download/convert failed: %s", ch_ref, e)
+            continue
+        audio_f = audio_i16.astype(_np.float32) / 32768.0
+        segments = chapter.get("segments", [])
+        items = _group_verse_items(segments, refresh_ayahs)
+        log.info("ch%s: %d whole-verse items from %d segments", ch_ref, len(items), len(segments))
+
+        for it in items:
+            sidx = it["seg_idxs"]
+            t0 = int(segments[sidx[0]].get("time_start", 0))
+            t1 = int(segments[sidx[-1]].get("time_end", t0))
+            span = audio_f[int(t0 * sample_rate / 1000): int(t1 * sample_rate / 1000)]
+            refs = [build_mfa_ref(segments[si]) for si in sidx]
+            too_short = len(span) < sample_rate // 50
+            for b in beams:
+                if too_short:
+                    rows = [(si, {"status": "error", "error": "empty span"}) for si in sidx]
+                else:
+                    try:
+                        vres = aligner.align_verse(
+                            refs, span, sample_rate, beam=b, retry_beam=b,
+                            include_letters=True, padding=padding,
+                            wb_allocation_resolved=wb)
+                    except Exception as e:
+                        rows = [(si, {"status": "error", "error": f"{type(e).__name__}: {e}"})
+                                for si in sidx]
+                    else:
+                        rows = []
+                        for j, si in enumerate(sidx):
+                            words = vres[j]["words"] if j < len(vres) else []
+                            delta = (t0 - int(segments[si].get("time_start", 0))) / 1000.0
+                            shifted = [_shift_word_times(w, delta) for w in words]
+                            rows.append((si, {"status": "ok" if shifted else "error",
+                                              "words": shifted,
+                                              **({} if shifted else {"error": "no words"})}))
+                results_by_beam[b].setdefault(ch_idx, []).extend(rows)
+    return results_by_beam
+
+
 def process(
     input_dir: Path,
     backend: MfaBackend | None,
