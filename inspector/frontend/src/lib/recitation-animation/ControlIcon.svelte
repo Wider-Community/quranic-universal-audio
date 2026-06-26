@@ -126,9 +126,10 @@
     .ci { display: inline-flex; line-height: 0; }
     .ci :global(svg) { display: block; }
 
-    /* The tajweed icon is a real analysis cell (3px-rounded, dark inset) reading a
-       big near-full-width TJW pinned to the top, over one of its own underline bars
-       cycling three palette hues. The cell clips the bar to its rounded bottom; the
+    /* The tajweed icon is a real analysis cell (3px-rounded, transparent so it sits
+       naturally in the footer) reading a big near-full-width TJW pinned to the top,
+       over one of its own underline bars cycling three palette hues. The cell clips
+       the bar to its rounded bottom; the
        bar ends round so the underline bleeds to the edge like the live per-cell one. */
     .tjw {
         position: relative;
@@ -137,7 +138,7 @@
         display: flex;
         align-items: flex-start;
         justify-content: center;
-        background: #0f0f23;
+        background: transparent;
         border: 1px solid var(--border-default, #3a3a55);
         border-radius: 3px;
         overflow: hidden;
