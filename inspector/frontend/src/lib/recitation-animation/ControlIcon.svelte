@@ -103,7 +103,13 @@
     };
 </script>
 
-<span class="ci" style:width="{size}px" style:height="{size}px" aria-hidden="true">
+<span
+    class="ci"
+    class:ci-fill={name === 'tajweed'}
+    style:width={name === 'tajweed' ? null : `${size}px`}
+    style:height={name === 'tajweed' ? null : `${size}px`}
+    aria-hidden="true"
+>
     {#if name === 'tajweed'}
         <span class="tjw" style:font-size="{size}px">
             <span class="tjw-txt">TJW</span>
@@ -125,12 +131,15 @@
 <style>
     .ci { display: inline-flex; line-height: 0; }
     .ci :global(svg) { display: block; }
+    /* The tajweed icon fills its footer button so its underline spans the whole
+       (blue, on hover/active) cell. */
+    .ci-fill { width: 100%; height: 100%; }
 
-    /* The tajweed icon is a real analysis cell (3px-rounded, transparent so it sits
-       naturally in the footer) reading a big near-full-width TJW pinned to the top,
-       over one of its own underline bars cycling three palette hues. The cell clips
-       the bar to its rounded bottom; the
-       bar ends round so the underline bleeds to the edge like the live per-cell one. */
+    /* The tajweed icon IS the footer button cell: borderless + transparent so the
+       button's own (blue, on hover/active) fill reads as the cell, with a big
+       top-pinned TJW over one underline bar cycling three palette hues spanning the
+       full width. overflow-hidden + the button-matched radius clip the bar to the
+       rounded bottom; the bar ends round so it bleeds to the edge like a live cell. */
     .tjw {
         position: relative;
         width: 100%;
@@ -139,16 +148,15 @@
         align-items: flex-start;
         justify-content: center;
         background: transparent;
-        border: 1px solid var(--border-default, #3a3a55);
-        border-radius: 3px;
+        border-radius: var(--r-2, 5px);
         overflow: hidden;
     }
     .tjw-txt {
-        font-size: 0.56em;
+        font-size: 0.62em;
         font-weight: 700;
         letter-spacing: -0.07em;
         line-height: 1;
-        margin-top: 0.13em;
+        margin-top: 0.12em;
         color: var(--text-primary, #eee);
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
