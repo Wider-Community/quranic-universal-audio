@@ -29,7 +29,6 @@ import type {
     Letter,
     PhonemeInterval,
     TsCell,
-    TsShardCellRow,
     TsShardResponse,
     TsVbrResponse,
     TsVerseData,
@@ -550,7 +549,7 @@ export function assembleVerseFromShard(
         // `phonemeRuleTags` (v8 muqattaat) is parallel to `phonemeIndices`, so it
         // rides the SAME filter — an index that maps to nothing drops its tag too,
         // keeping the two lists element-aligned after the remap.
-        const cells: TsCell[] = ((w[5] ?? []) as TsShardCellRow[]).map((row) => {
+        const cells: TsCell[] = (w[5] ?? []).map((row) => {
             const c = parseShardCell(row);
             const ruleTags = c.phonemeRuleTags;
             const mapped: number[] = [];

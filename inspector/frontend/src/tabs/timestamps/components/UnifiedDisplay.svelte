@@ -281,6 +281,7 @@
     // can never blow out. Re-measured on content/tier/size/font changes.
     const ROW_GAP_MIN = 16; // mirrors --mega-line-gap (base.css)
     const ROW_GAP_MAX = 40; // cap so a sparse row never opens an absurd gap
+    const ROW_BUCKET_TOL = 1; // px — fold near-equal unit bottoms into one visual row
     let rowGapPx = ROW_GAP_MIN;
 
     function setRowGap(g: number): void {
@@ -303,7 +304,15 @@
         const rows = new Map<number, { free: number; n: number }>();
         unitEls.forEach((u) => {
             const r = u.getBoundingClientRect();
-            const key = Math.round(r.bottom);
+            let key = Math.round(r.bottom);
+            // snap to an existing row whose bottom is within a sub-pixel/zoom hair,
+            // so one visual row never splits into two buckets (or vice-versa).
+            for (const k of rows.keys()) {
+                if (Math.abs(k - key) <= ROW_BUCKET_TOL) {
+                    key = k;
+                    break;
+                }
+            }
             const row = rows.get(key) ?? { free: innerW, n: 0 };
             row.free -= r.width;
             row.n += 1;
@@ -1206,7 +1215,9 @@
                 cur.span.span = cur.hi - cur.lo + 1;
             } else {
                 const span: PhonemeSpan = { phonemes: [p], colStart: lo, span: hi - lo + 1 };
-                (acc.get(g) ?? acc.set(g, []).get(g)!).push(span);
+                let spans = acc.get(g);
+                if (!spans) acc.set(g, (spans = []));
+                spans.push(span);
                 cur = { g, lo, hi, span };
             }
         }
@@ -1944,11 +1955,14 @@
     ): void {
         e.stopPropagation();
         const target = _diacriticTarget(startSec, endSec, wordIndex, firstPhoneIdx);
-        if (!target) return;
+        if (!target && startSec == null) return;
         _deferClick(() => {
             const lv = get(loadedVerse);
             if (!lv) return;
-            _swapLoopOrSeek(target, target.startSec + lv.tsSegOffset);
+            // A co-lit dropped haraka has no phone of its own (no loop identity) but
+            // is timed on the carrier's interval — seek there rather than no-op.
+            if (target) _swapLoopOrSeek(target, target.startSec + lv.tsSegOffset);
+            else if (startSec != null) seekToTime(startSec + lv.tsSegOffset);
         });
     }
 

@@ -49,11 +49,19 @@
         return '#888888';
     }
 
+    /** The document root's computed style, re-read only when an override changes
+     *  (the sole mutator of the `--tj-*` vars) — hoisted so the chip loop reads it
+     *  once per pass instead of calling getComputedStyle per row. */
+    const rootStyle = $derived.by(() => {
+        void $tajweedSettings;
+        return typeof document !== 'undefined' ? getComputedStyle(document.documentElement) : null;
+    });
+
     /** The rule's current effective colour as hex (override, else the live CSS var). */
     function effectiveHex(row: LegendRow): string {
         const override = $tajweedSettings[row.legendKey]?.color;
         if (override) return override;
-        const raw = getComputedStyle(document.documentElement).getPropertyValue(row.colorVar);
+        const raw = rootStyle?.getPropertyValue(row.colorVar) ?? '';
         return cssColorToHex(raw || '#888888');
     }
 </script>

@@ -208,23 +208,12 @@ export type TsShardWord = [
     /** letters: [char, start_ms|null, end_ms|null(, silent)][] (4th slot from schema v4) */
     Array<[string, number | null, number | null, boolean?]>,
     /** phones: [phone, start_ms, end_ms, ...optional flags][] */ Array<(string | number | boolean)[]>,
-    /** cells (schema v5, optional): [chars, role, status, phoneme_indices,
-     *  source_letter_index, tag?, share_group?, phoneme_rule_tags?][].
+    /** cells (schema v5, optional): the positional `TsShardCellRow` rows.
      *  phoneme_indices are word-local indices over the word's INDEXABLE phones
      *  (qalqala `Q` excluded); the optional 8th slot phoneme_rule_tags (v8) is
-     *  parallel to phoneme_indices. */
-    Array<
-        [
-            string,
-            string,
-            string,
-            number[],
-            number,
-            (string | null)?,
-            (number | null)?,
-            ((string | null)[] | null)?,
-        ]
-    >?,
+     *  parallel to them, the optional 9th slot secondary_tags (v9) is the
+     *  heaviness stack. */
+    TsShardCellRow[]?,
 ];
 
 /** One recited segment in a chapter's temporal `segments[]` array. FE-typed
