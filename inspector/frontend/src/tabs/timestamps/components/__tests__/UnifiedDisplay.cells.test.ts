@@ -2153,7 +2153,11 @@ describe('UnifiedDisplay — per-grapheme phoneme alignment', () => {
         expect(s.indexOf('ghunnah')).toBeLessThan(s.indexOf('mutajanisayn')); // ghunnah below the merge
     });
 
-    it('a within-word naqis TARGET underlines + names the rule (بَسَطتَ → ت)', () => {
+    it('within-word naqis (بَسَطتَ): BOTH letters AND both phonemes underline; tafkheem rides only the heavy ط/tˤ', () => {
+        // ط (source) and ت (target) both SOUND (nāqiṣ). The merge underline + tooltip
+        // must land on both letters AND both phonemes; tafkhīm stacks only on the heavy
+        // istiʿlāʾ ط and its tˤ phoneme. The tˤ phoneme is the regression: an idgham
+        // (bridge-tag) source that still owns a phoneme must badge it.
         const iv: PhonemeInterval[] = [
             { phone: 'tˤ', start: 0, end: 0.15 }, { phone: 't', start: 0.15, end: 0.3 },
         ];
@@ -2166,9 +2170,73 @@ describe('UnifiedDisplay — per-grapheme phoneme alignment', () => {
             [0, 1],
         );
         const { container } = mount([word], iv);
-        const taa = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter')).find((e) => e.textContent === 'ت')!;
+        const letters = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter'));
+        const taa = letters.find((e) => e.textContent === 'ط')!; // source (heavy)
+        const teh = letters.find((e) => e.textContent === 'ت')!; // target
+        const ph = Array.from(container.querySelectorAll<HTMLElement>('.mega-phoneme'));
+        // source ط letter + its tˤ phoneme: idgham + tafkheem
         expect(taa.style.boxShadow).toContain('var(--tj-mutajanisayn)');
-        expect(taa.dataset.tjRules).toBe('Idgham Mutajanisayn Naqis');
+        expect(taa.style.boxShadow).toContain('var(--tj-tafkheem)');
+        expect(ph[0]!.style.boxShadow).toContain('var(--tj-mutajanisayn)');
+        expect(ph[0]!.style.boxShadow).toContain('var(--tj-tafkheem)');
+        // target ت letter + its t phoneme: idgham only, no tafkheem (light)
+        expect(teh.style.boxShadow).toContain('var(--tj-mutajanisayn)');
+        expect(teh.dataset.tjRules).toBe('Idgham Mutajanisayn Naqis');
+        expect(ph[1]!.style.boxShadow).toContain('var(--tj-mutajanisayn)');
+        expect(ph[1]!.style.boxShadow).not.toContain('var(--tj-tafkheem)');
+    });
+
+    it('mutamathilayn TARGET underlines via its secondary tag, source co-lights, bridge carries it (بَّيْنَكُمْ)', () => {
+        // 2:282 وَلْيَكْتُب بَّيْنَكُمْ: source ب is co-lit (share group) + tagged; the receiver
+        // بّ carries the rule as a SECONDARY tag (uniform with the other idghams), so the
+        // target letter underlines without depending on the share-group path alone. The
+        // merged bb is the bridge tile.
+        const iv: PhonemeInterval[] = [{ phone: 'bb', start: 0, end: 0.3, bridge: 'idgham_mutamathilayn' }];
+        const src = w(
+            [{ char: 'ب', start: 0, end: 0, silent: true }],
+            [base(0, [], { chars: 'ب', tag: 'idgham_mutamathilayn', shareGroup: 0 })],
+            [],
+        );
+        const recv = w(
+            [{ char: 'ب', start: 0, end: 0.3, silent: false }],
+            [base(0, [0], { chars: 'بّ', shareGroup: 0, secondaryTags: ['idgham_mutamathilayn'] })],
+            [0],
+        );
+        const { container } = mount([src, recv], iv);
+        const letters = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter'));
+        const source = letters.find((e) => e.textContent === 'ب')!;
+        const target = letters.find((e) => e.textContent === 'بّ')!;
+        expect(source.classList.contains('silent')).toBe(false); // co-lit, not greyed
+        expect(source.style.boxShadow).toContain('var(--tj-mutamathilayn)');
+        expect(target.style.boxShadow).toContain('var(--tj-mutamathilayn)');
+        expect(target.dataset.tjRules).toBe('Idgham Mutamathilayn');
+        const bridge = container.querySelector<HTMLElement>('.crossword-bridge .mega-phoneme')!;
+        expect(bridge.style.boxShadow).toContain('var(--tj-mutamathilayn)');
+    });
+
+    it('within-word mutaqaribayn (نَخْلُقكُّم): silent heavy ق underlines + tafkheem; sounding ك underlines, no tafkheem', () => {
+        // قك inside one word: the heavy ق is the silent source (tafkhīm rides it), ك is the
+        // sounding target. The target was previously untagged within a word — now it gets
+        // the rule via its secondary tag (letter + phoneme).
+        const iv: PhonemeInterval[] = [{ phone: 'kk', start: 0, end: 0.3 }];
+        const word = w(
+            [{ char: 'ق', start: 0, end: 0, silent: true }, { char: 'ك', start: 0, end: 0.3, silent: false }],
+            [
+                base(0, [], { chars: 'ق', tag: 'idgham_mutaqaribayn', secondaryTags: ['tafkheem'] }),
+                base(1, [0], { chars: 'كّ', secondaryTags: ['idgham_mutaqaribayn'] }),
+            ],
+            [0],
+        );
+        const { container } = mount([word], iv);
+        const letters = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter'));
+        const qaf = letters.find((e) => e.textContent === 'ق')!;
+        const kaf = letters.find((e) => e.textContent === 'كّ')!;
+        expect(qaf.classList.contains('silent')).toBe(true); // silent source (no co-light)
+        expect(qaf.style.boxShadow).toContain('var(--tj-mutaqaribayn)');
+        expect(qaf.style.boxShadow).toContain('var(--tj-tafkheem)');
+        expect(kaf.style.boxShadow).toContain('var(--tj-mutaqaribayn)');
+        expect(kaf.style.boxShadow).not.toContain('var(--tj-tafkheem)'); // ك is light
+        expect(container.querySelector<HTMLElement>('.mega-phoneme')!.style.boxShadow).toContain('var(--tj-mutaqaribayn)');
     });
 
     it('mutaqaribayn keeps its source SILENT but still underlines + names it (no co-light)', () => {

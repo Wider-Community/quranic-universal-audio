@@ -1277,6 +1277,14 @@
         // synthesized iẓhar + the propagated idgham (group) tag, resolved to the ≤2-bar
         // stack; a muqattaat cell colours each phoneme by its own per-phoneme rule; a
         // tanwīn rule underlines only its nasal (the last phone).
+        // Idgham rules whose merger is realized as a separate bridge phone (every
+        // cross-word merger). A source carrying one of these has its merger shown in the
+        // bridge tile, so its OWN inline phonemes (a leftover tanwīn vowel, or the lifted
+        // nasal) carry no badge. A within-word merger (mutajānisayn nāqiṣ) emits no bridge
+        // phone, so its sounding source badges its own phoneme.
+        const bridgeRules = new Set(
+            intervals.map((iv) => iv.bridge).filter((r): r is string => !!r),
+        );
         const phonemeBadges = new Map<number, TjBadge[]>();
         for (const c of allCells) {
             if (c.phonemeRuleTags) {
@@ -1301,11 +1309,12 @@
                 });
                 continue;
             }
-            // A cross-word idgham SOURCE renders its merger as the bridge tile (and
-            // colours its own letter via cellBadges) — its inline phonemes (the
-            // tanwīn's short vowel) carry no badge. The receiver inherits the colour
-            // through its share group below.
-            if (isBridgeTag(c.tag)) continue;
+            // A cross-word idgham source renders its merger as the bridge tile (and
+            // colours its own letter via cellBadges) — its own inline phonemes carry no
+            // badge: either it's dropped (no phoneme) or its merger is a separate bridge
+            // phone. A within-word source (mutajānisayn nāqiṣ ط) has no bridge phone, so
+            // it falls through and badges its own sounding phoneme (idgham + its tafkheem).
+            if (isBridgeTag(c.tag) && (!c.phonemeIndices.length || bridgeRules.has(c.tag!))) continue;
             const groupTag = c.shareGroup != null ? idghamGroupTags.get(c.shareGroup) : undefined;
             // Qalqala underlines the render-only echo `Q` (the bounce), NOT the
             // consonant phoneme — its consonant keeps only its other rules (tafkheem).
