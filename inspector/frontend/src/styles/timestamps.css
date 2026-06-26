@@ -391,7 +391,7 @@
     background: var(--ts-letter-color, var(--hl-letter-color));
 }
 .haraka-cell.active .g {
-    color: #fff;
+    color: var(--ts-letter-ink, #fff);
 }
 .haraka-cell.hover-preview {
     background: color-mix(in srgb, var(--ts-letter-color, var(--hl-letter-color)) 30%, transparent);
@@ -438,7 +438,7 @@
 }
 .mega-letter.implicit.active {
     background: var(--ts-letter-color, var(--hl-letter-color));
-    color: #fff;
+    color: var(--ts-letter-ink, #fff);
 }
 
 /* --- Seekable diacritic / implicit-madd cells --------------------------- */
@@ -592,7 +592,7 @@
     background: var(--ts-letter-color, var(--hl-letter-color));
 }
 .bridge-letter.active .g {
-    color: #fff;
+    color: var(--ts-letter-ink, #fff);
 }
 .bridge-letter:hover .bg {
     background: color-mix(in srgb, var(--ts-letter-color, var(--hl-letter-color)) 30%, transparent);
@@ -762,10 +762,16 @@
         border-color var(--hl-attack-dur) var(--hl-attack-ease);
 }
 
-/* Continuous karaoke wipe (dev motion-lab `track` mode). `--fill` (0..1) is set
-   per frame on the active cell by `UnifiedDisplay.updateHighlights`; the fill
-   tracks the voice across the cell instead of a discrete cross-fade. Letters +
-   harakas wipe right→left with the recitation flow; phonemes (LTR) wipe L→R. */
+/* Continuous karaoke wipe. `--fill` (0..1) is set per frame on the active cell
+   by `UnifiedDisplay.updateHighlights`; the fill tracks the voice across the cell
+   instead of a discrete cross-fade. Letters + harakas wipe right→left with the
+   recitation flow; phonemes (LTR) wipe L→R.
+
+   The sweep runs from the tier's `--ts-*-muted` GHOST (a faint, desaturated
+   same-hue track) up to its full `--ts-*-color`, so the end-state matches the
+   discrete fill exactly. The ghost shares the fill's ink side, so the cell's own
+   auto-contrast ink (`--ts-*-ink`) reads across the whole sweep — same ink as
+   discrete mode, no fixed-white exception. */
 .hl-track .mega-letter.active,
 .hl-track .haraka-cell.active,
 .hl-track .mega-block.active .mega-letter.active,
@@ -773,22 +779,22 @@
     background: linear-gradient(
         to left,
         var(--ts-letter-color, var(--hl-letter-color)) calc(var(--fill, 0) * 100%),
-        color-mix(in srgb, var(--ts-letter-color, var(--hl-letter-color)) var(--hl-track-base), var(--hl-cell-rest)) 0
+        var(--ts-letter-muted, var(--hl-cell-rest)) 0
     );
-    /* The wipe background sweeps from dark track-tint to full colour, so the
-       solid-fill auto-contrast ink doesn't read over it — keep the glyph a fixed
-       light so it stays visible across the whole sweep. */
-    color: #fff;
+    color: var(--ts-letter-ink, #fff);
     transition: none;
+}
+.hl-track .haraka-cell.active .g {
+    color: var(--ts-letter-ink, #fff);
 }
 .hl-track .mega-phoneme.active,
 .hl-track .mega-block.active .mega-phoneme.active {
     background: linear-gradient(
         to left,
         var(--ts-phoneme-color, var(--hl-phoneme-color)) calc(var(--fill, 0) * 100%),
-        color-mix(in srgb, var(--ts-phoneme-color, var(--hl-phoneme-color)) var(--hl-track-base), var(--hl-cell-rest)) 0
+        var(--ts-phoneme-muted, var(--hl-cell-rest)) 0
     );
-    color: #fff;
+    color: var(--ts-phoneme-ink, #fff);
     transition: none;
 }
 

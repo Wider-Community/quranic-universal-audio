@@ -44,7 +44,7 @@
     import { playerContext, setIsLoading, setIsPlaying } from '../../lib/stores/player-context';
     import type { TsConfigResponse } from '../../lib/types/generated/schemas';
     import { getActiveTab, activeTab as activeTabStore } from '../../lib/utils/active-tab';
-    import { analogousTriad, inkFor } from '../../lib/utils/color-derive';
+    import { analogousTriad, inkFor, mutedFor } from '../../lib/utils/color-derive';
     import { LS_KEYS, TAB_NAMES } from '../../lib/utils/constants';
     import { shouldHandleKey } from '../../lib/utils/keyboard-guard';
     import { prewarmVersePeaks } from '../../lib/utils/peaks-fetch';
@@ -152,6 +152,11 @@
     $: wordInk = inkFor(triad.word);
     $: letterInk = inkFor(triad.letter);
     $: phonemeInk = inkFor(triad.phoneme);
+    // Karaoke-wipe "ghost" track: the faint, desaturated unfilled colour the wipe
+    // sweeps up from. Shares each tier's ink side so the same auto-contrast ink
+    // reads across the whole sweep (see color-derive `mutedFor`).
+    $: letterMuted = mutedFor(triad.letter);
+    $: phonemeMuted = mutedFor(triad.phoneme);
     $: wordDur =
         cfg && cfg.anim_transition_easing !== TS_EASING_NONE
             ? `${cfg.anim_word_transition_duration}s`
@@ -1005,6 +1010,8 @@
     style:--anim-highlight-color={highlightColor}
     style:--ts-letter-color={triad.letter}
     style:--ts-phoneme-color={triad.phoneme}
+    style:--ts-letter-muted={letterMuted}
+    style:--ts-phoneme-muted={phonemeMuted}
     style:--ts-word-ink={wordInk}
     style:--ts-letter-ink={letterInk}
     style:--ts-phoneme-ink={phonemeInk}

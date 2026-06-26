@@ -24,6 +24,13 @@
  *     teleprompter's active-word outline (a light halo lifts a dark accent off
  *     the dark page; a dark halo crisps a light one).
  *
+ *  3. One ink across the karaoke wipe. The continuous "wipe" highlight reveals
+ *     the fill across a cell over time, so the glyph spans both filled and
+ *     not-yet-filled regions at once. `mutedFor()` gives the unfilled "ghost"
+ *     track: the same hue at low chroma, nudged to the SAME side of the ink
+ *     crossover as the full fill — so the single `inkFor()` glyph reads over the
+ *     whole sweep and the wipe's end-state is identical to the discrete fill.
+ *
  * Changing the accent live-recolours all three layers, their inks, the waveform
  * overlay and the teleprompter as one reactive family.
  */
@@ -39,6 +46,11 @@ const MAX_L = 0.84;
 // Chroma floor for the derived siblings so a near-grey accent still yields
 // distinguishable layers (the word keeps the accent's own chroma).
 const MIN_C = 0.085;
+// Ghost (unfilled karaoke track) shaping: keep the hue, collapse chroma to a
+// fraction of the fill's, and nudge lightness toward the readable side of the
+// ink crossover so the fill's auto-contrast ink reads on the ghost too.
+const GHOST_C = 0.32;
+const GHOST_L_SHIFT = 0.12;
 
 // Ink endpoints. A near-black navy (matches the panel family) and pure white;
 // `inkFor` picks whichever clears WCAG contrast on the given fill.
@@ -207,4 +219,21 @@ export function analogousTriad(accentHex: string): ColorTriad {
         letter: oklchToHex({ L, C: sibC, h: base.h + LETTER_HUE_SHIFT }),
         phoneme: oklchToHex({ L, C: sibC, h: base.h + PHONEME_HUE_SHIFT }),
     };
+}
+
+/**
+ * The unfilled "ghost" track for the karaoke wipe of a given fill: same hue,
+ * collapsed chroma, lightness pushed AWAY from the fill's ink (lighter when the
+ * ink is dark, darker when the ink is light). The wipe then sweeps a desaturated
+ * faint version of the colour up to its full self while the single auto-contrast
+ * ink — `inkFor(fill)` — stays readable across both regions. Returns the input
+ * verbatim for an unparseable colour.
+ */
+export function mutedFor(fillHex: string): string {
+    const rgb = parseHex(fillHex);
+    if (!rgb) return fillHex;
+    const base = hexToOklch(rgb);
+    const inkIsDark = relLuminance(rgb.r, rgb.g, rgb.b) > INK_CROSSOVER;
+    const L = clamp(base.L + (inkIsDark ? GHOST_L_SHIFT : -GHOST_L_SHIFT), 0.08, 0.97);
+    return oklchToHex({ L, C: base.C * GHOST_C, h: base.h });
 }
