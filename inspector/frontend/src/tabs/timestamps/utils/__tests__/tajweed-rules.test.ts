@@ -80,11 +80,12 @@ describe('tajweed-rules — tjShadow', () => {
         expect(shadow).toBe('inset 0 -2px 0 var(--tj-idgham-bila), inset 0 -4px 0 var(--tj-tafkheem)');
     });
 
-    it('draws qalqala kubrā as a side-bleeding ::after, not an inset bar', () => {
+    it('draws qalqala kubrā bottom bar identical to ṣughrā, plus a side-wrap colour', () => {
         const k = badgesForTags(['qalqala_kubra']);
-        expect(tjShadow(k, all)).toBe(''); // no inset bar — the ::after draws it
+        // kubrā's bottom bar is the SAME inset bar as ṣughrā; the ::after only wraps the edges
+        expect(tjShadow(k, all)).toBe('inset 0 -2px 0 var(--tj-qalqala)');
         expect(tjKubraColor(k, all)).toBe('var(--tj-qalqala)');
-        // ṣughrā is a normal inset bar with no kubrā ::after
+        // ṣughrā draws the same bar but has no kubrā side-wrap
         const s = badgesForTags(['qalqala_sughra']);
         expect(tjShadow(s, all)).toBe('inset 0 -2px 0 var(--tj-qalqala)');
         expect(tjKubraColor(s, all)).toBe('');
@@ -95,9 +96,9 @@ describe('tajweed-rules — tjShadow', () => {
         expect(tjKubraColor(k, none)).toBe('');
     });
 
-    it('stacks tafkheem above a kubrā bleed — kubrā reserves its height, tafkheem insets', () => {
+    it('stacks tafkheem above the kubrā bottom bar (both inset, side-wrap colour set)', () => {
         const kt = badgesForTags(['qalqala_kubra', 'tafkheem']);
-        expect(tjShadow(kt, all)).toBe('inset 0 -4px 0 var(--tj-tafkheem)');
+        expect(tjShadow(kt, all)).toBe('inset 0 -2px 0 var(--tj-qalqala), inset 0 -4px 0 var(--tj-tafkheem)');
         expect(tjKubraColor(kt, all)).toBe('var(--tj-qalqala)');
     });
 
@@ -121,7 +122,26 @@ describe('tajweed-rules — tooltip names', () => {
         expect(silentTooltip('lam_shamsiyah')).toBe('Lam Shamsiyyah');
         expect(silentTooltip('silent_iltiqaa_sakinayn')).toBe("Iltiqa' 'as-sakinayn");
         expect(silentTooltip('iltiqaa_kasra')).toBe("Iltiqa' 'as-sakinayn");
+        expect(silentTooltip('iqlab_silent_noon')).toBe('Iqlab'); // the iqlab silent ن
         expect(silentTooltip('madd_lazim')).toBeNull(); // coloured, not silent-only
+    });
+
+    it('uses the full second-pass tooltip spellings', () => {
+        expect(badgeForTag('madd_jaiz_munfasil')!.tooltip).toBe("Madd Ja'iz Munfassil");
+        expect(badgeForTag('madd_wajib_muttasil')!.tooltip).toBe('Madd Wajib Muttasil');
+        expect(badgeForTag('madd_arid_lissukun')!.tooltip).toBe("Madd 'Arid-lissukun");
+        expect(badgeForTag('madd_tabii')!.tooltip).toBe("Madd Tabi'i");
+        expect(badgeForTag('izhar_halqi')!.tooltip).toBe('Izhar Halqi');
+        expect(badgeForTag('idgham_mutamathilayn')!.tooltip).toBe('Idgham Mutamathilayn');
+        expect(badgeForTag('idgham_mutajanisayn_naqis')!.tooltip).toBe('Idgham Mutajanisayn Naqis');
+    });
+
+    it('shows the matching legend labels (arid drops the "Madd" prefix)', () => {
+        const label = (k: string): string | undefined =>
+            LEGEND.flatMap((g) => g.rows).find((r) => r.legendKey === k)?.label;
+        expect(label('madd_jaiz')).toBe("Madd Ja'iz Munfassil");
+        expect(label('madd_arid')).toBe("'Arid-lissukun");
+        expect(label('izhar')).toBe('Izhar Halqi');
     });
 });
 

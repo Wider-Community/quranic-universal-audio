@@ -646,21 +646,33 @@
 
         // A cell's underline stack: its own tag + secondary tafkheem + synthesized
         // iẓhar + the cross-word idgham tag propagated to a merger receiver (its
-        // share group's source tag). Resolved to ≤2 bars (a base rule + tafkheem).
+        // share group's source tag) + a heavy-ikhfaa tafkheem (the nasal before an
+        // istiʿlāʾ letter, detected display-side). Resolved to ≤2 bars (base + tafkheem).
         const cellBadges = (c: TsCell): TjBadge[] => {
             const groupTag = c.shareGroup != null ? idghamGroupTags.get(c.shareGroup) : undefined;
-            return badgesForTags([c.tag, ...(c.secondaryTags ?? []), izharCellTag.get(c), groupTag]);
+            const heavyIkhfaa = c.phonemeIndices.some(
+                (fi) => _heavyIkhfaaDisplay(intervals[fi]?.phone, intervals[fi + 1]?.phone),
+            );
+            return badgesForTags([
+                c.tag, ...(c.secondaryTags ?? []), izharCellTag.get(c), groupTag,
+                heavyIkhfaa ? 'tafkheem' : undefined,
+            ]);
         };
         // Context-derived silent-rule names (need the cell's neighbours): a trailing
         // dropped ḥaraka/tanwīn with nothing sounding after it is the word-final
-        // vowel silenced at the stop → "Waqf"; a silent alef/maqṣūra right after a
-        // tanwīn is the otiose ʿiwaḍ alef at waṣl → "Madd 'Iwad Wasl".
+        // vowel silenced at the stop → "Waqf"; the dropped fatḥatan whose
+        // compensating madd moved onto the next ʾalif at waqf → "Madd 'Iwad" (the
+        // ʾalif carries the bar); a silent alef/maqṣūra right after a tanwīn is the
+        // otiose ʿiwaḍ alef at waṣl → "Madd 'Iwad Wasl".
         const extraSilent = new Map<TsCell, string>();
         {
             let lastSounding = -1;
             cells.forEach((c, i) => { if (c.phonemeIndices.length) lastSounding = i; });
             cells.forEach((c, i) => {
                 if ((c.role === 'haraka' || c.role === 'tanween') && c.status === 'dropped'
+                    && c.phonemeIndices.length === 0 && cells[i + 1]?.tag === 'madd_iwad') {
+                    extraSilent.set(c, "Madd 'Iwad");
+                } else if ((c.role === 'haraka' || c.role === 'tanween') && c.status === 'dropped'
                     && c.phonemeIndices.length === 0 && i > lastSounding) {
                     extraSilent.set(c, 'Waqf');
                 } else if (c.role === 'base' && c.phonemeIndices.length === 0
@@ -861,12 +873,16 @@
                 lEnd = Math.max(lEnd, qalqalaEcho[1]);
             }
             // Own tag + secondary tafkheem + synthesized iẓhar + the propagated
-            // cross-word idgham (the receiving merged letter). A coloured-merge
-            // SOURCE keeps its glyph visible + underlined — never greyed silent.
+            // cross-word idgham (the receiving merged letter). Un-greying is driven
+            // by co-light (a share group, folded into `silent` above), NOT by merely
+            // carrying a badge: a co-lit merge source (mutamāthilayn, noon idgham)
+            // reads visible + underlined, while a silent-but-tagged source
+            // (mutaqāribayn / mutajānisayn) stays greyed yet still draws its
+            // underline + tooltip.
             const badges = cellBadges(c);
             g.full.push({
                 glyph,
-                silent: silent && badges.length === 0,
+                silent,
                 status: c.status,
                 tag: c.tag,
                 implicit: false,
@@ -1271,12 +1287,18 @@
                 if (rest.length) for (const fi of c.phonemeIndices) phonemeBadges.set(fi, rest);
                 continue;
             }
-            const badges = badgesForTags([c.tag, ...(c.secondaryTags ?? []), izharCellTag.get(c), groupTag]);
+            const baseTags = [c.tag, ...(c.secondaryTags ?? []), izharCellTag.get(c), groupTag];
+            const badges = badgesForTags(baseTags);
             if (!badges.length) continue;
             const idxs = c.role === 'tanween' && c.phonemeIndices.length > 1
                 ? c.phonemeIndices.slice(-1)
                 : c.phonemeIndices;
-            for (const fi of idxs) phonemeBadges.set(fi, badges);
+            // A heavy ikhfaa nasal (ŋ before an istiʿlāʾ letter, shown ŋˤ) stacks a
+            // tafkheem bar above its ikhfaa underline.
+            for (const fi of idxs) {
+                const heavy = !!_heavyIkhfaaDisplay(intervals[fi]?.phone, intervals[fi + 1]?.phone);
+                phonemeBadges.set(fi, heavy ? badgesForTags([...baseTags, 'tafkheem']) : badges);
+            }
         }
 
         // Cross-word bridges baked into the shard: a phoneme carrying a `bridge` rule

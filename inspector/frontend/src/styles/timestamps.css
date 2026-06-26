@@ -305,6 +305,15 @@
     cursor: default;
 }
 
+/* A silent cell that still names a tajweed rule on hover (lām shamsiyyah,
+   hamzat-waṣl, the otiose alef, the iqlab silent noon, a merge source) stays
+   inert to clicks but accepts hover so its tooltip can surface — the blanket
+   pointer-events:none above would otherwise swallow the mouseenter. */
+.mega-letter.silent[data-tj-rules] {
+    pointer-events: auto;
+    cursor: help;
+}
+
 /* --- Diacritic (haraka / tanween) small-cell tier ------------------------ */
 /* Ported from the diacritic-cell sizing playground. A small cell is NOT a
    flex-flow column: it sits inside a vertical pin-track (`.dia-track`) sized as
@@ -705,11 +714,12 @@
    diacritic cells, and phoneme boxes (incl. the cross-word bridge tile). Colours are
    the `--tj-*` custom props (overridable per-rule by the settings store). */
 
-/* Qalqala kubrā — same 2px thickness as the ṣughrā bottom bar, but the underline
-   WRAPS the inside of the cell: a ⊔ bracket (bottom edge + the bar turning up the
-   left/right inner edges a short way), fully contained within the cell. Drawn as a
-   bordered ::after (no top) so a stacked tafkheem bar (box-shadow) still rides
-   above the bottom edge. */
+/* Qalqala kubrā — its bottom bar is IDENTICAL to ṣughrā (the inset box-shadow drawn
+   by tjShadow, hugging the cell's rounded corners). The only difference is this
+   ::after, which curls that bar a short way UP the left/right inner edges — two thin
+   side segments (no bottom border, so the box-shadow bottom shows through), with the
+   bottom corners rounded to the cell's 3px so the sides blend into the bottom bar.
+   Fully contained within the cell. */
 .tj-kubra {
     position: relative;
 }
@@ -717,13 +727,14 @@
     content: '';
     position: absolute;
     box-sizing: border-box;
-    left: 1px;
-    right: 1px;
+    left: 0;
+    right: 0;
     bottom: 0;
-    height: 6px;
-    border: 2px solid var(--tj-kubra);
-    border-top: none;
-    border-radius: 0 0 2px 2px;
+    height: 7px;
+    border-left: 2px solid var(--tj-kubra);
+    border-right: 2px solid var(--tj-kubra);
+    border-bottom-left-radius: 3px;
+    border-bottom-right-radius: 3px;
     pointer-events: none;
 }
 

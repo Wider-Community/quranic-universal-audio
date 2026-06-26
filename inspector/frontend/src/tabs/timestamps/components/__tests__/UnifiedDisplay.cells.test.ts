@@ -295,6 +295,8 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(noon).toBeTruthy();
         expect(noon.classList.contains('silent')).toBe(true);
         expect(noon.style.boxShadow).toBe('');
+        // ...but still NAMES "Iqlab" on hover (a silent-only tag, no badge).
+        expect(noon.dataset.tjRules).toBe('Iqlab');
         // The synthesized mini-meem (low-meem glyph, pinned top) carries the iqlab underline...
         const meem = Array.from(container.querySelectorAll<HTMLElement>('.haraka-cell'))
             .find((c) => c.querySelector('.g')!.textContent === 'ۭ')!;
@@ -1938,5 +1940,87 @@ describe('UnifiedDisplay — per-grapheme phoneme alignment', () => {
         expect(clusters.length).toBe(2);
         expect(clusterPhones(clusters[0]!)).toEqual(['q', 'Q']); // echo rides its qāf
         expect(clusterPhones(clusters[1]!)).toEqual(['d']);
+    });
+
+    it('heavy ikhfaa: the nasal before an istiʿlāʾ letter stacks tafkheem above the ikhfaa bar', () => {
+        // نْ before ص: the ikhfaa nasal ŋ is articulated heavy (shown ŋˤ) → a tafkheem
+        // bar rides above the ikhfaa underline on both the noon cell and its nasal phone.
+        const iv: PhonemeInterval[] = [
+            { phone: 'ŋ', start: 0, end: 0.15 },
+            { phone: 'sˤ', start: 0.15, end: 0.4 },
+        ];
+        const word = w(
+            [{ char: 'ن', start: 0, end: 0.15, silent: false }, { char: 'ص', start: 0.15, end: 0.4, silent: false }],
+            [
+                base(0, [0], { chars: 'ن', tag: 'ikhfaa_noon' }),
+                base(1, [1], { chars: 'ص', tag: 'tafkheem' }),
+            ],
+            [0, 1],
+        );
+        const { container } = mount([word], iv);
+        const noon = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter')).find((e) => e.textContent === 'ن')!;
+        expect(noon.style.boxShadow).toContain('var(--tj-ikhfaa)');
+        expect(noon.style.boxShadow).toContain('var(--tj-tafkheem)');
+        // the nasal phoneme cell stacks the same two bars (ikhfaa below, tafkheem above)
+        const nasal = container.querySelector<HTMLElement>('.mega-phoneme[data-index="0"]')!;
+        expect(nasal.style.boxShadow).toContain('var(--tj-ikhfaa)');
+        expect(nasal.style.boxShadow.indexOf('ikhfaa')).toBeLessThan(nasal.style.boxShadow.indexOf('tafkheem'));
+    });
+
+    it('a LIGHT ikhfaa (nasal before a non-istiʿlāʾ letter) gets no tafkheem bar', () => {
+        const iv: PhonemeInterval[] = [
+            { phone: 'ŋ', start: 0, end: 0.15 },
+            { phone: 't', start: 0.15, end: 0.4 },
+        ];
+        const word = w(
+            [{ char: 'ن', start: 0, end: 0.15, silent: false }, { char: 'ت', start: 0.15, end: 0.4, silent: false }],
+            [base(0, [0], { chars: 'ن', tag: 'ikhfaa_noon' }), base(1, [1], { chars: 'ت' })],
+            [0, 1],
+        );
+        const { container } = mount([word], iv);
+        const noon = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter')).find((e) => e.textContent === 'ن')!;
+        expect(noon.style.boxShadow).toContain('var(--tj-ikhfaa)');
+        expect(noon.style.boxShadow).not.toContain('tafkheem');
+    });
+
+    it('mutamathilayn un-greys + underlines its silent source (it co-lights via the share group)', () => {
+        // قُل لَّا cross-word: the source ل is silent but shares the merger group, so it
+        // reads visible + underlined (NOT greyed).
+        const iv: PhonemeInterval[] = [{ phone: 'll', start: 0, end: 0.3 }];
+        const src = w(
+            [{ char: 'ل', start: 0, end: 0, silent: true }],
+            [base(0, [], { chars: 'ل', tag: 'idgham_mutamathilayn', shareGroup: 3 })],
+            [],
+        );
+        const recv = w(
+            [{ char: 'ل', start: 0, end: 0.3, silent: false }],
+            [base(0, [0], { chars: 'ل', shareGroup: 3 })],
+            [0],
+        );
+        const { container } = mount([src, recv], iv);
+        const source = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter')).find((e) => e.textContent === 'ل')!;
+        expect(source.classList.contains('silent')).toBe(false); // un-greyed (co-lit)
+        expect(source.style.boxShadow).toContain('var(--tj-mutamathilayn)');
+    });
+
+    it('mutaqaribayn keeps its source SILENT but still underlines + names it (no co-light)', () => {
+        // قُل رَّبِّ cross-word: the source ل does NOT co-light (no share group) → it stays
+        // greyed, yet still draws its underline + tooltip.
+        const iv: PhonemeInterval[] = [{ phone: 'rˤrˤ', start: 0, end: 0.3 }];
+        const src = w(
+            [{ char: 'ل', start: 0, end: 0, silent: true }],
+            [base(0, [], { chars: 'ل', tag: 'idgham_mutaqaribayn', shareGroup: null })],
+            [],
+        );
+        const recv = w(
+            [{ char: 'ر', start: 0, end: 0.3, silent: false }],
+            [base(0, [0], { chars: 'ر' })],
+            [0],
+        );
+        const { container } = mount([src, recv], iv);
+        const source = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter')).find((e) => e.textContent === 'ل')!;
+        expect(source.classList.contains('silent')).toBe(true); // stays greyed (not co-lit)
+        expect(source.style.boxShadow).toContain('var(--tj-mutaqaribayn)'); // but still underlined
+        expect(source.dataset.tjRules).toBe('Idgham Mutaqaribayn'); // and named on hover
     });
 });

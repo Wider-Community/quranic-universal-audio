@@ -24,11 +24,12 @@ const cell = (over: Partial<TsCell>): TsCell => ({
 describe('cell-special-cases — iqlab noon', () => {
     const noon = cell({ chars: 'ن', phonemeIndices: [2], tag: 'iqlab_noon', sourceLetterIndex: 1 });
 
-    it('silent base surrenders the nasal phone + tag', () => {
+    it('silent base surrenders the nasal phone + underline, keeps an Iqlab hover tag', () => {
         const silent = iqlabNoonSilentBase(noon);
         expect(silent.chars).toBe('ن'); // the glyph stays
         expect(silent.phonemeIndices).toEqual([]); // no own phone → renders silent
-        expect(silent.tag).toBeNull(); // no underline
+        // a silent-only tag: draws no badge (absent from COLOR_RULES) but names "Iqlab"
+        expect(silent.tag).toBe('iqlab_silent_noon');
         expect(silent.shareGroup).toBeNull();
     });
 

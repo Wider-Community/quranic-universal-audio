@@ -22,10 +22,12 @@ import { MADDAH, MEEM_HI } from './tajweed-script';
 
 // ── Iqlab noon (نْ before ب) ──────────────────────────────────────────────────
 
-/** The ن of an iqlab-noon cell rendered silent + uncoloured — it surrenders its
- *  nasal phone and tag to the synthesized mini-meem below. */
+/** The ن of an iqlab-noon cell rendered silent — it surrenders its nasal phone
+ *  and the lone underline to the synthesized mini-meem below, but keeps a
+ *  silent-only `iqlab_silent_noon` tag so it still names "Iqlab" on hover
+ *  (registered in `tajweed-rules.ts` SILENT_TOOLTIPS; draws no badge). */
 export function iqlabNoonSilentBase(c: TsCell): TsCell {
-    return { ...c, phonemeIndices: [], tag: null, shareGroup: null };
+    return { ...c, phonemeIndices: [], tag: 'iqlab_silent_noon', shareGroup: null };
 }
 
 /** The mini-meem stacked above an iqlab-noon ن: owns the nasal phone (the

@@ -52,14 +52,14 @@ const COLOR_RULES: Record<string, RuleDef> = {
     idgham_shafawi: { legendKey: 'idgham_shafawi', colorVar: '--tj-idgham-shafawi', tooltip: 'Idgham Shafawi', stack: 'base' },
     // ── Madd ──────────────────────────────────────────────────────────────────
     madd_lazim: { legendKey: 'madd_lazim', colorVar: '--tj-madd-lazim', tooltip: 'Madd Lazim', stack: 'base' },
-    madd_wajib_muttasil: { legendKey: 'madd_wajib', colorVar: '--tj-madd-wajib', tooltip: 'Madd Wajib', stack: 'base' },
-    madd_jaiz_munfasil: { legendKey: 'madd_jaiz', colorVar: '--tj-madd-jaiz', tooltip: 'Madd Jaiz', stack: 'base' },
-    madd_arid_lissukun: { legendKey: 'madd_arid', colorVar: '--tj-madd-arid', tooltip: "Madd 'Arid", stack: 'base' },
+    madd_wajib_muttasil: { legendKey: 'madd_wajib', colorVar: '--tj-madd-wajib', tooltip: 'Madd Wajib Muttasil', stack: 'base' },
+    madd_jaiz_munfasil: { legendKey: 'madd_jaiz', colorVar: '--tj-madd-jaiz', tooltip: "Madd Ja'iz Munfassil", stack: 'base' },
+    madd_arid_lissukun: { legendKey: 'madd_arid', colorVar: '--tj-madd-arid', tooltip: "Madd 'Arid-lissukun", stack: 'base' },
     madd_leen: { legendKey: 'madd_leen', colorVar: '--tj-madd-leen', tooltip: 'Madd Leen', stack: 'base' },
     // ṭabīʿī + its structural aliases (the dagger-alef of Allah, the ʿiwaḍ alef)
-    madd_tabii: { legendKey: 'madd_tabii', colorVar: '--tj-madd-tabii', tooltip: 'Madd Tabii', stack: 'base' },
-    allah_dagger_alef: { legendKey: 'madd_tabii', colorVar: '--tj-madd-tabii', tooltip: 'Madd Tabii', stack: 'base' },
-    madd_iwad: { legendKey: 'madd_tabii', colorVar: '--tj-madd-tabii', tooltip: 'Madd Tabii (Iwad)', stack: 'base' },
+    madd_tabii: { legendKey: 'madd_tabii', colorVar: '--tj-madd-tabii', tooltip: "Madd Tabi'i", stack: 'base' },
+    allah_dagger_alef: { legendKey: 'madd_tabii', colorVar: '--tj-madd-tabii', tooltip: "Madd Tabi'i", stack: 'base' },
+    madd_iwad: { legendKey: 'madd_tabii', colorVar: '--tj-madd-tabii', tooltip: "Madd Tabi'i (Iwad)", stack: 'base' },
     // ── Heaviness ─────────────────────────────────────────────────────────────
     tafkheem: { legendKey: 'tafkheem', colorVar: '--tj-tafkheem', tooltip: 'Tafkheem', stack: 'top' },
     qalqala_sughra: { legendKey: 'qalqala', colorVar: '--tj-qalqala', tooltip: 'Qalqala Sughra', stack: 'base' },
@@ -67,12 +67,12 @@ const COLOR_RULES: Record<string, RuleDef> = {
     // ── Idgham (silent merges) ────────────────────────────────────────────────
     idgham_bila_ghunnah_noon: { legendKey: 'idgham_bila', colorVar: '--tj-idgham-bila', tooltip: 'Idgham bila Ghunnah', stack: 'base' },
     idgham_bila_ghunnah_tanween: { legendKey: 'idgham_bila', colorVar: '--tj-idgham-bila', tooltip: 'Idgham bila Ghunnah', stack: 'base' },
-    idgham_mutamathilayn: { legendKey: 'mutamathilayn', colorVar: '--tj-mutamathilayn', tooltip: 'Mutamathilayn', stack: 'base' },
-    idgham_mutaqaribayn: { legendKey: 'mutaqaribayn', colorVar: '--tj-mutaqaribayn', tooltip: 'Mutaqaribayn', stack: 'base' },
-    idgham_mutajanisayn_kamil: { legendKey: 'mutajanisayn', colorVar: '--tj-mutajanisayn', tooltip: 'Mutajanisayn Kamil', stack: 'base' },
-    idgham_mutajanisayn_naqis: { legendKey: 'mutajanisayn', colorVar: '--tj-mutajanisayn', tooltip: 'Mutajanisayn Naqis', stack: 'base' },
+    idgham_mutamathilayn: { legendKey: 'mutamathilayn', colorVar: '--tj-mutamathilayn', tooltip: 'Idgham Mutamathilayn', stack: 'base' },
+    idgham_mutaqaribayn: { legendKey: 'mutaqaribayn', colorVar: '--tj-mutaqaribayn', tooltip: 'Idgham Mutaqaribayn', stack: 'base' },
+    idgham_mutajanisayn_kamil: { legendKey: 'mutajanisayn', colorVar: '--tj-mutajanisayn', tooltip: 'Idgham Mutajanisayn Kamil', stack: 'base' },
+    idgham_mutajanisayn_naqis: { legendKey: 'mutajanisayn', colorVar: '--tj-mutajanisayn', tooltip: 'Idgham Mutajanisayn Naqis', stack: 'base' },
     // ── Iẓhar (FE-synthesized fallback for a sounding sākin noon/meem/tanwīn) ──
-    izhar_halqi: { legendKey: 'izhar', colorVar: '--tj-izhar-halqi', tooltip: 'Izhar', stack: 'base' },
+    izhar_halqi: { legendKey: 'izhar', colorVar: '--tj-izhar-halqi', tooltip: 'Izhar Halqi', stack: 'base' },
     izhar_shafawi: { legendKey: 'izhar_shafawi', colorVar: '--tj-izhar-shafawi', tooltip: 'Izhar Shafawi', stack: 'base' },
 };
 
@@ -84,6 +84,9 @@ const SILENT_TOOLTIPS: Record<string, string> = {
     silent_iltiqaa_sakinayn: "Iltiqa' 'as-sakinayn",
     iltiqaa_kasra: "Iltiqa' 'as-sakinayn",
     iltiqaa: "Iltiqa' 'as-sakinayn",
+    // The ن of an iqlab noon falls silent (the synthesized mini-meem owns the
+    // nasal + the lone underline) — name it on hover, draw no bar.
+    iqlab_silent_noon: 'Iqlab',
 };
 
 /** One resolved underline badge a cell carries (settings-independent). */
@@ -138,10 +141,11 @@ const BAR_PX = 2;
  * Compose the per-cell underline `box-shadow` from its badges, keeping only the
  * rules whose legend toggle is enabled. Stacked inset bottom-shadows accumulate
  * from the cell's bottom edge upward — the base rule is the lowest bar, tafkheem
- * the bar above it. A qalqala-**kubrā** bar is the SAME thickness but bleeds past
- * the cell's side edges, so it is drawn as a `::after` (see `tjKubraColor`) and
- * only RESERVES its height here. Empty string when no enabled badge draws an inset
- * bar. Uses the inset-box-shadow channel so bars survive the `.active` fill.
+ * the bar above it. A qalqala-**kubrā** bar draws its bottom edge here exactly like
+ * ṣughrā (same inset bottom-shadow, hugging the cell's rounded corners); only its
+ * short side-wraps are added separately via the `::after` (see `tjKubraColor`).
+ * Empty string when no enabled badge draws an inset bar. Uses the inset-box-shadow
+ * channel so bars survive the `.active` fill.
  */
 export function tjShadow(badges: TjBadge[], isEnabled: (legendKey: string) => boolean): string {
     let offset = 0;
@@ -149,15 +153,14 @@ export function tjShadow(badges: TjBadge[], isEnabled: (legendKey: string) => bo
     for (const b of badges) {
         if (!isEnabled(b.legendKey)) continue;
         offset += BAR_PX;
-        if (b.kubra) continue; // drawn by the side-bleeding ::after, not an inset bar
         shadows.push(`inset 0 -${offset}px 0 var(${b.colorVar})`);
     }
     return shadows.join(', ');
 }
 
-/** The colour of an enabled qalqala-kubrā badge on this cell (for the side-bleeding
- *  `::after`), or '' if none — kubrā's bar is the same thickness as ṣughrā but its
- *  edges spill past the cell sides. */
+/** The colour of an enabled qalqala-kubrā badge on this cell (for the side-wrap
+ *  `::after`), or '' if none — kubrā's bottom bar is identical to ṣughrā (drawn by
+ *  `tjShadow`); the `::after` only curls the bar a little way up the side edges. */
 export function tjKubraColor(badges: TjBadge[], isEnabled: (legendKey: string) => boolean): string {
     const b = badges.find((x) => x.kubra && isEnabled(x.legendKey));
     return b ? `var(${b.colorVar})` : '';
@@ -203,16 +206,16 @@ export const LEGEND: LegendGroup[] = [
         { legendKey: 'iqlab', label: 'Iqlab', colorVar: '--tj-iqlab', duration: '2' },
         { legendKey: 'idgham_ghunnah', label: 'Idgham Ghunnah', colorVar: '--tj-idgham-ghunnah', duration: '2' },
         { legendKey: 'idgham_shafawi', label: 'Idgham Shafawi', colorVar: '--tj-idgham-shafawi', duration: '2' },
-        { legendKey: 'izhar', label: 'Izhar', colorVar: '--tj-izhar-halqi', duration: '1' },
+        { legendKey: 'izhar', label: 'Izhar Halqi', colorVar: '--tj-izhar-halqi', duration: '1' },
         { legendKey: 'izhar_shafawi', label: 'Izhar Shafawi', colorVar: '--tj-izhar-shafawi', duration: '1' },
     ] },
     { category: 'madd', title: 'Madd', rows: [
-        { legendKey: 'madd_lazim', label: 'Lazim', colorVar: '--tj-madd-lazim', duration: '6' },
-        { legendKey: 'madd_wajib', label: 'Wajib', colorVar: '--tj-madd-wajib', duration: '4/5' },
-        { legendKey: 'madd_jaiz', label: 'Jaiz', colorVar: '--tj-madd-jaiz', duration: '2/4/5' },
-        { legendKey: 'madd_arid', label: "'Arid", colorVar: '--tj-madd-arid', duration: '2/4/6' },
-        { legendKey: 'madd_leen', label: 'Leen', colorVar: '--tj-madd-leen', duration: '2/4/6' },
-        { legendKey: 'madd_tabii', label: 'Tabii', colorVar: '--tj-madd-tabii', duration: '2' },
+        { legendKey: 'madd_lazim', label: 'Madd Lazim', colorVar: '--tj-madd-lazim', duration: '6' },
+        { legendKey: 'madd_wajib', label: 'Madd Wajib Muttasil', colorVar: '--tj-madd-wajib', duration: '4/5' },
+        { legendKey: 'madd_jaiz', label: "Madd Ja'iz Munfassil", colorVar: '--tj-madd-jaiz', duration: '2/4/5' },
+        { legendKey: 'madd_arid', label: "'Arid-lissukun", colorVar: '--tj-madd-arid', duration: '2/4/6' },
+        { legendKey: 'madd_leen', label: 'Madd Leen', colorVar: '--tj-madd-leen', duration: '2/4/6' },
+        { legendKey: 'madd_tabii', label: "Madd Tabi'i", colorVar: '--tj-madd-tabii', duration: '2' },
     ] },
     { category: 'heaviness', title: 'Heaviness', rows: [
         { legendKey: 'tafkheem', label: 'Tafkheem', colorVar: '--tj-tafkheem' },
