@@ -339,6 +339,9 @@
     // Reset previous-index cache when structure changes (new verse, etc.)
     $: rendered, (_prevActiveWordIdx = -1);
     $: rendered, (_prevActivePhonemeIdx = -1);
+    // Force the loop-highlight diff-gate to re-apply after a structural render
+    // (reused keyed nodes can carry a stale `.loop` class).
+    $: rendered, (_prevLoopKey = '\0');
     // Clear stale highlight classes on verse change. The keyed `{#each}` reuses
     // DOM nodes whose `block.wordIndex` matches across verses (typically 0,1,2…),
     // so without this the prior verse's `.active`/`.past` classes survive on
@@ -1489,6 +1492,10 @@
 
     let _prevActiveWordIdx = -1;
     let _prevActivePhonemeIdx = -1;
+    // Loop-highlight is a function of the loop target ALONE (not the playhead), so
+    // its four full-tier passes only need to run when the target changes — diff-gate
+    // them so the steady (no-loop) frame skips ~4×N classList writes.
+    let _prevLoopKey = '\0';
 
     /**
      * Apply current-time-based highlights imperatively. Called from the
@@ -1610,38 +1617,44 @@
             );
         });
 
-        // Loop perma-highlight — outline the looped element on its tier.
+        // Loop perma-highlight — outline the looped element on its tier. Only re-run
+        // the four tier passes when the loop target changes (a clear runs once to
+        // strip the classes); the steady frame skips them entirely.
         const lp = get(loopTarget);
-        hc.blocks.forEach((block) => {
-            const wi = parseInt(block.dataset.wordIndex ?? '-1');
-            block.classList.toggle(
-                'loop',
-                lp?.kind === 'word' && lp.wordIndex === wi,
-            );
-        });
-        hc.letters.forEach((el) => {
-            const wi = parseInt(el.dataset.wordIndex ?? '-1');
-            const li = parseInt(el.dataset.letterIndex ?? '-1');
-            el.classList.toggle(
-                'loop',
-                lp?.kind === 'letter' && lp.wordIndex === wi && lp.childIndex === li,
-            );
-        });
-        hc.phonemes.forEach((el) => {
-            const idx = parseInt(el.dataset.index ?? '-1');
-            el.classList.toggle(
-                'loop',
-                lp?.kind === 'phoneme' && lp.childIndex === idx,
-            );
-        });
-        hc.harakas.forEach((el) => {
-            const wi = parseInt(el.dataset.wordIndex ?? '-1');
-            const idx = parseInt(el.dataset.diaLoopIdx ?? '-1');
-            el.classList.toggle(
-                'loop',
-                lp?.kind === 'diacritic' && lp.wordIndex === wi && lp.childIndex === idx,
-            );
-        });
+        const loopKey = lp ? `${lp.kind}:${lp.wordIndex ?? ''}:${lp.childIndex ?? ''}` : '';
+        if (loopKey !== _prevLoopKey) {
+            _prevLoopKey = loopKey;
+            hc.blocks.forEach((block) => {
+                const wi = parseInt(block.dataset.wordIndex ?? '-1');
+                block.classList.toggle(
+                    'loop',
+                    lp?.kind === 'word' && lp.wordIndex === wi,
+                );
+            });
+            hc.letters.forEach((el) => {
+                const wi = parseInt(el.dataset.wordIndex ?? '-1');
+                const li = parseInt(el.dataset.letterIndex ?? '-1');
+                el.classList.toggle(
+                    'loop',
+                    lp?.kind === 'letter' && lp.wordIndex === wi && lp.childIndex === li,
+                );
+            });
+            hc.phonemes.forEach((el) => {
+                const idx = parseInt(el.dataset.index ?? '-1');
+                el.classList.toggle(
+                    'loop',
+                    lp?.kind === 'phoneme' && lp.childIndex === idx,
+                );
+            });
+            hc.harakas.forEach((el) => {
+                const wi = parseInt(el.dataset.wordIndex ?? '-1');
+                const idx = parseInt(el.dataset.diaLoopIdx ?? '-1');
+                el.classList.toggle(
+                    'loop',
+                    lp?.kind === 'diacritic' && lp.wordIndex === wi && lp.childIndex === idx,
+                );
+            });
+        }
 
         // Pause bridges: the bridge whose silence span contains the playhead lights
         // (`.active`) and the rest of the row dims to 70% (`.in-pause` on the
@@ -2064,32 +2077,7 @@
     function tjKubraFor(badges: TjBadge[], settings: TajweedSettings): string {
         return tjKubraColor(badges, (k) => isRuleEnabled(settings, k));
     }
-
-    // DEV-only highlight-transition perf A/B/C harness (remove before merge).
-    // Sets `data-ts-perf` on <html>; the variants live in timestamps.css.
-    const _perfModes: Array<[string, string]> = [
-        ['baseline', 'baseline 0.1s'],
-        ['drop', 'drop (none)'],
-        ['fast', '30ms'],
-        ['contain', 'contain:paint'],
-    ];
-    let _perfMode = 'baseline';
-    function _setPerf(m: string): void {
-        _perfMode = m;
-        const el = document.documentElement;
-        if (m === 'baseline') el.removeAttribute('data-ts-perf');
-        else el.setAttribute('data-ts-perf', m);
-    }
 </script>
-
-{#if import.meta.env.DEV}
-    <div class="perf-ab" dir="ltr">
-        <span class="perf-ab-label">highlight perf:</span>
-        {#each _perfModes as [m, label] (m)}
-            <button class="perf-ab-btn" class:on={_perfMode === m} on:click={() => _setPerf(m)}>{label}</button>
-        {/each}
-    </div>
-{/if}
 
 <div
     bind:this={rootEl}
