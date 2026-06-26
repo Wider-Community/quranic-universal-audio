@@ -13,8 +13,10 @@ from qua_jobs.publish_hf import (
     _rebase_row_multi,
     _seg_word_range,
     _subtract_spans,
+    _verses_for_validation,
     build_rows,
 )
+from qua_shared.dataset_validation import fatal_violations, validate_dataset
 
 _SURAH_INFO = {"1": {"verses": [{"verse": 1, "num_words": 4}, {"verse": 2, "num_words": 3}]}}
 
@@ -106,7 +108,9 @@ def test_build_rows_keep_runs_contiguous_single_run():
         "1:1": _ts([[1, 0, 1000], [2, 1000, 2000], [3, 2000, 3000], [4, 3000, 4000]], 0, 4000)
     }
     rows = build_rows(timestamps, _detailed_by_ref(detailed), _SURAH_INFO, {}, {"1": "u"})
-    assert rows[0]["keep_runs"] == [(0, 4000)]
+    # One run; the chapter-last verse takes the default pad_end (300ms) tail
+    # headroom, so the run ends at verse_end + 300.
+    assert rows[0]["keep_runs"] == [(0, 4300)]
 
 
 def test_build_rows_keep_runs_interior_no_match_splits():
@@ -129,7 +133,60 @@ def test_build_rows_keep_runs_interior_no_match_splits():
     }
     rows = build_rows(timestamps, _detailed_by_ref(detailed), _SURAH_INFO, {}, {"1": "u"})
     assert len(rows) == 1
-    assert rows[0]["keep_runs"] == [(0, 2000), (3000, 4000)]
+    # Interior no-match [2000,3000] excised; chapter-last verse takes the default
+    # pad_end (300ms) tail, so the trailing run ends at verse_end + 300.
+    assert rows[0]["keep_runs"] == [(0, 2000), (3000, 4300)]
+
+
+def test_build_rows_repeated_pivot_segments_no_overlap():
+    # 2:6 shape: word 6 is the look-back pivot recited in both segments, so the
+    # flat words carry word 6 twice. With the projection's occurrence spans,
+    # build_rows must pin each segment to its own occurrence — segments stay
+    # non-overlapping and the intra-segment-gap validator passes. (An index-keyed
+    # map would tie both segment-6 boundaries to the last occurrence, overlapping
+    # them and tripping a phantom gap.)
+    surah_info = {"1": {"verses": [{"verse": 1, "num_words": 11}]}}
+    detailed = {
+        "entries": [
+            {
+                "ref": "1:1",
+                "segments": [
+                    {"time_start": 0, "time_end": 5000, "matched_ref": "1:1:1-1:1:6"},
+                    {"time_start": 5010, "time_end": 9000, "matched_ref": "1:1:6-1:1:11"},
+                ],
+            }
+        ]
+    }
+    words = [
+        [1, 100, 1000], [2, 1000, 1900], [3, 1900, 2700], [4, 2700, 3500],
+        [5, 3500, 4300], [6, 4300, 5000],            # word 6, first occurrence
+        [6, 5010, 5800], [7, 5800, 6400], [8, 6400, 7000], [9, 7000, 7600],
+        [10, 7600, 8200], [11, 8200, 9000],          # word 6, second occurrence
+    ]
+    timestamps = {
+        "1:1": {
+            "words": words,
+            "letters": [],
+            "verse_start_ms": 100,
+            "verse_end_ms": 9000,
+            "seg_spans": [
+                {"ref": "1:1", "w_from": 1, "w_to": 6, "occ_start": 0, "occ_end": 6,
+                 "start_ms": 100, "end_ms": 5000},
+                {"ref": "1:1", "w_from": 6, "w_to": 11, "occ_start": 6, "occ_end": 12,
+                 "start_ms": 5010, "end_ms": 9000},
+            ],
+        }
+    }
+    rows = build_rows(timestamps, _detailed_by_ref(detailed), surah_info, {}, {"1": "u"})
+    assert len(rows) == 1
+    segs = rows[0]["segments"]
+    assert len(segs) == 2
+    # Internal boundary: seg A end <= seg B start (non-overlapping; the 10ms is the
+    # recovered silence between the two passes of word 6).
+    assert segs[0][3] <= segs[1][2]
+    # The validator (intra-segment gaplessness) must be clean.
+    summary = validate_dataset(_verses_for_validation(rows), surah_info=surah_info)
+    assert fatal_violations(summary["violations"]) == []
 
 
 def test_build_rows_full_verse_no_match_drops_row():

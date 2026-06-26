@@ -241,7 +241,8 @@ def _reshape_timestamps_for_rows(canonical: dict) -> dict[str, dict]:
             continue
         words = val.get("words") if isinstance(val, dict) else val
         if not words:
-            ts[ref] = {"words": [], "letters": [], "verse_start_ms": 0, "verse_end_ms": 0}
+            ts[ref] = {"words": [], "letters": [], "verse_start_ms": 0,
+                       "verse_end_ms": 0, "seg_spans": []}
             continue
         vs = val.get("verse_start_ms") if isinstance(val, dict) else None
         ve = val.get("verse_end_ms") if isinstance(val, dict) else None
@@ -257,6 +258,11 @@ def _reshape_timestamps_for_rows(canonical: dict) -> dict[str, dict]:
             "letters": letters,
             "verse_start_ms": int(vs),
             "verse_end_ms": int(ve),
+            # Per-segment occurrence spans from the projection (None for legacy
+            # word-only inputs) — the faithful source for segment boundaries when
+            # a boundary word index repeats. build_rows falls back to the
+            # word-index map when this is absent.
+            "seg_spans": val.get("segments") if isinstance(val, dict) else None,
         }
     return ts
 
@@ -403,28 +409,48 @@ def build_rows(
             clip_start = max(0, int(round(verse_start - lead_pad)))
             clip_end = int(round(verse_end + tail_pad))
 
-            # Segments (Change B): boundaries are the post-MFA word/letter ends,
-            # NOT VAD — so every internal segment boundary agrees byte-exact with
-            # the abutting word end and the gap between adjacent segments is the
-            # recovered inter-segment silence. The two outer edges are overridden
-            # to the padded clip edges below. Word span comes from matched_ref.
-            word_by_idx = {int(w[0]): (int(w[1]), int(w[2])) for w in tdata["words"]}
+            # Segments (Change B): boundaries are the post-MFA word ends, NOT VAD,
+            # so every internal segment boundary agrees byte-exact with the abutting
+            # word end and the gap between adjacent segments is the recovered
+            # inter-segment silence. The two outer edges are overridden to the
+            # padded clip edges below.
+            #
+            # Prefer the projection's per-segment OCCURRENCE spans. When a segment's
+            # boundary word index repeats elsewhere in the verse (a look-back), an
+            # index-keyed map collapses to the wrong occurrence and overlaps the
+            # adjacent segment — surfacing as a phantom intra-segment gap and over-
+            # lapping clips. The occurrence span pins the exact word that belongs to
+            # each segment. Fall back to the word-index map for legacy word-only
+            # inputs (no spans).
+            seg_spans = tdata.get("seg_spans")
             verse_segments: list[list[int]] = []
-            for seg in entry.get("segments", []) or []:
-                wr = _seg_word_range(seg.get("matched_ref", ""), surah_num, ayah, surah_info)
-                if wr is None:
-                    continue
-                w_from, w_to = wr
-                if w_from not in word_by_idx or w_to not in word_by_idx:
-                    continue
-                verse_segments.append(
-                    [
-                        _i(w_from),
-                        _i(w_to),
-                        _i(word_by_idx[w_from][0] - clip_start),
-                        _i(word_by_idx[w_to][1] - clip_start),
-                    ]
-                )
+            if seg_spans:
+                for sp in seg_spans:
+                    verse_segments.append(
+                        [
+                            _i(sp["w_from"]),
+                            _i(sp["w_to"]),
+                            _i(int(sp["start_ms"]) - clip_start),
+                            _i(int(sp["end_ms"]) - clip_start),
+                        ]
+                    )
+            else:
+                word_by_idx = {int(w[0]): (int(w[1]), int(w[2])) for w in tdata["words"]}
+                for seg in entry.get("segments", []) or []:
+                    wr = _seg_word_range(seg.get("matched_ref", ""), surah_num, ayah, surah_info)
+                    if wr is None:
+                        continue
+                    w_from, w_to = wr
+                    if w_from not in word_by_idx or w_to not in word_by_idx:
+                        continue
+                    verse_segments.append(
+                        [
+                            _i(w_from),
+                            _i(w_to),
+                            _i(word_by_idx[w_from][0] - clip_start),
+                            _i(word_by_idx[w_to][1] - clip_start),
+                        ]
+                    )
 
             # text_uthmani from detailed.json matched_refs, restricted to the
             # clip range; cross-verse segments use only this ayah's portion.
