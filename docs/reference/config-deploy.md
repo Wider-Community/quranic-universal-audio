@@ -133,17 +133,12 @@ The canonical dev/prod Spaces have **no** auto-provisioning script — their sec
 
 ## Type-check gate (pyright)
 
-`qua_shared/schemas/` is type-checked in basic mode as a **blocking** CI gate
-(`type-check` job in `inspector-checks.yml`). It runs via `npx -y pyright
---level error qua_shared/schemas` so no Python type-checker dependency is added
-to the image — node 24 is already present.
-
-To widen coverage to additional packages, follow the runbook embedded in
-`pyrightconfig.json`: add **one** package to `include` (recommended order:
-`qua_jobs`, then `inspector/services/` package by package), run pyright, fix or
-annotate the real errors, and only then add the next. Never widen to the whole
-repo in one step — the `extraPaths` in `pyrightconfig.json` ensures flat-layout
-imports resolve cleanly when you do.
+The entire Python backend (`inspector/`, `qua_jobs/`, `qua_shared/`) is
+type-checked in basic mode as a **blocking** CI gate (`type-check` job in
+`inspector-checks.yml`). It runs via `npx -y pyright --level error inspector
+qua_jobs qua_shared` so no Python type-checker dependency is added to the image
+— node 24 is already present. The `extraPaths` in `pyrightconfig.json` make the
+flat-layout imports resolve cleanly across the three packages.
 
 Touching any file under `qua_shared/schemas/` also requires regenerating the
 codegen'd FE types and committing the result — see `schema-codegen-check` in

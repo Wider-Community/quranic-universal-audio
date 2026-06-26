@@ -140,6 +140,12 @@ def _dump_json(obj: dict | list) -> bytes:
     return orjson.dumps(obj, option=orjson.OPT_INDENT_2)
 
 
+def _as_bytes(data: str | bytes) -> bytes:
+    """Normalize ``hffs.cat_file``'s loosely-typed ``str | bytes`` result to
+    ``bytes`` (bucket reads are always binary; ``str`` is defensive only)."""
+    return data.encode("utf-8") if isinstance(data, str) else data
+
+
 # ----------------------------------------------------------------------
 # FilesystemBackend
 # ----------------------------------------------------------------------
@@ -358,7 +364,7 @@ class BucketBackend:
         from huggingface_hub import hffs  # type: ignore[import-not-found]
 
         try:
-            return hffs.cat_file(self._bucket_uri(path))
+            return _as_bytes(hffs.cat_file(self._bucket_uri(path)))
         except Exception as e:
             if self._is_not_found(e):
                 raise StorageNotFound(path) from e
@@ -450,7 +456,7 @@ class BucketBackend:
         from huggingface_hub import hffs  # type: ignore[import-not-found]
 
         try:
-            return hffs.cat_file(self._bucket_uri(path))
+            return _as_bytes(hffs.cat_file(self._bucket_uri(path)))
         except Exception as e:
             if self._is_not_found(e):
                 raise StorageNotFound(path) from e

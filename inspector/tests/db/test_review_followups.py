@@ -10,7 +10,14 @@ from datetime import UTC, datetime, timezone
 import pytest
 
 from qua_shared.schemas import Actor, Delivery, ReciterEntry, Role
-from qua_shared.schemas.bucket.catalog import Channel, Riwayah, Source, Style, Vocab
+from qua_shared.schemas.bucket.catalog import (
+    AudioCategory,
+    Channel,
+    Riwayah,
+    Source,
+    Style,
+    Vocab,
+)
 from services import db
 from services.db import (
     _serde,
@@ -56,6 +63,8 @@ def test_transaction_failure_releases_lock(fresh_db):
 def test_from_iso_forces_utc_on_naive():
     aware = _serde.from_iso("2026-01-01T00:00:00+00:00")
     naive = _serde.from_iso("2026-01-01T00:00:00")
+    assert aware is not None
+    assert naive is not None
     assert aware.tzinfo is not None
     assert naive.tzinfo == UTC
     assert _serde.from_iso(None) is None
@@ -119,7 +128,9 @@ def test_undelete_missing_is_noop(fresh_db):
 def test_get_by_content_hash(fresh_db):
     seed_user("u1")
     rec = repo_transitions.append(event="reciter.released", actor=_actor())
+    assert rec.request_id is not None
     got = repo_transitions.get(rec.request_id)
+    assert got is not None
     found = repo_transitions.get_by_content_hash(got["content_hash"])
     assert found is not None and found["id"] == rec.request_id
     assert repo_transitions.get_by_content_hash("deadbeef") is None
@@ -161,7 +172,7 @@ def _delivery(slug, src="src", ch="ch"):
         style="mur",
         source=src,
         channel=ch,
-        audio_category="by_surah",
+        audio_category=AudioCategory.BY_SURAH,
         chapter_count=114,
         added_at=datetime(2026, 1, 1, tzinfo=UTC),
         added_by_hf_id="seed",

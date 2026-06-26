@@ -12,6 +12,7 @@ export const LS_KEYS = {
     TS_GRANULARITY:  'insp_ts_granularity',
     TS_SHOW_TRANSLATIONS: 'insp_ts_show_translations',
     TS_TRANSLATION_LANG:  'insp_ts_translation_lang',
+    TS_TAJWEED:           'insp_ts_tajweed',
     SEG_RECITER:     'insp_seg_reciter',
     SEG_SPEED:       'insp_seg_speed',
     SEG_AUTOPLAY:    'insp_seg_autoplay',

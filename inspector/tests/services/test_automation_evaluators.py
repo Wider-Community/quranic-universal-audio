@@ -154,7 +154,9 @@ def test_gh_cut_launches_when_changes_exist(monkeypatch):
     evaluators.eval_gh_cut(AutomationConfig(gh_cut=GhCutConfig(enabled=True)), _now())
 
     assert len(launched) == 1
-    assert repo_automation.get_state("gh_cut")["last_status"] == "launched"
+    gh_cut_state = repo_automation.get_state("gh_cut")
+    assert gh_cut_state is not None
+    assert gh_cut_state["last_status"] == "launched"
 
 
 def test_gh_cut_one_shot_override_is_cleared_after_launch(monkeypatch):
@@ -257,7 +259,9 @@ def test_stale_ts_regen_launches_when_edits_are_newer_than_last_job(monkeypatch)
     )
 
     assert launched == ["rec_a"]
-    assert repo_automation.get_state("stale_ts_regen")["last_status"] == "launched"
+    stale_ts_state = repo_automation.get_state("stale_ts_regen")
+    assert stale_ts_state is not None
+    assert stale_ts_state["last_status"] == "launched"
 
 
 # --- auto-release inactive claims -------------------------------------------
@@ -288,7 +292,9 @@ def test_auto_release_inactive_fires_force_release_for_idle_claim(monkeypatch):
     evaluators.eval_auto_release_inactive(_release_cfg(), _now())
 
     assert calls == [("rec_a", "claim.force_released")]
-    assert repo_automation.get_state(evaluators.AUTO_RELEASE_INACTIVE)["last_status"] == "launched"
+    release_state = repo_automation.get_state(evaluators.AUTO_RELEASE_INACTIVE)
+    assert release_state is not None
+    assert release_state["last_status"] == "launched"
 
 
 def test_auto_release_inactive_keeps_claim_with_recent_edit(monkeypatch):
@@ -345,10 +351,14 @@ def test_auto_release_inactive_releases_real_claim_and_notifies(seed_state, monk
     evaluators.eval_auto_release_inactive(_release_cfg(days=14), _now())
 
     assert repo_claims.get_open_claim(slug) is None  # claim released
-    assert state_service.get_row(slug).state.value == "awaiting_review"
+    released_row = state_service.get_row(slug)
+    assert released_row is not None
+    assert released_row.state.value == "awaiting_review"
     events = {n["event"] for n in repo_notifications.list_active("rev1")}
     assert "claim.force_released" in events
-    assert repo_automation.get_state(evaluators.AUTO_RELEASE_INACTIVE)["last_status"] == "launched"
+    release_state = repo_automation.get_state(evaluators.AUTO_RELEASE_INACTIVE)
+    assert release_state is not None
+    assert release_state["last_status"] == "launched"
 
 
 def test_auto_release_inactive_keeps_recently_claimed_real_row(seed_state, monkeypatch):
@@ -368,4 +378,6 @@ def test_auto_release_inactive_keeps_recently_claimed_real_row(seed_state, monke
     evaluators.eval_auto_release_inactive(_release_cfg(days=14), _now())
 
     assert repo_claims.get_open_claim(slug) is not None  # still claimed
-    assert state_service.get_row(slug).state.value == "under_review"
+    claimed_row = state_service.get_row(slug)
+    assert claimed_row is not None
+    assert claimed_row.state.value == "under_review"

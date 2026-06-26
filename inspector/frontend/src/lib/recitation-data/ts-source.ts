@@ -29,11 +29,19 @@ import type {
     Letter,
     PhonemeInterval,
     SegmentEntry,
+    TsCell,
     TsShardResponse,
     TsVbrResponse,
     TsVerseData,
     TsWord,
 } from '../types/ts-client';
+import { parseShardCell } from '../types/ts-client';
+
+// Render-only phone markers — NOT letter-derived, so excluded from the indexable
+// phone sequence the cell `phoneme_indices` count against. Mirrors the
+// phonemizer's `is_render_only` (the qalqala echo `Q`); the phonemizer test pins
+// the value, keep the two in lockstep.
+const RENDER_ONLY_PHONES = new Set(['Q']);
 
 import { type ChapterOccasion, chapterOccasions } from './occasions';
 
@@ -462,14 +470,36 @@ export function assembleOccasion(
     const verseRef = occasion.ref;
     const chapter = parseInt(verseRef.split(':')[0] ?? '0', 10);
 
-    // Every recited word across the occasion's segments, in audio order.
+    // Every recited word across the occasion's segments, in audio order (no
+    // dedup — repeats/lookbacks stay seekable). `cells[].share_group` ids are
+    // numbered per source SEGMENT (each restarts at 0), so offset each segment's
+    // ids by a running base to keep them verse-unique across a multi-segment
+    // occasion — else a consumer keying co-light by id would merge unrelated
+    // groups. `sgOffsets[i]` is the base added to word `wordsRaw[i]`'s share_groups.
     const wordsRaw: SegmentEntry['words'] = [];
-    for (const seg of occasion.segments) wordsRaw.push(...seg.words);
+    const sgOffsets: number[] = [];
+    let sgBase = 0;
+    for (const seg of occasion.segments) {
+        let maxSg = -1;
+        for (const w of seg.words) {
+            wordsRaw.push(w);
+            sgOffsets.push(sgBase);
+            for (const c of w[5] ?? []) {
+                const sg = c[6];
+                if (sg != null && sg > maxSg) maxSg = sg;
+            }
+        }
+        sgBase += maxSg + 1;
+    }
 
     const intervals: PhonemeInterval[] = [];
     const wordsOut: TsWord[] = [];
 
-    for (const w of wordsRaw) {
+    for (let wi = 0; wi < wordsRaw.length; wi++) {
+        const w = wordsRaw[wi]!;
+        // Per-segment base so cross-segment share_group ids don't collide within
+        // a multi-segment occasion (ids restart at 0 per segment).
+        const sgOffset = sgOffsets[wi] ?? 0;
         const wordIdx = w[0];
         const wStart = w[1] / 1000;
         const wEnd = w[2] / 1000;
@@ -504,9 +534,42 @@ export function assembleOccasion(
             (_, i) => phoneStartIdx + i,
         );
 
+        // Verse-flat indices of this word's INDEXABLE phones (render-only markers
+        // excluded) — maps a cell's word-local indexable index to the flat list.
+        const indexableFlat: number[] = [];
+        for (let i = 0; i < phonesRaw.length; i++) {
+            const p = phonesRaw[i]?.[0] as string | undefined;
+            if (p && !RENDER_ONLY_PHONES.has(p)) indexableFlat.push(phoneStartIdx + i);
+        }
+        // All cells flow through unchanged — including `base` cells (the ordered
+        // anchors the letter row groups on). Read each row by name (parseShardCell)
+        // then map its word-local indexable indices to the verse-flat list; the
+        // share_group carries the per-segment offset so cross-segment ids don't collide.
+        // `phonemeRuleTags` (v8 muqattaat) is parallel to `phonemeIndices`, so it
+        // rides the SAME filter — an index that maps to nothing drops its tag too,
+        // keeping the two lists element-aligned after the remap.
+        const cells: TsCell[] = (w[5] ?? []).map((row) => {
+            const c = parseShardCell(row);
+            const ruleTags = c.phonemeRuleTags;
+            const mapped: number[] = [];
+            const mappedTags: (string | null)[] = [];
+            c.phonemeIndices.forEach((k, i) => {
+                const flat = indexableFlat[k];
+                if (flat === undefined) return;
+                mapped.push(flat);
+                if (ruleTags) mappedTags.push(ruleTags[i] ?? null);
+            });
+            return {
+                ...c,
+                phonemeIndices: mapped,
+                phonemeRuleTags: ruleTags ? mappedTags : null,
+                shareGroup: c.shareGroup == null ? null : c.shareGroup + sgOffset,
+            };
+        });
+
         wordsOut.push({
             location, text, display_text: displayText,
-            start: wStart, end: wEnd, phoneme_indices: phonemeIndices, letters,
+            start: wStart, end: wEnd, phoneme_indices: phonemeIndices, letters, cells,
         });
     }
 

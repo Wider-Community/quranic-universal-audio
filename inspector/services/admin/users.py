@@ -10,6 +10,7 @@ per-mutation hook. ``get_user_detail()`` is lazy, bounded, and uncached.
 from __future__ import annotations
 
 from datetime import timedelta
+from typing import cast
 
 from qua_shared.schemas import (
     Actor,
@@ -101,7 +102,9 @@ def list_users() -> dict:
     db_seq = current_db_seq()
     cached = cache.get_admin_users_cache(db_seq)
     if cached is not None:
-        return cached
+        # The store is generically typed (object); this module is the sole
+        # writer and only ever caches the AdminUsersResponse dump (a dict).
+        return cast(dict, cached)
 
     base = repo_admin_users.base_rows()
     last_activity = repo_admin_users.last_activity_by_actor()
@@ -126,10 +129,11 @@ def list_users() -> dict:
             )
         )
 
+    # to_iso() is Optional only for a None input; the window cutoff is always a
+    # real datetime, so the ISO string is always present.
     cutoff = _serde.to_iso(_serde.now() - timedelta(days=_ACTIVE_WINDOW_DAYS))
-    active_this_week = sum(
-        1 for r in rows if r.last_activity is not None and r.last_activity >= cutoff
-    )
+    assert cutoff is not None
+    active_this_week = sum(1 for r in rows if (la := r.last_activity) is not None and la >= cutoff)
     payload = AdminUsersResponse(
         users=rows,
         summary=AdminUsersSummary(registered=len(rows), active_this_week=active_this_week),

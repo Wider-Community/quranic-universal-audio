@@ -219,11 +219,12 @@
 
     /** First index into `sorted` whose interval starts at/after `s` (bsearch). */
     function lowerBoundStart(s: number): number {
+        const S = sorted;
         let lo = 0;
-        let hi = sorted.length;
+        let hi = S.length;
         while (lo < hi) {
             const mid = (lo + hi) >> 1;
-            if (sorted[mid]!.start < s) lo = mid + 1;
+            if (S[mid]!.start < s) lo = mid + 1;
             else hi = mid;
         }
         return lo;
@@ -239,37 +240,44 @@
      *  word range maps recited progress onto the cell sub-span. For a forward first
      *  take this is identical to the canonical word-fraction crossing. */
     function takeFrac(idx: number, u: number, ivStart: number, tSec: number): number {
+        // Hoist the reactive `sorted` / `model` reads into plain locals once — the
+        // loops below index them O(span) times per frame, and each textual read of a
+        // `$derived` / prop signal is a `get()` + dirty-check. One snapshot per call
+        // keeps the value stable (synchronous) while collapsing thousands of
+        // signal reads to a handful (the per-frame `is_dirty` hot spot).
+        const S = sorted;
+        const cou = model.cellOfUnit;
         const cell = model.cells[idx]!;
         const us = cell.unitStart;
         // Locate the active interval in the sorted timeline (bsearch by start, then
         // disambiguate by unit among equal starts).
         let k = lowerBoundStart(ivStart);
-        while (k < sorted.length && sorted[k]!.start === ivStart && sorted[k]!.unitIdx !== u) k++;
-        if (k >= sorted.length || sorted[k]!.unitIdx !== u) return cell.words[u - us]?.frac0 ?? 0;
+        while (k < S.length && S[k]!.start === ivStart && S[k]!.unitIdx !== u) k++;
+        if (k >= S.length || S[k]!.unitIdx !== u) return cell.words[u - us]?.frac0 ?? 0;
         // Grow the take left/right over consecutive, same-cell, reading-order-rising
         // intervals (skipping nothing in between → a within-verse pause stays in, a
         // loopback / other verse cuts it).
         let lo = k;
         let hi = k;
         while (lo > 0) {
-            const p = sorted[lo - 1]!;
-            if ((model.cellOfUnit[p.unitIdx] ?? -1) !== idx || p.unitIdx >= sorted[lo]!.unitIdx) break;
+            const p = S[lo - 1]!;
+            if ((cou[p.unitIdx] ?? -1) !== idx || p.unitIdx >= S[lo]!.unitIdx) break;
             lo--;
         }
-        while (hi + 1 < sorted.length) {
-            const nx = sorted[hi + 1]!;
-            if ((model.cellOfUnit[nx.unitIdx] ?? -1) !== idx || nx.unitIdx <= sorted[hi]!.unitIdx) break;
+        while (hi + 1 < S.length) {
+            const nx = S[hi + 1]!;
+            if ((cou[nx.unitIdx] ?? -1) !== idx || nx.unitIdx <= S[hi]!.unitIdx) break;
             hi++;
         }
         let before = 0; // recited secs of take intervals strictly before the active one
         let total = 0;
         for (let i = lo; i <= hi; i++) {
-            const d = sorted[i]!.end - sorted[i]!.start;
+            const d = S[i]!.end - S[i]!.start;
             if (i < k) before += d;
             total += d;
         }
-        const f0 = cell.words[sorted[lo]!.unitIdx - us]?.frac0 ?? 0;
-        const f1 = cell.words[sorted[hi]!.unitIdx - us]?.frac1 ?? 1;
+        const f0 = cell.words[S[lo]!.unitIdx - us]?.frac0 ?? 0;
+        const f1 = cell.words[S[hi]!.unitIdx - us]?.frac1 ?? 1;
         const p = total > 0 ? clamp(0, 1, (before + (tSec - ivStart)) / total) : 0;
         return f0 + p * (f1 - f0);
     }

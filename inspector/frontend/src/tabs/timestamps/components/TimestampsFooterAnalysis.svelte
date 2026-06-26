@@ -4,7 +4,9 @@
      * `center-trail` slot (just right of the speed button) when the Timestamps
      * tab is active.
      *
-     * A single flat row:  loop · letters · phonemes · translations(globe) · help
+     * A single flat row:  loop · letters · phonemes · wipe · tajweed ·
+     * translations(globe) · help. `wipe` toggles the continuous karaoke-style
+     * highlight (vs the discrete fill).
      * All operate on the shared player (dashPort) + timestamps display stores.
      * The help button opens the shortcuts/guide drop-up.
      */
@@ -14,13 +16,15 @@
     import { dashPort } from '../../../lib/playback/dash-port';
     import { ControlIcon } from '../../../lib/recitation-animation';
     import { LS_KEYS } from '../../../lib/utils/constants';
-    import { showLetters, showPhonemes } from '../stores/display';
+    import { highlightWipe, showLetters, showPhonemes } from '../stores/display';
     import { loopTarget } from '../stores/playback';
     import { loadedVerse } from '../stores/verse';
     import { findWordAt } from '../utils/loop-target';
+    import TajweedSettingsPanel from './TajweedSettingsPanel.svelte';
     import TranslationGlobe from './TranslationGlobe.svelte';
 
     let guideOpen = $state(false);
+    let tajweedOpen = $state(false);
 
     function persist(key: string, v: boolean): void {
         try { localStorage.setItem(key, String(v)); } catch { /* ignore */ }
@@ -30,6 +34,9 @@
     }
     function togglePhonemes(): void {
         showPhonemes.update((v) => { persist(LS_KEYS.TS_SHOW_PHONEMES, !v); return !v; });
+    }
+    function toggleWipe(): void {
+        highlightWipe.update((v) => !v); // self-persists (see stores/display)
     }
     function toggleLoop(): void {
         if (get(loopTarget)) { loopTarget.set(null); return; }
@@ -70,6 +77,56 @@
             { key: 'Waveform', label: 'Click to seek' },
         ] },
     ];
+
+    // Keep the drop-up on-screen: it's anchored to its button, but on a narrow
+    // window the footer overflows and the button slides off the right edge,
+    // dragging the popup with it. Shift it left so its right edge clears the
+    // viewport, and only cap its width as a last resort.
+    function keepInView(node: HTMLElement) {
+        const margin = 8;
+        const place = (): void => {
+            node.style.right = '0px';
+            node.style.maxWidth = '';
+            const overflowRight = node.getBoundingClientRect().right - (window.innerWidth - margin);
+            node.style.right = `${Math.max(0, overflowRight)}px`;
+            if (node.getBoundingClientRect().left < margin) {
+                node.style.maxWidth = `${window.innerWidth - margin * 2}px`;
+            }
+        };
+        place();
+        window.addEventListener('resize', place);
+        return { destroy: () => window.removeEventListener('resize', place) };
+    }
+
+    // Centre the tajweed panel on the footer's play button (the centred transport
+    // column = true viewport centre), so its middle column lines up under play.
+    // Falls back to viewport-clamped if the wide box would overflow an edge.
+    function centerOnPlay(node: HTMLElement) {
+        const margin = 8;
+        const place = (): void => {
+            node.style.right = 'auto';
+            node.style.maxWidth = '';
+            const wrap = node.parentElement;
+            const controls = document.querySelector('.player .controls');
+            if (!wrap || !controls) return;
+            const wrapLeft = wrap.getBoundingClientRect().left;
+            const c = controls.getBoundingClientRect();
+            const w = node.offsetWidth;
+            if (w > window.innerWidth - margin * 2) {
+                node.style.maxWidth = `${window.innerWidth - margin * 2}px`;
+                node.style.left = `${Math.round(margin - wrapLeft)}px`;
+                return;
+            }
+            const vpLeft = Math.max(
+                margin,
+                Math.min(c.left + c.width / 2 - w / 2, window.innerWidth - margin - w),
+            );
+            node.style.left = `${Math.round(vpLeft - wrapLeft)}px`;
+        };
+        place();
+        window.addEventListener('resize', place);
+        return { destroy: () => window.removeEventListener('resize', place) };
+    }
 </script>
 
 <div class="tfa" role="group" aria-label="Analysis tiers">
@@ -85,6 +142,24 @@
         type="button" class="icon-btn" class:on={$showPhonemes}
         aria-pressed={$showPhonemes} title="Toggle phonemes" onclick={togglePhonemes}
     ><ControlIcon name="phonemes" /></button>
+    <button
+        type="button" class="icon-btn" class:on={$highlightWipe}
+        aria-pressed={$highlightWipe} title="Continuous highlight (karaoke wipe)" onclick={toggleWipe}
+    ><ControlIcon name="wipe" /></button>
+
+    <div class="guide-wrap" use:clickOutside={() => (tajweedOpen = false)}>
+        <button
+            type="button" class="icon-btn" class:on={tajweedOpen} title="Tajweed rules & colours"
+            aria-haspopup="dialog" aria-expanded={tajweedOpen}
+            onclick={() => (tajweedOpen = !tajweedOpen)}
+        ><ControlIcon name="tajweed" /></button>
+        {#if tajweedOpen}
+            <div class="guide-pop" use:centerOnPlay>
+                <TajweedSettingsPanel />
+            </div>
+        {/if}
+    </div>
+
     <TranslationGlobe />
 
     <div class="guide-wrap" use:clickOutside={() => (guideOpen = false)}>
@@ -94,23 +169,25 @@
             onclick={() => (guideOpen = !guideOpen)}
         ><ControlIcon name="help" size={15} /></button>
         {#if guideOpen}
-            <div class="guide-pop">
-                {#each SHORTCUTS as sec (sec.title)}
-                    <div class="guide-sec">
-                        <h4>{sec.title}</h4>
-                        {#each sec.rows as r (r.label)}
-                            <div class="guide-row">
-                                {#if r.icon}
-                                    <span class="g-ic"><ControlIcon name={r.icon} size={14} /></span>
-                                {:else if r.img}
-                                    <span class="g-ic"><img class="g-img" src={r.img} alt="" aria-hidden="true" /></span>
-                                {/if}
-                                {#if r.key}<kbd>{r.key}</kbd>{/if}
-                                <span class="g-label">{r.label}</span>
-                            </div>
-                        {/each}
-                    </div>
-                {/each}
+            <div class="guide-pop" use:keepInView>
+                <div class="guide-shortcuts">
+                    {#each SHORTCUTS as sec (sec.title)}
+                        <div class="guide-sec">
+                            <h4>{sec.title}</h4>
+                            {#each sec.rows as r (r.label)}
+                                <div class="guide-row">
+                                    {#if r.icon}
+                                        <span class="g-ic"><ControlIcon name={r.icon} size={14} /></span>
+                                    {:else if r.img}
+                                        <span class="g-ic"><img class="g-img" src={r.img} alt="" aria-hidden="true" /></span>
+                                    {/if}
+                                    {#if r.key}<kbd>{r.key}</kbd>{/if}
+                                    <span class="g-label">{r.label}</span>
+                                </div>
+                            {/each}
+                        </div>
+                    {/each}
+                </div>
             </div>
         {/if}
     </div>
@@ -152,18 +229,27 @@
     .guide-pop {
         position: absolute;
         bottom: calc(100% + var(--s-2));
-        left: 50%;
-        transform: translateX(-50%);
-        width: min(460px, calc(100vw - var(--s-4) * 2));
-        display: grid;
-        grid-template-columns: 1fr 1fr;
+        /* Anchored to the help button's right edge so the wider box grows
+         * leftward instead of overflowing the viewport's right side. */
+        right: 0;
+        left: auto;
+        display: flex;
+        align-items: stretch;
         gap: var(--s-3);
+        width: max-content;
         background: var(--panel);
         border: 1px solid var(--border-default);
         border-radius: var(--r-3);
         box-shadow: 0 16px 48px oklch(0 0 0 / 0.45);
         z-index: 50;
         padding: var(--s-3);
+    }
+    .guide-shortcuts {
+        flex: 0 0 auto;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--s-3) var(--s-4);
+        min-width: 360px;
     }
     .guide-sec h4 {
         margin: 0 0 4px;

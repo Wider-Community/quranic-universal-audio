@@ -44,9 +44,12 @@ def test_pulls_back_to_earliest_transition():
             "INSERT INTO transitions(id,ts,event,actor_id) VALUES('t2','2024-06-01T00:00:00Z','x','u1')"
         )
     late = _first_seen("u1")
+    assert late is not None
     _backfill()
-    assert _first_seen("u1") == "2024-06-01T00:00:00Z"
-    assert _first_seen("u1") < late
+    earliest = _first_seen("u1")
+    assert earliest == "2024-06-01T00:00:00Z"
+    assert earliest is not None
+    assert earliest < late
 
 
 def test_min_across_sources_request_wins():

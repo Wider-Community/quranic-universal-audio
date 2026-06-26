@@ -91,6 +91,7 @@ def test_append_history_batch_extends_hydrated_list():
     append_history_batch(slug, {"batch_id": "b2", "operations": []})
 
     batches = cache.get_seg_history_batches(slug)
+    assert batches is not None
     assert [b["batch_id"] for b in batches] == ["b0", "b1", "b2"]
     cache.pop_seg_history_batches(slug)
 

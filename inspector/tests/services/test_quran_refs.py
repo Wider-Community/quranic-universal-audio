@@ -9,7 +9,9 @@ def test_build_payload_strips_verse_markers(monkeypatch):
     from services import data_loader, quran_refs
 
     quran_refs.reset_cache()
-    data_loader.cache.set_dk_words_flat_cache(None)
+    # None is the unset sentinel the consumer checks for (``is not None``); the
+    # setter's dict annotation is stricter than the runtime contract.
+    data_loader.cache.set_dk_words_flat_cache(None)  # type: ignore[reportArgumentType]
     monkeypatch.setattr(
         data_loader,
         "load_dk",
@@ -39,7 +41,9 @@ def test_payload_hash_is_deterministic(monkeypatch):
     from services import data_loader, quran_refs
 
     quran_refs.reset_cache()
-    data_loader.cache.set_dk_words_flat_cache(None)
+    # None is the unset sentinel the consumer checks for (``is not None``); the
+    # setter's dict annotation is stricter than the runtime contract.
+    data_loader.cache.set_dk_words_flat_cache(None)  # type: ignore[reportArgumentType]
     monkeypatch.setattr(data_loader, "load_dk", lambda: {"1:1:1": {"text": "X"}})
     monkeypatch.setattr(quran_refs, "get_word_counts", lambda: {(1, 1): 1})
 

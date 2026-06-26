@@ -11,6 +11,8 @@
  * `--t-*`) so the section blends with the live dark theme.
  */
 
+import { inkFor, legibleAccent } from '../utils/color-derive';
+
 export type Granularity = 'word' | 'char';
 export type FilmstripMotion = 'hybrid' | 'tuner' | 'snap';
 
@@ -182,10 +184,17 @@ function outlineShadow(px: number, color: string): string {
 export function cssVars(cfg: RecitationAnimConfig): Record<string, string> {
     const isChar = cfg.granularity === 'char';
     const baseOutline = outlineShadow(cfg.baseStrokePx, cfg.baseStrokeColor);
+    // The active unit is coloured with the SAME legible highlight the analysis
+    // triad uses (`legibleAccent` == the analysis `triad.word`), so the line
+    // animation and the analysis cells always read as one colour — no dark↔light
+    // split between them. Its outline auto-contrasts with that highlight; an
+    // explicit activeStroke (px > 0) is honoured verbatim, otherwise the
+    // base-width silhouette is recoloured to the contrast halo.
+    const hl = legibleAccent(cfg.highlightColor);
     const activeOutline = cfg.activeStrokePx > 0
         ? outlineShadow(cfg.activeStrokePx, cfg.activeStrokeColor)
-        : baseOutline;
-    const glow = cfg.activeGlowPx > 0 ? `0 0 ${cfg.activeGlowPx}px ${cfg.highlightColor}` : '';
+        : outlineShadow(cfg.baseStrokePx, inkFor(hl));
+    const glow = cfg.activeGlowPx > 0 ? `0 0 ${cfg.activeGlowPx}px ${hl}` : '';
     // Vertical headroom so an active word scaled by `activeScale` (>1) isn't
     // clipped by the fixed-height, overflow-hidden line box. Round up to a
     // whole px; 0 when no scale.
@@ -196,7 +205,7 @@ export function cssVars(cfg: RecitationAnimConfig): Record<string, string> {
         '--ra-active-emphasis': `${isChar ? cfg.charActiveEmphasisMs : cfg.wordActiveEmphasisMs}ms`,
         '--ra-clear-fade': `${cfg.clearFadeMs}ms`,
         '--ra-easing': cfg.easing,
-        '--ra-highlight': cfg.highlightColor,
+        '--ra-highlight': hl,
         '--ra-base-color': cfg.baseColor,
         '--ra-reached-opacity': String(cfg.reachedOpacity),
         '--ra-unreached-opacity': String(cfg.unreachedOpacity),

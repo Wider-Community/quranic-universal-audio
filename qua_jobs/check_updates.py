@@ -177,7 +177,10 @@ def fetch_latest_manifest(repo: str, token: str | None = None) -> dict:
     assets = release.get("assets") or [] if isinstance(release, dict) else []
     for asset in assets:
         if asset.get("name") == "manifest.json":
-            return _get_json(asset["browser_download_url"], token)
+            manifest = _get_json(asset["browser_download_url"], token)
+            if not isinstance(manifest, dict):
+                raise RuntimeError(f"{repo} manifest.json is not a JSON object")
+            return manifest
     raise RuntimeError(f"latest release of {repo} has no manifest.json asset")
 
 

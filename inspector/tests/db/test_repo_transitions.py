@@ -46,7 +46,9 @@ def test_content_hash_matches_activity_audit_id(fresh_db):
     tombstones (keyed on that hash) silently stop matching."""
     _seed_user()
     rec = repo_transitions.append(event="reciter.released", actor=_actor())
+    assert rec.request_id is not None
     got = repo_transitions.get(rec.request_id)
+    assert got is not None
     assert got["content_hash"] == activity_classification.audit_id(got)
 
 

@@ -31,6 +31,7 @@ from qua_shared.timestamps_shards import build_segment_shards, gzip_shard
 
 if TYPE_CHECKING:
     import numpy as np
+    from qua_sdk.components.timing.runtimes.mfa_local import MfaLocalAligner
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -269,7 +270,7 @@ class LocalMfaBackend:
 # ---------------------------------------------------------------------------
 
 # Per-worker globals populated by the executor's initializer.
-_WORKER = {"aligner": None}
+_WORKER: dict[str, MfaLocalAligner | None] = {"aligner": None}
 
 
 def _init_worker(model_path: str, dictionary_path: str):
@@ -673,7 +674,11 @@ def mfa_wait_result(event_id, headers, base_url, timeout=DEFAULT_TIMEOUT):
 
     result_data = None
     current_event = None
-    for line in sse_resp.iter_lines(decode_unicode=True):
+    for raw_line in sse_resp.iter_lines(decode_unicode=True):
+        # requests types iter_lines as bytes even under decode_unicode=True
+        # (which yields str at runtime); normalize so the str ops below are
+        # both correct and type-clean.
+        line = raw_line.decode() if isinstance(raw_line, bytes) else raw_line
         if line and line.startswith("event: "):
             current_event = line[7:]
         elif line and line.startswith("data: "):
@@ -959,11 +964,14 @@ def process(
             if str(chapter.get("ref", "")).split(":")[0] in refresh_chapter_strs
         ]
     elif refresh_verses:
-        # Refresh: process only surahs containing target verses
+        # Refresh: process only surahs containing target verses. ``refresh_surahs``
+        # is None when there was no existing data to refresh against — nothing
+        # to reprocess in that case.
+        target_surahs = refresh_surahs or set()
         chapters_to_process = [
             (ch_idx, chapter)
             for ch_idx, chapter in enumerate(chapters)
-            if str(chapter.get("ref", "")).split(":")[0] in refresh_surahs
+            if str(chapter.get("ref", "")).split(":")[0] in target_surahs
         ]
     elif audio_category == "by_surah_audio":
         # For by-surah: skip entire surahs that have any output
@@ -1216,7 +1224,9 @@ def process(
                     del batch_state[bid]
     else:
         # Serial path (HF Space backend). Loop over beams sequentially per
-        # batch — the Space already ThreadPools internally per call.
+        # batch — the Space already ThreadPools internally per call. The
+        # ``not use_pool`` guard above guarantees ``backend`` is set here.
+        assert backend is not None
         producer = threading.Thread(target=_producer_loop, daemon=True)
         producer.start()
 
@@ -1306,18 +1316,13 @@ def process(
     # build_segment_shards emits each one RAW as a recitation-ordered segment
     # entry ({ref, t, words}) — no dedup at write. Consumers derive whatever
     # projection they need; the inspector read-path is a byte pass-through.
-    from quranic_phonemizer import Phonemizer
-
-    from qua_shared.timestamps_bridges import (
-        tag_v2_doc,  # lazy: keep phonemizer off the inspector import path
+    from qua_sdk.components.timing.lib.cells import (
+        annotate_v2_doc,  # lazy: keep phonemizer off the inspector import path
     )
     from qua_shared.timestamps_dedup import build_raw_v2  # lazy: avoid import cycle
 
     ts_dir = output_dir / "timestamps"
     ts_dir.mkdir(parents=True, exist_ok=True)
-
-    # One phonemizer for cross-word bridge tagging across all chapters.
-    bridge_pm = Phonemizer()
 
     # Slim aligner provenance stamped into each shard's ``_meta`` (reciter,
     # url_template and audio_urls are excluded — slug is the path, manifest is
@@ -1335,10 +1340,12 @@ def process(
     def _emit_segment_shards(results_by_ch, suffix=""):
         v2_doc = build_raw_v2(chapters, results_by_ch, audio_category)
         # Tag cross-word tajweed bridges AND stamp per-letter silent flags + folded
-        # silence marks (tag_v2_doc → tag_segment_words → _stamp_silent_flags) — the
-        # same path the silent-flags backfill runs. build_segment_shards then stamps
-        # schema v4. Correctness tracks the phonemizer version this job runs.
-        n_bridges = tag_v2_doc(bridge_pm, v2_doc)
+        # silence marks + per-character cells (annotate_v2_doc → annotate_segment_words
+        # → _stamp_silent_flags / _stamp_cells) — the same SDK path the backfills run.
+        # build_segment_shards then stamps the schema version. The SDK annotator owns
+        # the phonemizer (reached via the SDK domain layer); correctness tracks the
+        # phonemizer version this job runs.
+        n_bridges = annotate_v2_doc(v2_doc)
         log.info("Tagged %d cross-word bridge phone(s)", n_bridges)
         shards = build_segment_shards(
             v2_doc, audio_category=audio_category, src_meta=shard_provenance

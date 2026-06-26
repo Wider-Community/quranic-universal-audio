@@ -30,6 +30,32 @@
     --anim-highlight-color: #f0a500;
     --anim-word-transition: opacity 0.15s ease;
     --anim-char-transition: opacity 0.15s ease;
+
+    /* Tajweed-rule underline colours (Timestamps analysis row) — a per-cell
+       underline, distinct from the playback highlight. Hand-tuned sRGB hex for
+       legibility on the cell backgrounds (#0f0f23 rest / #1a1a3e active-word). The
+       rule→colour map + legend live in tabs/timestamps/utils/tajweed-rules.ts; the
+       settings store overrides any of these per-rule at runtime. */
+    --tj-madd-jaiz: #e189a8;        /* pink */
+    --tj-madd-wajib: #cb4d8e;       /* magenta */
+    --tj-madd-lazim: #a33729;       /* brick red */
+    --tj-madd-arid: #f7863b;        /* orange */
+    --tj-madd-leen: #efac4e;        /* amber */
+    --tj-madd-tabii: #775713;       /* brown */
+    --tj-idgham-ghunnah: #55a5a4;   /* teal */
+    --tj-idgham-shafawi: #33d77a;   /* green */
+    --tj-ghunnah: #227c55;          /* deep green */
+    --tj-ikhfaa: #c18fdc;           /* light purple */
+    --tj-ikhfaa-shafawi: #8a6cd0;   /* purple */
+    --tj-iqlab: #3f43a6;            /* indigo */
+    --tj-izhar-halqi: #e4b9b9;      /* dusty pink */
+    --tj-izhar-shafawi: #e4b9b9;    /* dusty pink */
+    --tj-tafkheem: #001eb3;         /* blue */
+    --tj-qalqala: #89c1f5;          /* light blue */
+    --tj-idgham-bila: #878787;      /* grey */
+    --tj-mutamathilayn: #6b680f;    /* olive */
+    --tj-mutaqaribayn: #938f15;     /* olive */
+    --tj-mutajanisayn: #e3dc1c;     /* yellow */
 }
 
 * {

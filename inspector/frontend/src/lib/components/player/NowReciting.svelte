@@ -49,6 +49,7 @@
         sizeUp,
         toggleGranularity,
     } from '../../recitation-animation/recitation-settings';
+    import { accentVarText } from '../../utils/accent-override';
     import {
         addBookmark,
         bookmarkKey,
@@ -235,7 +236,7 @@
 </script>
 
 {#if shown}
-    <div class="now-reciting" bind:clientHeight={rootH}>
+    <div class="now-reciting" bind:clientHeight={rootH} style={accentVarText(config.highlightColor)}>
         <!-- Handle row: the recitation display controls flank the collapse chip,
              3 on each side. Left = upcoming-eye · word/letter · filmstrip motion;
              right = highlight droplet · size− · size+. Collapsing hides the

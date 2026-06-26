@@ -95,11 +95,15 @@ def resolve_role(hf_user_id: str) -> Role:
 
 
 def _member_from_rows(ra, login: str | None) -> Member:
+    # granted_at is NOT NULL in role_assignments, so from_iso never returns None.
+    granted_at = _serde.from_iso(ra["granted_at"])
+    if granted_at is None:
+        raise ValueError(f"role_assignment {ra['hf_user_id']!r} has null granted_at")
     return Member(
         hf_user_id=ra["hf_user_id"],
         login=login or ra["hf_user_id"],
         role=Role(ra["role"]),
-        added_at=_serde.from_iso(ra["granted_at"]),
+        added_at=granted_at,
         added_by_hf_id=ra["granted_by"] or "unknown",
         removed_at=_serde.from_iso(ra["revoked_at"]),
         removed_by_hf_id=ra["revoked_by"],
