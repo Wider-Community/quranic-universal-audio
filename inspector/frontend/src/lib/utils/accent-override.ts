@@ -16,15 +16,19 @@
  * `--accent-fg` (ink on a filled accent, e.g. the play glyph) is the WCAG
  * auto-contrast pick so it stays legible on any chosen colour.
  */
-import { inkFor } from './color-derive';
+import { inkFor, legibleAccent } from './color-derive';
 
 export function accentVars(hex: string): Record<string, string> {
+    // The footer/filmstrip chrome paints the accent directly on the dark bg, so a
+    // too-dark pick is lifted into the legible band first (in-band picks are kept
+    // verbatim). Tints + ink derive from the legible colour so they track it.
+    const a = legibleAccent(hex);
     return {
-        '--accent': hex,
-        '--accent-strong': `color-mix(in oklab, ${hex} 85%, white)`,
-        '--accent-tint': `color-mix(in srgb, ${hex} 14%, transparent)`,
-        '--accent-tint-soft': `color-mix(in srgb, ${hex} 7%, transparent)`,
-        '--accent-fg': inkFor(hex),
+        '--accent': a,
+        '--accent-strong': `color-mix(in oklab, ${a} 85%, white)`,
+        '--accent-tint': `color-mix(in srgb, ${a} 14%, transparent)`,
+        '--accent-tint-soft': `color-mix(in srgb, ${a} 7%, transparent)`,
+        '--accent-fg': inkFor(a),
     };
 }
 

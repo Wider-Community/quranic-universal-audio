@@ -172,6 +172,18 @@ export function inkFor(fillHex: string): string {
     return relLuminance(rgb.r, rgb.g, rgb.b) > INK_CROSSOVER ? DARK_INK : LIGHT_INK;
 }
 
+/** The accent clamped into the legible-on-dark lightness band (hue + chroma
+ *  kept), so a too-dark (or glaring) pick still reads on the dark UI — used by
+ *  the footer/filmstrip chrome that paints the colour directly on the dark bg.
+ *  Returns the input verbatim when already in band, or on an unparseable colour. */
+export function legibleAccent(hex: string): string {
+    const rgb = parseHex(hex);
+    if (!rgb) return hex;
+    const base = hexToOklch(rgb);
+    const L = clamp(base.L, MIN_L, MAX_L);
+    return L === base.L ? toHex(rgb.r, rgb.g, rgb.b) : oklchToHex({ L, C: base.C, h: base.h });
+}
+
 /**
  * Build the analogous triad in OKLCh. The word layer is the accent at its own
  * chroma (verbatim when already in the legible lightness band); letter and
