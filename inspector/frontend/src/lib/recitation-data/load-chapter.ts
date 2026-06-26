@@ -1,23 +1,21 @@
 /**
  * One-call chapter loader for the recitation-animation surfaces.
  *
- * Wraps the shard fetch + per-verse assembly + chapter-absolute rebuild into a
- * single `loadChapterRecitation(reciter, chapter)` that returns the flat
+ * Wraps the shard fetch + per-occasion assembly + chapter-absolute rebuild into
+ * a single `loadChapterRecitation(reciter, chapter)` that returns the flat
  * `AnimUnit[]` + per-ayah boundaries the line animation and filmstrip consume —
  * or `null` when the reciter/chapter has no timestamps shard (caller hides the
  * section). Keeps the dashboard consumer free of any `tabs/*` import.
  *
- * Each verse's geometry + text come from its canonical occasion, but EVERY
- * occasion's recited span (loopbacks / re-dos) is folded onto the units via
- * `chapterOccasionIntervals` so the recitation locator covers the full chapter
- * audio — the highlight travels back into a re-recited verse instead of freezing
- * on the canonical span while a discarded take plays.
+ * Every occasion's words feed the build (no dedup), so each word's `intervals`
+ * cover every recited occurrence (loopbacks / re-dos) — the recitation locator
+ * spans the full chapter audio and the highlight travels back into a re-recited
+ * verse instead of freezing on a single take.
  *
  * Scope guard: `buildChapterRecitation` recovers chapter-absolute word times by
- * adding back each verse's per-verse offset, which is only correct for
- * `by_surah` reciters (one shared chapter file). `by_ayah` reciters have
- * per-verse files whose concatenation offsets aren't known here, so we return
- * `null` for them.
+ * adding back each occasion's offset, which is only correct for `by_surah`
+ * reciters (one shared chapter file). `by_ayah` reciters have per-verse files
+ * whose concatenation offsets aren't known here, so we return `null` for them.
  */
 
 import {
@@ -29,15 +27,14 @@ import { type ChapterCoverage, computeChapterCoverage } from './coverage';
 
 export type { ChapterCoverage };
 import {
-    assembleVerseFromShard,
-    chapterOccasionIntervals,
-    chapterVerseRefs,
+    assembleOccasion,
     loadChapterShard,
     loadDk,
     loadManifest,
     loadQpc,
     loadQpcVerseIndex,
     reciterAudioFromManifest,
+    shardOccasions,
 } from './ts-source';
 
 export interface ChapterRecitationData {
@@ -47,7 +44,7 @@ export interface ChapterRecitationData {
      *  duration from the transport when they have it. */
     contentEndMs: number;
     /** Mushaf coverage gaps (incomplete + fully-missing verses) for the chapter,
-     *  derived client-side from the canonical units vs the qpc verse index. */
+     *  derived client-side from the recited units vs the qpc verse index. */
     coverage: ChapterCoverage;
 }
 
@@ -80,20 +77,17 @@ export async function loadChapterRecitation(
 
     // The animation consumes only word/letter timings — `audio_url` is unused
     // here (playback rides the shared player on canonical URLs), so pass "".
-    const verses: AssembledVerse[] = [];
-    for (const verseRef of chapterVerseRefs(shard)) {
-        const data = assembleVerseFromShard(reciter, shard, verseRef, qpc, dk, reciterAudio, '');
-        if (data) verses.push({ verseRef, data });
+    // Every occasion (incl. re-takes) feeds the build, so no dedup drops audio.
+    const occasions: AssembledVerse[] = [];
+    for (const occ of shardOccasions(shard)) {
+        occasions.push({
+            verseRef: occ.ref,
+            data: assembleOccasion(reciter, occ, qpc, dk, reciterAudio, ''),
+        });
     }
-    if (!verses.length) return null;
+    if (!occasions.length) return null;
 
-    // Fold every occasion's recited span (canonical + loopbacks / re-dos) onto
-    // the units so the recitation locator covers the full chapter audio — the
-    // highlight travels back into a re-recited verse instead of freezing on the
-    // canonical-only span while the audio plays a discarded take.
-    const occasionIntervals = chapterOccasionIntervals(shard);
-
-    const built = buildChapterRecitation(reciter, chapter, verses, occasionIntervals);
+    const built = buildChapterRecitation(reciter, chapter, occasions);
     const coverage = computeChapterCoverage(built.units, chapter, qpcVerseIndex.get(chapter));
     return {
         units: built.units,

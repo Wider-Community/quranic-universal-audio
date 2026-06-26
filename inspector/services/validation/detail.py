@@ -156,8 +156,8 @@ def _build_detail_lists(
     repetitions: list[dict] = []
     muqattaat: list[dict] = []
     qalqala: list[dict] = []
-    basmala_11: list[dict] = []
-    basmala_amin_17: list[dict] = []
+    basmala_11: list[tuple[dict, bool]] = []
+    basmala_amin_17: list[tuple[dict, bool]] = []
     chapter_seg_idx: dict[int, int] = {}
     verse_segments: dict[tuple[int, int], list] = defaultdict(list)
     sequence_gaps: list[dict] = []

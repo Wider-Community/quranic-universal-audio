@@ -18,9 +18,9 @@
  *     between two reciters keeps both currents resident.
  *
  * Each chapter shard is a temporal `segments[]` array (every recited segment
- * raw, in recitation order). `assembleVerseFromShard` reduces a verse to its
- * canonical (completing) occasion via `occasion-dedup`; `verseOccasionsFromShard`
- * exposes all occasions for the (deferred) loopback filmstrip.
+ * raw, in recitation order). `shardOccasions` splits it into occasions (a verse
+ * may recur — loopbacks, re-dos) and `assembleOccasion` builds one occasion's
+ * `TsVerseData` with every recited word kept (no dedup). See `occasions.ts`.
  */
 
 import { ApiError, fetchArrayBuffer, fetchJson } from '../api';
@@ -28,6 +28,7 @@ import type { TsConfigResponse, TsManifestResponse, TsValidationDoc } from '../t
 import type {
     Letter,
     PhonemeInterval,
+    SegmentEntry,
     TsCell,
     TsShardResponse,
     TsVbrResponse,
@@ -42,12 +43,7 @@ import { parseShardCell } from '../types/ts-client';
 // the value, keep the two in lockstep.
 const RENDER_ONLY_PHONES = new Set(['Q']);
 
-import {
-    type VerseOccasions,
-    canonicalClip,
-    groupVerseOccasions,
-    maxWordIndex,
-} from './occasion-dedup';
+import { type ChapterOccasion, chapterOccasions } from './occasions';
 
 // ---------------------------------------------------------------------------
 // Singleton caches
@@ -432,74 +428,77 @@ export async function loadTsValidation(reciter: string): Promise<TsValidationDoc
 // Segment-array assembly
 // ---------------------------------------------------------------------------
 
-/** Per-shard memo of `groupVerseOccasions` keyed by verse ref. The grouping
- *  cost is O(segments) per chapter; callers iterate every verse of a chapter,
- *  so memoizing on the (LRU-stable) shard object turns O(verses²) into O(1)
- *  lookups after the first build. */
-const _occasionsByShard = new WeakMap<TsShardResponse, Map<string, VerseOccasions>>();
+/** Per-shard memo of `chapterOccasions`. The split is O(segments) per chapter;
+ *  callers iterate every occasion of a chapter, so it's cached on the
+ *  (LRU-stable) shard object. */
+const _occasionsByShard = new WeakMap<TsShardResponse, ChapterOccasion[]>();
 
-function shardOccasions(shard: TsShardResponse): Map<string, VerseOccasions> {
-    let index = _occasionsByShard.get(shard);
-    if (!index) {
-        index = new Map();
-        for (const g of groupVerseOccasions(shard.segments ?? [])) index.set(g.ref, g);
-        _occasionsByShard.set(shard, index);
+export function shardOccasions(shard: TsShardResponse): ChapterOccasion[] {
+    let list = _occasionsByShard.get(shard);
+    if (!list) {
+        list = chapterOccasions(shard.segments ?? []);
+        _occasionsByShard.set(shard, list);
     }
-    return index;
+    return list;
 }
 
 /**
- * Build the `TsVerseData` payload for one verse from a chapter's segment array.
+ * Build the `TsVerseData` for one OCCASION — a contiguous recitation of a verse
+ * (`occasions.ts`). Every recited word across the occasion's segments is kept, in
+ * audio order: no dedup, so leading/trailing repeats and mid-verse lookbacks all
+ * render and stay seekable. Words carry QPC / DK text; `by_surah_audio` words are
+ * 0-anchored by subtracting the occasion's start so the audio element starts at
+ * zero. The clip span (`[time_start_ms, time_end_ms]`) covers every segment /
+ * word / letter time — the segmenter's natural lead-in + trailing silence
+ * included (audio plays through it with nothing highlighted).
  *
- * The shard stores every recited segment raw, in recitation order; a verse may
- * recur across several entries (loopbacks, re-dos). This selects the canonical
- * (completing) occasion via {@link groupVerseOccasions} / {@link canonicalClip}
- * — mirroring the backend `project_segment_shard` rule — then assembles its
- * words with QPC / DK text and the `by_surah_audio` offset adjustment that
- * subtracts the verse's start so the audio element starts at zero.
- *
- * Identity flows top-down: the caller knows which slug it fetched `shard` for
- * (it's in the URL), so `reciter` is a param and rides back on the result.
- *
- * `audio_category` (offset logic) comes from `reciterAudio` — the manifest's
- * reciter block. `chapterAudioUrl` is the canonical per-chapter link the caller
- * resolved from `/api/audio/surahs` (the audio-manifest sidecar) — never
- * recomputed from a template, so non-templatable sources (per-chapter YouTube
- * IDs) resolve correctly. For by_surah every verse in the chapter shares it.
+ * Identity flows top-down: the caller knows which slug it fetched `shard` for, so
+ * `reciter` is a param and rides back on the result. `audio_category` (offset
+ * logic) comes from `reciterAudio` — the manifest's reciter block. `chapterAudioUrl`
+ * is the canonical per-chapter link the caller resolved from `/api/audio/surahs`
+ * (never recomputed from a template, so non-templatable sources like per-chapter
+ * YouTube IDs resolve). For by_surah every occasion in the chapter shares it.
  */
-export function assembleVerseFromShard(
+export function assembleOccasion(
     reciter: string,
-    shard: TsShardResponse,
-    verseRef: string,
+    occasion: ChapterOccasion,
     qpc: Record<string, { text?: string }>,
     dk: Record<string, { text?: string }>,
     reciterAudio: TsReciterAudio,
     chapterAudioUrl: string,
-): TsVerseData | null {
-    if (verseRef === '_meta') return null;
-
-    const verseSegs = (shard.segments ?? []).filter((s) => s.ref === verseRef);
-    if (verseSegs.length === 0) return null;
-
+): TsVerseData {
+    const verseRef = occasion.ref;
     const chapter = parseInt(verseRef.split(':')[0] ?? '0', 10);
 
-    // Pick the canonical occasion's words + clip span (completion-based dedup).
-    // Grouping runs against the FULL chapter (memoized per shard) so interleaving
-    // from other verses correctly splits a re-recited verse into occasions.
-    const nWords = maxWordIndex(verseSegs);
-    const grouped = shardOccasions(shard).get(verseRef);
-    const occasion = grouped?.canonical ?? verseSegs;
-    const clip = canonicalClip(occasion, nWords);
-    const wordsRaw = clip.words;
-    const sgOffsets = clip.sgOffsets;
+    // Every recited word across the occasion's segments, in audio order (no
+    // dedup — repeats/lookbacks stay seekable). `cells[].share_group` ids are
+    // numbered per source SEGMENT (each restarts at 0), so offset each segment's
+    // ids by a running base to keep them verse-unique across a multi-segment
+    // occasion — else a consumer keying co-light by id would merge unrelated
+    // groups. `sgOffsets[i]` is the base added to word `wordsRaw[i]`'s share_groups.
+    const wordsRaw: SegmentEntry['words'] = [];
+    const sgOffsets: number[] = [];
+    let sgBase = 0;
+    for (const seg of occasion.segments) {
+        let maxSg = -1;
+        for (const w of seg.words) {
+            wordsRaw.push(w);
+            sgOffsets.push(sgBase);
+            for (const c of w[5] ?? []) {
+                const sg = c[6];
+                if (sg != null && sg > maxSg) maxSg = sg;
+            }
+        }
+        sgBase += maxSg + 1;
+    }
 
     const intervals: PhonemeInterval[] = [];
     const wordsOut: TsWord[] = [];
 
     for (let wi = 0; wi < wordsRaw.length; wi++) {
         const w = wordsRaw[wi]!;
-        // Per-segment base so cross-segment share_group ids don't collide (a
-        // multi-segment occasion restarts ids at 0 per segment — see canonicalClip).
+        // Per-segment base so cross-segment share_group ids don't collide within
+        // a multi-segment occasion (ids restart at 0 per segment).
         const sgOffset = sgOffsets[wi] ?? 0;
         const wordIdx = w[0];
         const wStart = w[1] / 1000;
@@ -583,44 +582,46 @@ export function assembleVerseFromShard(
     const audioCategory: 'by_ayah_audio' | 'by_surah_audio' =
         reciterAudio.audio_category === 'by_surah' ? 'by_surah_audio' : 'by_ayah_audio';
 
+    // Occasion span: the contiguous `[start, end]` covering every segment, word
+    // and letter time (a word/letter can bleed a few ms past its segment `t`).
+    let spanStart = occasion.segments[0]?.t[0] ?? 0;
+    let spanEnd = occasion.segments[0]?.t[1] ?? 0;
+    for (const seg of occasion.segments) {
+        if (seg.t[0] < spanStart) spanStart = seg.t[0];
+        if (seg.t[1] > spanEnd) spanEnd = seg.t[1];
+        for (const w of seg.words) {
+            if (w[1] < spanStart) spanStart = w[1];
+            if (w[2] > spanEnd) spanEnd = w[2];
+            for (const lt of w[3] ?? []) {
+                if (lt[1] != null && lt[1] < spanStart) spanStart = lt[1];
+                if (lt[2] != null && lt[2] > spanEnd) spanEnd = lt[2];
+            }
+        }
+    }
+
     let timeStartMs = 0;
     let timeEndMs = 0;
 
-    // Clip bounds come from the canonical occasion's segment span — the
-    // contiguous `[start, end]` the dataset publishes (segmenter's natural
-    // lead-in / trailing silence included). Audio plays through the silence with
-    // no word/letter highlighted — that's expected.
     if (audioCategory === 'by_surah_audio') {
-        if (wordsRaw.length > 0) {
-            const wordStart = wordsRaw[0]![1];
-            const wordEnd = wordsRaw.reduce(
-                (m, w) => (w[2] > m ? w[2] : m), wordsRaw[0]![2]);
-            timeStartMs = Math.min(clip.startMs, wordStart);
-            timeEndMs = Math.max(clip.endMs, wordEnd);
-            const offsetSec = timeStartMs / 1000;
-            for (const wo of wordsOut) {
-                wo.start -= offsetSec;
-                wo.end -= offsetSec;
-                for (const lt of wo.letters) {
-                    if (lt.start !== null) lt.start -= offsetSec;
-                    if (lt.end !== null) lt.end -= offsetSec;
-                }
-            }
-            for (const iv of intervals) {
-                iv.start -= offsetSec;
-                iv.end -= offsetSec;
+        timeStartMs = spanStart;
+        timeEndMs = spanEnd;
+        const offsetSec = timeStartMs / 1000;
+        for (const wo of wordsOut) {
+            wo.start -= offsetSec;
+            wo.end -= offsetSec;
+            for (const lt of wo.letters) {
+                if (lt.start !== null) lt.start -= offsetSec;
+                if (lt.end !== null) lt.end -= offsetSec;
             }
         }
+        for (const iv of intervals) {
+            iv.start -= offsetSec;
+            iv.end -= offsetSec;
+        }
     } else {
-        // by_ayah: per-verse file, words already 0-anchored. Clip end is the
-        // segment span end (which can include trailing silence past the last word).
-        timeEndMs = clip.endMs > 0
-            ? clip.endMs
-            : (intervals.length > 0
-                ? Math.round(intervals[intervals.length - 1]!.end * 1000)
-                : (wordsRaw.length > 0
-                    ? wordsRaw.reduce((m, w) => (w[2] > m ? w[2] : m), wordsRaw[0]![2])
-                    : 0));
+        // by_ayah: per-verse file, words already 0-anchored; the clip end is the
+        // occasion span end (may include trailing silence past the last word).
+        timeEndMs = spanEnd;
     }
 
     return {
@@ -637,54 +638,17 @@ export function assembleVerseFromShard(
 }
 
 /** Distinct verse refs in a chapter, in recitation order (a verse appears once
- *  even when it recurs across multiple segments). */
+ *  even when it recurs across multiple occasions). */
 export function chapterVerseRefs(shard: TsShardResponse): string[] {
-    return [...shardOccasions(shard).keys()];
-}
-
-/** Recitation-ordered occasions per verse for the chapter — every take a verse
- *  was recited (loopbacks / re-dos), in playback order. Feeds the (deferred)
- *  loopback filmstrip; the default per-verse clip uses `g.canonical`. */
-export function verseOccasionsFromShard(shard: TsShardResponse): VerseOccasions[] {
-    return [...shardOccasions(shard).values()];
-}
-
-/** A single recited span of one word, chapter-absolute, in seconds. */
-export interface OccasionInterval {
-    /** "surah:ayah:word". */
-    location: string;
-    start: number;
-    end: number;
-}
-
-/**
- * Every word's recited span across ALL occasions of every verse, chapter-
- * absolute (seconds). The canonical occasion is included alongside the
- * loopbacks / re-dos, so the full-chapter player can cover the entire audio
- * timeline — the recited highlight travels back into a re-recited verse instead
- * of freezing on the canonical-only span.
- *
- * Geometry / text still come from the canonical occasion (via
- * `assembleVerseFromShard`); this only supplies the extra `intervals` the
- * recitation locator (`findActiveAt`) matches against. Words are keyed by
- * location so the chapter builder folds them onto the matching deduped unit.
- */
-export function chapterOccasionIntervals(shard: TsShardResponse): OccasionInterval[] {
-    const out: OccasionInterval[] = [];
-    for (const g of shardOccasions(shard).values()) {
-        for (const occasion of g.occasions) {
-            for (const seg of occasion) {
-                for (const w of seg.words) {
-                    out.push({
-                        location: `${g.ref}:${w[0]}`,
-                        start: w[1] / 1000,
-                        end: w[2] / 1000,
-                    });
-                }
-            }
+    const seen = new Set<string>();
+    const refs: string[] = [];
+    for (const o of shardOccasions(shard)) {
+        if (!seen.has(o.ref)) {
+            seen.add(o.ref);
+            refs.push(o.ref);
         }
     }
-    return out;
+    return refs;
 }
 
 // ---------------------------------------------------------------------------

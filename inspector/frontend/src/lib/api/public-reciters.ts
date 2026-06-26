@@ -45,3 +45,16 @@ export async function fetchPublicStats(signal?: AbortSignal): Promise<BucketCoun
     }
     return (await resp.json()) as BucketCounts;
 }
+
+/**
+ * Monotonic catalog version (`db_seq`) — a cheap change-probe the dashboard
+ * poll fetches each tick to decide whether the full roster needs refetching.
+ */
+export async function fetchCatalogVersion(signal?: AbortSignal): Promise<number> {
+    const resp = await fetch('/api/public/version', { signal });
+    if (!resp.ok) {
+        throw new Error(`fetchCatalogVersion: HTTP ${resp.status}`);
+    }
+    const body = (await resp.json()) as { db_seq: number };
+    return body.db_seq;
+}

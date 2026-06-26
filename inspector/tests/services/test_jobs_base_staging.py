@@ -170,6 +170,7 @@ def test_poll_dispatches_timestamps_labelled_job_to_handler(monkeypatch):
     dispatched: list[tuple[str | None, str]] = []
     saved = dict(base._HANDLERS)
     base._HANDLERS.clear()
+    base._completed_jobs.clear()
     try:
         base.register_handler("timestamps", lambda slug, jid: dispatched.append((slug, jid)))
         base._poll_terminal_jobs()
@@ -177,3 +178,68 @@ def test_poll_dispatches_timestamps_labelled_job_to_handler(monkeypatch):
     finally:
         base._HANDLERS.clear()
         base._HANDLERS.update(saved)
+        base._completed_jobs.clear()
+
+
+def test_poll_skips_already_completed_job_on_second_tick(monkeypatch):
+    """A terminal job HF still lists on the next tick is NOT re-dispatched once
+    its handler has run — this is what stops the idempotent completion handlers
+    from re-pushing the whole DB to the bucket every 120s poll cycle."""
+    hub = sys.modules.get("huggingface_hub")
+    if hub is None:
+        hub = types.ModuleType("huggingface_hub")
+        monkeypatch.setitem(sys.modules, "huggingface_hub", hub)
+    fake_job = types.SimpleNamespace(
+        id="jid-hf-1",
+        labels={"task": "hf_publish", "reciter": "foo_slug"},
+        status=types.SimpleNamespace(stage="COMPLETED"),
+    )
+    monkeypatch.setattr(hub, "list_jobs", lambda: [fake_job], raising=False)
+
+    dispatched: list[tuple[str | None, str]] = []
+    saved = dict(base._HANDLERS)
+    base._HANDLERS.clear()
+    base._completed_jobs.clear()
+    try:
+        base.register_handler("hf_publish", lambda slug, jid: dispatched.append((slug, jid)))
+        base._poll_terminal_jobs()
+        base._poll_terminal_jobs()
+        assert dispatched == [("foo_slug", "jid-hf-1")]
+    finally:
+        base._HANDLERS.clear()
+        base._HANDLERS.update(saved)
+        base._completed_jobs.clear()
+
+
+def test_poll_re_fires_handler_that_raised(monkeypatch):
+    """A handler that raises is NOT memoized, so the next tick retries it — the
+    memo only suppresses re-fires after a clean completion."""
+    hub = sys.modules.get("huggingface_hub")
+    if hub is None:
+        hub = types.ModuleType("huggingface_hub")
+        monkeypatch.setitem(sys.modules, "huggingface_hub", hub)
+    fake_job = types.SimpleNamespace(
+        id="jid-hf-2",
+        labels={"task": "hf_publish", "reciter": "foo_slug"},
+        status=types.SimpleNamespace(stage="COMPLETED"),
+    )
+    monkeypatch.setattr(hub, "list_jobs", lambda: [fake_job], raising=False)
+
+    calls = {"n": 0}
+
+    def _boom(slug, jid):
+        calls["n"] += 1
+        raise RuntimeError("handler failed")
+
+    saved = dict(base._HANDLERS)
+    base._HANDLERS.clear()
+    base._completed_jobs.clear()
+    try:
+        base.register_handler("hf_publish", _boom)
+        base._poll_terminal_jobs()
+        base._poll_terminal_jobs()
+        assert calls["n"] == 2
+    finally:
+        base._HANDLERS.clear()
+        base._HANDLERS.update(saved)
+        base._completed_jobs.clear()

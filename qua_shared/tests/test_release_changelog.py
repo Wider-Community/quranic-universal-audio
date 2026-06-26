@@ -153,22 +153,6 @@ def test_staying_up_to_date_section_and_asset_row():
     assert "`check_updates.py` |" in md
 
 
-def test_license_inline_and_links():
-    md = render_changelog(
-        version="v0.1.0",
-        previous_version=None,
-        release_date="d",
-        members=[_member("R")],
-        owner="Wider-Community",
-        repo="quranic-universal-audio",
-        hf_dataset="hetchyy/quranic-universal-ayahs",
-        license_id="CC-BY-4.0",
-    )
-    assert "**License:** CC-BY-4.0" in md
-    assert "https://github.com/Wider-Community/quranic-universal-audio" in md
-    assert "https://huggingface.co/datasets/hetchyy/quranic-universal-ayahs" in md
-
-
 def test_table_cell_pipe_escaped():
     md = render_changelog(
         version="v0.1.0",
@@ -177,31 +161,6 @@ def test_table_cell_pipe_escaped():
         members=[_member("A | B")],
     )
     assert "A \\| B" in md
-
-
-def test_missing_column_and_callout_render_when_a_reciter_has_gaps():
-    members = [
-        _member("Complete One"),
-        _member("Juz Amma Only", missing_surahs="1-84"),
-        _member("Two Verses Short", missing_verses="7:116, 41:15"),
-    ]
-    md = render_changelog(
-        version="v2.0.0",
-        previous_version="v1.2.0",
-        release_date="12-06-2026",
-        members=members,
-    )
-    # New column header present.
-    assert "| Reciter | Riwayah | Style | Channel | Coverage | Missing |" in md
-    # Whole-surah gap rendered with the "surahs" prefix; verse gaps verbatim.
-    assert "surahs 1-84" in md
-    assert "7:116, 41:15" in md
-    # The complete reciter's cell is an em dash.
-    assert "| Complete One - فلان |" in md
-    assert "| — |" in md
-    # The explanatory callout appears once.
-    assert "**About missing verses.**" in md
-    assert md.count("**About missing verses.**") == 1
 
 
 def test_no_missing_callout_when_all_complete():

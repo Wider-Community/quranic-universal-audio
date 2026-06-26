@@ -42,6 +42,7 @@ def append(
     """
     ts = _serde.now()
     ts_iso = _serde.to_iso(ts)
+    assert ts_iso is not None  # now() is never None, so to_iso never returns None
     tid = request_id or _serde.new_transition_id()
     role_val = actor.role.value if hasattr(actor.role, "value") else str(actor.role)
     ch = _serde.content_hash(

@@ -10,6 +10,7 @@ SCRIPT_PATH = (
     Path(__file__).resolve().parents[3] / "scripts" / "codegen" / "update_readme_badges.py"
 )
 SPEC = importlib.util.spec_from_file_location("update_readme_badges", SCRIPT_PATH)
+assert SPEC is not None
 badges = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
 sys.modules[SPEC.name] = badges

@@ -111,7 +111,7 @@ Three-stage build, context is the **repo root** (so `qua_shared/` ships alongsid
 2. **ffmpeg-build** (`alpine:3.23`) — compiles a minimal *static* ffmpeg/ffprobe (mp3 decode + `pcm_s16le`/wav for peaks + `libmp3lame`/mp3 muxer for the `segment-clip` route). `libmp3lame 3.100` is built from source `--enable-static` because Alpine ships no static lame archive — without it `clip.py` returns 200/0-bytes and playback hangs. http/https protocols enabled so ffmpeg can decode remote chapters via HTTP Range.
 3. **runtime** (`python:3.11-alpine`) — installs `inspector/requirements.txt`, purges pip/setuptools/wheel, **selective COPY** (`app.py/config.py/constants.py`, `adapters/ domain/ routes/ services/ utils/`, `scripts/__init__.py + qua_shared/ + qua_jobs/`, `.github/config/`, `LICENSE`, the 4 bundled data JSONs, and `frontend/dist` from stage 1). `qua_jobs/` + `.github/config/` + `LICENSE` are read by the HF-Job entrypoints (`config_loader`, cut_release asset upload). Runs as non-root uid/gid 1000. `EXPOSE 7860`. **Adding a `COPY` here needs no staging edit** — the deploy stages the whole tracked tree (see Deploy).
 
-`CMD`: `gunicorn -k gthread -w 1 --threads 16 --max-requests 5000 --max-requests-jitter 500 --timeout 60 --graceful-timeout 30 --bind 0.0.0.0:7860 --chdir /app/inspector app:app`. `-w 1` is load-bearing (asserted at import). `--threads 16` sizes the I/O-bound pool. `--max-requests` recycles the worker to bound slow leaks.
+`CMD`: `gunicorn -k gthread -w 1 --threads 16 --max-requests 5000 --max-requests-jitter 500 --timeout 60 --graceful-timeout 30 --bind 0.0.0.0:7860 --access-logfile - --error-logfile - --chdir /app/inspector app:app`. `-w 1` is load-bearing (asserted at import). `--threads 16` sizes the I/O-bound pool. `--max-requests` recycles the worker to bound slow leaks. The access log (one line per request → stdout) is de-noised by `app._AccessLogFilter`, attached to the `gunicorn.access` + `werkzeug` loggers: it drops static-asset (`/assets/*`), `/healthz`, and 304 lines while always keeping 4xx/5xx and real API/page hits.
 
 `docker-compose.yml` (repo `inspector/`) is the local reviewer entry (`docker compose up` → `:5000`, bind-mounts `data/`).
 
@@ -130,6 +130,19 @@ Push to `dev` or `main` (paths under `inspector/**`, `qua_shared/**`, `scripts/d
 The canonical dev/prod Spaces have **no** auto-provisioning script — their secrets/variables (`INSPECTOR_SESSION_SECRET`, `INSPECTOR_GITHUB_DISPATCH_TOKEN`, QF creds, `INSPECTOR_BUCKET_REPO` override, bucket attachment) are configured by hand in the Space settings panels. OAuth vars are auto-injected by HF via `hf_oauth: true` in the Space README frontmatter.
 
 **Contributor (personal) Spaces** are fully scripted — no manual Space-settings clicks. `scripts/devenv/bootstrap_dev_env.py <name>` provisions a private bucket + Space under the contributor's own account, **attaches the bucket as a Space volume at `/data/inspector-bucket`** (`HfApi.set_space_volumes`), auto-generates `INSPECTOR_SESSION_SECRET`, sets `HF_TOKEN` + the `INSPECTOR_BUCKET_REPO` variable, and (with `--deploy`) pushes code via `scripts/deploy/deploy_space.py <space-id>` (the committed, parameterized cousin of `scripts/deploy/upload_inspector.py`). The only manual prerequisite is an HF token with write scope; OAuth vars are auto-injected via `hf_oauth: true`. See `inspector/README.md` for the three-tier dev workflow.
+
+## Type-check gate (pyright)
+
+The entire Python backend (`inspector/`, `qua_jobs/`, `qua_shared/`) is
+type-checked in basic mode as a **blocking** CI gate (`type-check` job in
+`inspector-checks.yml`). It runs via `npx -y pyright --level error inspector
+qua_jobs qua_shared` so no Python type-checker dependency is added to the image
+— node 24 is already present. The `extraPaths` in `pyrightconfig.json` make the
+flat-layout imports resolve cleanly across the three packages.
+
+Touching any file under `qua_shared/schemas/` also requires regenerating the
+codegen'd FE types and committing the result — see `schema-codegen-check` in
+`inspector-checks.yml` and `docs/reference/schemas.md`.
 
 ## Secret rotation
 

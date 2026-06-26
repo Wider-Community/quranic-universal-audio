@@ -20,8 +20,9 @@ from __future__ import annotations
 import logging
 import os
 from datetime import UTC, datetime
+from typing import cast
 
-from qua_shared.schemas import Actor
+from qua_shared.schemas import Actor, Role
 from services.db import repo_releases
 from services.db.sync import durable_transaction
 from services.state import audit
@@ -39,7 +40,7 @@ JOB_TIMEOUT = os.environ.get("INSPECTOR_HF_JOB_TIMEOUT", "30m")
 
 def launch(slug: str, *, webhook_base: str | None = None) -> dict:
     """Launch a publish-hf job for ``slug``. Returns ``{job_id, url}``."""
-    from huggingface_hub import Volume, get_token, run_job
+    from huggingface_hub import SpaceHardware, Volume, get_token, run_job
 
     # Cross-kind single-flight on the slug — TS or HF publish in flight blocks
     # this launch (and vice versa).
@@ -88,7 +89,7 @@ def launch(slug: str, *, webhook_base: str | None = None) -> dict:
     job = run_job(
         image=base.JOB_IMAGE,
         command=command,
-        flavor=JOB_FLAVOR,
+        flavor=cast(SpaceHardware, JOB_FLAVOR),
         timeout=JOB_TIMEOUT,
         env=env,
         secrets=secrets,
@@ -132,25 +133,35 @@ def complete(
         return {"ok": False, "reason": "no slug"}
 
     version = version or job_id  # fallback so the unique key has something
+
+    # Idempotency pre-check OUTSIDE the write txn. The poll worker re-checks
+    # every still-listed terminal job, so for an already-recorded publish this
+    # returns before opening a durable_transaction — which would bump db_seq and
+    # push the whole DB to the bucket for a no-op. Any row (current OR
+    # superseded) for (hf, slug, version) counts.
+    existing = repo_releases.release_by_version("hf", slug, version)
+    if existing is not None:
+        log.info(
+            "hf_publish.complete(%s, %s): already recorded (id=%s)",
+            slug,
+            version,
+            existing.get("id"),
+        )
+        return {"ok": True, "skipped": "duplicate"}
+
     now = datetime.now(UTC)
     actor = Actor(
         hf_user_id="SYSTEM_ACTOR",
         login_at_time=launched_by or "system",
-        role="owner",
+        role=Role.OWNER,
     )
     with durable_transaction() as _:
-        # Idempotency: if any row (current OR superseded) for
-        # (hf, slug, version) already exists, no-op. The partial-unique on
-        # (track, slug) WHERE superseded_at IS NULL only blocks two CURRENT
-        # rows — a retry after a later supersede must NOT re-INSERT.
-        existing_any = repo_releases.release_by_version("hf", slug, version)
-        if existing_any is not None:
-            log.info(
-                "hf_publish.complete(%s, %s): already recorded (id=%s)",
-                slug,
-                version,
-                existing_any.get("id"),
-            )
+        # Re-read inside the txn as the atomic guard: webhook + poll can
+        # double-fire for a freshly-terminal job, and the serialized writer
+        # means the loser sees the winner's row here and bails (one-time, not
+        # the recurring poll path). The partial-unique on (track, slug) WHERE
+        # superseded_at IS NULL only blocks two CURRENT rows.
+        if repo_releases.release_by_version("hf", slug, version) is not None:
             return {"ok": True, "skipped": "duplicate"}
         # Supersede prior current row FIRST — the partial-unique blocks two
         # current rows for (hf, slug) so we can't insert before clearing.
@@ -194,4 +205,7 @@ def complete(
 
 
 def register() -> None:
-    base.register_handler(KIND, lambda slug, jid: complete(slug, jid))
+    def _handler(slug: str | None, jid: str) -> None:
+        complete(slug, jid)
+
+    base.register_handler(KIND, _handler)

@@ -9,6 +9,7 @@ startup sequence.
 import argparse
 import logging
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -134,6 +135,36 @@ class PlainFormatter(logging.Formatter):
         return line
 
 
+class _AccessLogFilter(logging.Filter):
+    """Drop zero-signal request lines from the gunicorn/werkzeug access log.
+
+    The access log prints one line per HTTP request, so static bundle assets,
+    health-check pings, and 304 conditional revalidations bury the lines that
+    actually matter. This filter drops those while always keeping 4xx/5xx (so
+    failures still surface) and every real API/page hit. Matching is on the
+    rendered message so it works for both gunicorn (deployed) and werkzeug
+    (dev), whose access formats differ.
+    """
+
+    _LINE_RE = re.compile(r'"[A-Z]+ (?P<path>\S+) [^"]*" (?P<status>\d{3})')
+    _NOISE_PREFIXES = ("/assets/", "/healthz")
+    _NOISE_EXACT = {"/favicon.ico", "/robots.txt", "/vite.svg", "/manifest.webmanifest"}
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        m = self._LINE_RE.search(record.getMessage())
+        if m is None:
+            return True  # not an access line (e.g. a werkzeug warning) — keep
+        status = m.group("status")
+        if status[0] in ("4", "5"):
+            return True  # always surface client/server errors
+        if status == "304":
+            return False  # conditional revalidation did no work
+        path = m.group("path").split("?", 1)[0]
+        if path in self._NOISE_EXACT or path.startswith(self._NOISE_PREFIXES):
+            return False
+        return True
+
+
 def _configure_logging() -> None:
     """Install the plain formatter on the root logger (idempotent)."""
     root = logging.getLogger()
@@ -161,6 +192,11 @@ def _configure_logging() -> None:
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     logging.getLogger("huggingface_hub._login").setLevel(logging.ERROR)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
+    # Drop zero-signal access-log noise (static assets, health pings, 304s)
+    # from both the gunicorn (deployed) and werkzeug (dev) request loggers.
+    access_filter = _AccessLogFilter()
+    for name in ("gunicorn.access", "werkzeug"):
+        logging.getLogger(name).addFilter(access_filter)
 
 
 _configure_logging()
@@ -444,7 +480,7 @@ _boot_substrate()
 @app.errorhandler(HTTPException)
 def _handle_http_exception(e: HTTPException):
     """Return the canonical ``{error: <description>}`` envelope with the HTTP status."""
-    return jsonify({"error": e.description}), e.code
+    return jsonify({"error": e.description}), e.code or 500
 
 
 @app.errorhandler(UnknownReciter)

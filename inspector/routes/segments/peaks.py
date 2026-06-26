@@ -135,7 +135,7 @@ def seg_peaks(reciter):
                     result[url] = peaks
                     cache.set_peaks_for_url(reciter, url, peaks)
 
-    body = SegPeaksResponse(peaks=result, complete=True).model_dump(
+    body = SegPeaksResponse.model_validate({"peaks": result, "complete": True}).model_dump(
         mode="json", exclude_none=True, by_alias=True
     )
     # Serialize once via orjson (~3× faster than stdlib on big payloads) and
@@ -197,7 +197,7 @@ def seg_segment_peaks(reciter):
         if data:
             results[key] = data
 
-    body = SegSegmentPeaksResponse(peaks=results).model_dump(
+    body = SegSegmentPeaksResponse.model_validate({"peaks": results}).model_dump(
         mode="json", exclude_none=True, by_alias=True
     )
     return jsonify(body)

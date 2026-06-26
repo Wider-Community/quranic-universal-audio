@@ -1,6 +1,6 @@
 ---
 name: inspector-admin
-description: Headless one-off Inspector admin operations — wraps the same services/admin/* and state.transition the UI calls. Use for quick patches when the Reviews/Users/Permissions/Requests UI surface isn't enough — publish a finished TS job, force-unlock a released reciter, cancel + relaunch a stuck HF job, force-release a stale claim, grant a role, run raw DB SQL.
+description: Headless one-off Inspector admin operations — wraps the same services/admin/* and state.transition the UI calls. Use for quick patches when the Reviews/Users/Permissions/Requests UI surface isn't enough — publish a finished TS job, force-unlock a released reciter, cancel + relaunch a stuck HF job, and similar one-off tasks.
 ---
 
 # inspector-admin

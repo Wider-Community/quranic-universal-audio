@@ -173,6 +173,8 @@ def running_job_for(*, kind: str | None = None, slug: str | None = None) -> tupl
             labels = getattr(job, "labels", {}) or {}
             j_kind = labels.get("task")
             j_slug = labels.get("reciter")
+            if j_kind is None:
+                continue
             if kind is not None and j_kind != kind:
                 continue
             if slug is not None and j_slug != slug:
@@ -181,7 +183,7 @@ def running_job_for(*, kind: str | None = None, slug: str | None = None) -> tupl
                 continue
             status = hf_status_str(job)
             if status in ("running", "pending", "updating"):
-                return j_kind, (hf_job_id(job) or "")
+                return str(j_kind), (hf_job_id(job) or "")
     except Exception as exc:
         log.warning("running_job_for(kind=%s, slug=%s) failed: %s", kind, slug, exc)
     return None
@@ -444,7 +446,7 @@ def stage_job_code() -> None:
     """
     from huggingface_hub import batch_bucket_files
 
-    adds: list[tuple[str, str]] = []
+    adds: list[tuple[str | Path | bytes, str]] = []
     seen_targets: set[str] = set()
     tmp_files: list[Path] = []
 
@@ -541,6 +543,14 @@ def register_poll_handlers() -> None:
     refresh_catalog.register()
 
 
+# (kind, job_id) pairs already driven to completion this process. HF keeps a
+# terminal job in ``list_jobs()`` for a retention window, so without this memo
+# the poll re-dispatches every terminal job each tick — and each idempotent
+# handler re-opens a durable_transaction that re-pushes the whole DB to the
+# bucket for a no-op. Bounded to jobs HF still lists (see end of the tick).
+_completed_jobs: set[tuple[str, str]] = set()
+
+
 def _poll_terminal_jobs() -> None:
     """Single tick: scan running HF jobs, dispatch any newly terminal to its handler."""
     from huggingface_hub import list_jobs
@@ -550,6 +560,7 @@ def _poll_terminal_jobs() -> None:
     except Exception as exc:
         log.warning("poll worker list_jobs failed: %s", exc)
         return
+    terminal_seen: set[tuple[str, str]] = set()
     for job in jobs:
         labels = getattr(job, "labels", {}) or {}
         kind = labels.get("task")
@@ -562,11 +573,20 @@ def _poll_terminal_jobs() -> None:
         jid = hf_job_id(job)
         if not jid:
             continue
+        key = (kind, jid)
+        terminal_seen.add(key)
+        if key in _completed_jobs:
+            continue  # already completed this process — don't re-fire the handler
         slug_arg = None if slug in ("_global", "_batch") else slug
         try:
             _HANDLERS[kind](slug_arg, jid)
         except Exception as exc:
             log.warning("poll handler %s(%s, %s) failed: %s", kind, slug_arg, jid, exc)
+        else:
+            _completed_jobs.add(key)
+    # Forget jobs HF no longer lists so the memo can't grow unbounded over a
+    # long-lived worker; a job that reappears just re-fires once.
+    _completed_jobs.intersection_update(terminal_seen)
 
 
 _poll_thread: threading.Thread | None = None
@@ -591,3 +611,4 @@ def start_poll_worker() -> None:
 def stop_poll_worker() -> None:
     """Used by tests."""
     _poll_stop.set()
+    _completed_jobs.clear()

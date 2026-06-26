@@ -19,7 +19,7 @@ from __future__ import annotations
 import logging
 import os
 
-from qua_shared.schemas import Actor
+from qua_shared.schemas import Actor, Role
 from services.db import repo_releases
 from services.db.sync import durable_transaction
 from services.state import audit
@@ -40,7 +40,9 @@ def launch(*, webhook_base: str | None = None) -> dict:
 
     Global single-flight — refuses if another refresh is in flight.
     """
-    from huggingface_hub import Volume, get_token, run_job
+    from typing import cast
+
+    from huggingface_hub import SpaceHardware, Volume, get_token, run_job
 
     busy = base.running_job_for(kind=KIND)
     if busy is not None:
@@ -83,7 +85,7 @@ def launch(*, webhook_base: str | None = None) -> dict:
     job = run_job(
         image=base.JOB_IMAGE,
         command=command,
-        flavor=JOB_FLAVOR,
+        flavor=cast(SpaceHardware, JOB_FLAVOR),
         timeout=JOB_TIMEOUT,
         env=env,
         secrets=secrets,
@@ -111,7 +113,7 @@ def complete(slug: str | None, job_id: str) -> dict:
     an already-clear set is a no-op, so webhook + poll double-fire is safe.
     ``ts_regen`` staleness is deliberately untouched (still needs a republish).
     """
-    actor = Actor(hf_user_id="SYSTEM_ACTOR", login_at_time="system", role="owner")
+    actor = Actor(hf_user_id="SYSTEM_ACTOR", login_at_time="system", role=Role.OWNER)
     with durable_transaction() as _:
         cleared = repo_releases.clear_catalog_stale_hf()
         if cleared:
@@ -131,4 +133,7 @@ def complete(slug: str | None, job_id: str) -> dict:
 
 
 def register() -> None:
-    base.register_handler(KIND, lambda slug, jid: complete(slug, jid))
+    def _handler(slug: str | None, jid: str) -> None:
+        complete(slug, jid)
+
+    base.register_handler(KIND, _handler)

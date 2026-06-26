@@ -189,32 +189,36 @@ jobs:
           fi
 
   type-check:
-    # NON-BLOCKING (continue-on-error) pyright type check, intentionally scoped
-    # to the Pydantic typed core (qua_shared/schemas/) in basic mode. Run via
-    # `npx pyright` so no Python type-checker dependency is added — node 24 is
-    # available. Repo-wide basic mode is ~636 errors of flat-import resolution
-    # noise; this narrow scope reports real schema-typing issues without
-    # gating the build. Flip continue-on-error off (blocking) once the handful
-    # of qua_shared/schemas/ errors are cleared. See CLAUDE.md / rollout notes.
+    # Blocking pyright gate for the whole backend (inspector, qua_jobs,
+    # qua_shared). Runtime + dev deps are installed first so pyright resolves
+    # real third-party types — without them, imports collapse to Unknown and the
+    # gate both misses real errors and reports spurious None-union ones. Pyright
+    # itself is run via `npx`, so no type-checker dep is added to the image.
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: pip
+          cache-dependency-path: |
+            inspector/requirements.txt
+            inspector/requirements-dev.txt
 
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
 
-      - name: Pyright (basic, qua_shared/schemas only)
+      - name: Install backend deps (for type resolution)
+        run: pip install -r inspector/requirements.txt -r inspector/requirements-dev.txt
+
+      - name: Pyright (basic, whole backend)
         run: >-
           npx -y pyright
           --pythonversion 3.11
           --level error
-          qua_shared/schemas
+          inspector qua_jobs qua_shared
 
   scripts-layout-guard:
     # Stops the old scattered-scripts layout from creeping back. Imported-at-runtime

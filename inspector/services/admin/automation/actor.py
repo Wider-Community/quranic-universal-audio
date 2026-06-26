@@ -8,7 +8,7 @@ completion handlers).
 
 from __future__ import annotations
 
-from qua_shared.schemas import Actor
+from qua_shared.schemas import Actor, Role
 
 #: Audit / launched_by id for automation-driven actions.
 SYSTEM_AUTOMATION_ID = "SYSTEM_AUTOMATION"
@@ -16,4 +16,4 @@ SYSTEM_AUTOMATION_ID = "SYSTEM_AUTOMATION"
 
 def system_actor() -> Actor:
     """The automation system actor (owner-tier, synthetic id)."""
-    return Actor(hf_user_id=SYSTEM_AUTOMATION_ID, login_at_time="system", role="owner")
+    return Actor(hf_user_id=SYSTEM_AUTOMATION_ID, login_at_time="system", role=Role.OWNER)

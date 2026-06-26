@@ -63,6 +63,7 @@ def _reciter(reciter_id: str, name_en: str):
 def _install(reciters, deliveries, rows):
     """Seed the supplied catalog + state fixtures into the SQLite substrate."""
     from qua_shared.schemas import (
+        AudioCategory,
         Channel,
         Riwayah,
         Source,
@@ -80,7 +81,7 @@ def _install(reciters, deliveries, rows):
                 slug="mp3quran",
                 name="mp3quran",
                 url="https://mp3quran.net",
-                audio_categories=["by_surah"],
+                audio_categories=[AudioCategory.BY_SURAH],
             ),
         ],
         channels=[
@@ -154,6 +155,33 @@ def test_stats_sets_cache_control(flask_client):
     _install(reciters=[], deliveries=[], rows=[])
     resp = flask_client.get("/api/public/stats")
     assert "no-store" in resp.headers["Cache-Control"]
+
+
+# ---------------------------------------------------------------------------
+# /api/public/version
+# ---------------------------------------------------------------------------
+
+
+def test_version_returns_db_seq_with_no_store(flask_client):
+    _install(reciters=[], deliveries=[], rows=[])
+    resp = flask_client.get("/api/public/version")
+    assert resp.status_code == 200
+    body = json.loads(resp.data)
+    assert isinstance(body["db_seq"], int)
+    assert "no-store" in resp.headers["Cache-Control"]
+
+
+def test_version_increments_after_committed_write(flask_client):
+    # The dashboard poll gates its roster refetch on this counter, so a
+    # committed write must move it — otherwise the catalog would never refresh.
+    from services import db
+
+    _install(reciters=[], deliveries=[], rows=[])
+    before = json.loads(flask_client.get("/api/public/version").data)["db_seq"]
+    with db.transaction():
+        pass  # an empty committed txn still bumps db_seq
+    after = json.loads(flask_client.get("/api/public/version").data)["db_seq"]
+    assert after > before
 
 
 # ---------------------------------------------------------------------------

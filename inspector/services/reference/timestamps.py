@@ -73,14 +73,16 @@ def _build_manifest_dict(reciters_block: dict[str, dict]) -> dict:
     catalog has no Arabic name (the FE distinguishes "no Arabic name" from
     "field absent").
     """
-    manifest = TsManifestResponse(
-        schema_version=SCHEMA_VERSION,
-        generated_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        commit="",
-        dataset_base_url="",
-        shard_url_template="/api/ts/shard/{reciter}/{chapter}",
-        resources={key: f"/api/ts/resource/{key}" for key in _RESOURCE_KEYS},
-        reciters=reciters_block,
+    manifest = TsManifestResponse.model_validate(
+        {
+            "schema_version": SCHEMA_VERSION,
+            "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "commit": "",
+            "dataset_base_url": "",
+            "shard_url_template": "/api/ts/shard/{reciter}/{chapter}",
+            "resources": {key: f"/api/ts/resource/{key}" for key in _RESOURCE_KEYS},
+            "reciters": reciters_block,
+        }
     )
     return manifest.model_dump(mode="json", by_alias=True)
 

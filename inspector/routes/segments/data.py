@@ -65,9 +65,9 @@ def seg_config():
         trim_dim_alpha=TRIM_DIM_ALPHA,
         low_conf_default_threshold=LOW_CONF_DEFAULT_THRESHOLD,
         validation_categories=list(ALL_CATEGORIES),
-        muqattaat_verses=sorted([tuple(t) for t in _MUQATTAAT_VERSES]),
+        muqattaat_verses=sorted(_MUQATTAAT_VERSES),
         qalqala_letters=sorted(_QALQALA_LETTERS),
-        standalone_refs=sorted([tuple(t) for t in _STANDALONE_REFS]),
+        standalone_refs=sorted(_STANDALONE_REFS),
         standalone_words=sorted(_STANDALONE_WORDS),
         accordion_context=ACCORDION_CONTEXT,
     )
@@ -93,7 +93,7 @@ def seg_reciters():
     by_slug = {
         d.slug: (d.source, d.audio_category.value) for d in catalog_service.snapshot().deliveries
     }
-    model = SegRecitersResponse(
+    model = SegRecitersResponse.model_validate(
         [
             {
                 "slug": row.slug,

@@ -35,5 +35,7 @@ def delete_public(user, audit_id: str):
     reason, err = validate_reason(body)
     if err is not None:
         return err
+    # required=True guarantees a non-empty reason whenever err is None.
+    assert reason is not None
     activity_state_service.delete(audit_id, actor=actor_for(user), reason=reason)
     return jsonify({"ok": True, "audit_id": audit_id})

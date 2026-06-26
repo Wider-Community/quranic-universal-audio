@@ -25,6 +25,7 @@ from qua_shared.schemas import (
     PublicReciter,
     PublicReciterPage,
 )
+from services import db as db_service
 from services import permissions
 from services import public_activity as public_activity_service
 from services import public_state as public_state_service
@@ -68,6 +69,18 @@ def _with_cache(payload, cache: str):
     resp: Response = jsonify(payload)
     resp.headers["Cache-Control"] = cache
     return resp
+
+
+@public_bp.route("/version")
+@require_capability("view.catalog")
+def version(user):
+    """Monotonic catalog version (``db_seq``), bumped by every committed write.
+
+    A cheap change-probe the dashboard polls in place of refetching the whole
+    roster every tick: the client only re-pulls ``/reciters`` + ``/stats`` when
+    this number moves. no-store so a poll always sees the live counter.
+    """
+    return _with_cache({"db_seq": db_service.current_db_seq()}, "no-store")
 
 
 @public_bp.route("/stats")

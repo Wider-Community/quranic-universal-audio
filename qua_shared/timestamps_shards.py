@@ -234,7 +234,9 @@ def build_segment_shards(
     cat = _normalize_audio_category(audio_category)
 
     # Group occurrences by chapter (derived from each segment's single-verse ref).
-    by_chapter: dict[int, list[dict]] = {}
+    # Each entry pairs the source occurrence with its built segment so the sort
+    # below can tie-break on the occurrence's ``seg_index``.
+    by_chapter: dict[int, list[tuple[dict, dict]]] = {}
     for key, occs in v2_doc.items():
         if key == "_meta":
             continue

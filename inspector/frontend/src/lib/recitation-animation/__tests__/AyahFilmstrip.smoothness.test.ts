@@ -3,9 +3,8 @@ import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
-    assembleVerseFromShard,
-    chapterOccasionIntervals,
-    chapterVerseRefs,
+    assembleOccasion,
+    shardOccasions,
     type TsReciterAudio,
 } from '../../recitation-data/ts-source';
 import shard102 from '../../recitation-data/__tests__/fixtures/nasser_al_qatami_mp3quran_102.shard.json';
@@ -57,12 +56,11 @@ function unit(loc: string, ivs: Array<[number, number]>): AnimUnit {
 
 function buildNasserUnits(): AnimUnit[] {
     const shard = shard102 as unknown as TsShardResponse;
-    const verses: AssembledVerse[] = [];
-    for (const ref of chapterVerseRefs(shard)) {
-        const data = assembleVerseFromShard(RECITER, shard, ref, EMPTY, EMPTY, RECITER_AUDIO, '');
-        if (data) verses.push({ verseRef: ref, data });
-    }
-    return buildChapterRecitation(RECITER, 102, verses, chapterOccasionIntervals(shard)).units;
+    const occasions: AssembledVerse[] = shardOccasions(shard).map((occ) => ({
+        verseRef: occ.ref,
+        data: assembleOccasion(RECITER, occ, EMPTY, EMPTY, RECITER_AUDIO, ''),
+    }));
+    return buildChapterRecitation(RECITER, 102, occasions).units;
 }
 
 // Re-derive the same cell geometry the component derives (matches `cells` in

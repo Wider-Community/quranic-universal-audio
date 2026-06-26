@@ -42,7 +42,9 @@ JOB_TIMEOUT = os.environ.get("INSPECTOR_HF_BATCH_JOB_TIMEOUT", "3h")
 
 def launch(slugs: list[str], *, webhook_base: str | None = None) -> dict:
     """Launch one batch publish job for ``slugs``. Returns ``{job_id, url}``."""
-    from huggingface_hub import Volume, get_token, run_job
+    from typing import cast
+
+    from huggingface_hub import SpaceHardware, Volume, get_token, run_job
 
     from services.storage.hf_bucket import resolve_bucket_repo
 
@@ -88,7 +90,7 @@ def launch(slugs: list[str], *, webhook_base: str | None = None) -> dict:
     job = run_job(
         image=base.JOB_IMAGE,
         command=command,
-        flavor=JOB_FLAVOR,
+        flavor=cast(SpaceHardware, JOB_FLAVOR),
         timeout=JOB_TIMEOUT,
         env=env,
         secrets=secrets,
@@ -224,4 +226,7 @@ def latest_batch_outcome() -> dict | None:
 
 def register() -> None:
     # Poll fallback: no members payload — complete() reads the bucket record.
-    base.register_handler(KIND, lambda _slug, jid: complete(jid))
+    def _handler(_slug: str | None, jid: str) -> None:
+        complete(jid)
+
+    base.register_handler(KIND, _handler)

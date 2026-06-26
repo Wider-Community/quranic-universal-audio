@@ -65,6 +65,7 @@ def test_canonical_sidecar_validates():
     assert m.meta.chapter_count == 2
     assert set(m.chapters) == {"1", "112"}
     assert m.chapters["1"].url.endswith("001.mp3")
+    assert m.chapters["112"].bitrate_mode is not None
     assert m.chapters["112"].bitrate_mode.value == "vbr"
 
 

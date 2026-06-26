@@ -12,14 +12,17 @@
  * the store tracks lifecycle transitions (e.g. a reciter flipping to
  * "available for review") without a manual reload — keeping every
  * catalog-fed surface (table, pickers, footer chip) in sync with the
- * activity rail, which polls on the same cadence. Backend
- * `/api/public/reciters` is `db_seq`-cached, so steady-state polls hit an
- * unchanged catalog; `applyPage` then skips the store write entirely so the
- * (now-virtualized) list isn't re-reconciled for nothing.
+ * activity rail, which polls on the same cadence. Each tick first fetches the
+ * tiny `/api/public/version` probe (`db_seq`, the monotonic write counter) and
+ * only refetches the full multi-page roster + stats when it has moved — so an
+ * idle catalog costs one small request per tick instead of paging the whole
+ * ~1k-reciter list every 30s. `applyPage` still guards the store write on a
+ * structural signature, so even a forced refetch that changed nothing skips
+ * re-reconciling the (virtualized) list.
  */
 import { get, writable } from 'svelte/store';
 
-import { fetchPublicReciters, fetchPublicStats } from '../../../lib/api/public-reciters';
+import { fetchCatalogVersion, fetchPublicReciters, fetchPublicStats } from '../../../lib/api/public-reciters';
 import type { BucketCounts, PublicDelivery, PublicReciter } from '../../../lib/types/generated/schemas';
 import { visiblePoll } from '../../../lib/utils/visible-poll';
 
@@ -94,12 +97,33 @@ export async function loadCatalog(force = false): Promise<void> {
 
 const CATALOG_POLL_MS = 30_000;
 
+/** Consecutive failed poll ticks tolerated before the dashboard surfaces an
+ *  error. A single transient 5xx (the Space proxy momentarily can't reach the
+ *  single worker) shouldn't blank a working dashboard — keep the last-good
+ *  snapshot and only surface once failures persist. */
+const POLL_ERROR_TOLERANCE = 3;
+
 let pollTeardown: (() => void) | null = null;
 let pollRefs = 0;
+
+/** Running count of consecutive failed poll ticks; reset on any success. */
+let pollErrorStreak = 0;
 
 /** Signature of the last applied snapshot, so a poll that returns an unchanged
  *  catalog skips the store write (and the list re-reconcile it would trigger). */
 let lastSnapshotSig: string | null = null;
+
+/** `db_seq` of the last roster the poll actually fetched. A tick whose version
+ *  probe matches this skips the multi-page roster refetch entirely. */
+let lastVersion: number | null = null;
+
+/** Poll payload: the freshly-fetched roster + stats, or `null` when the version
+ *  probe was unchanged and nothing needs applying. */
+type CatalogPollResult = {
+    page: { reciters: PublicReciter[] };
+    stats: BucketCounts;
+    version: number;
+} | null;
 
 /** Cheap structural fingerprint: roster size + each reciter's volatile fields
  *  (state/activity/delivery count) + the bucket stat counts. Catches every
@@ -130,20 +154,45 @@ function applyPage(page: { reciters: PublicReciter[] }, stats: BucketCounts): vo
 export function startCatalogPolling(): () => void {
     pollRefs += 1;
     if (!pollTeardown) {
-        pollTeardown = visiblePoll<[{ reciters: PublicReciter[] }, BucketCounts]>({
+        pollErrorStreak = 0;
+        pollTeardown = visiblePoll<CatalogPollResult>({
             intervalMs: CATALOG_POLL_MS,
-            fetcher: (signal) =>
-                Promise.all([
-                    fetchAllReciters(signal).then((reciters) => ({ reciters })),
+            fetcher: async (signal) => {
+                const version = await fetchCatalogVersion(signal);
+                // Unchanged since the last applied roster (and we have one) —
+                // skip the expensive multi-page refetch for this tick.
+                if (version === lastVersion && get(catalogData).reciters.length > 0) {
+                    return null;
+                }
+                const [reciters, stats] = await Promise.all([
+                    fetchAllReciters(signal),
                     fetchPublicStats(signal),
-                ]),
-            onResult: ([page, stats]) => applyPage(page, stats),
-            onError: (e) =>
-                catalogData.update((s) => ({
-                    ...s,
-                    loading: false,
-                    error: (e as Error).message ?? 'Failed to load catalog',
-                })),
+                ]);
+                return { page: { reciters }, stats, version };
+            },
+            onResult: (result) => {
+                pollErrorStreak = 0;
+                // A recovered tick clears any transient error a prior failed
+                // tick surfaced (applyPage only clears it when the data changed).
+                const cur = get(catalogData);
+                if (cur.error) catalogData.set({ ...cur, error: null });
+                if (result === null) return;
+                lastVersion = result.version;
+                applyPage(result.page, result.stats);
+            },
+            onError: (e) => {
+                pollErrorStreak += 1;
+                const haveData = get(catalogData).reciters.length > 0;
+                // Swallow a transient blip while we still have data to show;
+                // only surface once we've never loaded or failures persist.
+                if (!haveData || pollErrorStreak >= POLL_ERROR_TOLERANCE) {
+                    catalogData.update((s) => ({
+                        ...s,
+                        loading: false,
+                        error: (e as Error).message ?? 'Failed to load catalog',
+                    }));
+                }
+            },
         });
     }
     return () => {

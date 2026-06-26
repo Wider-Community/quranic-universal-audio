@@ -10,7 +10,7 @@
  *
  * @param starts  Ayah start times (ms, chapter-absolute). MUST be ascending —
  *                callers pass a memoised sorted list (see `recitationAyahStarts`
- *                / `chapterStartMs`). The lower-bound walk relies on this
+ *                / `distinctVerseStartMs`). The lower-bound walk relies on this
  *                ordering (the `else break` short-circuits on a sorted miss).
  * @param curMs   Chapter-absolute playhead (ms).
  * @param dir     +1 forward, -1 back.

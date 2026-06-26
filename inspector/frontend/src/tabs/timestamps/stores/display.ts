@@ -30,7 +30,7 @@ export const granularity = writable<TsGranularity>(TS_GRANULARITY_DEFAULT);
 export const showLetters = writable<boolean>(true);
 
 /** Analysis mode: toggle phoneme row + cross-word bridge visibility. */
-export const showPhonemes = writable<boolean>(false);
+export const showPhonemes = writable<boolean>(true);
 
 /** Analysis mode: toggle the word-by-word translation row (above each word). */
 export const showTranslations = writable<boolean>(false);

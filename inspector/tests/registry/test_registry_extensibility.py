@@ -65,7 +65,9 @@ def test_synthetic_new_category_picked_up_by_parametrization(monkeypatch):
     # Derived tuples are computed at module import time so the new monkey-
     # patched row will not appear in them unless rebuilt — assert that the
     # registry row itself drives the same boolean answers a consumer would
-    # ask via the derived tuples.
+    # ask via the derived tuples. The monkeypatched row is a plain dict, so it
+    # also supports the ``.get`` mapping method.
+    assert isinstance(row, dict)
     assert row.get("can_ignore") is True
     assert row.get("auto_suppress") is True
     assert row.get("persists_ignore") is True

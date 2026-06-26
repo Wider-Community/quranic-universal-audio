@@ -55,7 +55,7 @@
     import TsValidationPanel from './components/TsValidationPanel.svelte';
     import UnifiedDisplay from './components/UnifiedDisplay.svelte';
     import {
-        assembleVerseFromShard,
+        assembleOccasion,
         chapterVerseRefs,
         getRandomTarget,
         loadChapterShard,
@@ -67,6 +67,7 @@
         loadVbrChapters,
         loadVerseTranslations,
         reciterAudioFromManifest,
+        shardOccasions,
     } from './services/ts_client';
     import { findTsEntryBySlug, isTsCapable, resolveTsDeliveries } from './services/ts-published';
     import {
@@ -90,7 +91,7 @@
         selectedVerse,
         type TsLoadedVerse,
     } from './stores/verse';
-    import { resolveShuffleTick, shouldFireShuffle, verseAt } from './utils/shuffle-tick';
+    import { occasionIndexAt, resolveShuffleTick, shouldFireShuffle } from './utils/shuffle-tick';
     import { setupZoomLifecycle } from './utils/zoom';
 
     // ---- Local display constants ----
@@ -106,32 +107,38 @@
     let waveformTabEl: TimestampsWaveform;
 
     // ---- Chapter focus data ----
-    interface ChapVerse {
+    /** One contiguous recitation of a verse (a verse may recur → several
+     *  occasions). The waveform + analysis focus one occasion at a time. */
+    interface ChapOccasion {
         ref: string;
         startMs: number;
         endMs: number;
         lv: TsLoadedVerse;
     }
-    let chapterVerses: ChapVerse[] = [];
-    /** Ascending list of ayah start ms — mirrors `chapterVerses` (which is
-     *  sorted at assembly time, line ~297). Memoised so the keyboard handlers
-     *  don't `chapterVerses.map(...)` per keydown. */
-    let chapterStartMs: number[] = [];
+    /** Every occasion in the chapter, in audio order (a verse ref may repeat). */
+    let chapterOccasions: ChapOccasion[] = [];
+    /** First-occasion start ms per DISTINCT verse, ascending — feeds the
+     *  prev/next-ayah keyboard nav (which steps verses, not occasions). */
+    let distinctVerseStartMs: number[] = [];
+    /** Distinct verse refs in audio order — paired with `distinctVerseStartMs`. */
+    let distinctVerseRefs: string[] = [];
     let loadedChapterKey = ''; // `${slug}:${chapter}` currently assembled
-    let focusRef = '';
+    let focusIdx = -1; // index into `chapterOccasions` of the focused occasion
+    let focusRef = ''; // ref of the focused occasion (for display / verse nav)
     let lastFlagsSlug = ''; // reciter whose user-reported flags are loaded
     let manifestSlugs = new Set<string>();
     /** Set when a context switch should seek to a specific verse once the new
      *  chapter's data + audio are ready (shuffle / validation jump / entry). */
     let pendingSeekRef: string | null = null;
-    let shuffleFiredForRef = ''; // guard so ayah-end shuffle fires once per verse
+    let shuffleFiredForIdx = -1; // guard so the shuffle fires once per occasion
 
-    /** Loop is anchored to the verse that was in focus when the loop was
-     *  engaged — NOT the live focus verse. Captured on the loopTarget null→set
-     *  transition so a ~1-frame overshoot past the verse boundary can't drift
-     *  the focus to the next ayah and (a) flip the analysis text + (b) blow up
+    /** Loop is anchored to the occasion that was in focus when the loop was
+     *  engaged — NOT the live focus occasion. Captured on the loopTarget null→set
+     *  transition so a ~1-frame overshoot past the occasion boundary can't drift
+     *  the focus to the next occasion and (a) flip the analysis text + (b) blow up
      *  `endAbs` so the seek-back never fires again. Null while not looping. */
-    let loopAnchor: ChapVerse | null = null;
+    let loopAnchor: ChapOccasion | null = null;
+    let loopAnchorIdx = -1;
 
     // ---------------------------------------------------------------------
     // Colors (shared accent → analysis triad)
@@ -309,24 +316,32 @@
             const reciterAudio = reciterAudioFromManifest(manifest, slug);
             if (!reciterAudio) return;
             const chapterUrl = surahs[String(chapter)]?.url ?? '';
-            const verses: ChapVerse[] = [];
-            for (const ref of chapterVerseRefs(shard)) {
-                const data = assembleVerseFromShard(slug, shard, ref, qpc, dk, reciterAudio, chapterUrl);
-                if (!data) continue;
-                verses.push({
-                    ref,
+            const occasions: ChapOccasion[] = [];
+            for (const occ of shardOccasions(shard)) {
+                const data = assembleOccasion(slug, occ, qpc, dk, reciterAudio, chapterUrl);
+                occasions.push({
+                    ref: occ.ref,
                     startMs: data.time_start_ms,
                     endMs: data.time_end_ms,
                     lv: { data, tsSegOffset: data.time_start_ms / 1000, tsSegEnd: data.time_end_ms / 1000 },
                 });
             }
-            verses.sort((a, b) => a.startMs - b.startMs);
-            chapterVerses = verses;
-            // Memoised ascending startMs feeds `adjacentAyahStartMs` (which now
-            // trusts sorted input) without allocating + sorting on every
-            // keypress / drag. Reassigned alongside chapterVerses to keep both
-            // reactive views in lockstep.
-            chapterStartMs = verses.map((v) => v.startMs);
+            occasions.sort((a, b) => a.startMs - b.startMs);
+            chapterOccasions = occasions;
+            // First-occasion start per distinct verse (ascending) feeds the
+            // prev/next-ayah keyboard nav via `adjacentAyahStartMs` (which trusts
+            // sorted input) — stepping verses, not occasions.
+            const seenRefs = new Set<string>();
+            const verseStarts: number[] = [];
+            const verseRefs: string[] = [];
+            for (const o of occasions) {
+                if (seenRefs.has(o.ref)) continue;
+                seenRefs.add(o.ref);
+                verseStarts.push(o.startMs);
+                verseRefs.push(o.ref);
+            }
+            distinctVerseStartMs = verseStarts;
+            distinctVerseRefs = verseRefs;
             loadedChapterKey = key;
             selectedReciter.set(slug);
             selectedChapter.set(String(chapter));
@@ -350,10 +365,11 @@
             // Apply a queued seek (entry / shuffle / validation jump), else focus
             // the verse under the current playhead.
             if (pendingSeekRef) {
-                const v = chapterVerses.find((x) => x.ref === pendingSeekRef);
+                const i = firstOccasionIndexOfRef(pendingSeekRef);
                 pendingSeekRef = null;
-                if (v) {
-                    setFocus(v);
+                if (i >= 0) {
+                    const v = chapterOccasions[i]!;
+                    setFocusByIndex(i);
                     ensureDashCoveringRange(v.startMs, v.endMs);
                     dashPort.seek(v.startMs);
                     signalDashSeekIntent();
@@ -374,13 +390,17 @@
         }
     }
 
-    function setFocus(v: ChapVerse): void {
+    /** Focus the occasion at index `i` in `chapterOccasions`. */
+    function setFocusByIndex(i: number): void {
+        const v = chapterOccasions[i];
+        if (!v) return;
+        focusIdx = i;
         focusRef = v.ref;
         loadedVerse.set(v.lv);
         selectedVerse.set(v.ref);
         // Publish to the shell-level focus store so NowReciting's filmstrip
         // bookmark button can mirror the focus without running its own rAF.
-        // Verse refs are "surah:ayah" (chapterVerseRefs); parse defensively.
+        // Verse refs are "surah:ayah"; parse defensively.
         const [s, a] = v.ref.split(':');
         const surah = Number(s);
         const ayah = Number(a);
@@ -389,18 +409,20 @@
         }
     }
 
-    /** Focus the verse containing `ms` (chapter-absolute), else the nearest
+    /** Index of the FIRST occasion of `ref` (audio order), or -1 if absent. */
+    function firstOccasionIndexOfRef(ref: string): number {
+        return chapterOccasions.findIndex((o) => o.ref === ref);
+    }
+
+    /** Focus the occasion containing `ms` (chapter-absolute), else the nearest
      *  preceding one. No-op if the focus is unchanged. */
     function focusAt(ms: number): void {
-        const ref = verseAt(chapterVerses, ms);
-        if (ref && ref !== focusRef) {
-            const v = chapterVerses.find((x) => x.ref === ref);
-            if (v) setFocus(v);
-        }
+        const i = occasionIndexAt(chapterOccasions, ms);
+        if (i >= 0 && i !== focusIdx) setFocusByIndex(i);
     }
 
     /** True while a cross-source jump is mid-swap: the shared player already points
-     *  at (and may already be playing) the new chapter, but `chapterVerses` /
+     *  at (and may already be playing) the new chapter, but `chapterOccasions` /
      *  `focusRef` / `loadedVerse` still describe the previous chapter until
      *  syncChapter finishes loading and sets `loadedChapterKey`. `loadedChapterKey`
      *  trails `playerContext` across the whole window (incl. before `tsLoading`
@@ -448,9 +470,9 @@
                 ensureDashCovering(startAbs);
                 dashPort.seek(startAbs);
             }
-            // Keep focus on the loop's verse regardless of where the playhead
+            // Keep focus on the loop's occasion regardless of where the playhead
             // momentarily sits (the seek-back is async).
-            if (focusRef !== loopAnchor.ref) setFocus(loopAnchor);
+            if (focusIdx !== loopAnchorIdx) setFocusByIndex(loopAnchorIdx);
             refreshDisplays();
             return;
         }
@@ -464,23 +486,22 @@
         // against the auditioned ayah's captured end, bounds the leak to one frame.
         const fv = get(loadedVerse);
         const outcome = resolveShuffleTick({
-            verses: chapterVerses,
+            occasions: chapterOccasions,
             ms,
             swapInFlight: chapterSwapInFlight(),
             armed: getActiveTab() === TAB_NAMES.TIMESTAMPS && !get(loopTarget) && get(shuffleAyah),
             focusEndMs: fv ? fv.tsSegEnd * 1000 : null,
             guardMs: SHUFFLE_END_GUARD_MS,
-            firedForCurrentFocus: shuffleFiredForRef === focusRef,
+            firedForCurrentFocus: shuffleFiredForIdx === focusIdx,
         });
         // Mid-swap: freeze focus + display (no refresh) so the new playhead time
-        // isn't drawn against the old chapter's verse; syncChapter resumes us.
+        // isn't drawn against the old chapter's occasion; syncChapter resumes us.
         if (outcome.kind === 'idle') return;
         if (outcome.kind === 'fire') {
-            shuffleFiredForRef = focusRef;
+            shuffleFiredForIdx = focusIdx;
             void shuffleJump(); // sets the new focus itself; hold focus this frame
-        } else if (outcome.ref && outcome.ref !== focusRef) {
-            const v = chapterVerses.find((x) => x.ref === outcome.ref);
-            if (v) setFocus(v);
+        } else if (outcome.kind === 'focus' && outcome.idx >= 0 && outcome.idx !== focusIdx) {
+            setFocusByIndex(outcome.idx);
         }
         refreshDisplays();
     }
@@ -503,10 +524,10 @@
             ms,
             focusEndMs: fv ? fv.tsSegEnd * 1000 : null,
             guardMs: SHUFFLE_END_GUARD_MS,
-            firedForCurrentFocus: shuffleFiredForRef === focusRef,
+            firedForCurrentFocus: shuffleFiredForIdx === focusIdx,
         });
         if (fire) {
-            shuffleFiredForRef = focusRef;
+            shuffleFiredForIdx = focusIdx;
             void shuffleJump();
             return true;
         }
@@ -551,8 +572,8 @@
         if (sameSource) {
             // In-chapter jump is already gapless (plain seek) — drop the warm el.
             if (consumed) discardWarm(consumed.el);
-            const v = chapterVerses.find((x) => x.ref === target.verseRef);
-            if (v) seekFocus(v, autoplay);
+            const i = firstOccasionIndexOfRef(target.verseRef);
+            if (i >= 0) seekFocus(i, autoplay);
         } else if (consumed) {
             adoptGapless(consumed, autoplay);
         } else {
@@ -638,8 +659,11 @@
                 loadQpc(), loadDk(), loadManifest(),
             ]);
             const ra = reciterAudioFromManifest(manifest, target.reciter);
-            const data = ra
-                ? assembleVerseFromShard(target.reciter, shard, target.verseRef, qpc, dk, ra, rawUrl)
+            const occ = ra
+                ? shardOccasions(shard).find((o) => o.ref === target.verseRef)
+                : undefined;
+            const data = ra && occ
+                ? assembleOccasion(target.reciter, occ, qpc, dk, ra, rawUrl)
                 : null;
             if (data) {
                 seekSec = data.time_start_ms / 1000;
@@ -671,8 +695,8 @@
         const curSlug = get(playerContext).delivery?.slug ?? '';
         const curChapter = get(playerContext).surahNum ?? 0;
         if (slug === curSlug && chapter === curChapter) {
-            const v = chapterVerses.find((x) => x.ref === verseRef);
-            if (v) seekFocus(v, autoplay);
+            const i = firstOccasionIndexOfRef(verseRef);
+            if (i >= 0) seekFocus(i, autoplay);
             return;
         }
         const entry = findTsEntryBySlug(get(catalogData).reciters, manifestSlugs, slug);
@@ -693,13 +717,15 @@
         try { dashPort.play(); } catch { /* autoplay policy */ }
     }
 
-    function seekFocus(v: ChapVerse, autoplay = true): void {
+    function seekFocus(i: number, autoplay = true): void {
+        const v = chapterOccasions[i];
+        if (!v) return;
         const wasPlaying = !dashPort.paused;
-        setFocus(v);
+        setFocusByIndex(i);
         ensureDashCoveringRange(v.startMs, v.endMs);
         dashPort.seek(v.startMs);
         // Raise the buffering spinner (debounced) — clears on the first audible
-        // frame, no-ops if the verse start is already buffered.
+        // frame, no-ops if the occasion start is already buffered.
         signalDashSeekIntent();
         if (autoplay || wasPlaying) tryPlay();
         refreshDisplays();
@@ -714,15 +740,16 @@
         refreshDisplays();
     }
 
-    /** Step to the prev/next ayah in the current chapter (keyboard [ / ]). */
+    /** Step to the prev/next DISTINCT verse in the current chapter (keyboard
+     *  [ / ]) — seeks to that verse's first occasion. */
     function navigateVerse(delta: number): void {
-        if (chapterVerses.length === 0) return;
-        const idx = chapterVerses.findIndex((v) => v.ref === focusRef);
-        const ni = idx + delta;
-        if (ni < 0 || ni >= chapterVerses.length) return;
+        const vi = distinctVerseRefs.indexOf(focusRef);
+        if (vi < 0) return;
+        const ni = vi + delta;
+        if (ni < 0 || ni >= distinctVerseRefs.length) return;
         exitLoop();
-        const v = chapterVerses[ni]!;
-        seekFocus(v);
+        const i = firstOccasionIndexOfRef(distinctVerseRefs[ni]!);
+        if (i >= 0) seekFocus(i);
     }
 
     /** Validation panel click — jump the focus (+ playhead) to a flagged verse,
@@ -812,8 +839,7 @@
         lang: string,
     ): void {
         if (!lv) return;
-        const idx = chapterVerses.findIndex((x) => x.ref === focusRef);
-        const next = idx >= 0 ? chapterVerses[idx + 1] : undefined;
+        const next = focusIdx >= 0 ? chapterOccasions[focusIdx + 1] : undefined;
         if (!next) return;
         void prewarmVersePeaks(
             next.lv.data.reciter,
@@ -827,8 +853,8 @@
         }
     }
 
-    // (The once-per-verse shuffle guard resets implicitly: `shuffleFiredForRef`
-    //  is compared against `focusRef`, so a focus change re-arms it.)
+    // (The once-per-occasion shuffle guard resets implicitly: `shuffleFiredForIdx`
+    //  is compared against `focusIdx`, so a focus change re-arms it.)
 
     // ---------------------------------------------------------------------
     // Keyboard (operates on the shared dashPort)
@@ -846,14 +872,14 @@
             case 'ArrowLeft': {
                 e.preventDefault();
                 exitLoop();
-                const t = adjacentAyahStartMs(chapterStartMs, cur * 1000, -1);
+                const t = adjacentAyahStartMs(distinctVerseStartMs, cur * 1000, -1);
                 if (t !== null) seekMsAndResume(t);
                 break;
             }
             case 'ArrowRight': {
                 e.preventDefault();
                 exitLoop();
-                const t = adjacentAyahStartMs(chapterStartMs, cur * 1000, 1);
+                const t = adjacentAyahStartMs(distinctVerseStartMs, cur * 1000, 1);
                 if (t !== null) seekMsAndResume(t);
                 break;
             }
@@ -937,9 +963,11 @@
         // focus, so focus drift can't corrupt the loop window.
         const unsubLoop = loopTarget.subscribe((lt) => {
             if (lt && !loopAnchor) {
-                loopAnchor = chapterVerses.find((v) => v.ref === focusRef) ?? null;
+                loopAnchor = chapterOccasions[focusIdx] ?? null;
+                loopAnchorIdx = loopAnchor ? focusIdx : -1;
             } else if (!lt) {
                 loopAnchor = null;
+                loopAnchorIdx = -1;
             }
         });
         // Media-clock backstop for the ayah-end shuffle: timeupdate/ended fire off

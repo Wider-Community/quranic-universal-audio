@@ -1,14 +1,17 @@
-// pyrightconfig.json (repo root) — SCOPED, gradual type checking.
-// Initially covers only the Pydantic typed core (qua_shared/schemas/), which is
-// already nearly clean (2 errors, both in smoke.py). NON-BLOCKING in CI at first.
-// A repo-wide basic run reports ~636 errors (mostly import-resolution noise from
-// the flat sys.path import layout, not real type bugs), so do NOT widen `include`
-// or make the job blocking until those are triaged. Expand `include` one package
-// at a time as types are added.
+// pyrightconfig.json (repo root) — basic type checking for the WHOLE backend.
+// The entire Python backend (inspector/, qua_jobs/, qua_shared/) is type-checked
+// in basic mode and enforced as a blocking CI gate.
 {
   "include": [
-    "qua_shared/schemas"
+    "inspector",
+    "qua_jobs",
+    "qua_shared"
   ],
+  // Flat sys.path layout: the app imports `from config import ...` /
+  // `from services... import ...` with `inspector/` on the path, and several
+  // shared modules import each other with repo-root on the path. Mirror that
+  // here so flat-layout imports resolve cleanly.
+  "extraPaths": [".", "inspector"],
   "exclude": [
     "**/node_modules",
     "inspector/frontend",

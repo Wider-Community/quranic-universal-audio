@@ -219,6 +219,7 @@ def test_edit_delivery_stamps_catalog_edit_stale(fresh_catalog, monkeypatch):
 
     catalog_service.edit_delivery(actor=_actor(), slug="rec_a", recording_year=2020)
     hf = repo_releases.current_release("hf", "rec_a")
+    assert hf is not None
     assert hf["stale_since"] is not None
     assert hf["stale_reason"] == "catalog_edit"
 
@@ -235,6 +236,7 @@ def test_edit_reciter_name_fans_out_catalog_stale(fresh_catalog, monkeypatch):
 
     catalog_service.edit_reciter(actor=_actor(), reciter_id="rec_a", name_en="Reciter Alpha")
     hf = repo_releases.current_release("hf", "rec_a")
+    assert hf is not None
     assert hf["stale_reason"] == "catalog_edit"
 
 
@@ -250,5 +252,6 @@ def test_edit_reciter_notes_only_does_not_stamp(fresh_catalog, monkeypatch):
 
     catalog_service.edit_reciter(actor=_actor(), reciter_id="rec_a", notes="internal note")
     hf = repo_releases.current_release("hf", "rec_a")
+    assert hf is not None
     assert hf["stale_since"] is None
     assert hf["stale_reason"] is None

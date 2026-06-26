@@ -182,6 +182,14 @@ def emit_for_event(
         extra = extra or {}
         name = _reciter_name(record, extra)
         actor_id = record.actor.hf_user_id if record.actor else None
+        # Stable per-transition dedup key: a request-scoped id when present
+        # (so request alerts archive together), else the transition's own
+        # identity (event:slug:ts) so a re-driven transaction can't double-insert.
+        source_key = (
+            f"request:{record.request_id}"
+            if record.request_id
+            else f"event:{record.event}:{record.slug}:{record.ts.isoformat()}"
+        )
         if resolver is not None:
             for t in resolver(record, before, extra, name):
                 if not t.hf_user_id:
@@ -195,7 +203,7 @@ def emit_for_event(
                     title=t.title,
                     body=t.body,
                     payload=t.payload,
-                    source_key=record.request_id,
+                    source_key=source_key,
                 )
 
         # Auto-archive the "new request" alerts once the reciter reaches review:
