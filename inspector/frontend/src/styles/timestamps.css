@@ -292,7 +292,7 @@
 
 .mega-letter.active {
     background: var(--ts-letter-color, var(--hl-letter-color));
-    color: white;
+    color: var(--ts-letter-ink, #fff);
     border-color: var(--ts-letter-color, var(--hl-letter-color));
 }
 
@@ -638,7 +638,7 @@
 .pause-bridge.active {
     background: var(--anim-highlight-color);
     border-color: var(--anim-highlight-color);
-    color: #1a1a2e;
+    color: var(--ts-word-ink, #1a1a2e);
 }
 .pause-bridge.hover-preview {
     background: color-mix(in srgb, var(--anim-highlight-color) 30%, var(--hl-cell-rest));
@@ -790,13 +790,13 @@
 /* Active states */
 .mega-phoneme.active {
     background: var(--ts-phoneme-color, var(--hl-phoneme-color));
-    color: white;
+    color: var(--ts-phoneme-ink, #fff);
     border-color: var(--ts-phoneme-color, var(--hl-phoneme-color));
 }
 
 .mega-block.active .mega-word {
     background: var(--anim-highlight-color);
-    color: #1a1a2e;
+    color: var(--ts-word-ink, #1a1a2e);
     font-weight: bold;
     border-color: var(--anim-highlight-color);
 }
@@ -813,7 +813,7 @@
 
 .mega-block.active .mega-phoneme.active {
     background: var(--ts-phoneme-color, var(--hl-phoneme-color));
-    color: white;
+    color: var(--ts-phoneme-ink, #fff);
     border-color: var(--ts-phoneme-color, var(--hl-phoneme-color));
 }
 
@@ -832,7 +832,7 @@
 
 .mega-block.active .mega-letter.active {
     background: var(--ts-letter-color, var(--hl-letter-color));
-    color: white;
+    color: var(--ts-letter-ink, #fff);
     border-color: var(--ts-letter-color, var(--hl-letter-color));
 }
 
@@ -963,7 +963,7 @@
     font-size: 0.85rem;
     text-align: center;
 }
-.ts-view-btn.active, .ts-mode-btn.active { background: var(--anim-highlight-color); color: #1a1a2e; font-weight: bold; }
+.ts-view-btn.active, .ts-mode-btn.active { background: var(--anim-highlight-color); color: var(--ts-word-ink, #1a1a2e); font-weight: bold; }
 /* Translations toggle + language picker span the full group width (its own
    row under the Analysis/Animation + Letters/Phonemes rows). */
 .ts-translations-toggle {
