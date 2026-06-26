@@ -20,8 +20,8 @@
     } from '../stores/tajweed-settings';
 
     // The two dashed-haraka exemplars in the Other-rules key, positioned with the
-    // real per-glyph calibration (fatḥa U+064E pinned above, kasra U+0650 below).
-    const FATHA = 'َ';
+    // real per-glyph calibration (damma U+064F pinned above, kasra U+0650 below).
+    const DAMMA = 'ُ';
     const KASRA = 'ِ';
 
     // Hidden native colour inputs, one per row, opened by clicking its chip.
@@ -74,57 +74,82 @@
         <button type="button" class="tjs-reset" onclick={() => resetAllTajweed()}>Reset all</button>
     </div>
 
+    {#snippet ruleRow(row: LegendRow)}
+        {@const on = $tajweedSettings[row.legendKey]?.enabled ?? true}
+        <div class="tjs-row" class:off={!on}>
+            <div class="tjs-control">
+                <button
+                    type="button"
+                    class="tjs-swatch"
+                    class:kubra={row.kubra}
+                    style:--sw={`var(${row.colorVar})`}
+                    title="Change colour"
+                    onclick={() => inputs[row.label]?.click()}
+                >
+                    {#if row.kubra}
+                        <span class="kl"></span><span class="kr"></span>
+                    {/if}
+                    <span class="tjs-dropper" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="8" height="8">
+                            <path
+                                d="M6 18 L14 10 L16.5 12.5 L8.5 20.5 H6 Z M15 9 L17 7 A1.4 1.4 0 0 1 19 9 L17 11 Z"
+                                fill="currentColor"
+                            />
+                        </svg>
+                    </span>
+                </button>
+                <input
+                    bind:this={inputs[row.label]}
+                    type="color"
+                    class="tjs-color-input"
+                    value={effectiveHex(row)}
+                    oninput={(e) => setRuleColor(row.legendKey, e.currentTarget.value)}
+                    tabindex="-1"
+                    aria-hidden="true"
+                />
+                <button
+                    type="button"
+                    class="tjs-toggle"
+                    class:on
+                    role="switch"
+                    aria-checked={on}
+                    aria-label={`${row.label} ${on ? 'on' : 'off'}`}
+                    onclick={() => setRuleEnabled(row.legendKey, !on)}
+                ><span class="knob"></span></button>
+            </div>
+            <span class="tjs-label">{row.label}</span>
+            {#if row.duration}<span class="tjs-dur">[{row.duration}]</span>{/if}
+        </div>
+    {/snippet}
+
     <div class="tjs-cols">
         {#each LEGEND as group (group.title)}
-            <section class="tjs-group">
-                <h4>{group.title}</h4>
-                {#each group.rows as row (row.label)}
-                    {@const on = $tajweedSettings[row.legendKey]?.enabled ?? true}
-                    <div class="tjs-row" class:off={!on}>
-                        <div class="tjs-control">
-                            <button
-                                type="button"
-                                class="tjs-swatch"
-                                class:kubra={row.kubra}
-                                style:--sw={`var(${row.colorVar})`}
-                                title="Change colour"
-                                onclick={() => inputs[row.label]?.click()}
-                            >
-                                {#if row.kubra}
-                                    <span class="kl"></span><span class="kr"></span>
-                                {/if}
-                                <span class="tjs-dropper" aria-hidden="true">
-                                    <svg viewBox="0 0 24 24" width="8" height="8">
-                                        <path
-                                            d="M6 18 L14 10 L16.5 12.5 L8.5 20.5 H6 Z M15 9 L17 7 A1.4 1.4 0 0 1 19 9 L17 11 Z"
-                                            fill="currentColor"
-                                        />
-                                    </svg>
-                                </span>
-                            </button>
-                            <input
-                                bind:this={inputs[row.label]}
-                                type="color"
-                                class="tjs-color-input"
-                                value={effectiveHex(row)}
-                                oninput={(e) => setRuleColor(row.legendKey, e.currentTarget.value)}
-                                tabindex="-1"
-                                aria-hidden="true"
-                            />
-                            <button
-                                type="button"
-                                class="tjs-toggle"
-                                class:on
-                                role="switch"
-                                aria-checked={on}
-                                aria-label={`${row.label} ${on ? 'on' : 'off'}`}
-                                onclick={() => setRuleEnabled(row.legendKey, !on)}
-                            ><span class="knob"></span></button>
-                        </div>
-                        <span class="tjs-label">{row.label}</span>
-                        {#if row.duration}<span class="tjs-dur">[{row.duration}]</span>{/if}
+            <section class="tjs-group" class:fill={group.category !== 'other'}>
+                {#if group.subgroups}
+                    <!-- Noon / Meem: two sub-sections, each its own header, distributed to fill height. -->
+                    <div class="tjs-body">
+                        {#each group.subgroups as sg (sg.title)}
+                            <div class="tjs-sub">
+                                <h4>{sg.title}</h4>
+                                {#each sg.rows as row (row.label)}
+                                    {@render ruleRow(row)}
+                                {/each}
+                            </div>
+                        {/each}
                     </div>
-                {/each}
+                {:else if group.category === 'other'}
+                    <h4>{group.title}</h4>
+                    {#each group.rows ?? [] as row (row.label)}
+                        {@render ruleRow(row)}
+                    {/each}
+                {:else}
+                    <h4>{group.title}</h4>
+                    <div class="tjs-body">
+                        {#each group.rows ?? [] as row (row.label)}
+                            {@render ruleRow(row)}
+                        {/each}
+                    </div>
+                {/if}
 
                 {#if group.category === 'other'}
                     <div class="tjs-key">
@@ -133,7 +158,7 @@
                                 <span class="kcell big dashed">ا</span>
                                 <span class="kdia">
                                     <span class="kharaka pin-top dashed">
-                                        <span class="kg" style={harakaRenderStyle(FATHA)}>{FATHA}</span>
+                                        <span class="kg" style={harakaRenderStyle(DAMMA)}>{DAMMA}</span>
                                     </span>
                                     <span class="kharaka pin-bottom dashed">
                                         <span class="kg" style={harakaRenderStyle(KASRA)}>{KASRA}</span>
@@ -174,6 +199,7 @@
         font-size: var(--fs-meta);
         font-weight: 600;
         color: var(--text-primary);
+        white-space: nowrap;
     }
     .tjs-sub {
         font-weight: 400;
@@ -212,6 +238,37 @@
         font-size: var(--fs-meta);
         color: var(--text-primary);
         border-bottom: 1px solid var(--border-quiet);
+    }
+    /* Noon/Meem + Madd columns fill the shared (tallest-column) height: the body
+       grows and distributes its rows + sub-headers with even vertical spacing.
+       The Other column keeps its natural top-packed flow (its key block fills it). */
+    .tjs-group.fill {
+        display: flex;
+        flex-direction: column;
+    }
+    .tjs-body {
+        display: flex;
+        flex-direction: column;
+    }
+    .tjs-group.fill .tjs-body {
+        flex: 1 1 auto;
+        justify-content: space-between;
+        /* Baseline gap so the tallest fill column (which has no slack to
+           distribute) still breathes; shorter columns spread beyond it. */
+        gap: 5px;
+    }
+    .tjs-group.fill .tjs-row {
+        margin-bottom: 0;
+    }
+    /* Noon / Meem sub-sections — each headed by its own h4 (no redundant column
+       header); the two blocks distribute top/bottom to fill the column. */
+    .tjs-sub {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+    .tjs-sub h4 {
+        margin: 0;
     }
     .tjs-row {
         display: flex;

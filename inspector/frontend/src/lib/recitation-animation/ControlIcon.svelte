@@ -165,7 +165,9 @@
         font-weight: 700;
         letter-spacing: -0.07em;
         line-height: 1;
-        color: var(--text-primary, #eee);
+        /* Inherit the footer button's icon colour (muted → primary on hover →
+           accent on active) so TJW matches its sibling icons in every state. */
+        color: inherit;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
     .tjw-ul {

@@ -6,6 +6,7 @@ import {
     isBridgeTag,
     LEGEND,
     LEGEND_KEYS,
+    legendRows,
     silentTooltip,
     tajweedColorVar,
     tjKubraColor,
@@ -155,25 +156,37 @@ describe('tajweed-rules — tooltip names', () => {
 
     it('legend labels drop the "Madd" prefix in the Madd column', () => {
         const label = (k: string): string | undefined =>
-            LEGEND.flatMap((g) => g.rows).find((r) => r.legendKey === k)?.label;
+            LEGEND.flatMap((g) => legendRows(g)).find((r) => r.legendKey === k)?.label;
         expect(label('madd_jaiz')).toBe("Ja'iz Munfassil");
         expect(label('madd_wajib')).toBe('Wajib Muttassil');
         expect(label('madd_arid')).toBe("'Arid-lissukun");
         expect(label('izhar')).toBe('Izhar Halqi');
     });
 
-    it('groups into Noon / Meem, Madd, Other rules with idgham bila under Noon/Meem', () => {
+    it('groups into Noon / Meem, Madd, Other rules with idgham bila under Noon', () => {
         expect(LEGEND.map((g) => g.title)).toEqual(['Noon / Meem', 'Madd', 'Other rules']);
         const noonMeem = LEGEND.find((g) => g.category === 'noon_meem')!;
-        const bilaIdx = noonMeem.rows.findIndex((r) => r.legendKey === 'idgham_bila');
-        const izharIdx = noonMeem.rows.findIndex((r) => r.legendKey === 'izhar');
+        const rows = legendRows(noonMeem);
+        const bilaIdx = rows.findIndex((r) => r.legendKey === 'idgham_bila');
+        const izharIdx = rows.findIndex((r) => r.legendKey === 'izhar');
         expect(bilaIdx).toBeGreaterThanOrEqual(0);
         expect(bilaIdx).toBe(izharIdx - 1); // idgham bila ghunnah sits just above izhar halqi
     });
 
+    it('Noon / Meem splits into a Noon sub-section and a Meem (shafawi) sub-section', () => {
+        const noonMeem = LEGEND.find((g) => g.category === 'noon_meem')!;
+        expect(noonMeem.subgroups?.map((s) => s.title)).toEqual(['Noon', 'Meem']);
+        const meem = noonMeem.subgroups!.find((s) => s.title === 'Meem')!;
+        expect(meem.rows.map((r) => r.legendKey)).toEqual([
+            'ikhfaa_shafawi',
+            'idgham_shafawi',
+            'izhar_shafawi',
+        ]);
+    });
+
     it('qalqala is two coupled rows sharing the qalqala key (one kubrā)', () => {
         const other = LEGEND.find((g) => g.category === 'other')!;
-        const qalqala = other.rows.filter((r) => r.legendKey === 'qalqala');
+        const qalqala = legendRows(other).filter((r) => r.legendKey === 'qalqala');
         expect(qalqala.map((r) => r.label)).toEqual(['Qalqala Sughra', 'Qalqala Kubra']);
         expect(qalqala.filter((r) => r.kubra)).toHaveLength(1);
     });
@@ -181,11 +194,11 @@ describe('tajweed-rules — tooltip names', () => {
 
 describe('tajweed-rules — legend + defaults', () => {
     it('qalqala is the only repeated legendKey; LEGEND_KEYS dedups it', () => {
-        const keys = LEGEND.flatMap((g) => g.rows.map((r) => r.legendKey));
+        const keys = LEGEND.flatMap((g) => legendRows(g).map((r) => r.legendKey));
         const dups = keys.filter((k, i) => keys.indexOf(k) !== i);
         expect(dups).toEqual(['qalqala']);
         expect(new Set(LEGEND_KEYS).size).toBe(LEGEND_KEYS.length);
-        for (const g of LEGEND) for (const r of g.rows) expect(r.colorVar).toMatch(/^--tj-/);
+        for (const g of LEGEND) for (const r of legendRows(g)) expect(r.colorVar).toMatch(/^--tj-/);
     });
 
     it('defaults everything on except iẓhar and madd ṭabīʿī', () => {

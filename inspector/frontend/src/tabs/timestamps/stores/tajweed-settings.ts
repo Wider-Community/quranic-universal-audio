@@ -13,7 +13,7 @@
 import { writable } from 'svelte/store';
 
 import { LS_KEYS } from '../../../lib/utils/constants';
-import { DEFAULT_ENABLED, LEGEND, LEGEND_KEYS } from '../utils/tajweed-rules';
+import { DEFAULT_ENABLED, LEGEND, LEGEND_KEYS, legendRows } from '../utils/tajweed-rules';
 
 export interface RuleSetting {
     enabled: boolean;
@@ -24,7 +24,7 @@ export type TajweedSettings = Record<string, RuleSetting>;
 
 /** legendKey → its backing `--tj-*` custom property (for colour overrides). */
 const COLOR_VAR: Record<string, string> = Object.fromEntries(
-    LEGEND.flatMap((g) => g.rows.map((r) => [r.legendKey, r.colorVar])),
+    LEGEND.flatMap((g) => legendRows(g).map((r) => [r.legendKey, r.colorVar])),
 );
 
 function defaults(): TajweedSettings {

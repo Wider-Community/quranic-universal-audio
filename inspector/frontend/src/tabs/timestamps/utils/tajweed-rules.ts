@@ -253,25 +253,44 @@ export interface LegendRow {
     kubra?: boolean;
 }
 
-export interface LegendGroup {
-    category: RuleCategory;
+/** A labelled sub-section within a column (the Noon / Meem split). */
+export interface LegendSubgroup {
     title: string;
     rows: LegendRow[];
 }
 
+export interface LegendGroup {
+    category: RuleCategory;
+    title: string;
+    /** Flat row list (Madd, Other). Mutually exclusive with `subgroups`. */
+    rows?: LegendRow[];
+    /** Labelled sub-sections (Noon / Meem) stacked within one column. */
+    subgroups?: LegendSubgroup[];
+}
+
+/** Every row of a group, flat — whether it carries `rows` or `subgroups`. */
+export function legendRows(group: LegendGroup): LegendRow[] {
+    return group.rows ?? group.subgroups?.flatMap((s) => s.rows) ?? [];
+}
+
 /** The legend / settings panel structure — one row per legendKey, grouped by
- *  category. Order is the display order. */
+ *  category. Order is the display order. Noon / Meem splits into two stacked
+ *  sub-sections: noon (+ ghunnah) rules, then the three shafawi (mīm) rules. */
 export const LEGEND: LegendGroup[] = [
-    { category: 'noon_meem', title: 'Noon / Meem', rows: [
-        { legendKey: 'ghunnah', label: 'Ghunnah', colorVar: '--tj-ghunnah', duration: '2' },
-        { legendKey: 'ikhfaa', label: 'Ikhfaa', colorVar: '--tj-ikhfaa', duration: '2' },
-        { legendKey: 'ikhfaa_shafawi', label: 'Ikhfaa Shafawi', colorVar: '--tj-ikhfaa-shafawi', duration: '2' },
-        { legendKey: 'iqlab', label: 'Iqlab', colorVar: '--tj-iqlab', duration: '2' },
-        { legendKey: 'idgham_ghunnah', label: 'Idgham Ghunnah', colorVar: '--tj-idgham-ghunnah', duration: '2' },
-        { legendKey: 'idgham_shafawi', label: 'Idgham Shafawi', colorVar: '--tj-idgham-shafawi', duration: '2' },
-        { legendKey: 'idgham_bila', label: 'Idgham bila Ghunnah', colorVar: '--tj-idgham-bila', duration: '1' },
-        { legendKey: 'izhar', label: 'Izhar Halqi', colorVar: '--tj-izhar-halqi', duration: '1' },
-        { legendKey: 'izhar_shafawi', label: 'Izhar Shafawi', colorVar: '--tj-izhar-shafawi', duration: '1' },
+    { category: 'noon_meem', title: 'Noon / Meem', subgroups: [
+        { title: 'Noon', rows: [
+            { legendKey: 'ghunnah', label: 'Ghunnah', colorVar: '--tj-ghunnah', duration: '2' },
+            { legendKey: 'ikhfaa', label: 'Ikhfaa', colorVar: '--tj-ikhfaa', duration: '2' },
+            { legendKey: 'iqlab', label: 'Iqlab', colorVar: '--tj-iqlab', duration: '2' },
+            { legendKey: 'idgham_ghunnah', label: 'Idgham Ghunnah', colorVar: '--tj-idgham-ghunnah', duration: '2' },
+            { legendKey: 'idgham_bila', label: 'Idgham bila Ghunnah', colorVar: '--tj-idgham-bila', duration: '1' },
+            { legendKey: 'izhar', label: 'Izhar Halqi', colorVar: '--tj-izhar-halqi', duration: '1' },
+        ] },
+        { title: 'Meem', rows: [
+            { legendKey: 'ikhfaa_shafawi', label: 'Ikhfaa Shafawi', colorVar: '--tj-ikhfaa-shafawi', duration: '2' },
+            { legendKey: 'idgham_shafawi', label: 'Idgham Shafawi', colorVar: '--tj-idgham-shafawi', duration: '2' },
+            { legendKey: 'izhar_shafawi', label: 'Izhar Shafawi', colorVar: '--tj-izhar-shafawi', duration: '1' },
+        ] },
     ] },
     // Labels drop the "Madd" prefix — the group title already carries it.
     { category: 'madd', title: 'Madd', rows: [
@@ -296,7 +315,7 @@ export const LEGEND: LegendGroup[] = [
 
 /** Every distinct legendKey in display order (qalqala's two rows collapse to one). */
 export const LEGEND_KEYS: string[] = [
-    ...new Set(LEGEND.flatMap((g) => g.rows.map((r) => r.legendKey))),
+    ...new Set(LEGEND.flatMap((g) => legendRows(g).map((r) => r.legendKey))),
 ];
 
 /** First-load enabled state: everything on EXCEPT iẓhar (both) and madd ṭabīʿī. */
