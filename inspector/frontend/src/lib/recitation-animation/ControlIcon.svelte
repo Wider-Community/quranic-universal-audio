@@ -4,6 +4,12 @@
      * source for the chosen glyphs (granularity bar/dots, eye states, droplet,
      * filmstrip motion, size −/+) so the section header and the filmstrip edge
      * render identical icons. All inherit `currentColor`.
+     *
+     * `tajweed` is the one exception: rather than an SVG glyph it renders a real
+     * analysis cell (the same 3px-rounded shape) reading `TJW`, with three of the
+     * cell's own stacked underline bars — each bar cycling three `--tj-*` palette
+     * hues — so the icon literally is the stacked-underline feature it opens. It
+     * uses the live palette vars, not `currentColor`.
      */
     interface Props {
         name:
@@ -23,7 +29,7 @@
     // text so they inherit currentColor; an Arabic-capable system font shapes
     // the glyphs.
     const AR = 'font-family="Tahoma,\'Segoe UI\',\'Noto Naskh Arabic\',sans-serif" font-weight="600" fill="currentColor" text-anchor="middle" direction="rtl"';
-    const P: Record<Props['name'], string> = {
+    const P: Partial<Record<Props['name'], string>> = {
         'gran-word':
             `<text x="12" y="16.5" font-size="12.5" ${AR}>أبت</text>`,
         'gran-letter':
@@ -73,11 +79,6 @@
             + '<line x1="16.8" y1="10" x2="16.8" y2="14"/>'
             + '<line x1="20" y1="7" x2="20" y2="17"/>'
             + '</g>',
-        // Tajweed rules: an Arabic letter over a thick colour underline (the
-        // per-cell tajweed bar this panel configures).
-        'tajweed':
-            `<text x="12" y="14" font-size="13" ${AR}>ب</text>`
-            + '<line x1="5" y1="19" x2="19" y2="19" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>',
         // Translations: a globe (languages).
         'globe':
             '<circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.8"/>'
@@ -103,12 +104,79 @@
 </script>
 
 <span class="ci" style:width="{size}px" style:height="{size}px" aria-hidden="true">
-    <!-- Static internal SVG table (no user input) — safe to inline. -->
-    <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-    {@html `<svg viewBox="0 0 24 24" width="100%" height="100%">${P[name] ?? ''}</svg>`}
+    {#if name === 'tajweed'}
+        <span class="tjw" style:font-size="{size}px">
+            <span class="tjw-txt">TJW</span>
+            <span class="tjw-ul">
+                <span class="tjw-bar">
+                    <i style:background="var(--tj-qalqala)"></i>
+                    <i style:background="var(--tj-ghunnah)"></i>
+                    <i style:background="var(--tj-idgham-ghunnah)"></i>
+                </span>
+                <span class="tjw-bar">
+                    <i style:background="var(--tj-ikhfaa)"></i>
+                    <i style:background="var(--tj-tafkheem)"></i>
+                    <i style:background="var(--tj-izhar-halqi)"></i>
+                </span>
+                <span class="tjw-bar">
+                    <i style:background="var(--tj-madd-wajib)"></i>
+                    <i style:background="var(--tj-idgham-bila)"></i>
+                    <i style:background="var(--tj-madd-arid)"></i>
+                </span>
+            </span>
+        </span>
+    {:else}
+        <!-- Static internal SVG table (no user input) — safe to inline. -->
+        <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+        {@html `<svg viewBox="0 0 24 24" width="100%" height="100%">${P[name] ?? ''}</svg>`}
+    {/if}
 </span>
 
 <style>
     .ci { display: inline-flex; line-height: 0; }
     .ci :global(svg) { display: block; }
+
+    /* The tajweed icon is a real analysis cell (3px-rounded, dark inset) reading
+       TJW, with three of its own stacked underline bars — each bar cycling three
+       palette hues. The cell clips the bars to its rounded bottom; the bar ends
+       round so the underline bleeds to the edge like the live per-cell stack. */
+    .tjw {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #0f0f23;
+        border: 1px solid var(--border-default, #3a3a55);
+        border-radius: 3px;
+        overflow: hidden;
+    }
+    .tjw-txt {
+        font-size: 0.4em;
+        font-weight: 700;
+        letter-spacing: -0.05em;
+        line-height: 1;
+        margin-bottom: 0.34em;
+        color: var(--text-primary, #eee);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    .tjw-ul {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        display: flex;
+        flex-direction: column;
+    }
+    .tjw-bar { display: flex; height: 0.12em; }
+    .tjw-bar i { flex: 1; display: block; }
+    .tjw-bar i:first-child {
+        border-top-left-radius: 1.5px;
+        border-bottom-left-radius: 1.5px;
+    }
+    .tjw-bar i:last-child {
+        border-top-right-radius: 1.5px;
+        border-bottom-right-radius: 1.5px;
+    }
 </style>

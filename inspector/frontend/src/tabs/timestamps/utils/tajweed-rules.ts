@@ -20,7 +20,7 @@
  */
 
 export type StackLayer = 'base' | 'merge' | 'top';
-export type RuleCategory = 'ghunnah' | 'madd' | 'heaviness' | 'idgham';
+export type RuleCategory = 'noon_meem' | 'madd' | 'other';
 
 interface RuleDef {
     /** groups tags into one legend row / enable toggle / colour (e.g. both qalqala
@@ -53,7 +53,7 @@ const COLOR_RULES: Record<string, RuleDef> = {
     idgham_shafawi: { legendKey: 'idgham_shafawi', colorVar: '--tj-idgham-shafawi', tooltip: 'Idgham Shafawi', stack: 'base' },
     // ── Madd ──────────────────────────────────────────────────────────────────
     madd_lazim: { legendKey: 'madd_lazim', colorVar: '--tj-madd-lazim', tooltip: 'Madd Lazim', stack: 'base' },
-    madd_wajib_muttasil: { legendKey: 'madd_wajib', colorVar: '--tj-madd-wajib', tooltip: 'Madd Wajib Muttasil', stack: 'base' },
+    madd_wajib_muttasil: { legendKey: 'madd_wajib', colorVar: '--tj-madd-wajib', tooltip: 'Madd Wajib Muttassil', stack: 'base' },
     madd_jaiz_munfasil: { legendKey: 'madd_jaiz', colorVar: '--tj-madd-jaiz', tooltip: "Madd Ja'iz Munfassil", stack: 'base' },
     madd_arid_lissukun: { legendKey: 'madd_arid', colorVar: '--tj-madd-arid', tooltip: "Madd 'Arid-lissukun", stack: 'base' },
     madd_leen: { legendKey: 'madd_leen', colorVar: '--tj-madd-leen', tooltip: 'Madd Leen', stack: 'base' },
@@ -197,8 +197,10 @@ export interface LegendRow {
     colorVar: string;
     /** length in ḥarakāt (e.g. '2', '4/5'); omitted for rules with no count. */
     duration?: string;
-    /** the qalqala row renders two demo cells (ṣughrā bar vs kubrā fill). */
-    demo?: 'qalqala';
+    /** the qalqala kubrā row — its swatch previews the side-wrap geometry. Couples
+     *  to the ṣughrā row via the shared `qalqala` legendKey (one colour + one toggle
+     *  drive both rows). */
+    kubra?: boolean;
 }
 
 export interface LegendGroup {
@@ -210,38 +212,42 @@ export interface LegendGroup {
 /** The legend / settings panel structure — one row per legendKey, grouped by
  *  category. Order is the display order. */
 export const LEGEND: LegendGroup[] = [
-    { category: 'ghunnah', title: 'Ghunnah', rows: [
+    { category: 'noon_meem', title: 'Noon / Meem', rows: [
         { legendKey: 'ghunnah', label: 'Ghunnah', colorVar: '--tj-ghunnah', duration: '2' },
         { legendKey: 'ikhfaa', label: 'Ikhfaa', colorVar: '--tj-ikhfaa', duration: '2' },
         { legendKey: 'ikhfaa_shafawi', label: 'Ikhfaa Shafawi', colorVar: '--tj-ikhfaa-shafawi', duration: '2' },
         { legendKey: 'iqlab', label: 'Iqlab', colorVar: '--tj-iqlab', duration: '2' },
         { legendKey: 'idgham_ghunnah', label: 'Idgham Ghunnah', colorVar: '--tj-idgham-ghunnah', duration: '2' },
         { legendKey: 'idgham_shafawi', label: 'Idgham Shafawi', colorVar: '--tj-idgham-shafawi', duration: '2' },
+        { legendKey: 'idgham_bila', label: 'Idgham bila Ghunnah', colorVar: '--tj-idgham-bila', duration: '1' },
         { legendKey: 'izhar', label: 'Izhar Halqi', colorVar: '--tj-izhar-halqi', duration: '1' },
         { legendKey: 'izhar_shafawi', label: 'Izhar Shafawi', colorVar: '--tj-izhar-shafawi', duration: '1' },
     ] },
+    // Labels drop the "Madd" prefix — the group title already carries it.
     { category: 'madd', title: 'Madd', rows: [
-        { legendKey: 'madd_lazim', label: 'Madd Lazim', colorVar: '--tj-madd-lazim', duration: '6' },
-        { legendKey: 'madd_wajib', label: 'Madd Wajib Muttasil', colorVar: '--tj-madd-wajib', duration: '4/5' },
-        { legendKey: 'madd_jaiz', label: "Madd Ja'iz Munfassil", colorVar: '--tj-madd-jaiz', duration: '2/4/5' },
+        { legendKey: 'madd_lazim', label: 'Lazim', colorVar: '--tj-madd-lazim', duration: '6' },
+        { legendKey: 'madd_wajib', label: 'Wajib Muttassil', colorVar: '--tj-madd-wajib', duration: '4/5' },
+        { legendKey: 'madd_jaiz', label: "Ja'iz Munfassil", colorVar: '--tj-madd-jaiz', duration: '2/4/5' },
         { legendKey: 'madd_arid', label: "'Arid-lissukun", colorVar: '--tj-madd-arid', duration: '2/4/6' },
-        { legendKey: 'madd_leen', label: 'Madd Leen', colorVar: '--tj-madd-leen', duration: '2/4/6' },
-        { legendKey: 'madd_tabii', label: "Madd Tabi'i", colorVar: '--tj-madd-tabii', duration: '2' },
+        { legendKey: 'madd_leen', label: 'Leen', colorVar: '--tj-madd-leen', duration: '2/4/6' },
+        { legendKey: 'madd_tabii', label: "Tabi'i", colorVar: '--tj-madd-tabii', duration: '2' },
     ] },
-    { category: 'heaviness', title: 'Heaviness', rows: [
+    // Qalqala is two rows (ṣughrā / kubrā) coupled by the shared `qalqala` legendKey —
+    // one colour + one toggle drive both; the kubrā row's swatch previews the wrap.
+    { category: 'other', title: 'Other rules', rows: [
         { legendKey: 'tafkheem', label: 'Tafkheem', colorVar: '--tj-tafkheem' },
-        { legendKey: 'qalqala', label: 'Qalqala', colorVar: '--tj-qalqala', demo: 'qalqala' },
-    ] },
-    { category: 'idgham', title: 'Idgham', rows: [
-        { legendKey: 'idgham_bila', label: 'Bila Ghunnah', colorVar: '--tj-idgham-bila' },
-        { legendKey: 'mutamathilayn', label: 'Mutamathilayn', colorVar: '--tj-mutamathilayn' },
-        { legendKey: 'mutaqaribayn', label: 'Mutaqaribayn', colorVar: '--tj-mutaqaribayn' },
-        { legendKey: 'mutajanisayn', label: 'Mutajanisayn', colorVar: '--tj-mutajanisayn' },
+        { legendKey: 'qalqala', label: 'Qalqala Sughra', colorVar: '--tj-qalqala' },
+        { legendKey: 'qalqala', label: 'Qalqala Kubra', colorVar: '--tj-qalqala', kubra: true },
+        { legendKey: 'mutamathilayn', label: 'Idgham Mutamathilayn', colorVar: '--tj-mutamathilayn' },
+        { legendKey: 'mutaqaribayn', label: 'Idgham Mutaqaribayn', colorVar: '--tj-mutaqaribayn' },
+        { legendKey: 'mutajanisayn', label: 'Idgham Mutajanisayn', colorVar: '--tj-mutajanisayn' },
     ] },
 ];
 
-/** Every legendKey in display order. */
-export const LEGEND_KEYS: string[] = LEGEND.flatMap((g) => g.rows.map((r) => r.legendKey));
+/** Every distinct legendKey in display order (qalqala's two rows collapse to one). */
+export const LEGEND_KEYS: string[] = [
+    ...new Set(LEGEND.flatMap((g) => g.rows.map((r) => r.legendKey))),
+];
 
 /** First-load enabled state: everything on EXCEPT iẓhar (both) and madd ṭabīʿī. */
 const DEFAULT_OFF = new Set(['izhar', 'izhar_shafawi', 'madd_tabii']);

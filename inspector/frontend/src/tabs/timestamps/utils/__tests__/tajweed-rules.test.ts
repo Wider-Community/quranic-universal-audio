@@ -145,7 +145,7 @@ describe('tajweed-rules — tooltip names', () => {
 
     it('uses the full second-pass tooltip spellings', () => {
         expect(badgeForTag('madd_jaiz_munfasil')!.tooltip).toBe("Madd Ja'iz Munfassil");
-        expect(badgeForTag('madd_wajib_muttasil')!.tooltip).toBe('Madd Wajib Muttasil');
+        expect(badgeForTag('madd_wajib_muttasil')!.tooltip).toBe('Madd Wajib Muttassil');
         expect(badgeForTag('madd_arid_lissukun')!.tooltip).toBe("Madd 'Arid-lissukun");
         expect(badgeForTag('madd_tabii')!.tooltip).toBe("Madd Tabi'i");
         expect(badgeForTag('izhar_halqi')!.tooltip).toBe('Izhar Halqi');
@@ -153,19 +153,38 @@ describe('tajweed-rules — tooltip names', () => {
         expect(badgeForTag('idgham_mutajanisayn_naqis')!.tooltip).toBe('Idgham Mutajanisayn Naqis');
     });
 
-    it('shows the matching legend labels (arid drops the "Madd" prefix)', () => {
+    it('legend labels drop the "Madd" prefix in the Madd column', () => {
         const label = (k: string): string | undefined =>
             LEGEND.flatMap((g) => g.rows).find((r) => r.legendKey === k)?.label;
-        expect(label('madd_jaiz')).toBe("Madd Ja'iz Munfassil");
+        expect(label('madd_jaiz')).toBe("Ja'iz Munfassil");
+        expect(label('madd_wajib')).toBe('Wajib Muttassil');
         expect(label('madd_arid')).toBe("'Arid-lissukun");
         expect(label('izhar')).toBe('Izhar Halqi');
+    });
+
+    it('groups into Noon / Meem, Madd, Other rules with idgham bila under Noon/Meem', () => {
+        expect(LEGEND.map((g) => g.title)).toEqual(['Noon / Meem', 'Madd', 'Other rules']);
+        const noonMeem = LEGEND.find((g) => g.category === 'noon_meem')!;
+        const bilaIdx = noonMeem.rows.findIndex((r) => r.legendKey === 'idgham_bila');
+        const izharIdx = noonMeem.rows.findIndex((r) => r.legendKey === 'izhar');
+        expect(bilaIdx).toBeGreaterThanOrEqual(0);
+        expect(bilaIdx).toBe(izharIdx - 1); // idgham bila ghunnah sits just above izhar halqi
+    });
+
+    it('qalqala is two coupled rows sharing the qalqala key (one kubrā)', () => {
+        const other = LEGEND.find((g) => g.category === 'other')!;
+        const qalqala = other.rows.filter((r) => r.legendKey === 'qalqala');
+        expect(qalqala.map((r) => r.label)).toEqual(['Qalqala Sughra', 'Qalqala Kubra']);
+        expect(qalqala.filter((r) => r.kubra)).toHaveLength(1);
     });
 });
 
 describe('tajweed-rules — legend + defaults', () => {
-    it('every legend row resolves to a colour var, no duplicate keys', () => {
+    it('qalqala is the only repeated legendKey; LEGEND_KEYS dedups it', () => {
         const keys = LEGEND.flatMap((g) => g.rows.map((r) => r.legendKey));
-        expect(new Set(keys).size).toBe(keys.length);
+        const dups = keys.filter((k, i) => keys.indexOf(k) !== i);
+        expect(dups).toEqual(['qalqala']);
+        expect(new Set(LEGEND_KEYS).size).toBe(LEGEND_KEYS.length);
         for (const g of LEGEND) for (const r of g.rows) expect(r.colorVar).toMatch(/^--tj-/);
     });
 
