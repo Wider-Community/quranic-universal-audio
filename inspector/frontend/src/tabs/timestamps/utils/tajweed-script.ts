@@ -6,6 +6,8 @@
  * owns these script conventions; this keeps them out of the component body.
  */
 
+import type { TajweedRule } from '../../../lib/types/generated/schemas';
+
 // --- diacritic codepoints ----------------------------------------------------
 export const FATHA = 'َ'; // U+064E
 export const DAMMA = 'ُ'; // U+064F
@@ -42,12 +44,14 @@ export const OPEN_TANWEEN: Record<string, string> = {
 };
 
 /** Tags whose tanwīn assimilates → render the OPEN form (else stacked). Mirrors
- *  the phonemizer's `TANWEEN_ASSIMILATES_VALUES`; iẓhar carries no tanwīn tag. */
-export const OPEN_TANWEEN_TAGS = new Set([
+ *  the phonemizer's `TANWEEN_ASSIMILATES_VALUES`; iẓhar carries no tanwīn tag. The
+ *  literal array is typed against `TajweedRule` so a rename is a compile error. */
+const OPEN_TANWEEN_RULES: readonly TajweedRule[] = [
     'idgham_ghunnah_tanween',
     'idgham_bila_ghunnah_tanween',
     'ikhfaa_tanween',
-]);
+];
+export const OPEN_TANWEEN_TAGS: ReadonlySet<string> = new Set(OPEN_TANWEEN_RULES);
 
 /** First combining mark of `chars`, skipping a leading shadda (shadda+haraka
  *  composed → the second mark is the haraka). */

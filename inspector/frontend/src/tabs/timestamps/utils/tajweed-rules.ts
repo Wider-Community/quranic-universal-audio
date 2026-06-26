@@ -19,8 +19,28 @@
  * runtime by the settings store).
  */
 
+import type { TajweedRule } from '../../../lib/types/generated/schemas';
+
 export type StackLayer = 'base' | 'merge' | 'top';
 export type RuleCategory = 'noon_meem' | 'madd' | 'other';
+
+/** Tags the FE synthesizes itself — NOT phonemizer `TajweedRule` members, so the
+ *  registry allows them alongside the producer vocabulary. Each is documented at
+ *  its synthesis site: `izhar_*` (`UnifiedDisplay._izharTag`), `iqlab_silent_noon`
+ *  (`cell-special-cases.ts`), `iltiqaa` / `iltiqaa_kasra` + `madd_iwad` +
+ *  `allah_dagger_alef` (the SDK annotator). */
+export type FeSynthesizedTag =
+    | 'izhar_halqi'
+    | 'izhar_shafawi'
+    | 'iqlab_silent_noon'
+    | 'iltiqaa'
+    | 'iltiqaa_kasra'
+    | 'madd_iwad'
+    | 'allah_dagger_alef';
+
+/** Any tag a cell can carry: the phonemizer producer vocabulary (`TajweedRule`,
+ *  codegen'd from `qua_shared`) plus the FE-owned synthesized tags. */
+export type TajweedTag = TajweedRule | FeSynthesizedTag;
 
 interface RuleDef {
     /** groups tags into one legend row / enable toggle / colour (e.g. both qalqala
@@ -38,8 +58,10 @@ interface RuleDef {
 }
 
 /** Every tag that draws a coloured underline → its rule definition. Tags sharing a
- *  `legendKey` share colour + toggle but keep their own tooltip. */
-const COLOR_RULES: Record<string, RuleDef> = {
+ *  `legendKey` share colour + toggle but keep their own tooltip. `satisfies`
+ *  constrains keys to known tags (a phonemizer rename/typo is a compile error)
+ *  while preserving the literal key set for the completeness check below. */
+const COLOR_RULES = {
     // ── Ghunnah / nasalization ────────────────────────────────────────────────
     noon_ghunnah: { legendKey: 'ghunnah', colorVar: '--tj-ghunnah', tooltip: 'Ghunnah', stack: 'base' },
     meem_ghunnah: { legendKey: 'ghunnah', colorVar: '--tj-ghunnah', tooltip: 'Ghunnah', stack: 'base' },
@@ -77,10 +99,10 @@ const COLOR_RULES: Record<string, RuleDef> = {
     // ── Iẓhar (FE-synthesized fallback for a sounding sākin noon/meem/tanwīn) ──
     izhar_halqi: { legendKey: 'izhar', colorVar: '--tj-izhar-halqi', tooltip: 'Izhar Halqi', stack: 'base' },
     izhar_shafawi: { legendKey: 'izhar_shafawi', colorVar: '--tj-izhar-shafawi', tooltip: 'Izhar Shafawi', stack: 'base' },
-};
+} satisfies Partial<Record<TajweedTag, RuleDef>>;
 
 /** Silent rules — hover tooltip only, no colour and no legend row. */
-const SILENT_TOOLTIPS: Record<string, string> = {
+const SILENT_TOOLTIPS = {
     vowel_silent: 'Silent vowel',
     hamza_wasl_silent: 'Hamzat-al-wasl (silent)',
     lam_shamsiyah: 'Lam Shamsiyyah',
@@ -90,7 +112,25 @@ const SILENT_TOOLTIPS: Record<string, string> = {
     // The ن of an iqlab noon falls silent (the synthesized mini-meem owns the
     // nasal + the lone underline) — name it on hover, draw no bar.
     iqlab_silent_noon: 'Iqlab',
-};
+} satisfies Partial<Record<TajweedTag, string>>;
+
+// Compile-time completeness: every phonemizer rule must be classified — either
+// rendered (a COLOR_RULES / SILENT_TOOLTIPS entry) or explicitly pipeline-only
+// (carried in the shard but intentionally drawn with no badge/tooltip: the
+// hamzat-waṣl ibtidāʾ vowels + the raw tanwīn-iltiqāʾ the SDK rewrites). A new
+// phonemizer rule (e.g. a future riwāyah) lands in `TajweedRule` via codegen and
+// breaks this assertion until classified — never a silently-dropped underline.
+const PIPELINE_ONLY_TAGS = [
+    'hamza_wasl_fatha',
+    'hamza_wasl_kasra',
+    'hamza_wasl_damma',
+    'iltiqaa_sakinayn_tanween',
+] as const satisfies readonly TajweedRule[];
+
+type RenderedTag = keyof typeof COLOR_RULES | keyof typeof SILENT_TOOLTIPS;
+type UnclassifiedRule = Exclude<TajweedRule, RenderedTag | (typeof PIPELINE_ONLY_TAGS)[number]>;
+const _assertAllRulesClassified: UnclassifiedRule extends never ? true : UnclassifiedRule = true;
+void _assertAllRulesClassified;
 
 /** One resolved underline badge a cell carries (settings-independent). */
 export interface TjBadge {
@@ -105,7 +145,7 @@ export interface TjBadge {
 /** Resolve one tag into its badge, or null if the tag draws no underline. */
 export function badgeForTag(tag: string | null | undefined): TjBadge | null {
     if (!tag) return null;
-    const def = COLOR_RULES[tag];
+    const def = (COLOR_RULES as Partial<Record<string, RuleDef>>)[tag];
     if (!def) return null;
     return { ...def, kubra: tag === 'qalqala_kubra' };
 }
@@ -135,7 +175,17 @@ export function badgesForTags(tags: (string | null | undefined)[]): TjBadge[] {
 /** The silent-rule hover name for a tag (the named silent rules + the iltiqaa
  *  kasra), or null. Independent of the colour/legend set. */
 export function silentTooltip(tag: string | null | undefined): string | null {
-    return tag ? (SILENT_TOOLTIPS[tag] ?? null) : null;
+    return tag ? ((SILENT_TOOLTIPS as Partial<Record<string, string>>)[tag] ?? null) : null;
+}
+
+/** All tags sharing a legend toggle/colour (e.g. both qalqala subtypes) — derived
+ *  from the registry so callers never re-list tag keys. */
+export function tagsForLegend(legendKey: string): Set<string> {
+    return new Set(
+        Object.entries(COLOR_RULES)
+            .filter(([, def]) => def.legendKey === legendKey)
+            .map(([tag]) => tag),
+    );
 }
 
 // ── Underline geometry ────────────────────────────────────────────────────────
@@ -259,14 +309,15 @@ export const DEFAULT_ENABLED: Record<string, boolean> = Object.fromEntries(
 
 /** The `var(--tj-*)` badge colour for a tag, or null if the rule is uncoloured. */
 export function tajweedColorVar(tag: string | null | undefined): string | null {
-    const def = tag ? COLOR_RULES[tag] : undefined;
+    const def = tag ? (COLOR_RULES as Partial<Record<string, RuleDef>>)[tag] : undefined;
     return def ? `var(${def.colorVar})` : null;
 }
 
 /** Cross-word idgham tags — their phoneme renders as a single bridge tile between
  *  two words; the letter row colours both involved letters (source holds the tag,
- *  receiver gets it by `share_group` propagation). */
-export const CROSS_WORD_IDGHAM_TAGS: ReadonlySet<string> = new Set([
+ *  receiver gets it by `share_group` propagation). The literal array is typed
+ *  against `TajweedRule` so a rename surfaces here too. */
+const CROSS_WORD_IDGHAM: readonly TajweedRule[] = [
     'idgham_ghunnah_noon',
     'idgham_ghunnah_tanween',
     'idgham_bila_ghunnah_noon',
@@ -276,7 +327,8 @@ export const CROSS_WORD_IDGHAM_TAGS: ReadonlySet<string> = new Set([
     'idgham_mutaqaribayn',
     'idgham_mutajanisayn_kamil',
     'idgham_mutajanisayn_naqis',
-]);
+];
+export const CROSS_WORD_IDGHAM_TAGS: ReadonlySet<string> = new Set(CROSS_WORD_IDGHAM);
 
 /** True for a tag whose phoneme renders as a cross-word bridge (not an inline box). */
 export function isBridgeTag(tag: string | null | undefined): boolean {

@@ -32,6 +32,7 @@ from .bucket.segment import (
     FlagFollowUp,
     SegmentFlag,
 )
+from .bucket.tajweed_vocab import TajweedRule
 from .bucket.ts_job_record import TsJobRecord, TsJobSettings
 from .bucket.ts_shard import TsShardCell, TsShardDoc, TsShardMeta, TsShardSegment, TsShardWord
 from .bucket.ts_validation import TsValidationDoc, TsValidationMeta, TsValidationVerse
@@ -276,6 +277,7 @@ __all__ = [
     "TsShardWord",
     "CellRole",
     "CellStatus",
+    "TajweedRule",
     "TsValidationDoc",
     "TsValidationMeta",
     "TsValidationVerse",

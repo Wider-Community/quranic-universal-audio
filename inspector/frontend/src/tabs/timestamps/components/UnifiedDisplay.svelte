@@ -42,6 +42,7 @@
         badgesForTags,
         isBridgeTag,
         silentTooltip,
+        tagsForLegend,
         tjKubraColor,
         tjRuleNames,
         tjShadow,
@@ -507,8 +508,9 @@
         return s === Infinity ? { start: null, end: null } : { start: s, end: e };
     }
 
-    /** Qalqala cell tags (ṣughrā mid-word, kubrā at a stop). */
-    const QALQALA_TAGS = new Set(['qalqala_sughra', 'qalqala_kubra']);
+    /** Qalqala cell tags (ṣughrā mid-word, kubrā at a stop) — derived from the
+     *  registry so the tag keys live in one place. */
+    const QALQALA_TAGS = tagsForLegend('qalqala');
 
     /** A qalqala consonant's render-only echo `Q` immediately follows its phoneme
      *  in `intervals[]` but is in NO cell's indexable `phonemeIndices` (excluded by

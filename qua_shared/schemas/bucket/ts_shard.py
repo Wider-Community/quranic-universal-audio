@@ -56,6 +56,7 @@ from pydantic import BaseModel, ConfigDict, Field, RootModel, model_validator
 
 from .._extras import strip_and_warn
 from .cell_vocab import CellRole, CellStatus
+from .tajweed_vocab import TajweedRule
 
 # Letter timing triple: [char, start_ms, end_ms]; timings may be null when the
 # aligner couldn't place an individual letter. A 4th slot ``silent`` (bool) is
@@ -123,9 +124,11 @@ class TsShardCell(BaseModel):
 
     The shard stores cells positionally (``CellTiming``) and they are read via
     ``ts_shard_cells.parse_cell`` — this model is the codegen vehicle that emits
-    ``CellRole`` / ``CellStatus`` as TS string unions for the FE (json2ts drops
-    enums referenced only inside a positional tuple), and documents the row's
-    fields by name.
+    ``CellRole`` / ``CellStatus`` / ``TajweedRule`` as TS string unions for the FE
+    (json2ts drops enums referenced only inside a positional tuple), and documents
+    the row's fields by name. It is never validated against real shard data (the
+    positional ``CellTiming`` is), so typing the rule slots as ``TajweedRule`` is a
+    codegen convenience that does not constrain the byte-pass-through read.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -135,10 +138,10 @@ class TsShardCell(BaseModel):
     status: CellStatus
     phoneme_indices: list[int]
     source_letter_index: int
-    tag: str | None = None
+    tag: TajweedRule | None = None
     share_group: int | None = None
-    phoneme_rule_tags: list[str | None] | None = None
-    secondary_tags: list[str] | None = None
+    phoneme_rule_tags: list[TajweedRule | None] | None = None
+    secondary_tags: list[TajweedRule] | None = None
 
 
 class TsShardSegment(BaseModel):

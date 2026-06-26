@@ -55,6 +55,40 @@ export type SegValAnyItem =
 export type AudioCategory = "by_surah" | "by_ayah";
 export type CellRole = "base" | "haraka" | "tanween" | "madd";
 export type CellStatus = "present" | "inserted" | "dropped" | "replaced" | "shortened";
+export type TajweedRule =
+  | "noon_ghunnah"
+  | "meem_ghunnah"
+  | "ikhfaa_noon"
+  | "ikhfaa_tanween"
+  | "ikhfaa_shafawi"
+  | "iqlab_noon"
+  | "iqlab_tanween"
+  | "idgham_ghunnah_noon"
+  | "idgham_ghunnah_tanween"
+  | "idgham_shafawi"
+  | "vowel_silent"
+  | "hamza_wasl_silent"
+  | "lam_shamsiyah"
+  | "idgham_bila_ghunnah_noon"
+  | "idgham_bila_ghunnah_tanween"
+  | "idgham_mutamathilayn"
+  | "idgham_mutaqaribayn"
+  | "idgham_mutajanisayn_kamil"
+  | "silent_iltiqaa_sakinayn"
+  | "tafkheem"
+  | "qalqala_sughra"
+  | "qalqala_kubra"
+  | "hamza_wasl_fatha"
+  | "hamza_wasl_kasra"
+  | "hamza_wasl_damma"
+  | "iltiqaa_sakinayn_tanween"
+  | "idgham_mutajanisayn_naqis"
+  | "madd_tabii"
+  | "madd_wajib_muttasil"
+  | "madd_jaiz_munfasil"
+  | "madd_lazim"
+  | "madd_arid_lissukun"
+  | "madd_leen";
 /**
  * One encoded word inside a segment — a flat positional tuple.
  *
@@ -1994,9 +2028,11 @@ export interface TsReciterFlags {
  *
  * The shard stores cells positionally (``CellTiming``) and they are read via
  * ``ts_shard_cells.parse_cell`` — this model is the codegen vehicle that emits
- * ``CellRole`` / ``CellStatus`` as TS string unions for the FE (json2ts drops
- * enums referenced only inside a positional tuple), and documents the row's
- * fields by name.
+ * ``CellRole`` / ``CellStatus`` / ``TajweedRule`` as TS string unions for the FE
+ * (json2ts drops enums referenced only inside a positional tuple), and documents
+ * the row's fields by name. It is never validated against real shard data (the
+ * positional ``CellTiming`` is), so typing the rule slots as ``TajweedRule`` is a
+ * codegen convenience that does not constrain the byte-pass-through read.
  */
 export interface TsShardCell {
   chars: string;
@@ -2004,10 +2040,10 @@ export interface TsShardCell {
   status: CellStatus;
   phoneme_indices: number[];
   source_letter_index: number;
-  tag?: string | null;
+  tag?: TajweedRule | null;
   share_group?: number | null;
-  phoneme_rule_tags?: (string | null)[] | null;
-  secondary_tags?: string[] | null;
+  phoneme_rule_tags?: (TajweedRule | null)[] | null;
+  secondary_tags?: TajweedRule[] | null;
 }
 /**
  * The decompressed body of one chapter shard: ``_meta`` + ``segments[]``.

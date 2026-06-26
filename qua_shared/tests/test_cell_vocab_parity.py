@@ -1,9 +1,12 @@
-"""Parity guard: the qua_shared cell vocab mirrors the phonemizer's, and the
-schema coerces a v6 cell row's role/status to the enums.
+"""Parity guard: the qua_shared cell + tajweed vocab mirrors the phonemizer's, and
+the schema coerces a v6 cell row's role/status to the enums.
 
 qua_shared cannot import the phonemizer at module load (it must stay off the
-inspector runtime import path), so ``CellRole`` / ``CellStatus`` are a mirror;
-this asserts they never drift from the phonemizer's canonical values.
+inspector runtime import path), so ``CellRole`` / ``CellStatus`` / ``TajweedRule``
+are mirrors. The literal-pin tests below run unconditionally (in inspector CI,
+where the phonemizer is NOT installed) and freeze the canonical value sets; the
+``skipif``-gated tests additionally confirm the live phonemizer agrees with that
+pin — so neither end can drift unnoticed.
 """
 
 from __future__ import annotations
@@ -11,23 +14,79 @@ from __future__ import annotations
 import pytest
 
 from qua_shared.schemas.bucket.cell_vocab import CellRole, CellStatus
+from qua_shared.schemas.bucket.tajweed_vocab import TajweedRule
 from qua_shared.schemas.bucket.ts_shard import TsShardWord
+
+# The canonical value sets, pinned as literals so a drift fails even where the
+# phonemizer is absent. Keep in lockstep with the phonemizer enums (the skipif
+# tests below assert the live producer matches these exact sets).
+_ROLE_VALUES = {"base", "haraka", "tanween", "madd"}
+_STATUS_VALUES = {"present", "inserted", "dropped", "replaced", "shortened"}
+_TAJWEED_VALUES = {
+    "noon_ghunnah",
+    "meem_ghunnah",
+    "ikhfaa_noon",
+    "ikhfaa_tanween",
+    "ikhfaa_shafawi",
+    "iqlab_noon",
+    "iqlab_tanween",
+    "idgham_ghunnah_noon",
+    "idgham_ghunnah_tanween",
+    "idgham_shafawi",
+    "vowel_silent",
+    "hamza_wasl_silent",
+    "lam_shamsiyah",
+    "idgham_bila_ghunnah_noon",
+    "idgham_bila_ghunnah_tanween",
+    "idgham_mutamathilayn",
+    "idgham_mutaqaribayn",
+    "idgham_mutajanisayn_kamil",
+    "silent_iltiqaa_sakinayn",
+    "tafkheem",
+    "qalqala_sughra",
+    "qalqala_kubra",
+    "hamza_wasl_fatha",
+    "hamza_wasl_kasra",
+    "hamza_wasl_damma",
+    "iltiqaa_sakinayn_tanween",
+    "idgham_mutajanisayn_naqis",
+    "madd_tabii",
+    "madd_wajib_muttasil",
+    "madd_jaiz_munfasil",
+    "madd_lazim",
+    "madd_arid_lissukun",
+    "madd_leen",
+}
 
 
 def _phonemizer_vocab():
     try:
         from quranic_phonemizer import CellRole as PR
         from quranic_phonemizer import CellStatus as PS
+        from quranic_phonemizer import TajweedRule as PT
     except ImportError:
         return None
-    return PR, PS
+    return PR, PS, PT
+
+
+def test_vocab_value_sets_pinned():
+    """The mirror value sets are frozen — runs even without the phonemizer."""
+    assert {r.value for r in CellRole} == _ROLE_VALUES
+    assert {s.value for s in CellStatus} == _STATUS_VALUES
+    assert {r.value for r in TajweedRule} == _TAJWEED_VALUES
 
 
 @pytest.mark.skipif(_phonemizer_vocab() is None, reason="phonemizer not installed")
 def test_role_status_mirror_phonemizer():
-    pr, ps = _phonemizer_vocab()
-    assert {r.value for r in CellRole} == {r.value for r in pr}
-    assert {s.value for s in CellStatus} == {s.value for s in ps}
+    pr, ps, _ = _phonemizer_vocab()
+    assert {r.value for r in CellRole} == {r.value for r in pr} == _ROLE_VALUES
+    assert {s.value for s in CellStatus} == {s.value for s in ps} == _STATUS_VALUES
+
+
+@pytest.mark.skipif(_phonemizer_vocab() is None, reason="phonemizer not installed")
+def test_tajweed_rule_mirror_phonemizer():
+    _, _, pt = _phonemizer_vocab()
+    assert {r.value for r in TajweedRule} == {r.value for r in pt} == _TAJWEED_VALUES
 
 
 def test_schema_coerces_v6_cell_row():
