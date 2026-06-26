@@ -27,7 +27,9 @@ import {
 } from '../src/lib/recitation-data/ts-source';
 import UnifiedDisplay from '../src/tabs/timestamps/components/UnifiedDisplay.svelte';
 import { showLetters, showPhonemes } from '../src/tabs/timestamps/stores/display';
+import { setRuleEnabled } from '../src/tabs/timestamps/stores/tajweed-settings';
 import { loadedVerse } from '../src/tabs/timestamps/stores/verse';
+import { LEGEND_KEYS } from '../src/tabs/timestamps/utils/tajweed-rules';
 
 async function render(): Promise<void> {
     const p = new URLSearchParams(location.search);
@@ -62,6 +64,10 @@ async function render(): Promise<void> {
     // `&phonemes=0` opt out of either tier.
     showLetters.set(p.get('letters') !== '0');
     showPhonemes.set(p.get('phonemes') !== '0');
+
+    // `&alltj=1` force-enables every tajweed rule (incl. the default-off iẓhar +
+    // madd ṭabīʿī) so a screenshot shows the full underline set, not just the defaults.
+    if (p.get('alltj') === '1') for (const k of LEGEND_KEYS) setRuleEnabled(k, true);
 
     loadedVerse.set({ data, tsSegOffset: 0, tsSegEnd: Number.MAX_SAFE_INTEGER });
     mount(UnifiedDisplay, { target: document.getElementById('app')! });

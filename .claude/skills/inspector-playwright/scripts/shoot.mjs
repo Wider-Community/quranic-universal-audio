@@ -35,6 +35,7 @@ const { values } = parseArgs({
         api: { type: 'string', default: 'https://hetchyy-quranic-inspector-dev.hf.space' },
         port: { type: 'string', default: '5199' },
         width: { type: 'string', default: '1600' },
+        alltj: { type: 'boolean', default: false },
     },
 });
 
@@ -64,6 +65,7 @@ let ok = 0;
 for (const ref of values.ref) {
     const qs = new URLSearchParams({ reciter: values.reciter, ref });
     if (values.words) qs.set('words', values.words);
+    if (values.alltj) qs.set('alltj', '1');
     const url = `http://localhost:${port}/harness/analysis.html?${qs}`;
     try {
         await page.goto(url, { waitUntil: 'load' });

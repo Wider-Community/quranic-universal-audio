@@ -459,11 +459,14 @@
     }
 
     /** Source-letter indices in a word that carry a real (sounding, non-sukūn)
-     *  haraka — a noon/meem on one of these is voweled, not sakin (so not iẓhar). */
+     *  haraka — a noon/meem on one of these is voweled, not sakin (so not iẓhar). A
+     *  tanwīn also vowels its base letter (a meem with ḍammatan is مُ, never sākin), so
+     *  count it too — else a tanwīn'd meem/noon falsely reads as a sākin iẓhar source. */
     function _voweledSrcSet(cells: TsCell[]): Set<number> {
         const s = new Set<number>();
         for (const c of cells) {
-            if (c.role === 'haraka' && c.phonemeIndices.length && !_isSukunCell(c)) {
+            if (c.phonemeIndices.length
+                && ((c.role === 'haraka' && !_isSukunCell(c)) || c.role === 'tanween')) {
                 s.add(c.sourceLetterIndex);
             }
         }
@@ -650,7 +653,11 @@
         // istiʿlāʾ letter, detected display-side). Resolved to ≤2 bars (base + tafkheem).
         const cellBadges = (c: TsCell): TjBadge[] => {
             const groupTag = c.shareGroup != null ? idghamGroupTags.get(c.shareGroup) : undefined;
-            const heavyIkhfaa = c.phonemeIndices.some(
+            // A muqattaat letter's heaviness rides its own `secondaryTags` tafkhīm (set
+            // on a heavy istiʿlāʾ / rāʾ name), NOT a buried ikhfaa nasal — so عَيْن's
+            // heavy ŋˤ tafkhīm stays on the phoneme row, off the bare ع glyph.
+            const isMuq = !!c.phonemeRuleTags?.length;
+            const heavyIkhfaa = !isMuq && c.phonemeIndices.some(
                 (fi) => _heavyIkhfaaDisplay(intervals[fi]?.phone, intervals[fi + 1]?.phone),
             );
             return badgesForTags([
@@ -1109,6 +1116,9 @@
      *  whose base phones are `sˤ dˤ tˤ ðˤ q`. The ikhfaa nasal `ŋ` before one of
      *  these is articulated heavy (tafkhīm). */
     const HEAVY_IKHFAA_PHONES = new Set(['sˤ', 'dˤ', 'tˤ', 'ðˤ', 'q']);
+    /** The emphatic long vowel `aˤ:` — a muqattaat heavy letter's vowel (ṣād's aˤ:,
+     *  qāf's aˤ:, the heavy rāʾ's aˤ:). It stacks tafkhīm above its madd bar. */
+    const HEAVY_VOWEL_PHONES = new Set(['aˤ:']);
     /** DISPLAY-only ikhfaa-heavy override: a plain ikhfaa nasal `ŋ` immediately
      *  before a heavy istiʿlāʾ consonant renders as `ŋˤ`. Returns the override
      *  phone, or undefined when no transform applies (the raw phone is used). The
@@ -1280,7 +1290,13 @@
                         if (qb.length) phonemeBadges.set(fi + 1, qb);
                         return;
                     }
-                    const b = badgesForTags([t]);
+                    // A heavy long vowel (aˤ:) or a heavy ikhfaa nasal (ŋ before an
+                    // istiʿlāʾ consonant, shown ŋˤ) stacks a tafkhīm bar above its own
+                    // rule — the consonant's tafkhīm already rides its prt tag `t`.
+                    const phone = intervals[fi]?.phone;
+                    const heavy = HEAVY_VOWEL_PHONES.has(phone ?? '')
+                        || !!_heavyIkhfaaDisplay(phone, intervals[fi + 1]?.phone);
+                    const b = badgesForTags(heavy ? [t, 'tafkheem'] : [t]);
                     if (b.length) phonemeBadges.set(fi, b);
                 });
                 continue;

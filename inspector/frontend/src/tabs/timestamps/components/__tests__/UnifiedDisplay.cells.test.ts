@@ -1390,6 +1390,30 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(meem.style.boxShadow).toContain('izhar-shafawi');
     });
 
+    it('no iẓhar shafawi for a meem carrying a tanwīn (voweled by its ḍammatan, not sakin)', () => {
+        // بُكْمٌ: the final meem carries a tanwīn (مٌ = "mun"), so it is voweled, never a
+        // sakin iẓhar source. The tanwīn lives in a separate `tanween` cell sharing the
+        // meem's source index — that must count as voweling, else the meem falsely badges
+        // izhar_shafawi. (The tanwīn itself keeps its own izhar-ḥalqī, gated separately.)
+        setRuleEnabled('izhar_shafawi', true);
+        const intervals: PhonemeInterval[] = [
+            { phone: 'm', start: 0, end: 0.2 }, { phone: 'u', start: 0.2, end: 0.3 },
+            { phone: 'n', start: 0.3, end: 0.4 },
+        ];
+        const word = w(
+            [{ char: 'م', start: 0, end: 0.4, silent: false }],
+            [
+                base(0, [0], { chars: 'م' }),
+                { chars: 'ٌ', role: 'tanween', status: 'present', phonemeIndices: [1, 2], sourceLetterIndex: 0, tag: null, shareGroup: null },
+            ],
+            [0, 1, 2],
+        );
+        const { container } = mount([word], intervals);
+        const meem = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter'))
+            .find((e) => e.textContent === 'م')!;
+        expect(meem.style.boxShadow).not.toContain('izhar-shafawi');
+    });
+
     it('no iẓhar for a VOWELED noon (not sakin) nor a mushaddad noon (ghunnah)', () => {
         // نَ : a fatḥa-voweled nūn → not sakin → no izhar.
         const intervals: PhonemeInterval[] = [
@@ -1637,6 +1661,115 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(ph(3).style.boxShadow).toBe(''); // ʕ
         expect(ph(5).style.boxShadow).toContain('madd-lazim'); // j leen-glide
         expect(ph(6).style.boxShadow).toContain('ikhfaa'); // ŋ
+    });
+
+    it('muqattaat 2-count letter (طه): heavy ط glyph BASE+tafkheem, light ه glyph bare, vowels differ', () => {
+        // طه = ṭā · hā. ط is istiʿlāʾ → its glyph is a BASE cell carrying secondaryTags
+        // tafkheem (mufakhkham) but NO madd bar; its heavy vowel aˤ: stacks tafkheem
+        // above madd. ه is light → no glyph bar, and its plain a: is madd_tabii only.
+        setRuleEnabled('madd_tabii', true); // surface the 2-count vowel madd
+        const intervals: PhonemeInterval[] = [
+            { phone: 'tˤ', start: 0, end: 0.2 }, { phone: 'aˤ:', start: 0.2, end: 0.7 },
+            { phone: 'h', start: 0.7, end: 0.8 }, { phone: 'a:', start: 0.8, end: 1.2 },
+        ];
+        const word = w(
+            [{ char: 'ط', start: 0, end: 0.7, silent: false }, { char: 'ه', start: 0.7, end: 1.2, silent: false }],
+            [
+                { chars: 'ط', role: 'base', status: 'present', phonemeIndices: [0, 1], sourceLetterIndex: 0, tag: null, shareGroup: null, phonemeRuleTags: ['tafkheem', 'madd_tabii'], secondaryTags: ['tafkheem'] },
+                { chars: 'ه', role: 'base', status: 'present', phonemeIndices: [2, 3], sourceLetterIndex: 1, tag: null, shareGroup: null, phonemeRuleTags: [null, 'madd_tabii'], secondaryTags: [] },
+            ],
+            [0, 1, 2, 3],
+        );
+        const { container } = mount([word], intervals);
+        const letter = (ch: string) =>
+            Array.from(container.querySelectorAll<HTMLElement>('.mega-letter')).find((e) => e.textContent === ch)!;
+        const ph = (i: number) => container.querySelector<HTMLElement>(`.mega-phoneme[data-index="${i}"]`)!;
+        // ط glyph: heavy → tafkheem, but never a madd bar (2-count lives on the phoneme).
+        expect(letter('ط').style.boxShadow).toContain('tafkheem');
+        expect(letter('ط').style.boxShadow).not.toContain('madd');
+        // ه glyph: light 2-count → no underline at all.
+        expect(letter('ه').style.boxShadow).toBe('');
+        // tˤ = tafkheem; aˤ: = madd-tabii + tafkheem stacked.
+        expect(ph(0).style.boxShadow).toContain('tafkheem');
+        expect(ph(1).style.boxShadow).toContain('madd-tabii');
+        expect(ph(1).style.boxShadow).toContain('tafkheem');
+        // ه's light a: = madd-tabii only, no tafkheem.
+        expect(ph(3).style.boxShadow).toContain('madd-tabii');
+        expect(ph(3).style.boxShadow).not.toContain('tafkheem');
+    });
+
+    it('muqattaat heavy rāʾ (الٓر): rˤ tafkheem + heavy vowel madd-tabii stacked tafkheem', () => {
+        setRuleEnabled('madd_tabii', true);
+        const intervals: PhonemeInterval[] = [
+            { phone: 'rˤ', start: 0, end: 0.2 }, { phone: 'aˤ:', start: 0.2, end: 0.7 },
+        ];
+        const word = w(
+            [{ char: 'ر', start: 0, end: 0.7, silent: false }],
+            [{ chars: 'ر', role: 'base', status: 'present', phonemeIndices: [0, 1], sourceLetterIndex: 0, tag: null, shareGroup: null, phonemeRuleTags: ['tafkheem', 'madd_tabii'], secondaryTags: ['tafkheem'] }],
+            [0, 1],
+        );
+        const { container } = mount([word], intervals);
+        const ph = (i: number) => container.querySelector<HTMLElement>(`.mega-phoneme[data-index="${i}"]`)!;
+        expect(ph(0).style.boxShadow).toContain('tafkheem');
+        expect(ph(1).style.boxShadow).toContain('madd-tabii');
+        expect(ph(1).style.boxShadow).toContain('tafkheem');
+    });
+
+    it('muqattaat ikhfaa nasal before a heavy istiʿlāʾ letter stacks tafkheem (عٓسٓقٓ سٓ ŋ before قٓ q)', () => {
+        // سٓ ends in an ikhfaa ŋ; the next letter is قٓ (q, heavy) → the nasal is heavy
+        // ikhfaa: ikhfaa underline + a stacked tafkheem bar, display ŋˤ.
+        const intervals: PhonemeInterval[] = [
+            { phone: 's', start: 0, end: 0.1 }, { phone: 'i:', start: 0.1, end: 0.5 },
+            { phone: 'ŋ', start: 0.5, end: 0.8 }, { phone: 'q', start: 0.8, end: 0.9 },
+            { phone: 'aˤ:', start: 0.9, end: 1.3 }, { phone: 'f', start: 1.3, end: 1.4 },
+        ];
+        const word = w(
+            [{ char: 'س', start: 0, end: 0.8, silent: false }, { char: 'ق', start: 0.8, end: 1.4, silent: false }],
+            [
+                { chars: 'سٓ', role: 'madd', status: 'present', phonemeIndices: [0, 1, 2], sourceLetterIndex: 0, tag: 'madd_lazim', shareGroup: null, phonemeRuleTags: [null, 'madd_lazim', 'ikhfaa_noon'] },
+                { chars: 'قٓ', role: 'madd', status: 'present', phonemeIndices: [3, 4, 5], sourceLetterIndex: 1, tag: 'madd_lazim', shareGroup: null, phonemeRuleTags: ['tafkheem', 'madd_lazim', null], secondaryTags: ['tafkheem'] },
+            ],
+            [0, 1, 2, 3, 4, 5],
+        );
+        const { container } = mount([word], intervals);
+        const ph = (i: number) => container.querySelector<HTMLElement>(`.mega-phoneme[data-index="${i}"]`)!;
+        // ŋ before q → heavy ikhfaa: ikhfaa underline + stacked tafkheem.
+        expect(ph(2).style.boxShadow).toContain('ikhfaa');
+        expect(ph(2).style.boxShadow).toContain('tafkheem');
+        // qāf consonant: tafkheem; its heavy vowel: madd-lazim + tafkheem stacked.
+        expect(ph(3).style.boxShadow).toContain('tafkheem');
+        expect(ph(4).style.boxShadow).toContain('madd-lazim');
+        expect(ph(4).style.boxShadow).toContain('tafkheem');
+    });
+
+    it('muqattaat: a buried heavy-ikhfaa nasal does NOT tafkheem-bar the bare letter glyph', () => {
+        // عٓ (in كٓهيعٓصٓ) ends in ŋ before ṣād (sˤ, heavy) → the ŋˤ heaviness shows on the
+        // phoneme row only; the bare ع glyph keeps just its madd-lazim, no tafkheem bar.
+        const intervals: PhonemeInterval[] = [
+            { phone: 'ʕ', start: 0, end: 0.1 }, { phone: 'a', start: 0.1, end: 0.15 },
+            { phone: 'j', start: 0.15, end: 0.5 }, { phone: 'ŋ', start: 0.5, end: 0.8 },
+            { phone: 'sˤ', start: 0.8, end: 1.0 }, { phone: 'aˤ:', start: 1.0, end: 1.4 },
+        ];
+        const word = w(
+            [{ char: 'ع', start: 0, end: 0.8, silent: false }, { char: 'ص', start: 0.8, end: 1.4, silent: false }],
+            [
+                { chars: 'عٓ', role: 'madd', status: 'present', phonemeIndices: [0, 1, 2, 3], sourceLetterIndex: 0, tag: 'madd_lazim', shareGroup: null, phonemeRuleTags: [null, null, 'madd_lazim', 'ikhfaa_noon'] },
+                { chars: 'صٓ', role: 'madd', status: 'present', phonemeIndices: [4, 5], sourceLetterIndex: 1, tag: 'madd_lazim', shareGroup: null, phonemeRuleTags: ['tafkheem', 'madd_lazim'], secondaryTags: ['tafkheem'] },
+            ],
+            [0, 1, 2, 3, 4, 5],
+        );
+        const { container } = mount([word], intervals);
+        const letter = (ch: string) =>
+            Array.from(container.querySelectorAll<HTMLElement>('.mega-letter')).find((e) => e.textContent === ch)!;
+        // ع glyph: madd-lazim only — the buried heavy ŋˤ does NOT add a letter tafkheem bar.
+        expect(letter('عٓ').style.boxShadow).toContain('madd-lazim');
+        expect(letter('عٓ').style.boxShadow).not.toContain('tafkheem');
+        // ص glyph: heavy istiʿlāʾ → madd-lazim + its own secondaryTags tafkheem.
+        expect(letter('صٓ').style.boxShadow).toContain('tafkheem');
+        // The heavy ikhfaa ŋ still stacks tafkheem on the PHONEME row.
+        const ph = (i: number) => container.querySelector<HTMLElement>(`.mega-phoneme[data-index="${i}"]`)!;
+        expect(ph(3).style.boxShadow).toContain('ikhfaa');
+        expect(ph(3).style.boxShadow).toContain('tafkheem');
     });
 
     // --- Cross-word merger carrier timing (idgham / shafawi) ----------------
