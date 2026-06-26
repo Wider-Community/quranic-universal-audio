@@ -11,6 +11,7 @@
      * overrides, toggles drive the per-cell underline. `tajweedDump()` (devtools)
      * prints the current palette + enables for promoting to shipped defaults.
      */
+    import { harakaRenderStyle } from '../utils/haraka-render';
     import { LEGEND, type LegendRow } from '../utils/tajweed-rules';
     import {
         resetAllTajweed,
@@ -18,6 +19,11 @@
         setRuleEnabled,
         tajweedSettings,
     } from '../stores/tajweed-settings';
+
+    // The two dashed-haraka exemplars in the Other-rules key, positioned with the
+    // real per-glyph calibration (fatḥa U+064E pinned above, kasra U+0650 below).
+    const FATHA = 'َ';
+    const KASRA = 'ِ';
 
     // Hidden native colour inputs, one per row, opened by clicking its chip.
     let inputs: Record<string, HTMLInputElement | undefined> = $state({});
@@ -124,7 +130,14 @@
                         <div class="tjs-key-row">
                             <span class="tjs-key-cells">
                                 <span class="kcell big dashed">ا</span>
-                                <span class="kcell kasra dashed">ِ</span>
+                                <span class="kdia">
+                                    <span class="kharaka pin-top dashed">
+                                        <span class="kg" style={harakaRenderStyle(FATHA)}>{FATHA}</span>
+                                    </span>
+                                    <span class="kharaka pin-bottom dashed">
+                                        <span class="kg" style={harakaRenderStyle(KASRA)}>{KASRA}</span>
+                                    </span>
+                                </span>
                             </span>
                             <span class="kcap">Pronounced but unwritten/transformed</span>
                         </div>
@@ -363,10 +376,45 @@
         height: 34px;
         font-size: 22px;
     }
-    .kcell.kasra {
+    /* A full-letter-height dia column holding the two dashed harakas, each pinned
+       and centred exactly like the real `.dia-track` / `.haraka-cell` pair — the
+       glyph is scaled + nudged by the shared `--haraka-*` calibration. */
+    .kdia {
+        position: relative;
         width: 16.5px;
+        height: 34px;
+        flex: 0 0 auto;
+    }
+    .kharaka {
+        position: absolute;
+        left: 0;
+        right: 0;
         height: 11.9px;
-        font-size: 15px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--canvas-inset);
+        border: 1px solid transparent;
+        border-radius: 3px;
+        overflow: hidden;
+    }
+    .kharaka.pin-top {
+        top: 0;
+    }
+    .kharaka.pin-bottom {
+        bottom: 0;
+    }
+    .kharaka.dashed {
+        border-style: dashed;
+        border-color: #6a6f8c;
+    }
+    .kg {
+        display: inline-block;
+        line-height: 1;
+        color: #aaa;
+        font-family: 'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
+        font-size: calc(var(--analysis-letter-font-size, 1.05rem) * var(--haraka-scale, 1.4));
+        transform: translate(var(--haraka-shift, 0em), var(--haraka-raise, 0em));
     }
     .kcell.dashed {
         border-style: dashed;

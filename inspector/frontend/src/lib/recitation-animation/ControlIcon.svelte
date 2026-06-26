@@ -116,8 +116,8 @@
             <span class="tjw-ul">
                 <span class="tjw-bar">
                     <i style:background="var(--tj-qalqala)"></i>
-                    <i style:background="var(--tj-ghunnah)"></i>
-                    <i style:background="var(--tj-idgham-ghunnah)"></i>
+                    <i style:background="var(--tj-izhar-halqi)"></i>
+                    <i style:background="var(--tj-madd-arid)"></i>
                 </span>
             </span>
         </span>
@@ -145,8 +145,11 @@
         width: 100%;
         height: 100%;
         display: flex;
-        align-items: flex-start;
+        align-items: center;
         justify-content: center;
+        /* Reserve the underline strip so TJW centres in the space ABOVE it — equal
+           gap from the top edge and from the colours. */
+        padding-bottom: 0.14em;
         background: transparent;
         border-radius: var(--r-2, 5px);
         overflow: hidden;
@@ -156,7 +159,6 @@
         font-weight: 700;
         letter-spacing: -0.07em;
         line-height: 1;
-        margin-top: 0.12em;
         color: var(--text-primary, #eee);
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
