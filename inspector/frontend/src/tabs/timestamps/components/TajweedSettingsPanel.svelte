@@ -66,19 +66,6 @@
         >
         <button type="button" class="tjs-reset" onclick={() => resetAllTajweed()}>Reset all</button>
     </div>
-    <div class="tjs-tip">
-        <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">
-            <path
-                d="M6 18 L13.5 10.5 L16 13 L8.5 20.5 H6 Z"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.7"
-                stroke-linejoin="round"
-            />
-            <path d="M14.5 9.5 L16.8 7.2 A1.6 1.6 0 0 1 19 9.4 L16.7 11.7 Z" fill="currentColor" />
-        </svg>
-        Click a colour chip to recolour it · toggle to show or hide each rule
-    </div>
 
     <div class="tjs-cols">
         {#each LEGEND as group (group.title)}
@@ -135,12 +122,16 @@
                 {#if group.category === 'other'}
                     <div class="tjs-key">
                         <div class="tjs-key-row">
-                            <span class="kcell big dashed">ا</span>
-                            <span class="kcell small dashed">◌ِ</span>
+                            <span class="tjs-key-cells">
+                                <span class="kcell big dashed">ا</span>
+                                <span class="kcell kasra dashed">ِ</span>
+                            </span>
                             <span class="kcap">Pronounced but unwritten/transformed</span>
                         </div>
                         <div class="tjs-key-row">
-                            <span class="kcell big silent">ٱ</span>
+                            <span class="tjs-key-cells">
+                                <span class="kcell big silent">ٱ</span>
+                            </span>
                             <span class="kcap">Written but silent</span>
                         </div>
                     </div>
@@ -162,6 +153,8 @@
         display: flex;
         align-items: baseline;
         justify-content: space-between;
+        padding-bottom: var(--s-1);
+        border-bottom: 1px solid var(--border-quiet);
     }
     .tjs-title {
         font-size: var(--fs-meta);
@@ -186,15 +179,6 @@
     .tjs-reset:hover {
         color: var(--text-primary);
         border-color: var(--border-default);
-    }
-    .tjs-tip {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        font-size: 11px;
-        color: var(--text-faint);
-        padding-bottom: var(--s-1);
-        border-bottom: 1px solid var(--border-quiet);
     }
     .tjs-cols {
         display: grid;
@@ -354,6 +338,14 @@
         align-items: center;
         gap: 7px;
     }
+    /* The letter + its haraka bottom-align, mirroring the real grapheme row where
+       the small diacritic cell is pinned to the letter cell's bottom edge. */
+    .tjs-key-cells {
+        display: flex;
+        align-items: flex-end;
+        gap: 4px;
+        flex: 0 0 auto;
+    }
     .kcell {
         display: flex;
         align-items: center;
@@ -365,15 +357,16 @@
         font-family: 'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
         color: var(--text-secondary);
     }
+    /* Real analysis-cell dimensions: a 30×34 letter cell + a 16.5×11.9 haraka cell. */
     .kcell.big {
-        width: 22px;
-        height: 28px;
-        font-size: 18px;
+        width: 30px;
+        height: 34px;
+        font-size: 22px;
     }
-    .kcell.small {
-        width: 15px;
-        height: 17px;
-        font-size: 12px;
+    .kcell.kasra {
+        width: 16.5px;
+        height: 11.9px;
+        font-size: 15px;
     }
     .kcell.dashed {
         border-style: dashed;

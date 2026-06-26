@@ -113,16 +113,6 @@
                     <i style:background="var(--tj-ghunnah)"></i>
                     <i style:background="var(--tj-idgham-ghunnah)"></i>
                 </span>
-                <span class="tjw-bar">
-                    <i style:background="var(--tj-ikhfaa)"></i>
-                    <i style:background="var(--tj-tafkheem)"></i>
-                    <i style:background="var(--tj-izhar-halqi)"></i>
-                </span>
-                <span class="tjw-bar">
-                    <i style:background="var(--tj-madd-wajib)"></i>
-                    <i style:background="var(--tj-idgham-bila)"></i>
-                    <i style:background="var(--tj-madd-arid)"></i>
-                </span>
             </span>
         </span>
     {:else}
@@ -136,16 +126,16 @@
     .ci { display: inline-flex; line-height: 0; }
     .ci :global(svg) { display: block; }
 
-    /* The tajweed icon is a real analysis cell (3px-rounded, dark inset) reading
-       TJW, with three of its own stacked underline bars — each bar cycling three
-       palette hues. The cell clips the bars to its rounded bottom; the bar ends
-       round so the underline bleeds to the edge like the live per-cell stack. */
+    /* The tajweed icon is a real analysis cell (3px-rounded, dark inset) reading a
+       big near-full-width TJW pinned to the top, over one of its own underline bars
+       cycling three palette hues. The cell clips the bar to its rounded bottom; the
+       bar ends round so the underline bleeds to the edge like the live per-cell one. */
     .tjw {
         position: relative;
         width: 100%;
         height: 100%;
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         justify-content: center;
         background: #0f0f23;
         border: 1px solid var(--border-default, #3a3a55);
@@ -153,11 +143,11 @@
         overflow: hidden;
     }
     .tjw-txt {
-        font-size: 0.4em;
+        font-size: 0.56em;
         font-weight: 700;
-        letter-spacing: -0.05em;
+        letter-spacing: -0.07em;
         line-height: 1;
-        margin-bottom: 0.34em;
+        margin-top: 0.13em;
         color: var(--text-primary, #eee);
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
@@ -169,7 +159,7 @@
         display: flex;
         flex-direction: column;
     }
-    .tjw-bar { display: flex; height: 0.12em; }
+    .tjw-bar { display: flex; height: 0.14em; }
     .tjw-bar i { flex: 1; display: block; }
     .tjw-bar i:first-child {
         border-top-left-radius: 1.5px;
