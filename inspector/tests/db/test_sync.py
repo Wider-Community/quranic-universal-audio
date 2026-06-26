@@ -38,7 +38,7 @@ def test_upload_then_pull_roundtrip(synced):
     seq = sync.upload()
     assert seq == 1
     # sidecar reflects our seq + nonce
-    meta = _serde.json_loads(sync._read_direct(sync.SEQ_BUCKET_PATH))
+    meta = _serde.json_loads(sync._read_direct(sync.SEQ_BUCKET_PATH).decode())
     assert meta["seq"] == 1 and meta["nonce"] == sync._NONCE
     # the db blob exists
     assert len(sync._read_direct(sync.DB_BUCKET_PATH)) > 0
@@ -81,7 +81,7 @@ def test_deferred_sync_uploads_when_batch_commits(synced):
     sync.set_sync_enabled(True)
     with sync.deferred_sync():
         _commit_user()  # bumps db_seq 0 -> 1
-    meta = _serde.json_loads(sync._read_direct(sync.SEQ_BUCKET_PATH))
+    meta = _serde.json_loads(sync._read_direct(sync.SEQ_BUCKET_PATH).decode())
     assert meta["seq"] == 1 and meta["nonce"] == sync._NONCE
 
 
@@ -100,7 +100,7 @@ def test_deferred_sync_skips_upload_when_batch_is_noop(synced):
     with sync.deferred_sync():  # no commit inside → no-op
         pass
     # sidecar left untouched (we never tried to clobber) and no conflict logged
-    meta = _serde.json_loads(sync._read_direct(sync.SEQ_BUCKET_PATH))
+    meta = _serde.json_loads(sync._read_direct(sync.SEQ_BUCKET_PATH).decode())
     assert meta["nonce"] == "other-container"
     assert sync._last_error is None
 

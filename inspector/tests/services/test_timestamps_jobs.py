@@ -11,6 +11,7 @@ from __future__ import annotations
 import sys
 import types
 from datetime import UTC
+from typing import Any
 
 import pytest
 
@@ -32,7 +33,7 @@ def fake_hf(monkeypatch):
     """Stub huggingface_hub.inspect_job / fetch_job_logs (imported inside
     ``job_status``). Returns a handle to set the reported stage + log lines."""
     state = {"stage": "succeeded", "logs": ["line1", "line2"]}
-    mod = types.ModuleType("huggingface_hub")
+    mod: Any = types.ModuleType("huggingface_hub")
     mod.inspect_job = lambda job_id: _Info(state["stage"])
     mod.fetch_job_logs = lambda job_id: list(state["logs"])
     monkeypatch.setitem(sys.modules, "huggingface_hub", mod)
@@ -128,6 +129,7 @@ def test_complete_publishes_marked_ready(monkeypatch):
     assert out["released"] is True
     assert out["state"] == "released"
     row = state_service.get_row("rec_a")
+    assert row is not None
     assert row.state.value == "released"
     assert row.assignee_hf_id is None
     assert row.timestamps_job_ids == ["job-1"]
@@ -178,7 +180,9 @@ def test_complete_regen_idempotent_when_ts_already_recorded(monkeypatch):
     assert out["released"] is False
     assert out["reason"] == "ts already recorded"
     # Still exactly one current ts row at the original version.
-    assert repo_releases.current_release("ts", "rec_a")["version"] == "job-1"
+    ts_current = repo_releases.current_release("ts", "rec_a")
+    assert ts_current is not None
+    assert ts_current["version"] == "job-1"
 
 
 def test_complete_regen_on_released_row(monkeypatch):
@@ -195,12 +199,20 @@ def test_complete_regen_on_released_row(monkeypatch):
     assert out["released"] is False
     assert out["regenerated"] is True
     # State unchanged — no released → released transition.
-    assert state_service.get_row("rec_a").state.value == "released"
+    row = state_service.get_row("rec_a")
+    assert row is not None
+    assert row.state.value == "released"
     # New ts row is current; the prior one is superseded.
-    assert repo_releases.current_release("ts", "rec_a")["version"] == "job-new"
-    assert repo_releases.release_by_version("ts", "rec_a", "job-old")["superseded_at"] is not None
+    ts_current = repo_releases.current_release("ts", "rec_a")
+    assert ts_current is not None
+    assert ts_current["version"] == "job-new"
+    ts_old = repo_releases.release_by_version("ts", "rec_a", "job-old")
+    assert ts_old is not None
+    assert ts_old["superseded_at"] is not None
     # HF membership stamped stale so the operator is driven to re-publish.
-    assert repo_releases.current_release("hf", "rec_a")["stale_since"] is not None
+    hf_current = repo_releases.current_release("hf", "rec_a")
+    assert hf_current is not None
+    assert hf_current["stale_since"] is not None
     # Audit trail carries the distinct regen event.
     events = [
         r for r in repo_transitions.for_slug("rec_a") if r["event"] == "reciter.ts_regenerated"
@@ -221,7 +233,9 @@ def test_complete_regen_refuses_when_no_shards(monkeypatch):
     assert out["released"] is False
     assert out["reason"] == "no shards"
     # No new ts row — the prior remains current.
-    assert repo_releases.current_release("ts", "rec_a")["version"] == "job-old"
+    ts_current = repo_releases.current_release("ts", "rec_a")
+    assert ts_current is not None
+    assert ts_current["version"] == "job-old"
 
 
 def test_complete_noop_when_not_marked_ready(monkeypatch):
@@ -238,7 +252,9 @@ def test_complete_noop_when_not_marked_ready(monkeypatch):
     # noop branch (e.g. ``no shards``) doesn't silently masquerade as this
     # one — the other noop tests assert their reason already.
     assert out["reason"] == "not marked-ready / wrong state"
-    assert state_service.get_row("rec_a").state.value == "under_review"
+    row = state_service.get_row("rec_a")
+    assert row is not None
+    assert row.state.value == "under_review"
 
 
 def test_complete_refuses_when_no_shards(monkeypatch):
@@ -251,7 +267,9 @@ def test_complete_refuses_when_no_shards(monkeypatch):
 
     assert out["released"] is False
     assert out["reason"] == "no shards"
-    assert state_service.get_row("rec_a").state.value == "under_review"
+    row = state_service.get_row("rec_a")
+    assert row is not None
+    assert row.state.value == "under_review"
 
 
 def test_complete_is_idempotent_on_double_call(monkeypatch):
@@ -265,7 +283,9 @@ def test_complete_is_idempotent_on_double_call(monkeypatch):
 
     assert first["released"] is True
     assert second["released"] is False  # already released → no-op
-    assert state_service.get_row("rec_a").state.value == "released"
+    row = state_service.get_row("rec_a")
+    assert row is not None
+    assert row.state.value == "released"
 
 
 def test_complete_unknown_slug_is_noop():
@@ -297,4 +317,6 @@ def test_failure_leaves_reciter_under_review():
 
     _seed_marked_ready("rec_a")
     timestamps_jobs.note_timestamps_job_failed("rec_a")
-    assert state_service.get_row("rec_a").state.value == "under_review"  # no publish
+    row = state_service.get_row("rec_a")
+    assert row is not None
+    assert row.state.value == "under_review"  # no publish

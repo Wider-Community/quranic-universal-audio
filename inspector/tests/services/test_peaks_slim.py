@@ -47,6 +47,7 @@ def test_unpack_returns_list_of_lists_for_slicer_compat():
     must satisfy this — numpy arrays would slip past isinstance(_, list).
     """
     slim = unpack_slim(pack_slim(_hd_doc(120)))
+    assert slim is not None
     assert isinstance(slim["peaks"], list)
     assert all(isinstance(p, list) and len(p) == 2 for p in slim["peaks"])
 

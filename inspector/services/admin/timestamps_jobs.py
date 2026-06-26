@@ -41,6 +41,7 @@ import logging
 import os
 from datetime import UTC
 from pathlib import Path
+from typing import Any
 
 from qua_shared.schemas import StaleReason, TsJobRecord, TsJobSettings
 from services.state import state as state_service
@@ -201,7 +202,7 @@ def _stage_job_code() -> None:
     every launch so the job always runs current code."""
     from huggingface_hub import batch_bucket_files
 
-    adds: list[tuple[str, str]] = []
+    adds: list[tuple[str | Path | bytes, str]] = []
     for sub in ("qua_shared", "qua_jobs"):
         base = _REPO_ROOT / sub
         for path in base.rglob("*.py"):
@@ -440,7 +441,7 @@ def launch(slug: str, *, settings: TsJobSettings, webhook_base: str | None = Non
     job = run_job(
         image=JOB_IMAGE,
         command=_job_command(),
-        flavor=flavor,
+        flavor=flavor,  # type: ignore[reportArgumentType]  # HF accepts the str value of SpaceHardware
         timeout=timeout,
         env=env,
         secrets=secrets,
@@ -574,7 +575,9 @@ def job_status(slug: str, job_id: str, *, log_tail: int = 400) -> dict:
 
     if status in _TERMINAL:
         existing = read_job_record(slug, job_id)
-        base = dict(existing) if existing else {"job_id": job_id, "slug": slug, "type": "ts"}
+        base: dict[str, Any] = (
+            dict(existing) if existing else {"job_id": job_id, "slug": slug, "type": "ts"}
+        )
         changed = False
         # The job self-writes its terminal status + timestamps but NOT its logs;
         # if it was hard-killed (OOM/timeout) it may still read running/unknown.

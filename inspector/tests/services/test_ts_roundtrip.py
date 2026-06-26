@@ -97,6 +97,7 @@ def test_read_path_is_byte_passthrough(tmp_reciter_dir):
     assert data_dir.read_timestamps_chapter_gz(SLUG, chapter) == gz
     # The inflated form decodes to the segment-array shard shape.
     inflated = data_dir.read_timestamps_chapter(SLUG, chapter)
+    assert inflated is not None
     shard = orjson.loads(inflated)
     assert shard["_meta"]["schema_version"] == SEGMENT_SCHEMA_VERSION
     assert isinstance(shard["segments"], list)
@@ -110,7 +111,9 @@ def test_missing_chapter_returns_none(tmp_reciter_dir):
 
 def test_roundtrip_consumer_dedup(tmp_reciter_dir):
     chapter, _doc, _gz = _write_shard(*_loopback_chapter())
-    shard = orjson.loads(data_dir.read_timestamps_chapter(SLUG, chapter))
+    inflated = data_dir.read_timestamps_chapter(SLUG, chapter)
+    assert inflated is not None
+    shard = orjson.loads(inflated)
     proj = project_segment_shard(shard)
 
     verse = proj["1:1"]
@@ -140,7 +143,9 @@ def test_roundtrip_multi_occasion_earliest_wins(tmp_reciter_dir):
         ]
     }
     chapter, _doc, _gz = _write_shard(chapter_doc, results)
-    shard = orjson.loads(data_dir.read_timestamps_chapter(SLUG, chapter))
+    inflated = data_dir.read_timestamps_chapter(SLUG, chapter)
+    assert inflated is not None
+    shard = orjson.loads(inflated)
 
     proj = project_segment_shard(shard)
     assert set(proj) == {"1:1", "1:2"}

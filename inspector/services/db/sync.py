@@ -136,7 +136,7 @@ def _read_remote_seq() -> dict | None:
         logger.warning("db sync: could not read remote seq sidecar: %s", _safe_err(e))
         return None
     try:
-        return _serde.json_loads(raw)
+        return _serde.json_loads(raw.decode("utf-8"))
     except Exception as e:
         logger.warning("db sync: malformed remote seq sidecar: %s", _safe_err(e))
         return None

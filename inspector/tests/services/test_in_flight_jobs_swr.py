@@ -66,6 +66,7 @@ def test_block_false_serves_last_known_stale_value(monkeypatch):
     kinds = ("cut_release",)
     # Seed a value, then force-expire it by rewinding the stamp past the TTL.
     cache.set_in_flight_jobs_cache(kinds, [_row("cut_release", "old")])
+    assert cache._jobs_in_flight is not None
     stamped_at, cached_kinds, value = cache._jobs_in_flight
     cache._jobs_in_flight = (stamped_at - cache._JOBS_IN_FLIGHT_TTL_S - 1.0, cached_kinds, value)
 

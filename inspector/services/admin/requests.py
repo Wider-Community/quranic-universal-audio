@@ -13,6 +13,8 @@ the current catalog value joined in as the ``from`` side.
 
 from __future__ import annotations
 
+from typing import cast
+
 from services.db import _serde, repo_requests
 from services.db.connection import current_db_seq
 from services.state import catalog as catalog_service
@@ -52,7 +54,7 @@ def list_requests(*, status: str, caller_is_owner: bool, caller_hf_id: str) -> d
     db_status = _STATUS_DB.get(status, "pending")
     db_seq = current_db_seq()
 
-    base = cache.get_admin_requests_cache(db_seq, db_status)
+    base = cast("list[dict] | None", cache.get_admin_requests_cache(db_seq, db_status))
     if base is None:
         base = _build_base_rows(db_status)
         cache.set_admin_requests_cache(db_seq, db_status, base)

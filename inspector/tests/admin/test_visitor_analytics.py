@@ -33,6 +33,7 @@ def test_record_hit_and_flush_upserts():
 
     day = visitors._today()
     row = repo_visitors.get_day(day)
+    assert row is not None
     assert row["signed_in_hits"] == 2
     assert row["unique_signed_in"] == 1
     assert row["anon_hits"] == 2
@@ -55,6 +56,7 @@ def test_flush_accumulates_same_day():
     from services.db import repo_visitors
 
     row = repo_visitors.get_day(visitors._today())
+    assert row is not None
     assert row["anon_hits"] == 2
     assert row["unique_anon"] == 2
 

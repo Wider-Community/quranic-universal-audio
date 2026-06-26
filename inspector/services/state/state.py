@@ -418,6 +418,8 @@ def _apply_event(
         reason=reason,
     )
     tid = record.request_id
+    if tid is None:
+        raise RuntimeError("transition record missing request_id")
     _persist_state(before, new_row, tid=tid)
     _persist_claim_diff(before, new_row, tid=tid, event=event, payload=payload)
 

@@ -515,16 +515,16 @@ def _build_manifest(
     digest_src = "".join(f"{k}={chapters[k]['url']};" for k in sorted(chapters)).encode("utf-8")
     checksum = hashlib.sha256(digest_src).hexdigest()[:16]
     try:
-        return AudioManifestSidecar(
-            slug=slug,
-            chapters=chapters,
-            **{
+        return AudioManifestSidecar.model_validate(
+            {
+                "slug": slug,
+                "chapters": chapters,
                 "_meta": {
                     "checksum": checksum,
                     "chapter_count": len(chapters),
                     "category": audio_category.value,
-                }
-            },
+                },
+            }
         )
     except ValidationError as e:
         raise IngestBadRequest(f"invalid audio_manifest: {e}") from e
@@ -580,7 +580,7 @@ def probe(request_id: str) -> ProbeResponse:
     onto ``payload.probe``."""
     row = _require_pending_intake(request_id)
     payload = _serde.json_loads(row["payload"]) or {}
-    src = IntakeSource(**(payload.get("source") or {"method": "links"}))
+    src = IntakeSource.model_validate(payload.get("source") or {"method": "links"})
     result = probe_source(src)
     with _sync.durable_transaction():
         payload["probe"] = result.model_dump(mode="json")

@@ -20,8 +20,9 @@ from __future__ import annotations
 import logging
 import os
 from datetime import UTC, datetime
+from typing import cast
 
-from qua_shared.schemas import Actor
+from qua_shared.schemas import Actor, Role
 from services.db import repo_releases
 from services.db.sync import durable_transaction
 from services.state import audit
@@ -39,7 +40,7 @@ JOB_TIMEOUT = os.environ.get("INSPECTOR_HF_JOB_TIMEOUT", "30m")
 
 def launch(slug: str, *, webhook_base: str | None = None) -> dict:
     """Launch a publish-hf job for ``slug``. Returns ``{job_id, url}``."""
-    from huggingface_hub import Volume, get_token, run_job
+    from huggingface_hub import SpaceHardware, Volume, get_token, run_job
 
     # Cross-kind single-flight on the slug — TS or HF publish in flight blocks
     # this launch (and vice versa).
@@ -88,7 +89,7 @@ def launch(slug: str, *, webhook_base: str | None = None) -> dict:
     job = run_job(
         image=base.JOB_IMAGE,
         command=command,
-        flavor=JOB_FLAVOR,
+        flavor=cast(SpaceHardware, JOB_FLAVOR),
         timeout=JOB_TIMEOUT,
         env=env,
         secrets=secrets,
@@ -152,7 +153,7 @@ def complete(
     actor = Actor(
         hf_user_id="SYSTEM_ACTOR",
         login_at_time=launched_by or "system",
-        role="owner",
+        role=Role.OWNER,
     )
     with durable_transaction() as _:
         # Re-read inside the txn as the atomic guard: webhook + poll can
@@ -204,4 +205,7 @@ def complete(
 
 
 def register() -> None:
-    base.register_handler(KIND, lambda slug, jid: complete(slug, jid))
+    def _handler(slug: str | None, jid: str) -> None:
+        complete(slug, jid)
+
+    base.register_handler(KIND, _handler)

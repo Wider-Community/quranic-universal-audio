@@ -88,6 +88,7 @@ def _delivery(
 def _install(reciters, deliveries, rows):
     """Seed catalog (vocab + reciters + deliveries) + state rows into SQLite."""
     from qua_shared.schemas import (
+        AudioCategory,
         Channel,
         RecordingContext,
         Riwayah,
@@ -106,7 +107,7 @@ def _install(reciters, deliveries, rows):
                 slug="mp3quran",
                 name="mp3quran",
                 url="https://mp3quran.net",
-                audio_categories=["by_surah"],
+                audio_categories=[AudioCategory.BY_SURAH],
             ),
         ],
         channels=[

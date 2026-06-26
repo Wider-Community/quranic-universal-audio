@@ -115,6 +115,14 @@ def seg_segment_clip(reciter):
         logger.error("ffmpeg not found on PATH")
         return jsonify({"error": "ffmpeg not available"}), 500
 
+    # stdout=PIPE always yields a stream; bind it so the type narrows for the
+    # peek + streaming reads below (Popen.stdout is typed Optional).
+    stdout = proc.stdout
+    if stdout is None:
+        proc.kill()
+        logger.error("ffmpeg stdout pipe unavailable")
+        return jsonify({"error": "ffmpeg not available"}), 500
+
     def _stderr_tail() -> str:
         try:
             if proc.stderr and not proc.stderr.closed:
@@ -129,7 +137,7 @@ def seg_segment_clip(reciter):
     # real audio of a no-Xing VBR file → ~few-hundred-byte mp3 at rc=0) is caught
     # here; a streaming clip (proc still running) or a genuine short clip passes.
     try:
-        first = proc.stdout.read(STREAM_CHUNK_BYTES)
+        first = stdout.read(STREAM_CHUNK_BYTES)
     except (OSError, ValueError):
         first = b""
     # A short first read means ffmpeg hit EOF (clip fully produced, or failed) —
@@ -169,7 +177,7 @@ def seg_segment_clip(reciter):
         yield first
         try:
             while True:
-                chunk = proc.stdout.read(STREAM_CHUNK_BYTES)
+                chunk = stdout.read(STREAM_CHUNK_BYTES)
                 if not chunk:
                     break
                 bytes_yielded += len(chunk)

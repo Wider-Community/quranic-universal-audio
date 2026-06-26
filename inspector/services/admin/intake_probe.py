@@ -47,7 +47,9 @@ def probe_source(source: IntakeSource) -> ProbeResponse:
 
     # Stable order: chapter ascending, playlist (None) last.
     results.sort(key=lambda r: (r.chapter is None, r.chapter or 0))
-    return ProbeResponse(at=_serde.to_iso(_serde.now()), results=results)
+    at = _serde.to_iso(_serde.now())
+    assert at is not None  # now() is never None, so to_iso never returns None
+    return ProbeResponse(at=at, results=results)
 
 
 def _probe_one(chapter: int | None, url: str) -> ProbeResult:
