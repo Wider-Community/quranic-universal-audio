@@ -24,7 +24,7 @@ from qua_jobs.cut_release import _verse_for_validate
 from qua_shared.dataset_validation import (
     check_duration_arithmetic,
 )
-from qua_shared.verse_layout import build_verse_layouts, reshape_canonical
+from qua_shared.verse_layout import PadParams, build_verse_layouts, reshape_canonical
 
 # An LFS pointer file — what HF auto-LFS ships for ``data/qpc_hafs.json.gz`` in
 # the job image (LFS'd by extension; the Space build can't smudge it).
@@ -32,7 +32,7 @@ _LFS_POINTER = b"version https://git-lfs.github.com/spec/v1\noid sha256:deadbeef
 
 # Zero pads → the clip window equals the word-span, so these tier/validate tests
 # read the same bounds the old word-span builder produced.
-_ZERO_PADS = {"pad_start": 0, "pad_end": 0, "min_gap": 0}
+_ZERO_PADS: PadParams = {"pad_start": 0, "pad_end": 0, "min_gap": 0}
 
 
 def _layouts(verses: dict) -> dict:

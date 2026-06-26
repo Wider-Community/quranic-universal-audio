@@ -5,9 +5,9 @@ segments (no overlap on a repeated pivot word), and the outer-edge override.
 
 from __future__ import annotations
 
-from qua_shared.verse_layout import build_verse_layouts
+from qua_shared.verse_layout import PadParams, build_verse_layouts
 
-PADS = {"pad_start": 100, "pad_end": 300, "min_gap": 100}
+PADS: PadParams = {"pad_start": 100, "pad_end": 300, "min_gap": 100}
 
 
 def _ts(words, vs, ve, seg_spans=None):

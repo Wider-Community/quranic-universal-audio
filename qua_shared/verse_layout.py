@@ -35,16 +35,27 @@ import json
 import os
 from collections.abc import Callable
 from pathlib import Path
+from typing import TypedDict
 
 from qua_shared.letter_vocab import to_external_char
 from qua_shared.ts_shard_letters import iter_letters
 
+
+class PadParams(TypedDict):
+    """The three clip-edge knobs (ms), shared by both release channels — typed so
+    ``**pads`` unpacking into ``build_verse_layouts`` is keyword-exact."""
+
+    pad_start: int
+    pad_end: int
+    min_gap: int
+
+
 #: Default clip-edge knobs (ms). pad_start before the first word, pad_end after
 #: the last word, min_gap minimum silence kept between adjacent verse clips.
-PAD_DEFAULTS = {"pad_start": 100, "pad_end": 300, "min_gap": 100}
+PAD_DEFAULTS: PadParams = {"pad_start": 100, "pad_end": 300, "min_gap": 100}
 
 
-def pad_params_from_env() -> dict[str, int]:
+def pad_params_from_env() -> PadParams:
     """The three release clip-edge knobs from the job env — shared by both
     channels so a "Release settings" change reaches the HF publish AND the GH
     cut identically. Unset/empty falls back to ``PAD_DEFAULTS``.
@@ -263,6 +274,10 @@ def build_verse_layouts(
         verse_letters: list[tuple[int, str, int, int]] = []
         for widx, letters in tdata.get("letters", []):
             for lt in iter_letters(letters):
+                # The published letter tier can't encode an unplaced letter — fail
+                # loud if the aligner left a None timing (also narrows int | None).
+                if lt.start_ms is None or lt.end_ms is None:
+                    raise ValueError(f"letter {lt.char!r} in {ref} has unplaced timing: {lt!r}")
                 verse_letters.append(
                     (int(widx), to_external_char(lt.char), int(lt.start_ms), int(lt.end_ms))
                 )
