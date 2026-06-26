@@ -41,7 +41,7 @@
     import { hasCapability } from '../../lib/stores/capabilities';
     import { currentUser } from '../../lib/stores/current-user';
     import { pendingTsNavigation } from '../../lib/stores/navigation';
-    import { playerContext, setIsLoading, setIsPlaying } from '../../lib/stores/player-context';
+    import { playerContext, setIsLoading, setIsPlaying, setSpeed, speedLocked } from '../../lib/stores/player-context';
     import type { TsConfigResponse } from '../../lib/types/generated/schemas';
     import { getActiveTab, activeTab as activeTabStore } from '../../lib/utils/active-tab';
     import { analogousTriad } from '../../lib/utils/color-derive';
@@ -90,6 +90,7 @@
         selectedVerse,
         type TsLoadedVerse,
     } from './stores/verse';
+    import { startWaLoop, stopWaLoop, waLoopPosMs } from './utils/loop-webaudio';
     import { occasionIndexAt, resolveShuffleTick, shouldFireShuffle } from './utils/shuffle-tick';
     import { setupZoomLifecycle } from './utils/zoom';
 
@@ -464,7 +465,15 @@
             const offsetSec = loopAnchor.startMs / 1000;
             const startAbs = (loop.startSec + offsetSec) * 1000;
             const endAbs = (loop.endSec + offsetSec) * 1000;
-            if (ms >= endAbs) {
+            if (waActive) {
+                // The Web Audio loop owns looping: sync the carrier element (and so
+                // the highlight) to the audio clock so playback + highlight stay
+                // locked together.
+                const wp = waLoopPosMs();
+                if (wp != null) dashPort.seek(wp);
+            } else if (ms >= endAbs) {
+                // The element loops audibly via this seek-back only while WA is still
+                // decoding (covers the gap); WA takes over the instant it's ready.
                 ensureDashCovering(startAbs);
                 dashPort.seek(startAbs);
             }
@@ -530,6 +539,69 @@
             return true;
         }
         return false;
+    }
+
+    // The loop is a sample-accurate Web Audio region loop (loop-webaudio): the
+    // shared element is muted and only carries the visual highlight while WA owns
+    // the audio. While looping, the footer speed is forced to 1× and restored on
+    // exit. waActive is true once the WA source is playing.
+    let waActive = false;
+    function loopRegion(): { reciter: string; audioUrl: string; startMs: number; endMs: number } | null {
+        const loop = get(loopTarget);
+        const src = dashPort.source;
+        if (!loop || !loopAnchor || !src || !src.reciter || !src.audioUrl) return null;
+        const offsetSec = loopAnchor.startMs / 1000;
+        return {
+            reciter: src.reciter,
+            audioUrl: src.audioUrl,
+            startMs: (loop.startSec + offsetSec) * 1000,
+            endMs: (loop.endSec + offsetSec) * 1000,
+        };
+    }
+    // Force the footer speed to 1× while a WA loop is engaged (the loop plays at
+    // native rate), locking the control; restore the prior speed on exit.
+    let savedSpeed: number | null = null;
+    function lockSpeedTo1x(): void {
+        if (savedSpeed === null) savedSpeed = get(playerContext).speed;
+        if (get(playerContext).speed !== 1) { setSpeed(1); dashPort.setPlaybackRate(1); }
+        speedLocked.set(true);
+    }
+    function restoreSpeed(): void {
+        speedLocked.set(false);
+        if (savedSpeed === null) return;
+        if (get(playerContext).speed !== savedSpeed) { setSpeed(savedSpeed); dashPort.setPlaybackRate(savedSpeed); }
+        savedSpeed = null;
+    }
+
+    async function syncWaLoop(): Promise<void> {
+        const region = loopRegion();
+        const el = dashPort.element;
+        if (region) {
+            lockSpeedTo1x();
+            try {
+                // Keep the element audibly looping (via the rAF tick) until WA is
+                // decoded and ready; mute it exactly at the WA handoff so there's
+                // no silent gap waiting on the clip fetch/decode.
+                await startWaLoop({
+                    ...region,
+                    onReady: () => { const e = dashPort.element; if (e) e.muted = true; },
+                });
+                waActive = true;
+            } catch (e) {
+                console.warn('[ts-loop] web-audio loop failed, using element seek-back', e);
+                stopWaLoop();
+                waActive = false;
+                if (el) el.muted = false;
+                restoreSpeed();
+            }
+        } else {
+            if (waActive) {
+                stopWaLoop();
+                waActive = false;
+            }
+            if (el) el.muted = false;
+            restoreSpeed();
+        }
     }
 
     function refreshDisplays(): void {
@@ -967,6 +1039,7 @@
                 loopAnchor = null;
                 loopAnchorIdx = -1;
             }
+            void syncWaLoop();
         });
         // Media-clock backstop for the ayah-end shuffle: timeupdate/ended fire off
         // the audio clock (even when the tab is backgrounded and rAF is throttled),
@@ -983,6 +1056,8 @@
 
     onDestroy(() => {
         stopTick();
+        stopWaLoop();
+        restoreSpeed();
         // Don't leak this tab's last focus to other surfaces (Dashboard's
         // NowReciting subscribes to it).
         recitationFocus.set(null);
