@@ -260,7 +260,7 @@ def cancel_release_job(user, job_id):
         if denied is not None:
             return denied
     try:
-        hf_cancel_job(job_id)
+        hf_cancel_job(job_id=job_id)
     except Exception as exc:
         log.warning("cancel release job %s (%s) failed: %s", job_id, kind, exc)
         return jsonify({"error": str(exc)}), 502

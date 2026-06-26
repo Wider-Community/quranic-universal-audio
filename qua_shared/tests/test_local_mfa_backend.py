@@ -37,8 +37,8 @@ class _StubAligner:
 
     def __init__(self, envelope: BatchEnvelope):
         self.envelope = envelope
-        self.ctor_args = None
-        self.ctor_kwargs = None
+        self.ctor_args: tuple | None = None
+        self.ctor_kwargs: dict | None = None
         self.calls: list[dict] = []
 
     def align_items(self, refs_and_paths, **kwargs):
@@ -96,6 +96,7 @@ def test_align_batch_zips_refs_and_paths_into_align_items(monkeypatch):
         shared_cmvn=False,
         padding="forward",
     )
+    assert isinstance(backend.aligner, _StubAligner)
     call = backend.aligner.calls[0]
     assert call["items"] == [("1:1:1-1:1:4", "/tmp/a.wav"), ("1:2:1-1:2:3", "/tmp/b.wav")]
     assert call["method"] == "kalpy"
@@ -109,6 +110,7 @@ def test_align_batch_pins_retry_beam_to_beam(monkeypatch):
     backend.align_batch(
         refs, ["/tmp/a.wav"], method="kalpy", beam=7, shared_cmvn=False, padding="forward"
     )
+    assert isinstance(backend.aligner, _StubAligner)
     call = backend.aligner.calls[0]
     assert call["beam"] == 7
     assert call["retry_beam"] == 7
@@ -126,6 +128,7 @@ def test_align_batch_resolves_wb_payload_to_full_rule_dict(monkeypatch):
         padding="forward",
         word_boundary_allocation={"idgham_shafawi": "second"},
     )
+    assert isinstance(backend.aligner, _StubAligner)
     resolved = backend.aligner.calls[0]["wb_allocation_resolved"]
     expected = dict(resolve_word_boundary_allocation(None))
     expected["idgham_shafawi"] = "second"
@@ -139,6 +142,7 @@ def test_align_batch_none_wb_payload_resolves_to_system_defaults(monkeypatch):
     backend.align_batch(
         refs, ["/tmp/a.wav"], method="kalpy", beam=50, shared_cmvn=False, padding="forward"
     )
+    assert isinstance(backend.aligner, _StubAligner)
     resolved = backend.aligner.calls[0]["wb_allocation_resolved"]
     assert resolved == resolve_word_boundary_allocation(None)
 
@@ -163,6 +167,7 @@ def test_align_batch_rows_feed_convert_word(monkeypatch):
     rows = backend.align_batch(
         refs, ["/tmp/a.wav"], method="kalpy", beam=50, shared_cmvn=False, padding="forward"
     )
+    assert rows is not None
     assert rows[0]["status"] == "ok"
     converted = _convert_word(rows[0]["words"][0], 100)
     assert converted == [1, 100, 600, [["b", 100, 600]], [["B", 100, 600]]]
@@ -170,6 +175,7 @@ def test_align_batch_rows_feed_convert_word(monkeypatch):
 
 def test_backend_ctor_builds_serial_aligner_with_mfa_threads(monkeypatch):
     backend = _patched_backend(monkeypatch, _ok_envelope([]), mfa_threads=3)
+    assert isinstance(backend.aligner, _StubAligner)
     assert backend.aligner.ctor_args == ("model.zip", "dict.txt")
     assert backend.aligner.ctor_kwargs == {"num_threads": 3, "use_pool": False}
 

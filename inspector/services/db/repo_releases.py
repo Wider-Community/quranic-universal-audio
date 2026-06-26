@@ -25,6 +25,14 @@ from qua_shared.schemas import StaleReason
 from . import _serde
 from .connection import get_conn
 
+
+def _require_rowid(rowid: int | None) -> int:
+    """Return the rowid of a just-completed INSERT, which sqlite always sets."""
+    if rowid is None:
+        raise RuntimeError("INSERT did not produce a rowid")
+    return rowid
+
+
 # ---------------------------------------------------------------------------
 # per_recitation_releases
 # ---------------------------------------------------------------------------
@@ -73,7 +81,7 @@ def insert_per_recitation_release(
             prior_ts_version,
         ),
     )
-    return int(cur.lastrowid)
+    return _require_rowid(cur.lastrowid)
 
 
 def supersede_current(track: str, slug: str, *, except_id: int, at: datetime) -> int:
@@ -291,7 +299,7 @@ def insert_gh_release(
             _serde.json_dumps(validation_summary) if validation_summary else None,
         ),
     )
-    return int(cur.lastrowid)
+    return _require_rowid(cur.lastrowid)
 
 
 def supersede_prior_gh_releases(*, except_id: int, at: datetime) -> int:

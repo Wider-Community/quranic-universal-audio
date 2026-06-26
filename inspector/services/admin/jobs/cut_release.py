@@ -28,7 +28,7 @@ import logging
 import os
 from datetime import UTC, datetime
 
-from qua_shared.schemas import Actor
+from qua_shared.schemas import Actor, Role
 from services.db import repo_releases
 from services.db.sync import durable_transaction
 from services.state import audit
@@ -114,7 +114,7 @@ def launch(
     job = run_job(
         image=base.JOB_IMAGE,
         command=command,
-        flavor=JOB_FLAVOR,
+        flavor=JOB_FLAVOR,  # type: ignore[reportArgumentType]  # HF accepts the str value of SpaceHardware
         timeout=JOB_TIMEOUT,
         env=env,
         secrets=secrets,
@@ -163,7 +163,7 @@ def complete(
     actor = Actor(
         hf_user_id="SYSTEM_ACTOR",
         login_at_time=launched_by or "system",
-        role="owner",
+        role=Role.OWNER,
     )
     with durable_transaction() as _:
         # Idempotency: any row (current OR superseded) with this version → no-op.

@@ -4,6 +4,12 @@
      * source for the chosen glyphs (granularity bar/dots, eye states, droplet,
      * filmstrip motion, size −/+) so the section header and the filmstrip edge
      * render identical icons. All inherit `currentColor`.
+     *
+     * `tajweed` is the one exception: rather than an SVG glyph it renders a real
+     * analysis cell (the same 3px-rounded shape) reading `TJW`, with three of the
+     * cell's own stacked underline bars — each bar cycling three `--tj-*` palette
+     * hues — so the icon literally is the stacked-underline feature it opens. It
+     * uses the live palette vars, not `currentColor`.
      */
     interface Props {
         name:
@@ -12,7 +18,7 @@
             | 'droplet'
             | 'motion-hybrid' | 'motion-snap'
             | 'size-down' | 'size-up'
-            | 'letters' | 'phonemes' | 'globe'
+            | 'letters' | 'phonemes' | 'globe' | 'tajweed' | 'wipe'
             | 'bookmark' | 'bookmark-filled' | 'bookmarks-panel' | 'help';
         size?: number;
     }
@@ -23,7 +29,7 @@
     // text so they inherit currentColor; an Arabic-capable system font shapes
     // the glyphs.
     const AR = 'font-family="Tahoma,\'Segoe UI\',\'Noto Naskh Arabic\',sans-serif" font-weight="600" fill="currentColor" text-anchor="middle" direction="rtl"';
-    const P: Record<Props['name'], string> = {
+    const P: Partial<Record<Props['name'], string>> = {
         'gran-word':
             `<text x="12" y="16.5" font-size="12.5" ${AR}>أبت</text>`,
         'gran-letter':
@@ -73,6 +79,12 @@
             + '<line x1="16.8" y1="10" x2="16.8" y2="14"/>'
             + '<line x1="20" y1="7" x2="20" y2="17"/>'
             + '</g>',
+        // Continuous-highlight (karaoke wipe): a cell filling like liquid — a
+        // wave level inside the rounded cell, signalling the fill that tracks the
+        // voice across each cell (vs the discrete fill when off).
+        'wipe':
+            '<rect x="3.5" y="4.5" width="17" height="15" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/>'
+            + '<path d="M4.5 12.8q3.75-2.6 7.5 0t7.5 0L19.5 17.2a2.3 2.3 0 0 1-2.3 2.3L6.8 19.5a2.3 2.3 0 0 1-2.3-2.3Z" fill="currentColor"/>',
         // Translations: a globe (languages).
         'globe':
             '<circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.8"/>'
@@ -97,13 +109,83 @@
     };
 </script>
 
-<span class="ci" style:width="{size}px" style:height="{size}px" aria-hidden="true">
-    <!-- Static internal SVG table (no user input) — safe to inline. -->
-    <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-    {@html `<svg viewBox="0 0 24 24" width="100%" height="100%">${P[name] ?? ''}</svg>`}
+<span
+    class="ci"
+    class:ci-fill={name === 'tajweed'}
+    style:width={name === 'tajweed' ? null : `${size}px`}
+    style:height={name === 'tajweed' ? null : `${size}px`}
+    aria-hidden="true"
+>
+    {#if name === 'tajweed'}
+        <span class="tjw" style:font-size="{size}px">
+            <span class="tjw-txt">TJW</span>
+            <span class="tjw-ul">
+                <span class="tjw-bar">
+                    <i style:background="var(--tj-qalqala)"></i>
+                    <i style:background="var(--tj-izhar-halqi)"></i>
+                    <i style:background="var(--tj-madd-arid)"></i>
+                </span>
+            </span>
+        </span>
+    {:else}
+        <!-- Static internal SVG table (no user input) — safe to inline. -->
+        <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+        {@html `<svg viewBox="0 0 24 24" width="100%" height="100%">${P[name] ?? ''}</svg>`}
+    {/if}
 </span>
 
 <style>
     .ci { display: inline-flex; line-height: 0; }
     .ci :global(svg) { display: block; }
+    /* The tajweed icon fills its footer button so its underline spans the whole
+       (blue, on hover/active) cell. */
+    .ci-fill { width: 100%; height: 100%; }
+
+    /* The tajweed icon IS the footer button cell: borderless + transparent so the
+       button's own (blue, on hover/active) fill reads as the cell, with a big
+       top-pinned TJW over one underline bar cycling three palette hues spanning the
+       full width. overflow-hidden + the button-matched radius clip the bar to the
+       rounded bottom; the bar ends round so it bleeds to the edge like a live cell. */
+    .tjw {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        /* Reserve the underline strip so TJW centres in the space ABOVE it — equal
+           gap from the top edge and from the colours. */
+        padding-bottom: 0.14em;
+        background: transparent;
+        border-radius: var(--r-2, 5px);
+        overflow: hidden;
+    }
+    .tjw-txt {
+        font-size: 0.62em;
+        font-weight: 700;
+        letter-spacing: -0.07em;
+        line-height: 1;
+        /* Inherit the footer button's icon colour (muted → primary on hover →
+           accent on active) so TJW matches its sibling icons in every state. */
+        color: inherit;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    .tjw-ul {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        display: flex;
+        flex-direction: column;
+    }
+    .tjw-bar { display: flex; height: 0.14em; }
+    .tjw-bar i { flex: 1; display: block; }
+    .tjw-bar i:first-child {
+        border-top-left-radius: 1.5px;
+        border-bottom-left-radius: 1.5px;
+    }
+    .tjw-bar i:last-child {
+        border-top-right-radius: 1.5px;
+        border-bottom-right-radius: 1.5px;
+    }
 </style>

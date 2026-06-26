@@ -523,6 +523,7 @@ def tmp_reciter_dir(tmp_path, monkeypatch):
             rebuild_segments_json(reciter, entries)
             # Re-stamp meta if rebuild dropped it.
             seg_doc = backend.read_json(seg_rel)
+            assert isinstance(seg_doc, dict)
             if not seg_doc.get("_meta"):
                 seg_doc["_meta"] = meta
                 backend.write_json_atomic(seg_rel, seg_doc)

@@ -47,7 +47,9 @@ def launch(slugs: list[str], *, settings=None, webhook_base: str | None = None) 
     fields are threaded to the job as ``PUBLISH_PAD_START`` / ``PUBLISH_PAD_END``
     / ``PUBLISH_MIN_GAP`` and read per-slug in ``publish_hf_batch``.
     """
-    from huggingface_hub import Volume, get_token, run_job
+    from typing import cast
+
+    from huggingface_hub import SpaceHardware, Volume, get_token, run_job
 
     from services.storage.hf_bucket import resolve_bucket_repo
 
@@ -97,7 +99,7 @@ def launch(slugs: list[str], *, settings=None, webhook_base: str | None = None) 
     job = run_job(
         image=base.JOB_IMAGE,
         command=command,
-        flavor=JOB_FLAVOR,
+        flavor=cast(SpaceHardware, JOB_FLAVOR),
         timeout=JOB_TIMEOUT,
         env=env,
         secrets=secrets,
@@ -233,4 +235,7 @@ def latest_batch_outcome() -> dict | None:
 
 def register() -> None:
     # Poll fallback: no members payload — complete() reads the bucket record.
-    base.register_handler(KIND, lambda _slug, jid: complete(jid))
+    def _handler(_slug: str | None, jid: str) -> None:
+        complete(jid)
+
+    base.register_handler(KIND, _handler)

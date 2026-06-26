@@ -480,7 +480,7 @@ _boot_substrate()
 @app.errorhandler(HTTPException)
 def _handle_http_exception(e: HTTPException):
     """Return the canonical ``{error: <description>}`` envelope with the HTTP status."""
-    return jsonify({"error": e.description}), e.code
+    return jsonify({"error": e.description}), e.code or 500
 
 
 @app.errorhandler(UnknownReciter)

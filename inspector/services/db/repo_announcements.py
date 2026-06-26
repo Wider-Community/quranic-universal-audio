@@ -49,7 +49,10 @@ def create(
         "VALUES (?,?,?,?,?)",
         (title, body, author_hf_user_id, author_login, _serde.to_iso(at or _serde.now())),
     )
-    return cur.lastrowid
+    rowid = cur.lastrowid
+    if rowid is None:
+        raise RuntimeError("INSERT did not produce a rowid")
+    return rowid
 
 
 def list_active(*, limit: int = 50) -> list[dict[str, Any]]:

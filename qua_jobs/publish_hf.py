@@ -589,7 +589,7 @@ def _verses_for_validation(rows: list[dict]) -> dict[str, dict]:
 # ---------------------------------------------------------------------------
 
 
-def _push_to_hf(slug: str, riwayah: str, rows: list[dict], audio_bytes: list[bytes]) -> str:
+def _push_to_hf(slug: str, riwayah: str, rows: list[dict], audio_bytes: list[bytes | None]) -> str:
     """Build the parquet split and push to HF. Returns the dataset commit SHA."""
     from datasets import Audio, Dataset, Features, Sequence, Value
     from huggingface_hub import HfApi

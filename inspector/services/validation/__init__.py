@@ -92,10 +92,11 @@ def _read_deleted_basmala_chapters(reciter: str) -> set[int]:
     return set(meta.get("deleted_basmala_chapters") or [])
 
 
-def validate_reciter_segments(reciter: str) -> dict:
+def validate_reciter_segments(reciter: str) -> dict | None:
     """Validate all chapters for a reciter, returning issues grouped by category.
 
-    Returns a plain dict suitable for ``jsonify()``.
+    Returns a plain dict suitable for ``jsonify()``, or ``None`` when the
+    reciter has no saved segments (callers surface this as a 404 / block).
     """
     # Parallel I/O fan-out: four independent bucket reads. SSL recv releases
     # the GIL, so threads cut the wall-clock cost from sum(serial) to

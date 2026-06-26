@@ -106,6 +106,7 @@ def test_word_by_word_unknown_language_falls_back_to_en(monkeypatch, _clear_qf_c
     seen = {}
 
     def fake_get(url, params=None, headers=None, timeout=None):
+        assert params is not None
         seen["language"] = params["language"]
         return _FakeResp(_verse_payload())
 

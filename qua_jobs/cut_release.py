@@ -956,9 +956,7 @@ def main() -> int:
         # the changelog Missing column — whole missing surahs vs within-surah
         # verse gaps, split so even a partial recitation stays short.
         present_refs = {
-            (int(k.split(":")[0]), int(k.split(":")[1]))
-            for k in verses
-            if not k.startswith("_")
+            (int(k.split(":")[0]), int(k.split(":")[1])) for k in verses if not k.startswith("_")
         }
         missing_surahs, missing_verses = missing_coverage(present_refs, surah_verse_counts)
         catalog_bytes = _build_catalog_json(

@@ -84,7 +84,7 @@ def snapshot() -> ReciterCatalog:
 
     seq = _db.current_db_seq()
     cached = _cache.get_catalog_snapshot_cache(seq)
-    if cached is not None:
+    if isinstance(cached, ReciterCatalog):
         return cached
     cat = repo_catalog.snapshot()
     _cache.set_catalog_snapshot_cache(seq, cat)

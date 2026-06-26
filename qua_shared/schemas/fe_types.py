@@ -20,6 +20,7 @@ committed to git so CI can ``git diff --exit-code`` it.
 
 from __future__ import annotations
 
+from .bucket.cell_vocab import CellRole, CellStatus
 from .bucket.edit_history import EditHistoryBatch, EditOperation, EditOpPatch
 from .bucket.jobs import JobMember, JobRecord, JobsListResponse
 from .bucket.peaks_history import PeaksRecord
@@ -31,8 +32,9 @@ from .bucket.segment import (
     FlagFollowUp,
     SegmentFlag,
 )
+from .bucket.tajweed_vocab import TajweedRule
 from .bucket.ts_job_record import TsJobRecord, TsJobSettings
-from .bucket.ts_shard import TsShardDoc, TsShardMeta, TsShardSegment, TsShardWord
+from .bucket.ts_shard import TsShardCell, TsShardDoc, TsShardMeta, TsShardSegment, TsShardWord
 from .bucket.ts_validation import TsValidationDoc, TsValidationMeta, TsValidationVerse
 from .config.automation import (
     AutoGenTsConfig,
@@ -268,10 +270,14 @@ __all__ = [
     "SuggestedAction",
     "TsJobRecord",
     "TsJobSettings",
+    "TsShardCell",
     "TsShardDoc",
     "TsShardMeta",
     "TsShardSegment",
     "TsShardWord",
+    "CellRole",
+    "CellStatus",
+    "TajweedRule",
     "TsValidationDoc",
     "TsValidationMeta",
     "TsValidationVerse",

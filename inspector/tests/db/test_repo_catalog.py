@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timezone
 
 from qua_shared.schemas import (
+    AudioCategory,
     Channel,
     Delivery,
     ReciterCatalog,
@@ -33,7 +34,7 @@ def _catalog() -> ReciterCatalog:
                     slug="mp3quran",
                     name="MP3Quran",
                     url="https://mp3quran.net",
-                    audio_categories=["by_surah"],
+                    audio_categories=[AudioCategory.BY_SURAH],
                 )
             ],
             channels=[
@@ -61,7 +62,7 @@ def _catalog() -> ReciterCatalog:
                 recording_context="studio",
                 source="mp3quran",
                 channel="ch1",
-                audio_category="by_surah",
+                audio_category=AudioCategory.BY_SURAH,
                 chapter_count=114,
                 added_at=ts,
                 added_by_hf_id="seed",
@@ -95,7 +96,9 @@ def test_full_catalog_roundtrip_parity(fresh_db):
 
 def test_find_reciter_and_delivery(fresh_db):
     _load(_catalog())
-    assert repo_catalog.find_reciter("husary").name_en == "Al-Husary"
+    found = repo_catalog.find_reciter("husary")
+    assert found is not None
+    assert found.name_en == "Al-Husary"
     assert repo_catalog.find_reciter("nope") is None
     d = repo_catalog.find_delivery("husary_hafs_murattal")
     assert d is not None and d.riwayah == "hafs"
@@ -105,12 +108,16 @@ def test_edit_reciter_and_delivery(fresh_db):
     _load(_catalog())
     with db.transaction():
         r = repo_catalog.edit_reciter("husary", name_en="Mahmoud Al-Husary", notes="updated")
+    assert r is not None
     assert r.name_en == "Mahmoud Al-Husary" and r.notes == "updated"
     with db.transaction():
         d = repo_catalog.edit_delivery(
             "husary_hafs_murattal", recording_year=1960, variant_label="remastered"
         )
+    assert d is not None
     assert d.recording_year == 1960 and d.variant_label == "remastered"
     # edit persists through a fresh snapshot
     snap = repo_catalog.snapshot()
-    assert snap.find_reciter("husary").name_en == "Mahmoud Al-Husary"
+    snap_reciter = snap.find_reciter("husary")
+    assert snap_reciter is not None
+    assert snap_reciter.name_en == "Mahmoud Al-Husary"

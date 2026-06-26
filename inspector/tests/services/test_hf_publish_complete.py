@@ -53,4 +53,6 @@ def test_first_complete_records_and_advances_db_seq():
     assert out["ok"] is True
     assert "release_id" in out
     assert current_db_seq() > seq_before
-    assert repo_releases.current_release("hf", slug)["version"] == version
+    rel = repo_releases.current_release("hf", slug)
+    assert rel is not None
+    assert rel["version"] == version
