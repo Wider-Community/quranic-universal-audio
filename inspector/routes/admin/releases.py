@@ -195,7 +195,8 @@ def publish_hf_batch(user):
 
     webhook_base = request.url_root
     try:
-        result = hf_publish_batch_jobs.launch(slugs, webhook_base=webhook_base)
+        result = hf_publish_batch_jobs.launch(
+            slugs, settings=req.settings, webhook_base=webhook_base)
     except Exception as exc:
         log.warning("publish-hf-batch launch failed: %s", exc)
         return jsonify({"error": str(exc)}), 502

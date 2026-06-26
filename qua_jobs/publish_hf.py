@@ -42,7 +42,6 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from qua_shared.letter_vocab import to_external_char  # noqa: E402
-from qua_shared.ts_shard_letters import iter_letters  # noqa: E402
 from qua_shared.mp3_frames import (  # noqa: E402
     FrameIndex,
     MultiFrameSlice,
@@ -50,6 +49,7 @@ from qua_shared.mp3_frames import (  # noqa: E402
     slice_frames,
     slice_frames_multi,
 )
+from qua_shared.ts_shard_letters import iter_letters  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger("publish_hf")
@@ -321,6 +321,29 @@ def _subtract_spans(lo: int, hi: int, spans: list[tuple[int, int]]) -> list[tupl
     return runs
 
 
+def _fit_boundary(
+    left_end: int, right_start: int, pad_end: int, pad_start: int, min_gap: int
+) -> tuple[float, float]:
+    """Split the true silence between two adjacent verses (verse N's MFA
+    last-letter end → verse N+1's MFA first-letter start) into
+    ``(tail_pad for N, lead_pad for N+1)``.
+
+    Hands ``pad_end`` to N's tail and ``pad_start`` to N+1's lead while keeping
+    at least ``min_gap`` of silence between the two clips. When they would
+    overflow the available silence the pads scale down proportionally (the
+    ``pad_end : pad_start`` ratio is preserved) so the clips never leak into each
+    other (their gap then equals exactly ``min_gap``).
+    """
+    sil = right_start - left_end
+    if pad_end + min_gap + pad_start <= sil:
+        return float(pad_end), float(pad_start)
+    budget = max(0.0, sil - min_gap)
+    total = pad_end + pad_start
+    if total <= 0:
+        return 0.0, 0.0
+    return budget * pad_end / total, budget * pad_start / total
+
+
 def build_rows(
     timestamps: dict,
     detailed_by_ref: dict,
@@ -329,6 +352,9 @@ def build_rows(
     chapter_urls: dict[str, str] | None = None,
     *,
     chapter_offsets: dict[str, int] | None = None,
+    pad_start: int = 100,
+    pad_end: int = 300,
+    min_gap: int = 100,
 ) -> list[dict]:
     """Build dataset row metadata in canonical verse order.
 
@@ -356,27 +382,47 @@ def build_rows(
             tdata = timestamps.get(ref)
             if not tdata:
                 continue
-            clip_start = tdata["verse_start_ms"]
-            clip_end = tdata["verse_end_ms"]
+            verse_start = tdata["verse_start_ms"]
+            verse_end = tdata["verse_end_ms"]
+            # Clip edges from MFA times (not VAD): pad the verse's outer edges
+            # with ratio-fit headroom shared against the neighbour verses, so
+            # adjacent rows keep >= min_gap of silence and never leak (see
+            # _fit_boundary). Chapter-edge verses just pad (clamped to audio).
+            prev = timestamps.get(f"{surah_num}:{ayah - 1}")
+            nxt = timestamps.get(f"{surah_num}:{ayah + 1}")
+            if prev and prev.get("words"):
+                _, lead_pad = _fit_boundary(
+                    int(prev["verse_end_ms"]), verse_start, pad_end, pad_start, min_gap)
+            else:
+                lead_pad = float(pad_start)
+            if nxt and nxt.get("words"):
+                tail_pad, _ = _fit_boundary(
+                    verse_end, int(nxt["verse_start_ms"]), pad_end, pad_start, min_gap)
+            else:
+                tail_pad = float(pad_end)
+            clip_start = max(0, int(round(verse_start - lead_pad)))
+            clip_end = int(round(verse_end + tail_pad))
 
-            # Segments: only those overlapping the clip AND covering this ayah;
-            # trim to clip; clip-relative. Word span comes from matched_ref.
+            # Segments (Change B): boundaries are the post-MFA word/letter ends,
+            # NOT VAD — so every internal segment boundary agrees byte-exact with
+            # the abutting word end and the gap between adjacent segments is the
+            # recovered inter-segment silence. The two outer edges are overridden
+            # to the padded clip edges below. Word span comes from matched_ref.
+            word_by_idx = {int(w[0]): (int(w[1]), int(w[2])) for w in tdata["words"]}
             verse_segments: list[list[int]] = []
             for seg in entry.get("segments", []) or []:
-                t_start = seg.get("time_start", 0)
-                t_end = seg.get("time_end", 0)
-                if t_end <= clip_start or t_start >= clip_end:
-                    continue
                 wr = _seg_word_range(seg.get("matched_ref", ""), surah_num, ayah, surah_info)
                 if wr is None:
                     continue
                 w_from, w_to = wr
+                if w_from not in word_by_idx or w_to not in word_by_idx:
+                    continue
                 verse_segments.append(
                     [
                         _i(w_from),
                         _i(w_to),
-                        _i(max(0, t_start - clip_start)),
-                        _i(min(t_end, clip_end) - clip_start),
+                        _i(word_by_idx[w_from][0] - clip_start),
+                        _i(word_by_idx[w_to][1] - clip_start),
                     ]
                 )
 
@@ -450,6 +496,14 @@ def build_rows(
                             xv_after[-1][2],
                         ]
                     )
+
+            # Outer-edge headroom (the intentional mismatch): the first segment
+            # starts at the clip start and the last ends at the clip end, so the
+            # two outer segments absorb the lead/tail pads while every internal
+            # boundary stays byte-exact with the words.
+            if verse_segments:
+                verse_segments[0][2] = 0
+                verse_segments[-1][3] = _i(clip_end - clip_start)
 
             # Letters: flatten (widx, char, start, end) — clip-relative. Read via
             # the named accessor; the shard's trailing ``silent`` flag (and any
@@ -960,7 +1014,10 @@ def _result(
     }
 
 
-def publish_slug(slug: str, job_id: str, *, sync_card: bool = True) -> dict:
+def publish_slug(
+    slug: str, job_id: str, *, sync_card: bool = True,
+    pad_start: int = 100, pad_end: int = 300, min_gap: int = 100,
+) -> dict:
     """Publish one recitation to the HF dataset. Returns a result dict; never
     posts a webhook or raises (the caller — single or batch — owns reporting).
 
@@ -1043,6 +1100,9 @@ def publish_slug(slug: str, job_id: str, *, sync_card: bool = True) -> dict:
         dk_words,
         chapter_urls,
         chapter_offsets=chapter_offsets,
+        pad_start=pad_start,
+        pad_end=pad_end,
+        min_gap=min_gap,
     )
     log.info("built %d rows for %s", len(rows), slug)
     if not rows:
@@ -1203,9 +1263,14 @@ def publish_slug(slug: str, job_id: str, *, sync_card: bool = True) -> dict:
 def main() -> int:
     slug = os.environ.get("SLUG", "").strip()
     job_id = os.environ.get("JOB_ID", "").strip() or "unknown"
-    log.info("publish_hf: slug=%s job=%s", slug, job_id)
+    pad_start = int(os.environ.get("PUBLISH_PAD_START", "").strip() or 100)
+    pad_end = int(os.environ.get("PUBLISH_PAD_END", "").strip() or 300)
+    min_gap = int(os.environ.get("PUBLISH_MIN_GAP", "").strip() or 100)
+    log.info("publish_hf: slug=%s job=%s pads=(start=%d,end=%d,gap=%d)",
+             slug, job_id, pad_start, pad_end, min_gap)
 
-    result = publish_slug(slug, job_id, sync_card=True)
+    result = publish_slug(slug, job_id, sync_card=True,
+                          pad_start=pad_start, pad_end=pad_end, min_gap=min_gap)
     _post_webhook(
         slug=slug,
         job_id=job_id,

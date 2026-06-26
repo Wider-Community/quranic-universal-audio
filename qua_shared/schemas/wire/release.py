@@ -18,6 +18,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel, model_serializer, model_validator
 
+from qua_shared.schemas.bucket.publish_hf_settings import PublishHfSettings
+
 SCHEMA_VERSION = 1
 VERSE_KEY_RE = re.compile(r"^[1-9]\d{0,2}:[1-9]\d{0,2}$")
 LOCATION_KEY_RE = re.compile(r"^[1-9]\d{0,2}:[1-9]\d{0,2}:[1-9]\d{0,2}$")
@@ -479,6 +481,8 @@ class AdminPublishBatchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     slugs: list[str] = Field(..., min_length=1)
+    #: Clip-edge padding for the published rows. ``None`` = server defaults.
+    settings: PublishHfSettings | None = None
 
 
 class AdminLaunchResponse(BaseModel):
