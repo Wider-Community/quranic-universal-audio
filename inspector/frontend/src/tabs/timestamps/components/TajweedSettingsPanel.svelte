@@ -129,7 +129,7 @@
                     <!-- Noon / Meem: two sub-sections, each its own header, distributed to fill height. -->
                     <div class="tjs-body">
                         {#each group.subgroups as sg (sg.title)}
-                            <div class="tjs-sub">
+                            <div class="tjs-subsec">
                                 <h4>{sg.title}</h4>
                                 {#each sg.rows as row (row.label)}
                                     {@render ruleRow(row)}
@@ -262,12 +262,12 @@
     }
     /* Noon / Meem sub-sections — each headed by its own h4 (no redundant column
        header); the two blocks distribute top/bottom to fill the column. */
-    .tjs-sub {
+    .tjs-subsec {
         display: flex;
         flex-direction: column;
         gap: 5px;
     }
-    .tjs-sub h4 {
+    .tjs-subsec h4 {
         margin: 0;
     }
     .tjs-row {
