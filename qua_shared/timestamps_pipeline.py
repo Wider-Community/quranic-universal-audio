@@ -934,6 +934,92 @@ def _align_whole_verse(
     return results_by_beam
 
 
+def _finalize_shards(
+    results_by_beam: dict,
+    *,
+    chapters: list,
+    canonical_beam: int,
+    beams: list[int],
+    output_dir: Path,
+    audio_category: str,
+    audio_source: str,
+    method: str,
+    shared_cmvn: bool,
+    padding: str,
+    reciter: str,
+    refresh_chapters: set | None,
+    existing_data: dict,
+    tmp_dir: Path,
+) -> Path | None:
+    """Write per-chapter segment-array shards + the ts_validation sidecar from
+    ``results_by_beam`` — shared by the per-segment and whole-verse paths.
+
+    ``canonical_results`` carries every aligned segment, so build_raw_v2 keeps
+    all occurrences and build_segment_shards emits each one RAW (no dedup at
+    write); the narrower beams feed the verse-level ts_validation sidecar.
+    """
+    canonical_results = results_by_beam[canonical_beam]
+    if not canonical_results and not existing_data:
+        log.info("No segments processed (all skipped or failed)")
+        _cleanup([], tmp_dir)
+        return None
+
+    from quranic_phonemizer import Phonemizer
+
+    from qua_shared.timestamps_bridges import (
+        tag_v2_doc,  # lazy: keep phonemizer off the inspector import path
+    )
+    from qua_shared.timestamps_dedup import build_raw_v2  # lazy: avoid import cycle
+
+    ts_dir = output_dir / "timestamps"
+    ts_dir.mkdir(parents=True, exist_ok=True)
+
+    bridge_pm = Phonemizer()
+    shard_provenance = {
+        "created_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "audio_source": audio_source,
+        "aligner_model": DEFAULT_ALIGNER_MODEL,
+        "method": method,
+        "beam": canonical_beam,
+        "shared_cmvn": shared_cmvn,
+        "padding": padding,
+    }
+
+    def _emit_segment_shards(results_by_ch, suffix=""):
+        v2_doc = build_raw_v2(chapters, results_by_ch, audio_category)
+        n_bridges = tag_v2_doc(bridge_pm, v2_doc)
+        log.info("Tagged %d cross-word bridge phone(s)", n_bridges)
+        shards = build_segment_shards(
+            v2_doc, audio_category=audio_category, src_meta=shard_provenance
+        )
+        for ch_num, shard_doc in shards.items():
+            (ts_dir / f"{ch_num}{suffix}.json.gz").write_bytes(gzip_shard(shard_doc))
+        fails = len((v2_doc.get("_meta") or {}).get("mfa_failures", []))
+        return len(shards), fails
+
+    n_shards, n_fail = _emit_segment_shards(canonical_results)
+    if n_fail:
+        log.warning("Canonical beam %d: %d MFA failures", canonical_beam, n_fail)
+    log.info("Wrote %d segment-array timestamps shard(s) (beam=%d) -> %s",
+             n_shards, canonical_beam, ts_dir)
+
+    ts_validation = build_ts_validation(
+        chapters, results_by_beam, beams, reciter=reciter, method=method
+    )
+    if refresh_chapters:
+        ts_validation = _merge_ts_validation(
+            output_dir / "ts_validation.json", ts_validation, refresh_chapters
+        )
+    (output_dir / "ts_validation.json").write_text(
+        json.dumps(ts_validation, ensure_ascii=False), encoding="utf-8"
+    )
+    log.info("Wrote ts_validation.json: %d flagged verse(s) across beams %s",
+             len(ts_validation["verses"]), ts_validation["_meta"]["beams"])
+
+    _cleanup([], tmp_dir)
+    return output_dir
+
+
 def process(
     input_dir: Path,
     backend: MfaBackend | None,
@@ -952,6 +1038,7 @@ def process(
     mfa_dictionary_path: str | Path | None = None,
     mfa_app_path: str | Path | None = None,
     word_boundary_allocation: dict | None = None,
+    whole_verse: bool = False,
 ) -> Path | None:
     """Process all chapters from detailed.json through MFA alignment.
 
@@ -986,7 +1073,7 @@ def process(
     if mfa_app_path is not None and not (mfa_model_path and mfa_dictionary_path):
         mfa_model_path, mfa_dictionary_path = _paths_from_app_path(mfa_app_path)
     use_pool = bool(mfa_model_path and mfa_dictionary_path) and workers > 1
-    if not use_pool and backend is None:
+    if not use_pool and backend is None and not whole_verse:
         raise ValueError("backend is required when not using the process pool")
 
     detailed_path = input_dir / "detailed.json"
@@ -1119,6 +1206,27 @@ def process(
         # written (single canonical format).
         log.info("No segments to process (all complete or skipped)")
         return output_dir
+
+    # Whole-verse path: one align_verse pass per verse occurrence (psil seeded
+    # at every segment boundary), raw + faithful, producing the same
+    # results_by_beam the per-segment streaming path does. Early-returns through
+    # the shared shard writer, leaving the per-segment producer block untouched.
+    if whole_verse:
+        if not (mfa_model_path and mfa_dictionary_path):
+            raise ValueError("whole_verse requires mfa_model_path + mfa_dictionary_path")
+        results_by_beam = _align_whole_verse(
+            chapters_to_process, beams,
+            mfa_model_path=mfa_model_path, mfa_dictionary_path=mfa_dictionary_path,
+            padding=padding, word_boundary_allocation=word_boundary_allocation,
+            refresh_ayahs=refresh_ayahs,
+        )
+        return _finalize_shards(
+            results_by_beam, chapters=chapters, canonical_beam=canonical_beam,
+            beams=beams, output_dir=output_dir, audio_category=audio_category,
+            audio_source=audio_source, method=method, shared_cmvn=shared_cmvn,
+            padding=padding, reciter=reciter, refresh_chapters=refresh_chapters,
+            existing_data=existing_data, tmp_dir=tmp_dir,
+        )
 
     # --- Producer-consumer pipeline ---
     # Bounded queue prevents unbounded WAV accumulation on disk.
@@ -1428,96 +1536,13 @@ def process(
                 except OSError:
                     pass
 
-    canonical_results = results_by_beam[canonical_beam]
-    if not canonical_results and not existing_data:
-        log.info("No segments processed (all skipped or failed)")
-        _cleanup([], tmp_dir)
-        return None
-
-    # Per-chapter temporal segment-array shards at
-    # ``<output_dir>/timestamps/<chapter>.json.gz``. ``canonical_results``
-    # carries every aligned segment, so build_raw_v2 keeps all occurrences and
-    # build_segment_shards emits each one RAW as a recitation-ordered segment
-    # entry ({ref, t, words}) — no dedup at write. Consumers derive whatever
-    # projection they need; the inspector read-path is a byte pass-through.
-    from quranic_phonemizer import Phonemizer
-
-    from qua_shared.timestamps_bridges import (
-        tag_v2_doc,  # lazy: keep phonemizer off the inspector import path
+    return _finalize_shards(
+        results_by_beam, chapters=chapters, canonical_beam=canonical_beam,
+        beams=beams, output_dir=output_dir, audio_category=audio_category,
+        audio_source=audio_source, method=method, shared_cmvn=shared_cmvn,
+        padding=padding, reciter=reciter, refresh_chapters=refresh_chapters,
+        existing_data=existing_data, tmp_dir=tmp_dir,
     )
-    from qua_shared.timestamps_dedup import build_raw_v2  # lazy: avoid import cycle
-
-    ts_dir = output_dir / "timestamps"
-    ts_dir.mkdir(parents=True, exist_ok=True)
-
-    # One phonemizer for cross-word bridge tagging across all chapters.
-    bridge_pm = Phonemizer()
-
-    # Slim aligner provenance stamped into each shard's ``_meta`` (reciter,
-    # url_template and audio_urls are excluded — slug is the path, manifest is
-    # the audio ground truth).
-    shard_provenance = {
-        "created_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "audio_source": audio_source,
-        "aligner_model": DEFAULT_ALIGNER_MODEL,
-        "method": method,
-        "beam": canonical_beam,
-        "shared_cmvn": shared_cmvn,
-        "padding": padding,
-    }
-
-    def _emit_segment_shards(results_by_ch, suffix=""):
-        v2_doc = build_raw_v2(chapters, results_by_ch, audio_category)
-        # Tag cross-word tajweed bridges AND stamp per-letter silent flags + folded
-        # silence marks (tag_v2_doc → tag_segment_words → _stamp_silent_flags) — the
-        # same path the silent-flags backfill runs. build_segment_shards then stamps
-        # schema v4. Correctness tracks the phonemizer version this job runs.
-        n_bridges = tag_v2_doc(bridge_pm, v2_doc)
-        log.info("Tagged %d cross-word bridge phone(s)", n_bridges)
-        shards = build_segment_shards(
-            v2_doc, audio_category=audio_category, src_meta=shard_provenance
-        )
-        for ch_num, shard_doc in shards.items():
-            (ts_dir / f"{ch_num}{suffix}.json.gz").write_bytes(gzip_shard(shard_doc))
-        fails = len((v2_doc.get("_meta") or {}).get("mfa_failures", []))
-        return len(shards), fails
-
-    n_shards, n_fail = _emit_segment_shards(canonical_results)
-    if n_fail:
-        log.warning("Canonical beam %d: %d MFA failures", canonical_beam, n_fail)
-    log.info(
-        "Wrote %d segment-array timestamps shard(s) (beam=%d) -> %s",
-        n_shards,
-        canonical_beam,
-        ts_dir,
-    )
-
-    # Probe beams → ONE verse-level ``ts_validation.json`` sidecar (the
-    # verse-level analogue of low_confidence_v2.json) instead of per-beam
-    # shard files. Flags verses whose alignment disagrees under tighter beams;
-    # served owner-gated to the Timestamps-tab "ts-validation" accordion.
-    ts_validation = build_ts_validation(
-        chapters, results_by_beam, beams, reciter=reciter, method=method
-    )
-    # ts_validation.json is a WHOLE-RECITER sidecar but a partial run only
-    # produced flags for the processed chapters. Merge: drop the existing flags
-    # for the refreshed chapters (they're rebuilt) and keep every other chapter's,
-    # so an affected-only regen never clobbers untouched chapters' flags.
-    if refresh_chapters:
-        ts_validation = _merge_ts_validation(
-            output_dir / "ts_validation.json", ts_validation, refresh_chapters
-        )
-    (output_dir / "ts_validation.json").write_text(
-        json.dumps(ts_validation, ensure_ascii=False), encoding="utf-8"
-    )
-    log.info(
-        "Wrote ts_validation.json: %d flagged verse(s) across beams %s",
-        len(ts_validation["verses"]),
-        ts_validation["_meta"]["beams"],
-    )
-
-    _cleanup([], tmp_dir)
-    return output_dir
 
 
 def _submit_with_retry(
