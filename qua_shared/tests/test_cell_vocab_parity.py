@@ -11,6 +11,8 @@ pin — so neither end can drift unnoticed.
 
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 
 from qua_shared.schemas.bucket.cell_vocab import CellRole, CellStatus
@@ -78,14 +80,18 @@ def test_vocab_value_sets_pinned():
 
 @pytest.mark.skipif(_phonemizer_vocab() is None, reason="phonemizer not installed")
 def test_role_status_mirror_phonemizer():
-    pr, ps, _ = _phonemizer_vocab()
+    vocab = _phonemizer_vocab()
+    assert vocab is not None
+    pr, ps, _ = vocab
     assert {r.value for r in CellRole} == {r.value for r in pr} == _ROLE_VALUES
     assert {s.value for s in CellStatus} == {s.value for s in ps} == _STATUS_VALUES
 
 
 @pytest.mark.skipif(_phonemizer_vocab() is None, reason="phonemizer not installed")
 def test_tajweed_rule_mirror_phonemizer():
-    _, _, pt = _phonemizer_vocab()
+    vocab = _phonemizer_vocab()
+    assert vocab is not None
+    _, _, pt = vocab
     assert {r.value for r in TajweedRule} == {r.value for r in pt} == _TAJWEED_VALUES
 
 
@@ -102,7 +108,8 @@ def test_schema_coerces_v6_cell_row():
         ],
     ]
     w = TsShardWord.model_validate(v6)
-    cells = w.root[5]
+    # v6 validates to the 6-tuple variant (cells present); narrow for the checker.
+    cells = cast(tuple[int, int, int, list, list, list], w.root)[5]
     assert cells[0][1] is CellRole.BASE and cells[0][2] is CellStatus.PRESENT
     assert cells[1][1] is CellRole.HARAKA
     # round-trips back to bare strings on the wire (byte pass-through unchanged).

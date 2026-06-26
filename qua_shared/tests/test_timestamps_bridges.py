@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import pytest
 
+pytest.importorskip("qua_sdk.components.timing.lib.cells", reason="qua_sdk not installed")
+
 from qua_sdk.components.timing.lib.cells import (
     _BRIDGE_SLOT,
     BRIDGE_RULES,
