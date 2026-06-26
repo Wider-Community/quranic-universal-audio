@@ -12,8 +12,9 @@ Two shard shapes share the deterministic gzip writer here:
 
 Phone tuples are ``[phone, start_ms, end_ms]``, optionally extended to
 ``[phone, start, end, geminate_start, geminate_end, bridge_rule]`` — slot 5
-carries the cross-word tajweed bridge rule (see `timestamps_bridges`), stamped
-at write time by the pipeline. Schema version 3 = bridge-tagged.
+carries the cross-word tajweed bridge rule (see
+`qua_sdk.components.timing.lib.cells`), stamped at write time by the pipeline.
+Schema version 3 = bridge-tagged.
 
 Both are gzipped via `gzip_shard` (level 6, mtime 0 → byte-stable output).
 """
@@ -53,7 +54,23 @@ _SEGMENT_META_PROVENANCE = (
     "created_at",
 )
 
-SEGMENT_SCHEMA_VERSION = 4
+# v5 added the 6th word slot ``cells[]`` — per-character phoneme cells from the
+# phonemizer's ``character_phoneme_mappings()`` (see
+# ``qua_sdk.components.timing.lib.cells._stamp_cells`` and
+# ``qua_shared/ts_shard_cells.py``). v6 carries two extra phonemizer-owned cell
+# facts so the FE never infers phonology: the canonical shaddah composed into a
+# geminated base cell's ``chars``, and a ``share_group`` on the vowel-absorbed
+# haraka of a cross-word idgham. v7 expands the open-form cell ``tag`` vocabulary
+# (madd subtypes, plain ghunnah, ikhfaa/idgham shafawi) so a consumer can colour
+# per-rule tajweed badges — the cell-row STRUCTURE is unchanged across v5–v7.
+# v8 adds an OPTIONAL 8th cell slot ``phoneme_rule_tags`` (per-phoneme tag list
+# parallel to ``phoneme_indices``) for muqattaat cells whose phonemes carry
+# distinct tajweed; readers tolerate its absence so v5-v7 shards keep working.
+# v9 adds an OPTIONAL 9th cell slot ``secondary_tags`` (extra rules that co-occur
+# on the grapheme but lost the single-``tag`` pick — ``["tafkheem"]`` on a heavy
+# madd/qalqala cell), so a renderer can stack the heaviness badge; when only it is
+# present the 8th slot is padded ``None``. Readers tolerate its absence (v5-v8).
+SEGMENT_SCHEMA_VERSION = 9
 
 
 def _filter_mfa_failures(failures: list[dict] | None, chapter: int) -> list[dict]:

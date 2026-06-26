@@ -9,8 +9,9 @@ https://huggingface.co/hetchyy
 
 Build steps:
 
-1. Stage the Space build context: every git-tracked file, copied verbatim,
-   plus two Space-specific overlays (root ``Dockerfile`` + frontmatter
+1. Stage the Space build context: every git-tracked file, HARDLINKED into a
+   temp tree (metadata-only — no byte copy; falls back to a copy only across
+   volumes), plus two Space-specific overlays (root ``Dockerfile`` + frontmatter
    ``README.md``). The image's contents are defined solely by
    ``inspector/Dockerfile`` + ``.dockerignore`` (both tracked, both consumed
    identically here and by ``docker-publish.yml``'s repo-root build), so there
@@ -132,8 +133,24 @@ def _assert_no_lfs_pointers(stage_root: Path) -> None:
         )
 
 
+def _link_or_copy(src: Path, dst: Path) -> None:
+    """Hardlink ``src`` → ``dst`` (metadata-only, near-instant); fall back to a
+    byte copy only on EXDEV / a filesystem that can't hardlink.
+
+    The staged tree is READ-ONLY input to ``upload_folder`` + the LFS-pointer
+    guard, so sharing the worktree's inode is safe and skips the O(all-files)
+    byte copy that dominated deploy time on Windows. The temp dir is on the same
+    volume as the repo (both on the system drive), so the hardlink path is taken;
+    removing the temp tree just drops the extra link, never the worktree file.
+    """
+    try:
+        os.link(src, dst)
+    except OSError:
+        shutil.copy2(src, dst)
+
+
 def _stage(repo: Path, stage_root: Path, env: str, branch: str) -> None:
-    """Stage the Space build context: every git-tracked file, verbatim.
+    """Stage the Space build context: every git-tracked file, hardlinked.
 
     The image's contents are defined solely by ``inspector/Dockerfile`` +
     ``.dockerignore`` (both tracked, both consumed identically here and by
@@ -159,9 +176,9 @@ def _stage(repo: Path, stage_root: Path, env: str, branch: str) -> None:
             continue  # tracked but absent in the worktree (e.g. deleted)
         dst = stage_root / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src, dst)
+        _link_or_copy(src, dst)
 
-    shutil.copy2(repo / "inspector" / "Dockerfile", stage_root / "Dockerfile")
+    _link_or_copy(repo / "inspector" / "Dockerfile", stage_root / "Dockerfile")
 
     suffix = " (dev)" if env == "dev" else ""
     (stage_root / "README.md").write_text(

@@ -13,15 +13,24 @@
      * Scoped styles use `:global()` selectors for the dynamic classes.
      */
 
-    import { onDestroy, untrack } from 'svelte';
+    import { onDestroy, onMount, tick, untrack } from 'svelte';
     import { get } from 'svelte/store';
 
     import { ensureDashCovering } from '../../../lib/playback/dash-covering';
     import { dashPort } from '../../../lib/playback/dash-port';
     import type { PhonemeInterval, TsWord } from '../../../lib/types/ts-client';
-    import { splitWaqf } from '../../../lib/utils/waqf';
+    import { splitPhone } from '../utils/phoneme-columns';
+    import { buildRendered, groupUnits } from '../utils/rendered-blocks';
+    import {
+        tjKubraColor,
+        tjRuleNames,
+        tjShadow,
+        type TjBadge,
+    } from '../utils/tajweed-rules';
+    import { isRuleEnabled, tajweedSettings, type TajweedSettings } from '../stores/tajweed-settings';
     import { waqfRenderStyle } from '../utils/waqf-render';
     import {
+        highlightWipe,
         showLetters,
         showPhonemes,
         showTranslations,
@@ -35,60 +44,6 @@
     import { TS_CLICK_DELAY_MS } from '../utils/constants';
     import WordTranslation from './WordTranslation.svelte';
 
-    /** Rub-el-hizb (۞ U+06DE) and place-of-sajdah (۩ U+06E9) — section markers,
-     *  not recited; stripped from the analysis word box so the cell shows only the
-     *  recited text. */
-    const NON_RECITED_SIGNS = /[\u06de\u06e9]/g;
-
-    // ---- Local structural state (derived declaratively from loadedVerse) ----
-
-    interface RenderedLetter {
-        /** One grapheme = one cell (letters are never grouped, even when they
-         *  share timing) — the sole exception is alef-maksura + dagger alef (ىٰ),
-         *  one long-vowel unit folded into a single cell. A `silent` grapheme is
-         *  greyed, non-interactive, and never highlighted — the highlight/hover/
-         *  click land on the pronounced letter that shares its timing. */
-        ch: string;
-        silent: boolean;
-        start: number | null;
-        end: number | null;
-        isNull: boolean;
-    }
-
-    interface RenderedPhoneme {
-        interval: PhonemeInterval;
-        /** Flat interval index (for highlight matching + click seek). */
-        index: number;
-    }
-
-    interface RenderedBridge {
-        phonemes: RenderedPhoneme[];
-    }
-
-    /** A detected silence between this block and the previous one. Sits as a small
-     *  cell between the two words; carries the previous word's lifted-out waqf
-     *  (stop) mark, or null → the neutral pause icon. Lights while its silence
-     *  plays; dims the rest of the row to 70%. */
-    interface RenderedPauseBridge {
-        mark: string | null;
-        startSec: number;
-        endSec: number;
-    }
-
-    interface RenderedBlock {
-        word: TsWord;
-        wordIndex: number;
-        /** Word text to render — the previous-word's waqf mark is stripped here
-         *  when a following pause surfaces it into the pause bridge. */
-        displayText: string;
-        letters: RenderedLetter[];
-        phonemes: RenderedPhoneme[];
-        /** Optional cross-word (idgham) bridge to render before this block. */
-        bridge: RenderedBridge | null;
-        /** Optional pause bridge to render before this block. */
-        pauseBridge: RenderedPauseBridge | null;
-    }
-
     // Container ref used for imperative highlight updates.
     let rootEl: HTMLDivElement;
 
@@ -101,9 +56,89 @@
         $loadedVerse?.data.intervals ?? [],
     );
 
+    // Group blocks into unbreakable `.word-unit`s (a bridge OR pause connector
+    // pairs its two words into one unit). Centered rows share ONE uniform gap —
+    // see `.word-unit` / `.unified-display` in timestamps.css and `recomputeRowGap`.
+    $: units = groupUnits(rendered);
+
+    // --- Uniform, capped inter-unit gap -------------------------------------
+    // Centered rows with a flat gap leave wide edges on sparse rows. Instead size
+    // ONE shared column-gap to flush the DENSEST wrapped row (the gap that exactly
+    // fills the row with the least slack), clamped to [MIN, MAX]: dense rows fill
+    // the width, sparser rows still center but with a smaller edge, and the gap
+    // can never blow out. Re-measured on content/tier/size/font changes.
+    const ROW_GAP_MIN = 16; // mirrors --mega-line-gap (base.css)
+    const ROW_GAP_MAX = 40; // cap so a sparse row never opens an absurd gap
+    const ROW_BUCKET_TOL = 1; // px — fold near-equal unit bottoms into one visual row
+    let rowGapPx = ROW_GAP_MIN;
+
+    function setRowGap(g: number): void {
+        if (Math.abs(g - rowGapPx) > 0.5) rowGapPx = g;
+    }
+
+    /** Size the shared column-gap to the largest value that won't overflow any
+     *  wrapped row, clamped to [MIN, MAX]. Units bottom-align (flex-end), so a row
+     *  is the set of units sharing a rendered bottom edge. */
+    function recomputeRowGap(): void {
+        if (!rootEl || $loadedVerse === null) return;
+        const unitEls = rootEl.querySelectorAll<HTMLElement>('.word-unit');
+        if (unitEls.length < 2) {
+            setRowGap(ROW_GAP_MIN);
+            return;
+        }
+        const cs = getComputedStyle(rootEl);
+        const innerW =
+            rootEl.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+        const rows = new Map<number, { free: number; n: number }>();
+        unitEls.forEach((u) => {
+            const r = u.getBoundingClientRect();
+            let key = Math.round(r.bottom);
+            // snap to an existing row whose bottom is within a sub-pixel/zoom hair,
+            // so one visual row never splits into two buckets (or vice-versa).
+            for (const k of rows.keys()) {
+                if (Math.abs(k - key) <= ROW_BUCKET_TOL) {
+                    key = k;
+                    break;
+                }
+            }
+            const row = rows.get(key) ?? { free: innerW, n: 0 };
+            row.free -= r.width;
+            row.n += 1;
+            rows.set(key, row);
+        });
+        let minFlush = Infinity;
+        rows.forEach(({ free, n }) => {
+            if (n > 1) minFlush = Math.min(minFlush, free / (n - 1));
+        });
+        setRowGap(
+            Number.isFinite(minFlush)
+                ? Math.max(ROW_GAP_MIN, Math.min(minFlush, ROW_GAP_MAX))
+                : ROW_GAP_MIN,
+        );
+    }
+
+    // Re-measure after the DOM reflects a content or tier-visibility change (the
+    // leading refs are the tracked reactive deps); container resize / web-font swap
+    // are caught by the ResizeObserver + fonts.ready below.
+    function scheduleGapRecompute(): void {
+        void tick().then(recomputeRowGap);
+    }
+    $: units, $showLetters, $showPhonemes, $showTranslations, scheduleGapRecompute();
+
+    onMount(() => {
+        if (typeof ResizeObserver === 'undefined') return;
+        const ro = new ResizeObserver(() => recomputeRowGap());
+        ro.observe(rootEl);
+        if (document.fonts) void document.fonts.ready.then(() => recomputeRowGap());
+        return () => ro.disconnect();
+    });
+
     // Reset previous-index cache when structure changes (new verse, etc.)
     $: rendered, (_prevActiveWordIdx = -1);
     $: rendered, (_prevActivePhonemeIdx = -1);
+    // Force the loop-highlight diff-gate to re-apply after a structural render
+    // (reused keyed nodes can carry a stale `.loop` class).
+    $: rendered, (_prevLoopKey = '\0');
     // Clear stale highlight classes on verse change. The keyed `{#each}` reuses
     // DOM nodes whose `block.wordIndex` matches across verses (typically 0,1,2…),
     // so without this the prior verse's `.active`/`.past` classes survive on
@@ -111,6 +146,51 @@
     // and the new audio's `play` event the rAF loop is stopped, so the user
     // sees the stale highlight pinned on the old word until playback resumes.
     $: rendered, _resetHighlightClasses();
+    // Measure the natural-width sample cell after each structural render so the
+    // small diacritic cells (sized as a factor of --letter-cell-w/h) track the
+    // letter box at the current zoom. tick() waits for the DOM to flush.
+    $: rendered, untrack(() => void tick().then(() => { _measureLetterCell(); _rebuildHighlightCache(); }));
+    function _measureLetterCell(): void {
+        if (!rootEl) return;
+        // A dedicated natural-width sample, NOT a live letter cell — live cells
+        // stretch to fill their column, which would inflate every dia-track.
+        const sample = rootEl.querySelector<HTMLElement>('.letter-metrics');
+        if (!sample) return;
+        const r = sample.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) {
+            rootEl.style.setProperty('--letter-cell-w', `${r.width.toFixed(2)}px`);
+            rootEl.style.setProperty('--letter-cell-h', `${r.height.toFixed(2)}px`);
+        }
+    }
+
+    // Per-frame highlight node cache. `updateHighlights` runs at 60fps and must
+    // NOT re-query the (now much larger) cell DOM each frame — that regressed the
+    // animation to a laggy, trailing smear. We snapshot the node lists once per
+    // structural render (the only time the DOM changes) and iterate the arrays.
+    interface HiCache {
+        blocks: HTMLElement[];
+        phonemes: HTMLElement[];
+        timedCells: HTMLElement[];
+        letters: HTMLElement[];
+        harakas: HTMLElement[];
+        pauseBridges: HTMLElement[];
+    }
+    let _hc: HiCache | null = null;
+    // The active phoneme element (track mode sets its `--fill` per frame; phonemes
+    // light by index diff, not in the timed-cell loop, so we hold a reference).
+    let _trackPh: HTMLElement | null = null;
+    function _rebuildHighlightCache(): void {
+        if (!rootEl) { _hc = null; return; }
+        const q = (s: string): HTMLElement[] => Array.from(rootEl.querySelectorAll<HTMLElement>(s));
+        _hc = {
+            blocks: q('.mega-block'),
+            phonemes: q('.mega-phoneme'),
+            timedCells: q('[data-cell-timed]'),
+            letters: q('.mega-letter:not(.null-ts)'),
+            harakas: q('.haraka-cell[data-dia-loop-idx]'),
+            pauseBridges: q('.pause-bridge'),
+        };
+    }
     function _resetHighlightClasses(): void {
         if (!rootEl) return;
         rootEl.classList.remove('in-pause');
@@ -126,6 +206,14 @@
         rootEl.querySelectorAll<HTMLElement>('.mega-letter:not(.null-ts)').forEach((l) => {
             l.classList.remove('active', 'hover-preview');
         });
+        rootEl.querySelectorAll<HTMLElement>('.haraka-cell').forEach((c) => {
+            c.classList.remove('active', 'hover-preview');
+        });
+        rootEl.querySelectorAll<HTMLElement>('.bridge-letter').forEach((c) => {
+            c.classList.remove('active', 'hover-preview');
+        });
+        rootEl.querySelectorAll<HTMLElement>('.group-hover').forEach((c) => c.classList.remove('group-hover'));
+        rootEl.querySelectorAll<HTMLElement>('.mega-grid').forEach((g) => { g.dataset.hoverGi = ''; });
     }
 
     // Waveform hover → re-run highlights. The rAF loop is stopped while paused,
@@ -141,131 +229,21 @@
     // such re-runs, which broke first-load reactivity wholesale.
     $: ($tsWaveformHoverTime, $loopTarget, untrack(() => updateHighlights()));
 
-    // ---- Pure helpers (state-free) ----
+    // Continuous-highlight mode is a root class the cell CSS reads; the per-frame
+    // `--fill` is written in `updateHighlights` only while this is on.
+    $: if (rootEl) rootEl.classList.toggle('hl-track', $highlightWipe);
 
-    // Alef-maksura (ى U+0649) + dagger alef (ٰ U+0670) is one long-vowel unit
-    // (علىٰ, موسىٰ, إلىٰ). The aligner splits the dagger into its own shard letter,
-    // but the two render as a single cell. Folding by char is safe — an alef-
-    // maksura never carries an independent dagger. Every other grapheme stays its
-    // own cell: a carrier waw keeps its (silent) waw + dagger split, a consonant's
-    // dagger stays independent.
-    const ALEF_MAKSURA = 'ى';
-    const DAGGER_ALEF = 'ٰ';
 
-    function letterGroupsFor(word: TsWord): RenderedLetter[] {
-        const out: RenderedLetter[] = [];
-        for (const letter of word.letters || []) {
-            const prev = out[out.length - 1];
-            if (prev && letter.char.startsWith(DAGGER_ALEF) && prev.ch.endsWith(ALEF_MAKSURA)) {
-                // Fold the dagger onto the maksura cell: one combined unit spanning
-                // both timings, sounding unless both graphemes are silent.
-                prev.ch += letter.char;
-                if (letter.end != null) prev.end = letter.end;
-                prev.silent = prev.silent && letter.silent === true;
-                prev.isNull = prev.isNull || letter.start == null || letter.end == null;
-                continue;
-            }
-            out.push({
-                ch: letter.char,
-                silent: letter.silent === true,
-                start: letter.start,
-                end: letter.end,
-                isNull: letter.start == null || letter.end == null,
-            });
-        }
-        return out;
-    }
 
-    /** Split a phone string into base character(s) and trailing IPA modifiers
-     *  (length ː, emphatic ˤ, ghunnah tilde ̃). The modifier is rendered as a
-     *  superscript so the base stays visually centred in the cell. */
-    // Only length marks (ː / ASCII :) are detached modifiers; ˤ is integral to
-    // the consonant symbol (rˤ, aˤ) and must stay in the base.
-    const PHONE_MOD_RE = /([ː:]+)$/u;
-    function splitPhone(phone: string | undefined): { base: string; mod: string } {
-        if (!phone || phone === 'sil' || phone === 'sp') return { base: phone ?? '', mod: '' };
-        const m = PHONE_MOD_RE.exec(phone);
-        return m ? { base: phone.slice(0, -m[0].length), mod: m[0] } : { base: phone, mod: '' };
-    }
-
-    /** Parse the trailing word number from a ``surah:ayah:word`` location.
-     *  Returns 0 when the location is malformed — caller filters those out. */
-    function buildRendered(
-        words: TsWord[],
-        intervals: PhonemeInterval[],
-    ): RenderedBlock[] {
-        if (!words.length) return [];
-
-        // Cross-word bridges are baked into the shard at generation: a phoneme
-        // carrying a ``bridge`` rule is the idgham merger that fuses two words.
-        // Lift it out of its inline row into the gold tile at the boundary — no
-        // scanning, no side inference. A merger at a word's head renders before
-        // that block; one in a word's tail (idgham shafawi) bridges into the
-        // next block. The generator placed the tag on the exact merger interval,
-        // so there's nothing to disambiguate here.
-        const bridgeBeforeBlock = new Map<number, RenderedPhoneme>();
-        const excluded = new Set<number>();
-        for (let wi = 0; wi < words.length; wi++) {
-            const indices = words[wi]?.phoneme_indices ?? [];
-            for (let k = 0; k < indices.length; k++) {
-                const pi = indices[k]!;
-                if (!intervals[pi]?.bridge) continue;
-                const target = k === 0 ? wi : wi + 1;
-                if (target < words.length) {
-                    bridgeBeforeBlock.set(target, { interval: intervals[pi]!, index: pi });
-                    excluded.add(pi);
-                }
-            }
-        }
-
-        const blocks: RenderedBlock[] = [];
-        for (let wi = 0; wi < words.length; wi++) {
-            const word = words[wi];
-            if (!word) continue;
-
-            const bp = bridgeBeforeBlock.get(wi);
-            const bridge: RenderedBridge | null = bp ? { phonemes: [bp] } : null;
-
-            const phonemes: RenderedPhoneme[] = [];
-            for (const pi of word.phoneme_indices ?? []) {
-                if (excluded.has(pi)) continue;
-                const iv = intervals[pi];
-                if (iv && !iv.geminate_end) phonemes.push({ interval: iv, index: pi });
-            }
-
-            blocks.push({
-                word,
-                wordIndex: wi,
-                displayText: (word.display_text || word.text).replace(NON_RECITED_SIGNS, ''),
-                letters: letterGroupsFor(word),
-                phonemes,
-                bridge,
-                pauseBridge: null,
-            });
-        }
-
-        // Detected inter-word silences: a positive gap between consecutive words
-        // (their end/start are ms-quantized, so contiguous words share a boundary
-        // and only a real pause leaves a gap). Each gap gets a pause bridge before
-        // the later block; a surfaced waqf mark on the earlier word is lifted out
-        // of its box into the bridge.
-        for (let bi = 0; bi < blocks.length - 1; bi++) {
-            const a = blocks[bi]!;
-            const b = blocks[bi + 1]!;
-            const startSec = a.word.end;
-            const endSec = b.word.start;
-            if (endSec <= startSec) continue;
-            const { clean, mark } = splitWaqf(a.displayText);
-            if (mark) a.displayText = clean;
-            b.pauseBridge = { mark, startSec, endSec };
-        }
-        return blocks;
-    }
 
     // ---- Per-frame imperative highlight update (called from animation loop) ----
 
     let _prevActiveWordIdx = -1;
     let _prevActivePhonemeIdx = -1;
+    // Loop-highlight is a function of the loop target ALONE (not the playhead), so
+    // its four full-tier passes only need to run when the target changes — diff-gate
+    // them so the steady (no-loop) frame skips ~4×N classList writes.
+    let _prevLoopKey = '\0';
 
     /**
      * Apply current-time-based highlights imperatively. Called from the
@@ -283,6 +261,16 @@
         const portReady = !!dashPort.element;
         const portPaused = dashPort.paused;
         const hoverTime = get(tsWaveformHoverTime);
+
+        // Continuous karaoke wipe across the active cell (vs the discrete fill).
+        const trackOn = get(highlightWipe);
+        const leadSec = 0;
+
+        // Cached node lists (rebuilt only on structural render) — never query the
+        // DOM per frame; that regressed the animation to a laggy, trailing smear.
+        if (!_hc) _rebuildHighlightCache();
+        const hc = _hc;
+        if (!hc) return;
 
         // Current phoneme (skip geminate_end)
         let currentIndex = -1;
@@ -336,8 +324,7 @@
         }
         const isHoverDriven = hoverTime != null && portReady && portPaused;
         if (currentWordIndex !== _prevActiveWordIdx) {
-            const blocks = rootEl.querySelectorAll<HTMLElement>('.mega-block');
-            blocks.forEach((block) => {
+            hc.blocks.forEach((block) => {
                 const wi = parseInt(block.dataset.wordIndex ?? '-1');
                 block.classList.remove('active', 'past');
                 if (wi === currentWordIndex) {
@@ -349,68 +336,105 @@
             });
             _prevActiveWordIdx = currentWordIndex;
         }
-        rootEl.querySelectorAll<HTMLElement>('.mega-block').forEach((block) => {
+        hc.blocks.forEach((block) => {
             const wi = parseInt(block.dataset.wordIndex ?? '-1');
             block.classList.toggle('hover-preview', wi === hoverWordIndex);
         });
 
         // Phoneme highlights — diff-only
         if (currentIndex !== _prevActivePhonemeIdx) {
-            rootEl.querySelectorAll<HTMLElement>('.mega-phoneme').forEach((ph) => {
-                ph.classList.toggle('active', parseInt(ph.dataset.index ?? '-1') === currentIndex);
+            _trackPh = null;
+            hc.phonemes.forEach((ph) => {
+                const on = parseInt(ph.dataset.index ?? '-1') === currentIndex;
+                ph.classList.toggle('active', on);
+                if (on) _trackPh = ph;
+                else ph.style.removeProperty('--fill');
             });
             _prevActivePhonemeIdx = currentIndex;
         }
-        rootEl.querySelectorAll<HTMLElement>('.mega-phoneme').forEach((ph) => {
+        if (trackOn && _trackPh && currentIndex >= 0) {
+            const iv = intervals[currentIndex];
+            if (iv) {
+                const d = iv.end - iv.start;
+                const f = d > 0 ? (time + leadSec - iv.start) / d : 0;
+                _trackPh.style.setProperty('--fill', String(f < 0 ? 0 : f > 1 ? 1 : f));
+            }
+        }
+        hc.phonemes.forEach((ph) => {
             ph.classList.toggle('hover-preview', parseInt(ph.dataset.index ?? '-1') === hoverPhonemeIndex);
         });
 
-        // Letter highlights — must check each frame (time-based within word).
-        // Silent cells are excluded: at a shared [start,end] the highlight lands
-        // on the pronounced letter alone.
-        rootEl
-            .querySelectorAll<HTMLElement>('.mega-letter:not(.null-ts):not(.silent)')
-            .forEach((el) => {
-                const s = parseFloat(el.dataset.letterStart ?? '0');
-                const e = parseFloat(el.dataset.letterEnd ?? '0');
-                const wi = parseInt(el.dataset.wordIndex ?? '-1');
-                el.classList.toggle('active', time >= s && time < e);
-                el.classList.toggle(
-                    'hover-preview',
-                    hoverTime != null && wi === hoverWordIndex && hoverTime >= s && hoverTime < e,
+        // Cell highlights — ONE loop over EVERY timed cell (full base + small
+        // diacritic). Each lights on ITS OWN phoneme interval (data-cell-start/
+        // end): a base lights on its consonant; a haraka on the vowel; a long-
+        // vowel haraka + carrier share an index (and share-group union) and
+        // co-light. This tiles cleanly with no flash/gap. Untimed cells (sukūn,
+        // dropped, null-ts) carry no `data-cell-timed` and are skipped.
+        hc.timedCells.forEach((el) => {
+            const s = parseFloat(el.dataset.cellStart ?? 'NaN');
+            const e = parseFloat(el.dataset.cellEnd ?? 'NaN');
+            const wi = parseInt(el.dataset.wordIndex ?? '-1');
+            const isActive = time >= s && time < e;
+            el.classList.toggle('active', isActive);
+            el.classList.toggle(
+                'hover-preview',
+                hoverTime != null && wi === hoverWordIndex && hoverTime >= s && hoverTime < e,
+            );
+            if (trackOn) {
+                if (isActive) {
+                    const d = e - s;
+                    const f = d > 0 ? (time + leadSec - s) / d : 0;
+                    el.style.setProperty('--fill', String(f < 0 ? 0 : f > 1 ? 1 : f));
+                } else if (el.style.getPropertyValue('--fill')) {
+                    el.style.removeProperty('--fill');
+                }
+            }
+        });
+
+        // Loop perma-highlight — outline the looped element on its tier. Only re-run
+        // the four tier passes when the loop target changes (a clear runs once to
+        // strip the classes); the steady frame skips them entirely.
+        const lp = get(loopTarget);
+        const loopKey = lp ? `${lp.kind}:${lp.wordIndex ?? ''}:${lp.childIndex ?? ''}` : '';
+        if (loopKey !== _prevLoopKey) {
+            _prevLoopKey = loopKey;
+            hc.blocks.forEach((block) => {
+                const wi = parseInt(block.dataset.wordIndex ?? '-1');
+                block.classList.toggle(
+                    'loop',
+                    lp?.kind === 'word' && lp.wordIndex === wi,
                 );
             });
-
-        // Loop perma-highlight — outline the looped element on its tier.
-        const lp = get(loopTarget);
-        rootEl.querySelectorAll<HTMLElement>('.mega-block').forEach((block) => {
-            const wi = parseInt(block.dataset.wordIndex ?? '-1');
-            block.classList.toggle(
-                'loop',
-                lp?.kind === 'word' && lp.wordIndex === wi,
-            );
-        });
-        rootEl.querySelectorAll<HTMLElement>('.mega-letter:not(.null-ts)').forEach((el) => {
-            const wi = parseInt(el.dataset.wordIndex ?? '-1');
-            const li = parseInt(el.dataset.letterIndex ?? '-1');
-            el.classList.toggle(
-                'loop',
-                lp?.kind === 'letter' && lp.wordIndex === wi && lp.childIndex === li,
-            );
-        });
-        rootEl.querySelectorAll<HTMLElement>('.mega-phoneme').forEach((el) => {
-            const idx = parseInt(el.dataset.index ?? '-1');
-            el.classList.toggle(
-                'loop',
-                lp?.kind === 'phoneme' && lp.childIndex === idx,
-            );
-        });
+            hc.letters.forEach((el) => {
+                const wi = parseInt(el.dataset.wordIndex ?? '-1');
+                const li = parseInt(el.dataset.letterIndex ?? '-1');
+                el.classList.toggle(
+                    'loop',
+                    lp?.kind === 'letter' && lp.wordIndex === wi && lp.childIndex === li,
+                );
+            });
+            hc.phonemes.forEach((el) => {
+                const idx = parseInt(el.dataset.index ?? '-1');
+                el.classList.toggle(
+                    'loop',
+                    lp?.kind === 'phoneme' && lp.childIndex === idx,
+                );
+            });
+            hc.harakas.forEach((el) => {
+                const wi = parseInt(el.dataset.wordIndex ?? '-1');
+                const idx = parseInt(el.dataset.diaLoopIdx ?? '-1');
+                el.classList.toggle(
+                    'loop',
+                    lp?.kind === 'diacritic' && lp.wordIndex === wi && lp.childIndex === idx,
+                );
+            });
+        }
 
         // Pause bridges: the bridge whose silence span contains the playhead lights
         // (`.active`) and the rest of the row dims to 70% (`.in-pause` on the
         // container). Waveform hover over a silence span previews its bridge.
         let inPauseGap = false;
-        rootEl.querySelectorAll<HTMLElement>('.pause-bridge').forEach((b) => {
+        hc.pauseBridges.forEach((b) => {
             const s = parseFloat(b.dataset.pauseStart ?? 'NaN');
             const e = parseFloat(b.dataset.pauseEnd ?? 'NaN');
             const playing = time >= s && time < e;
@@ -624,55 +648,275 @@
         });
     }
 
-    // ---- Hover handlers: publish to tsHoveredElement for waveform sync ----
+    // ---- Hover handlers: publish to tsHoveredElement for waveform sync, AND
+    //      raise the per-cell duration tooltip (see the tooltip block below). ----
 
-    function onWordEnter(word: TsWord): void {
+    function onWordEnter(e: MouseEvent, word: TsWord): void {
         tsHoveredElement.set({ kind: 'word', startSec: word.start, endSec: word.end });
+        _tipEnter(e, word.start, word.end);
     }
 
-    function onLetterEnter(startSec: number | null, endSec: number | null): void {
-        if (startSec == null || endSec == null) return;
-        tsHoveredElement.set({ kind: 'letter', startSec, endSec });
+    function onLetterEnter(e: MouseEvent, startSec: number | null, endSec: number | null): void {
+        // A silent letter (no timing) still raises its rule tooltip — but never
+        // publishes a waveform band.
+        if (startSec != null && endSec != null) tsHoveredElement.set({ kind: 'letter', startSec, endSec });
+        _tipEnter(e, startSec, endSec);
     }
 
-    function onPhonemeEnter(iv: PhonemeInterval): void {
+    function onPhonemeEnter(e: MouseEvent, iv: PhonemeInterval): void {
         tsHoveredElement.set({ kind: 'phoneme', startSec: iv.start, endSec: iv.end });
+        _tipEnter(e, iv.start, iv.end);
     }
 
     function onHoverLeave(): void {
         tsHoveredElement.set(null);
+        _tipLeave();
+    }
+
+    // Diacritic cells (haraka/tanwīn small cells + implicit-madd full cells) and
+    // the pause/stop cell: duration tooltip on hover, and — for diacritics —
+    // click-to-seek. They deliberately do NOT publish tsHoveredElement, so the
+    // waveform cursors stay exactly as they were (per requirement).
+    function onCellEnter(e: MouseEvent, startSec: number | null, endSec: number | null): void {
+        _tipEnter(e, startSec, endSec);
+    }
+
+    function onCellLeave(): void {
+        _tipLeave();
+    }
+
+    function onCellClick(e: MouseEvent, startSec: number | null): void {
+        e.stopPropagation();
+        if (startSec == null) return;
+        const lv = get(loadedVerse);
+        if (!lv) return;
+        seekToTime(startSec + lv.tsSegOffset);
+    }
+
+    /** A diacritic (haraka / tanwīn) loop target spanning the cell's [cellStart,
+     *  cellEnd) — already the UNION of the cell's phoneme(s) (a tanwīn covers both
+     *  its short-vowel + nasal, a plain haraka its one). Identity is the cell's
+     *  first sounded interval index; null when the cell carries no timing. */
+    function _diacriticTarget(
+        startSec: number | null,
+        endSec: number | null,
+        wordIndex: number,
+        firstPhoneIdx: number | undefined,
+    ): TsLoopTarget | null {
+        if (startSec == null || endSec == null || firstPhoneIdx == null) return null;
+        return { kind: 'diacritic', startSec, endSec, wordIndex, childIndex: firstPhoneIdx };
+    }
+
+    /** Single-click a diacritic cell: loop-aware (swap target while looping, else
+     *  seek) — deferred to disambiguate from dblclick, matching letter/phoneme. */
+    function onDiacriticClick(
+        e: MouseEvent,
+        startSec: number | null,
+        endSec: number | null,
+        wordIndex: number,
+        firstPhoneIdx: number | undefined,
+    ): void {
+        e.stopPropagation();
+        const target = _diacriticTarget(startSec, endSec, wordIndex, firstPhoneIdx);
+        if (!target && startSec == null) return;
+        _deferClick(() => {
+            const lv = get(loadedVerse);
+            if (!lv) return;
+            // A co-lit dropped haraka has no phone of its own (no loop identity) but
+            // is timed on the carrier's interval — seek there rather than no-op.
+            if (target) _swapLoopOrSeek(target, target.startSec + lv.tsSegOffset);
+            else if (startSec != null) seekToTime(startSec + lv.tsSegOffset);
+        });
+    }
+
+    /** Double-click a diacritic cell: toggle loop on its span. */
+    function onDiacriticDblClick(
+        e: MouseEvent,
+        startSec: number | null,
+        endSec: number | null,
+        wordIndex: number,
+        firstPhoneIdx: number | undefined,
+    ): void {
+        e.stopPropagation();
+        _cancelPendingClick();
+        const target = _diacriticTarget(startSec, endSec, wordIndex, firstPhoneIdx);
+        if (target) toggleLoopOn(target);
+    }
+
+    // ---- Group-hover spotlight ----
+    // Hovering any cell softly tints its whole column (the cell-group + its
+    // phoneme cluster, matched by `data-group-index`), so the letter↔phoneme
+    // relationship reads on hover — not only when co-highlighted. A single
+    // delegated listener per grid keeps this off the 60fps highlight path.
+    function _applyColHover(grid: HTMLElement, gi: string | null): void {
+        if (grid.dataset.hoverGi === (gi ?? '')) return;
+        grid.dataset.hoverGi = gi ?? '';
+        grid.querySelectorAll<HTMLElement>('[data-group-index]').forEach((el) => {
+            el.classList.toggle('group-hover', gi != null && el.dataset.groupIndex === gi);
+        });
+    }
+    function colHover(node: HTMLElement) {
+        const over = (e: Event): void => {
+            const t = (e.target as HTMLElement | null)?.closest<HTMLElement>('[data-group-index]');
+            _applyColHover(node, t?.dataset.groupIndex ?? null);
+        };
+        const leave = (): void => _applyColHover(node, null);
+        node.addEventListener('mouseover', over);
+        node.addEventListener('mouseleave', leave);
+        return {
+            destroy(): void {
+                node.removeEventListener('mouseover', over);
+                node.removeEventListener('mouseleave', leave);
+            },
+        };
+    }
+
+    // ---- Per-cell duration tooltip (warmup/cooldown) ----------------------
+    // Shows a cell's recited duration (ms, rounded to the nearest 10) on hover.
+    // The first (cold) hover warms up for TS_TIP_WARMUP_MS before showing; once
+    // warm, moving to another cell shows near-instantly; warm decays back to
+    // cold TS_TIP_COOLDOWN_MS after the pointer leaves a cell.
+    const TS_TIP_WARMUP_MS = 500;
+    const TS_TIP_COOLDOWN_MS = 2000;
+    let tipText: string | null = null;
+    let tipX = 0;
+    let tipY = 0;
+    let _tipWarm = false;
+    let _tipShowTimer: number | null = null;
+    let _tipCoolTimer: number | null = null;
+
+    function _roundMs(startSec: number, endSec: number): number {
+        return Math.round(((endSec - startSec) * 1000) / 10) * 10;
+    }
+
+    /** Compose the tip text: the recited duration (when timed) plus the cell's
+     *  enabled tajweed rule names (from `data-tj-rules`), each on its own line. A
+     *  silent letter shows only its rule name(s). */
+    function _tipTextFor(el: HTMLElement, ms: number | null): string | null {
+        const lines: string[] = [];
+        if (ms != null) lines.push(`${ms} ms`);
+        const rules = el.dataset.tjRules;
+        if (rules) lines.push(rules);
+        return lines.length ? lines.join('\n') : null;
+    }
+
+    function _tipShowAt(el: HTMLElement, ms: number | null): void {
+        if (!el.isConnected) return; // cell removed (verse change) before warmup fired
+        const text = _tipTextFor(el, ms);
+        if (!text) return;
+        const r = el.getBoundingClientRect();
+        tipX = r.left + r.width / 2;
+        tipY = r.top;
+        tipText = text;
+        _tipWarm = true;
+    }
+
+    function _tipEnter(e: MouseEvent, startSec: number | null, endSec: number | null): void {
+        const el = e.currentTarget as HTMLElement | null;
+        if (!el) return;
+        const ms = startSec != null && endSec != null ? _roundMs(startSec, endSec) : null;
+        // Nothing to show — neither a duration nor a rule name on this cell.
+        if (ms == null && !el.dataset.tjRules) return;
+        if (_tipCoolTimer !== null) { clearTimeout(_tipCoolTimer); _tipCoolTimer = null; }
+        if (_tipShowTimer !== null) { clearTimeout(_tipShowTimer); _tipShowTimer = null; }
+        if (_tipWarm) _tipShowAt(el, ms);
+        else _tipShowTimer = window.setTimeout(() => { _tipShowTimer = null; _tipShowAt(el, ms); }, TS_TIP_WARMUP_MS);
+    }
+
+    function _tipLeave(): void {
+        if (_tipShowTimer !== null) { clearTimeout(_tipShowTimer); _tipShowTimer = null; }
+        tipText = null;
+        if (_tipCoolTimer !== null) clearTimeout(_tipCoolTimer);
+        _tipCoolTimer = window.setTimeout(() => { _tipCoolTimer = null; _tipWarm = false; }, TS_TIP_COOLDOWN_MS);
     }
 
     // Safety net: if the component unmounts while a hover is active (e.g. view
     // switch), clear the store so the waveform doesn't keep a stale band.
-    // Also drop any pending deferred click so it doesn't fire post-unmount.
+    // Also drop any pending deferred click / tooltip timer so neither fires
+    // post-unmount.
     onDestroy(() => {
         tsHoveredElement.set(null);
         _cancelPendingClick();
+        if (_tipShowTimer !== null) clearTimeout(_tipShowTimer);
+        if (_tipCoolTimer !== null) clearTimeout(_tipCoolTimer);
     });
+
+    // ---- Tajweed underline + tooltip (reactive on the rule settings) ----------
+    // The cell box-shadow + tooltip rule names recompute when a rule's enable
+    // toggle flips (passed `$tajweedSettings` so the template tracks the dep);
+    // colour overrides apply via `--tj-*` CSS-var swaps with no re-render.
+    function tjShadowFor(badges: TjBadge[], settings: TajweedSettings): string {
+        return tjShadow(badges, (k) => isRuleEnabled(settings, k));
+    }
+    function tjTitleFor(badges: TjBadge[], silent: string[], settings: TajweedSettings): string {
+        return tjRuleNames(badges, silent, (k) => isRuleEnabled(settings, k));
+    }
+    function tjKubraFor(badges: TjBadge[], settings: TajweedSettings): string {
+        return tjKubraColor(badges, (k) => isRuleEnabled(settings, k));
+    }
 </script>
 
 <div
     bind:this={rootEl}
     class="unified-display"
     dir="rtl"
+    style="--mega-row-gap: {rowGapPx}px"
     class:hidden={$loadedVerse === null}
 >
-    {#each rendered as block (block.wordIndex)}
-        {#if block.bridge}
-            <div class="crossword-bridge" class:hidden={!$showPhonemes}>
-                {#each block.bridge.phonemes as ph (ph.index)}
-                    {@const parts = splitPhone(ph.interval.phone)}
+    <!-- natural-width reference for sizing the small diacritic cells (read by
+         _measureLetterCell); shares the letter box metrics but is out of flow,
+         not a .mega-letter, never highlighted or queried as a cell. -->
+    <span class="letter-metrics" aria-hidden="true">ب</span>
+    {#each units as unit (unit.key)}
+        <div class="word-unit">
+        {#each unit.parts as part}
+        {#if part.kind === 'bridge'}
+            {@const br = part.bridge}
+            <div
+                class="crossword-bridge"
+                class:borderless={br.letter != null}
+                class:hidden={br.letter != null ? !$showLetters && !$showPhonemes : !$showPhonemes}
+            >
+                {#if br.letter}
+                    {@const lt = br.letter}
+                    <!-- iltiqaa connecting kasra lifted onto the letter row, between
+                         the two words; borderless, click-to-seek, lights on its i. -->
+                    <span
+                        class="bridge-letter dia-seekable"
+                        class:hidden={!$showLetters}
+                        data-cell-timed={lt.cellStart != null ? '1' : undefined}
+                        data-cell-start={lt.cellStart}
+                        data-cell-end={lt.cellEnd}
+                        data-word-index={lt.wordIndex}
+                        data-tj-rules={lt.silentRules.join('\n') || null}
+                        on:click={(e) => onCellClick(e, lt.cellStart)}
+                        on:dblclick|stopPropagation
+                        on:mouseenter={(e) => onCellEnter(e, lt.cellStart, lt.cellEnd)}
+                        on:mouseleave={onCellLeave}
+                        on:keydown={() => {}}
+                        role="button"
+                        tabindex="-1"
+                    >
+                        <span class="bg"><span class="g" style={lt.style}>{lt.glyph}</span></span>
+                    </span>
+                {/if}
+                {#each br.phonemes as ph (ph.index)}
+                    {@const parts = splitPhone(ph.displayPhone ?? ph.interval.phone)}
                     <span
                         class="mega-phoneme"
+                        class:hidden={br.letter != null && !$showPhonemes}
                         class:silence={!ph.interval.phone ||
                             ph.interval.phone === 'sil' ||
                             ph.interval.phone === 'sp'}
                         class:geminate={ph.interval.geminate_start}
                         data-index={ph.index}
-                        on:click={(e) => onPhonemeClick(e, ph.interval, ph.index, block.wordIndex)}
-                        on:dblclick={(e) => onPhonemeDblClick(e, ph.interval, ph.index, block.wordIndex)}
-                        on:mouseenter={() => onPhonemeEnter(ph.interval)}
+                        style:box-shadow={tjShadowFor(ph.tjBadges, $tajweedSettings)}
+                        class:tj-kubra={!!tjKubraFor(ph.tjBadges, $tajweedSettings)}
+                        style:--tj-kubra={tjKubraFor(ph.tjBadges, $tajweedSettings)}
+                        data-tj-rules={tjTitleFor(ph.tjBadges, [], $tajweedSettings) || null}
+                        on:click={(e) => onPhonemeClick(e, ph.interval, ph.index, part.wordIndex)}
+                        on:dblclick={(e) => onPhonemeDblClick(e, ph.interval, ph.index, part.wordIndex)}
+                        on:mouseenter={(e) => onPhonemeEnter(e, ph.interval)}
                         on:mouseleave={onHoverLeave}
                         on:keydown={() => {}}
                         role="button"
@@ -682,22 +926,25 @@
                     </span>
                 {/each}
             </div>
-        {/if}
-        {#if block.pauseBridge}
+        {:else if part.kind === 'pause'}
+            {@const pb = part.pause}
             <div
                 class="pause-bridge"
-                data-pause-start={block.pauseBridge.startSec}
-                data-pause-end={block.pauseBridge.endSec}
-                title={block.pauseBridge.mark ? 'Stop sign' : 'Pause'}
+                data-pause-start={pb.startSec}
+                data-pause-end={pb.endSec}
+                role="group"
+                on:mouseenter={(e) => onCellEnter(e, pb.startSec, pb.endSec)}
+                on:mouseleave={onCellLeave}
             >
-                {#if block.pauseBridge.mark}
-                    <span class="pause-waqf" style={waqfRenderStyle(block.pauseBridge.mark)}
-                    >{block.pauseBridge.mark}</span>
+                {#if pb.mark}
+                    <span class="pause-waqf" style={waqfRenderStyle(pb.mark)}
+                    >{pb.mark}</span>
                 {:else}
                     <span class="pause-icon" aria-hidden="true"></span>
                 {/if}
             </div>
-        {/if}
+        {:else}
+            {@const block = part.block}
         <div
             class="mega-block"
             data-word-index={block.wordIndex}
@@ -713,65 +960,200 @@
             <div
                 class="mega-word"
                 role="group"
-                on:mouseenter={() => onWordEnter(block.word)}
+                on:mouseenter={(e) => onWordEnter(e, block.word)}
                 on:mouseleave={onHoverLeave}
             >{block.displayText}</div>
-            {#if block.letters.length}
-                <div class="mega-letters" class:hidden={!$showLetters} dir="rtl">
-                    {#each block.letters as lt, li (li)}
-                        {#if lt.isNull}
-                            <span
-                                class="mega-letter null-ts"
-                                class:silent={lt.silent}
-                                on:click|stopPropagation
-                                on:keydown={() => {}}
-                                role="button"
-                                tabindex="-1"
-                            >{lt.ch}</span>
-                        {:else}
-                            <span
-                                class="mega-letter"
-                                class:silent={lt.silent}
-                                data-letter-start={lt.start}
-                                data-letter-end={lt.end}
-                                data-word-index={block.wordIndex}
-                                data-letter-index={li}
-                                on:click={(e) =>
-                                    onLetterClick(e, lt.start ?? 0, lt.end ?? 0, block.wordIndex, li)}
-                                on:dblclick={(e) =>
-                                    onLetterDblClick(e, lt.start ?? 0, lt.end ?? 0, block.wordIndex, li)}
-                                on:mouseenter={() => onLetterEnter(lt.start, lt.end)}
-                                on:mouseleave={onHoverLeave}
-                                on:keydown={() => {}}
-                                role="button"
-                                tabindex="-1"
-                            >{lt.ch}</span>
-                        {/if}
+            {#if block.groups.length}
+                <div
+                    class="mega-grid"
+                    dir="rtl"
+                    use:colHover
+                    class:no-letters={!$showLetters}
+                    class:no-phonemes={!$showPhonemes}
+                >
+                    {#each block.groups as grp, gi (gi)}
+                        <div
+                            class="cell-group"
+                            class:vowel={grp.kind === 'vowel'}
+                            class:share-group={grp.shareGroup != null}
+                            data-group-index={gi}
+                            style="--gcols:{grp.cols.length}"
+                        >
+                            {#each grp.cols as col, ci}
+                                {#if col.full}
+                                    {@const f = col.full}
+                                    {#if f.implicit}
+                                        <!-- implicit madd (Allah dagger-alef / madd-ʿiwaḍ): a FULL cell,
+                                             non-interactive, with the inserted/replaced affordance -->
+                                        <span
+                                            class="mega-letter implicit dia-{f.status}"
+                                            class:dia-timed={f.status !== 'dropped' && f.cellStart != null}
+                                            class:dia-seekable={f.cellStart != null}
+                                            style="grid-column:{ci + 1}; justify-self:stretch"
+                                            data-cell-timed={f.status !== 'dropped' && f.cellStart != null ? '1' : undefined}
+                                            data-cell-start={f.cellStart}
+                                            data-cell-end={f.cellEnd}
+                                            data-word-index={block.wordIndex}
+                                            style:box-shadow={tjShadowFor(f.tjBadges, $tajweedSettings)}
+                                            class:tj-kubra={!!tjKubraFor(f.tjBadges, $tajweedSettings)}
+                                            style:--tj-kubra={tjKubraFor(f.tjBadges, $tajweedSettings)}
+                                            data-tj-rules={tjTitleFor(f.tjBadges, f.silentRules, $tajweedSettings) || null}
+                                            on:click={(e) => onCellClick(e, f.cellStart)}
+                                            on:dblclick|stopPropagation
+                                            on:mouseenter={(e) => onCellEnter(e, f.cellStart, f.cellEnd)}
+                                            on:mouseleave={onCellLeave}
+                                            on:keydown={() => {}}
+                                            role="button"
+                                            tabindex="-1"
+                                        >{f.glyph}</span>
+                                    {:else if f.isNull}
+                                        <span
+                                            class="mega-letter null-ts"
+                                            class:silent={f.silent}
+                                            style="grid-column:{ci + 1}; justify-self:stretch"
+                                            style:box-shadow={tjShadowFor(f.tjBadges, $tajweedSettings)}
+                                            class:tj-kubra={!!tjKubraFor(f.tjBadges, $tajweedSettings)}
+                                            style:--tj-kubra={tjKubraFor(f.tjBadges, $tajweedSettings)}
+                                            data-tj-rules={tjTitleFor(f.tjBadges, f.silentRules, $tajweedSettings) || null}
+                                            on:click|stopPropagation
+                                            on:mouseenter={(e) => onCellEnter(e, null, null)}
+                                            on:mouseleave={onCellLeave}
+                                            on:keydown={() => {}}
+                                            role="button"
+                                            tabindex="-1"
+                                        >{f.glyph}</span>
+                                    {:else}
+                                        <!-- base consonant OR real madd carrier (ا و ي ٰ) — a FULL,
+                                             interactive, timed letter cell -->
+                                        <span
+                                            class="mega-letter"
+                                            class:silent={f.silent}
+                                            class:dia-inserted={f.inserted}
+                                            class:dia-timed={f.cellStart != null && (!f.silent || f.shareGroup != null)}
+                                            style="grid-column:{ci + 1}; justify-self:stretch"
+                                            data-cell-timed={f.cellStart != null && (!f.silent || f.shareGroup != null) ? '1' : undefined}
+                                            data-cell-start={f.cellStart}
+                                            data-cell-end={f.cellEnd}
+                                            data-letter-start={f.letterStart}
+                                            data-letter-end={f.letterEnd}
+                                            data-word-index={block.wordIndex}
+                                            data-letter-index={f.letterIndex}
+                                            style:box-shadow={tjShadowFor(f.tjBadges, $tajweedSettings)}
+                                            class:tj-kubra={!!tjKubraFor(f.tjBadges, $tajweedSettings)}
+                                            style:--tj-kubra={tjKubraFor(f.tjBadges, $tajweedSettings)}
+                                            data-tj-rules={tjTitleFor(f.tjBadges, f.silentRules, $tajweedSettings) || null}
+                                            on:click={(e) =>
+                                                onLetterClick(e, f.letterStart ?? 0, f.letterEnd ?? 0, block.wordIndex, f.letterIndex)}
+                                            on:dblclick={(e) =>
+                                                onLetterDblClick(e, f.letterStart ?? 0, f.letterEnd ?? 0, block.wordIndex, f.letterIndex)}
+                                            on:mouseenter={(e) => onLetterEnter(e, f.letterStart, f.letterEnd)}
+                                            on:mouseleave={onHoverLeave}
+                                            on:keydown={() => {}}
+                                            role="button"
+                                            tabindex="-1"
+                                        >{f.glyph}</span>
+                                    {/if}
+                                {:else if col.small}
+                                    {@const c = col.small}
+                                    <span class="dia-track" style="grid-column:{ci + 1}">
+                                        <span
+                                            class="haraka-cell pin-{c.slot} dia-{c.status}"
+                                            class:dia-inserted={c.inserted}
+                                            class:dia-timed={c.status !== 'dropped' && c.cellStart != null}
+                                            class:dia-seekable={c.cellStart != null}
+                                            data-cell-timed={c.status !== 'dropped' && c.cellStart != null ? '1' : undefined}
+                                            data-cell-start={c.cellStart}
+                                            data-cell-end={c.cellEnd}
+                                            data-word-index={block.wordIndex}
+                                            data-dia-loop-idx={c.phoneIdx.length ? c.phoneIdx[0] : undefined}
+                                            style:box-shadow={tjShadowFor(c.tjBadges, $tajweedSettings)}
+                                            class:tj-kubra={!!tjKubraFor(c.tjBadges, $tajweedSettings)}
+                                            style:--tj-kubra={tjKubraFor(c.tjBadges, $tajweedSettings)}
+                                            data-tj-rules={tjTitleFor(c.tjBadges, c.silentRules, $tajweedSettings) || null}
+                                            on:click={(e) => onDiacriticClick(e, c.cellStart, c.cellEnd, block.wordIndex, c.phoneIdx[0])}
+                                            on:dblclick={(e) => onDiacriticDblClick(e, c.cellStart, c.cellEnd, block.wordIndex, c.phoneIdx[0])}
+                                            on:mouseenter={(e) => onCellEnter(e, c.cellStart, c.cellEnd)}
+                                            on:mouseleave={onCellLeave}
+                                            on:keydown={() => {}}
+                                            role="button"
+                                            tabindex="-1"
+                                        >
+                                            <span class="g" style={c.renderStyle}>{c.glyph}</span>
+                                        </span>
+                                    </span>
+                                {/if}
+                            {/each}
+                            {#each grp.phonemeSpans as ps}
+                                <span
+                                    class="phoneme-cluster"
+                                    class:fill={ps.phonemes.length === 1}
+                                    data-group-index={gi}
+                                    style="grid-column:{ps.colStart + 1} / span {ps.span}"
+                                >
+                                    {#each ps.phonemes as ph (ph.index)}
+                                        {@const parts = splitPhone(ph.displayPhone ?? ph.interval.phone)}
+                                        <span
+                                            class="mega-phoneme"
+                                            class:silence={!ph.interval.phone ||
+                                                ph.interval.phone === 'sil' ||
+                                                ph.interval.phone === 'sp'}
+                                            class:geminate={ph.interval.geminate_start}
+                                            data-index={ph.index}
+                                            style:box-shadow={tjShadowFor(ph.tjBadges, $tajweedSettings)}
+                        class:tj-kubra={!!tjKubraFor(ph.tjBadges, $tajweedSettings)}
+                        style:--tj-kubra={tjKubraFor(ph.tjBadges, $tajweedSettings)}
+                                            data-tj-rules={tjTitleFor(ph.tjBadges, [], $tajweedSettings) || null}
+                                            on:click={(e) => onPhonemeClick(e, ph.interval, ph.index, block.wordIndex)}
+                                            on:dblclick={(e) => onPhonemeDblClick(e, ph.interval, ph.index, block.wordIndex)}
+                                            on:mouseenter={(e) => onPhonemeEnter(e, ph.interval)}
+                                            on:mouseleave={onHoverLeave}
+                                            on:keydown={() => {}}
+                                            role="button"
+                                            tabindex="-1"
+                                        >
+                                            <span class="ph-base">{parts.base || '(sil)'}</span>{#if parts.mod}<sup class="ph-mod">{parts.mod}</sup>{/if}
+                                        </span>
+                                    {/each}
+                                </span>
+                            {/each}
+                        </div>
+                    {/each}
+                </div>
+            {:else}
+                <div class="mega-phonemes flat" class:hidden={!$showPhonemes} dir="rtl">
+                    {#each block.phonemes as ph (ph.index)}
+                        {@const parts = splitPhone(ph.displayPhone ?? ph.interval.phone)}
+                        <span
+                            class="mega-phoneme"
+                            class:silence={!ph.interval.phone ||
+                                ph.interval.phone === 'sil' ||
+                                ph.interval.phone === 'sp'}
+                            class:geminate={ph.interval.geminate_start}
+                            data-index={ph.index}
+                            on:click={(e) => onPhonemeClick(e, ph.interval, ph.index, block.wordIndex)}
+                            on:dblclick={(e) => onPhonemeDblClick(e, ph.interval, ph.index, block.wordIndex)}
+                            on:mouseenter={(e) => onPhonemeEnter(e, ph.interval)}
+                            on:mouseleave={onHoverLeave}
+                            on:keydown={() => {}}
+                            role="button"
+                            tabindex="-1"
+                        >
+                            <span class="ph-base">{parts.base || '(sil)'}</span>{#if parts.mod}<sup class="ph-mod">{parts.mod}</sup>{/if}
+                        </span>
                     {/each}
                 </div>
             {/if}
-            <div class="mega-phonemes" class:hidden={!$showPhonemes} dir="rtl">
-                {#each block.phonemes as ph (ph.index)}
-                    {@const parts = splitPhone(ph.interval.phone)}
-                    <span
-                        class="mega-phoneme"
-                        class:silence={!ph.interval.phone ||
-                            ph.interval.phone === 'sil' ||
-                            ph.interval.phone === 'sp'}
-                        class:geminate={ph.interval.geminate_start}
-                        data-index={ph.index}
-                        on:click={(e) => onPhonemeClick(e, ph.interval, ph.index, block.wordIndex)}
-                        on:dblclick={(e) => onPhonemeDblClick(e, ph.interval, ph.index, block.wordIndex)}
-                        on:mouseenter={() => onPhonemeEnter(ph.interval)}
-                        on:mouseleave={onHoverLeave}
-                        on:keydown={() => {}}
-                        role="button"
-                        tabindex="-1"
-                    >
-                        <span class="ph-base">{parts.base || '(sil)'}</span>{#if parts.mod}<sup class="ph-mod">{parts.mod}</sup>{/if}
-                    </span>
-                {/each}
-            </div>
+        </div>
+        {/if}
+        {/each}
         </div>
     {/each}
+    {#if tipText}
+        <div class="cell-tip" dir="ltr" style="left:{tipX}px; top:{tipY}px;" aria-hidden="true">
+            {#each tipText.split('\n') as line (line)}
+                <div class:tip-rule={!line.endsWith(' ms')}>{line}</div>
+            {/each}
+        </div>
+    {/if}
 </div>
+

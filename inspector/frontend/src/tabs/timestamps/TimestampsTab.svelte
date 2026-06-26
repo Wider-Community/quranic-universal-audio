@@ -44,7 +44,7 @@
     import { playerContext, setIsLoading, setIsPlaying } from '../../lib/stores/player-context';
     import type { TsConfigResponse } from '../../lib/types/generated/schemas';
     import { getActiveTab, activeTab as activeTabStore } from '../../lib/utils/active-tab';
-    import { analogousTriad } from '../../lib/utils/color-derive';
+    import { analogousTriad, inkFor } from '../../lib/utils/color-derive';
     import { LS_KEYS, TAB_NAMES } from '../../lib/utils/constants';
     import { shouldHandleKey } from '../../lib/utils/keyboard-guard';
     import { prewarmVersePeaks } from '../../lib/utils/peaks-fetch';
@@ -79,6 +79,7 @@
         verseTranslations,
     } from './stores/display';
     import { tsLoading } from './stores/loading';
+    import { initTajweedSettings } from './stores/tajweed-settings';
     import { loadTsFlags, tsFlaggedVerses } from './stores/ts-flags';
     import { exitLoop, loopTarget } from './stores/playback';
     import { manualShuffleRequest, shuffleAyah, shuffleMode } from './stores/shuffle';
@@ -145,6 +146,12 @@
     $: cfg = $tsConfig;
     $: triad = analogousTriad($recitationConfigStore.highlightColor);
     $: highlightColor = triad.word;
+    // Auto-contrast ink: the glyph on each active (filled) cell switches
+    // black/white for legibility against its own fill — recomputed live with the
+    // accent. Only the active rules consume these; idle cells are untouched.
+    $: wordInk = inkFor(triad.word);
+    $: letterInk = inkFor(triad.letter);
+    $: phonemeInk = inkFor(triad.phoneme);
     $: wordDur =
         cfg && cfg.anim_transition_easing !== TS_EASING_NONE
             ? `${cfg.anim_word_transition_duration}s`
@@ -178,6 +185,7 @@
         if (sP !== null) showPhonemes.set(sP === 'true');
         if (sT !== null) showTranslations.set(sT === 'true');
         if (sLang) translationLanguage.set(sLang);
+        initTajweedSettings();
 
         try {
             const [, manifest] = await Promise.all([loadPublicCatalog(), loadManifest()]);
@@ -997,6 +1005,9 @@
     style:--anim-highlight-color={highlightColor}
     style:--ts-letter-color={triad.letter}
     style:--ts-phoneme-color={triad.phoneme}
+    style:--ts-word-ink={wordInk}
+    style:--ts-letter-ink={letterInk}
+    style:--ts-phoneme-ink={phonemeInk}
     style:--anim-word-transition={wordTransition}
     style:--anim-char-transition={charTransition}
     style:--anim-word-spacing={cfg?.anim_word_spacing ?? ''}

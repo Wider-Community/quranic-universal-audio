@@ -16,6 +16,7 @@ import './styles/filters.css';
 import './styles/history.css';
 import './styles/segments.css';
 import './styles/stats.css';
+import './styles/highlight-constants.css';
 import './styles/timestamps.css';
 import './styles/validation.css';
 import './styles/combination-picker.css';

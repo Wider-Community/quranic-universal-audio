@@ -1316,18 +1316,13 @@ def process(
     # build_segment_shards emits each one RAW as a recitation-ordered segment
     # entry ({ref, t, words}) — no dedup at write. Consumers derive whatever
     # projection they need; the inspector read-path is a byte pass-through.
-    from quranic_phonemizer import Phonemizer
-
-    from qua_shared.timestamps_bridges import (
-        tag_v2_doc,  # lazy: keep phonemizer off the inspector import path
+    from qua_sdk.components.timing.lib.cells import (
+        annotate_v2_doc,  # lazy: keep phonemizer off the inspector import path
     )
     from qua_shared.timestamps_dedup import build_raw_v2  # lazy: avoid import cycle
 
     ts_dir = output_dir / "timestamps"
     ts_dir.mkdir(parents=True, exist_ok=True)
-
-    # One phonemizer for cross-word bridge tagging across all chapters.
-    bridge_pm = Phonemizer()
 
     # Slim aligner provenance stamped into each shard's ``_meta`` (reciter,
     # url_template and audio_urls are excluded — slug is the path, manifest is
@@ -1345,10 +1340,12 @@ def process(
     def _emit_segment_shards(results_by_ch, suffix=""):
         v2_doc = build_raw_v2(chapters, results_by_ch, audio_category)
         # Tag cross-word tajweed bridges AND stamp per-letter silent flags + folded
-        # silence marks (tag_v2_doc → tag_segment_words → _stamp_silent_flags) — the
-        # same path the silent-flags backfill runs. build_segment_shards then stamps
-        # schema v4. Correctness tracks the phonemizer version this job runs.
-        n_bridges = tag_v2_doc(bridge_pm, v2_doc)
+        # silence marks + per-character cells (annotate_v2_doc → annotate_segment_words
+        # → _stamp_silent_flags / _stamp_cells) — the same SDK path the backfills run.
+        # build_segment_shards then stamps the schema version. The SDK annotator owns
+        # the phonemizer (reached via the SDK domain layer); correctness tracks the
+        # phonemizer version this job runs.
+        n_bridges = annotate_v2_doc(v2_doc)
         log.info("Tagged %d cross-word bridge phone(s)", n_bridges)
         shards = build_segment_shards(
             v2_doc, audio_category=audio_category, src_meta=shard_provenance
