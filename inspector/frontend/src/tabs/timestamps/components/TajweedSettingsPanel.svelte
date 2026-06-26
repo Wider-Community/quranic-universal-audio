@@ -28,8 +28,10 @@
     // Hidden native colour inputs, one per row, opened by clicking its chip.
     let inputs: Record<string, HTMLInputElement | undefined> = $state({});
 
-    /** Normalise any CSS colour (oklch / rgb / hex) to a `#rrggbb` the native
-     *  picker accepts, via a throwaway canvas (Chromium parses oklch). */
+    /** Normalise any CSS colour (oklch / rgb / hex / named) to a `#rrggbb` the native
+     *  `<input type=color>` accepts. Paints one pixel and reads its sRGB bytes — the
+     *  canvas `fillStyle` *getter* serialises modern `oklch(...)` back as `oklch(...)`,
+     *  so a string round-trip would miss; the painted pixel is always sRGB. */
     function cssColorToHex(input: string): string {
         const s = input.trim();
         if (/^#[0-9a-f]{6}$/i.test(s)) return s;
@@ -38,17 +40,9 @@
             if (ctx) {
                 ctx.fillStyle = '#000000';
                 ctx.fillStyle = s;
-                const v = ctx.fillStyle;
-                if (/^#[0-9a-f]{6}$/i.test(v)) return v;
-                const m = v.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
-                if (m) {
-                    return (
-                        '#' +
-                        [1, 2, 3]
-                            .map((i) => Number(m[i]).toString(16).padStart(2, '0'))
-                            .join('')
-                    );
-                }
+                ctx.fillRect(0, 0, 1, 1);
+                const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+                return '#' + [r, g, b].map((x) => (x ?? 0).toString(16).padStart(2, '0')).join('');
             }
         } catch {
             /* unsupported parse — fall through */
