@@ -28,7 +28,7 @@
         publishHfBatch,
         refreshHfCatalog,
         type InFlightJob,
-        type PublishHfSettings,
+        type ReleaseSettings,
         type ReleasePreviewResponse,
         type ReleaseStatusRow,
         type ReleasesStatusResponse,
@@ -49,6 +49,9 @@
     let preview = $state<ReleasePreviewResponse | null>(null);
 
     let cutModalOpen = $state(false);
+    // Shared release settings (clip-edge pads) — one source of truth for BOTH
+    // the HF publish (action bar) and the GH cut (modal), mirrors server defaults.
+    let releaseSettings = $state<ReleaseSettings>({ pad_start: 100, pad_end: 300, min_gap: 100 });
     let rowError = $state<{ slug: string; message: string } | null>(null);
     let sendBackBusySlug = $state<string | null>(null);
 
@@ -382,12 +385,12 @@
     const selectableCount = $derived(filteredRows.filter(isSelectable).length);
 
     // ---- actions ----
-    async function onPublishBatch(settings: PublishHfSettings): Promise<void> {
+    async function onPublishBatch(): Promise<void> {
         if (batchBusy || selected.size === 0) return;
         batchBusy = true;
         batchError = null;
         try {
-            await publishHfBatch([...selected], settings);
+            await publishHfBatch([...selected], releaseSettings);
             clearSelection();
             refetch();   // the server cache is already busted; this gets the new in_flight
         } catch (e) {
@@ -666,6 +669,7 @@
             selectableCount={selectableCount}
             busy={batchBusy}
             error={batchError}
+            bind:settings={releaseSettings}
             onPublish={onPublishBatch}
             onSelectAll={selectAll}
             onClear={clearSelection}
@@ -674,7 +678,11 @@
     {/if}
 
     {#if cutModalOpen}
-        <CutReleaseModal onclose={() => (cutModalOpen = false)} onsuccess={onCutComplete} />
+        <CutReleaseModal
+            bind:settings={releaseSettings}
+            onclose={() => (cutModalOpen = false)}
+            onsuccess={onCutComplete}
+        />
     {/if}
 </div>
 

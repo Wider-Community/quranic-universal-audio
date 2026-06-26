@@ -357,6 +357,7 @@ def cut_release(user):
         result = cut_release_jobs.launch(
             version=version,
             launched_by=getattr(user, "hf_user_id", None),
+            settings=cut_request.settings,
             webhook_base=webhook_base,
         )
     except Exception as exc:

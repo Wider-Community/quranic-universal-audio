@@ -70,7 +70,8 @@ export async function fetchReleasePreview(signal?: AbortSignal): Promise<Release
     return _unwrap<ReleasePreviewResponse>(resp);
 }
 
-export interface PublishHfSettings {
+/** Clip-edge knobs applied to BOTH release channels (HF publish + GH cut). */
+export interface ReleaseSettings {
     pad_start: number;
     pad_end: number;
     min_gap: number;
@@ -80,7 +81,7 @@ export interface PublishHfSettings {
  *  batch of one. Returns the launched job id; throws the server error verbatim
  *  (e.g. the 409 "a cut_release is in flight" / "a job is already running").
  *  Optional ``settings`` overrides the server-side pad/gap defaults. */
-export async function publishHfBatch(slugs: string[], settings?: PublishHfSettings): Promise<LaunchResponse> {
+export async function publishHfBatch(slugs: string[], settings?: ReleaseSettings): Promise<LaunchResponse> {
     const resp = await fetch('/api/admin/publish-hf-batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

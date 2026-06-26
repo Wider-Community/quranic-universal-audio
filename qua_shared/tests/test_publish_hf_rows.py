@@ -7,7 +7,8 @@ the inter-verse silence is tight).
 """
 from __future__ import annotations
 
-from qua_jobs.publish_hf import _fit_boundary, build_rows
+from qua_jobs.publish_hf import build_rows
+from qua_shared.verse_layout import _fit_boundary
 
 SURAH = {"112": {"verses": [{"verse": 1}, {"verse": 2}]}}
 

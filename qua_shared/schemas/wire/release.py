@@ -18,7 +18,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel, model_serializer, model_validator
 
-from qua_shared.schemas.bucket.publish_hf_settings import PublishHfSettings
+from qua_shared.schemas.bucket.release_settings import ReleaseSettings
 
 SCHEMA_VERSION = 1
 VERSE_KEY_RE = re.compile(r"^[1-9]\d{0,2}:[1-9]\d{0,2}$")
@@ -475,6 +475,9 @@ class AdminCutReleaseRequest(BaseModel):
 
     version: str | None = None
     expected_version_at_preview: str | None = None
+    #: Clip-edge padding for the release tiers. ``None`` = server defaults. The
+    #: SAME knobs the HF publish uses, so the two channels stay consistent.
+    settings: ReleaseSettings | None = None
 
 
 class AdminPublishBatchRequest(BaseModel):
@@ -482,7 +485,7 @@ class AdminPublishBatchRequest(BaseModel):
 
     slugs: list[str] = Field(..., min_length=1)
     #: Clip-edge padding for the published rows. ``None`` = server defaults.
-    settings: PublishHfSettings | None = None
+    settings: ReleaseSettings | None = None
 
 
 class AdminLaunchResponse(BaseModel):

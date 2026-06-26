@@ -108,6 +108,15 @@ export interface AdminClaimEvent {
 export interface AdminCutReleaseRequest {
   version?: string | null;
   expected_version_at_preview?: string | null;
+  settings?: ReleaseSettings | null;
+}
+/**
+ * Clip-edge padding for both release channels (all in milliseconds).
+ */
+export interface ReleaseSettings {
+  pad_start?: number;
+  pad_end?: number;
+  min_gap?: number;
 }
 /**
  * A discarded combo surfaced in the admin reciter view.
@@ -208,6 +217,7 @@ export interface AdminPublishBatchRequest {
    * @minItems 1
    */
   slugs: [string, ...string[]];
+  settings?: ReleaseSettings | null;
 }
 /**
  * A reciter's failure in the most recent batch publish. Surfaced on the

@@ -43,7 +43,7 @@ JOB_TIMEOUT = os.environ.get("INSPECTOR_HF_BATCH_JOB_TIMEOUT", "3h")
 def launch(slugs: list[str], *, settings=None, webhook_base: str | None = None) -> dict:
     """Launch one batch publish job for ``slugs``. Returns ``{job_id, url}``.
 
-    ``settings`` is an optional ``PublishHfSettings`` (clip-edge pads); its
+    ``settings`` is an optional ``ReleaseSettings`` (clip-edge pads); its
     fields are threaded to the job as ``PUBLISH_PAD_START`` / ``PUBLISH_PAD_END``
     / ``PUBLISH_MIN_GAP`` and read per-slug in ``publish_hf_batch``.
     """

@@ -7,10 +7,12 @@
      * selection is just a batch of one) — there are no per-row publish buttons.
      * Gated by ``release.publish_hf``.
      *
-     * Includes a collapsible "Dataset publishing settings" accordion that exposes
-     * the pad_start / pad_end / min_gap knobs forwarded to the publish API.
+     * Includes a collapsible "Release settings" accordion that exposes the
+     * pad_start / pad_end / min_gap knobs — the SAME settings the GH cut uses,
+     * so both channels stay consistent (state is owned by the parent).
      */
     import { can } from '../../../../../lib/stores/capabilities';
+    import type { ReleaseSettings } from '../../../../../lib/api/admin-releases';
 
     interface Props {
         count: number;
@@ -18,45 +20,39 @@
         selectableCount: number;
         busy?: boolean;
         error?: string | null;
-        onPublish: (settings: { pad_start: number; pad_end: number; min_gap: number }) => void;
+        /** Shared release settings (also used by the GH cut). Bindable. */
+        settings: ReleaseSettings;
+        onPublish: () => void;
         onSelectAll: () => void;
         onClear: () => void;
     }
     let { count, selectableCount, busy = false, error = null,
-          onPublish, onSelectAll, onClear }: Props = $props();
+          settings = $bindable(), onPublish, onSelectAll, onClear }: Props = $props();
 
     const canPublish = can('release.publish_hf');
     const allSelected = $derived(count >= selectableCount && selectableCount > 0);
 
-    // Dataset publishing settings state — mirrors the server-side defaults.
     let settingsOpen = $state(false);
-    let padStart = $state(100);
-    let padEnd = $state(300);
-    let minGap = $state(100);
-
-    function handlePublish(): void {
-        onPublish({ pad_start: padStart, pad_end: padEnd, min_gap: minGap });
-    }
 </script>
 
 {#if count > 0 && $canPublish}
     <div class="action-bar-wrap">
         {#if settingsOpen}
-            <div class="pub-settings" role="group" aria-label="Dataset publishing settings">
+            <div class="pub-settings" role="group" aria-label="Release settings">
                 <div class="settings-row">
                     <label class="field">
                         <span class="lbl">pad start (ms)</span>
-                        <input type="number" min="0" bind:value={padStart} />
+                        <input type="number" min="0" bind:value={settings.pad_start} />
                     </label>
                     <label class="field">
                         <span class="lbl">pad end (ms)</span>
-                        <input type="number" min="0" bind:value={padEnd} />
+                        <input type="number" min="0" bind:value={settings.pad_end} />
                     </label>
                     <label class="field">
                         <span class="lbl">min gap (ms)</span>
-                        <input type="number" min="0" bind:value={minGap} />
+                        <input type="number" min="0" bind:value={settings.min_gap} />
                     </label>
-                    <span class="settings-hint">Audio headroom added before/after each verse clip; minimum silence kept between adjacent clips.</span>
+                    <span class="settings-hint">Audio headroom before/after each verse clip; minimum silence kept between adjacent clips. Applies to the HF dataset AND the GitHub release.</span>
                 </div>
             </div>
         {/if}
@@ -79,9 +75,9 @@
                 aria-expanded={settingsOpen}
                 aria-controls="pub-settings-panel"
             >
-                {settingsOpen ? '− Publishing settings' : '+ Publishing settings'}
+                {settingsOpen ? '− Release settings' : '+ Release settings'}
             </button>
-            <button class="publish" type="button" onclick={handlePublish} disabled={busy}>
+            <button class="publish" type="button" onclick={onPublish} disabled={busy}>
                 {busy ? 'Launching…' : `Publish ${count} to HF`}
             </button>
         </div>
