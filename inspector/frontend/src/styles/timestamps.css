@@ -775,6 +775,10 @@
         var(--ts-letter-color, var(--hl-letter-color)) calc(var(--fill, 0) * 100%),
         color-mix(in srgb, var(--ts-letter-color, var(--hl-letter-color)) var(--hl-track-base), var(--hl-cell-rest)) 0
     );
+    /* The wipe background sweeps from dark track-tint to full colour, so the
+       solid-fill auto-contrast ink doesn't read over it — keep the glyph a fixed
+       light so it stays visible across the whole sweep. */
+    color: #fff;
     transition: none;
 }
 .hl-track .mega-phoneme.active,
@@ -784,6 +788,7 @@
         var(--ts-phoneme-color, var(--hl-phoneme-color)) calc(var(--fill, 0) * 100%),
         color-mix(in srgb, var(--ts-phoneme-color, var(--hl-phoneme-color)) var(--hl-track-base), var(--hl-cell-rest)) 0
     );
+    color: #fff;
     transition: none;
 }
 
