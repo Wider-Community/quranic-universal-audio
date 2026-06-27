@@ -30,12 +30,14 @@ deferred). Verdicts confirmed by the data owner:
 This script reports the *authoritative* (replayed) status, so these three already
 read correctly here; the deferred work is fixing detailed.json/the inspector.
 """
+
 from __future__ import annotations
 
 import argparse
 import json
 import sys
 from pathlib import Path
+from typing import cast
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "bucket"))
 import _bootstrap as bs  # noqa: E402, I001  (must follow the sys.path insert)
@@ -58,7 +60,7 @@ def _vparts(mref: str):
     """(first_verse, last_verse) as (surah, ayah) from a matched_ref; None on junk."""
     for p in ("Basmala+", "Isti'adha+"):
         if mref.startswith(p):
-            mref = mref[len(p):]
+            mref = mref[len(p) :]
     parts = mref.split("-")
     try:
         a = parts[0].split(":")
@@ -87,7 +89,11 @@ def replay_is_wasl(edit_history_lines: list[str]):
     for _sa, op in rows:
         ot = op.get("op_type") or op.get("kind")
         after = (op.get("patch") or {}).get("after") or []
-        if ot == "split_segment" and op.get("op_context_category") == "cross_verse" and len(after) >= 2:
+        if (
+            ot == "split_segment"
+            and op.get("op_context_category") == "cross_verse"
+            and len(after) >= 2
+        ):
             (_, last0) = _vparts(after[0].get("matched_ref", ""))
             (first1, _) = _vparts(after[1].get("matched_ref", ""))
             uid0 = after[0].get("segment_uid")
@@ -108,7 +114,12 @@ def reciter_boundaries(fs, bucket_id: str, reciter: str, chapter: int | None):
     except FileNotFoundError:
         return
     try:
-        eh = fs.open(f"{base}/edit_history.jsonl", "rb").read().decode("utf-8", "replace").splitlines()
+        eh = (
+            fs.open(f"{base}/edit_history.jsonl", "rb")
+            .read()
+            .decode("utf-8", "replace")
+            .splitlines()
+        )
     except FileNotFoundError:
         eh = []
     uid_wasl, split_boundary = replay_is_wasl(eh)
@@ -151,7 +162,9 @@ def reciter_boundaries(fs, bucket_id: str, reciter: str, chapter: int | None):
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     p.add_argument("--bucket", choices=["dev", "prod", "all"], default="dev")
     p.add_argument("--reciter", help="reciter slug (substring match); default all")
     p.add_argument("--chapter", type=int, help="restrict to one chapter (surah number)")
@@ -161,17 +174,16 @@ def main() -> int:
     bs.ensure_utf8_stdout()
     bs.load_hf_token()
     from huggingface_hub import HfFileSystem
+
     fs = HfFileSystem()
 
-    bucket_ids = (["dev", "prod"] if a.bucket == "all" else [a.bucket])
+    bucket_ids = ["dev", "prod"] if a.bucket == "all" else [a.bucket]
     out = []
     for bkey in bucket_ids:
         bid = bs.BUCKETS[bkey]
-        if a.reciter:
-            reciters = [r.split("/")[-1] for r in fs.ls(bs.abs_path(bid, "reciters"), detail=False)
-                        if a.reciter in r.split("/")[-1]]
-        else:
-            reciters = [r.split("/")[-1] for r in fs.ls(bs.abs_path(bid, "reciters"), detail=False)]
+        entries = cast(list[str], fs.ls(bs.abs_path(bid, "reciters"), detail=False))
+        names = [e.split("/")[-1] for e in entries]
+        reciters = [n for n in names if a.reciter in n] if a.reciter else names
         for r in sorted(reciters):
             for b in reciter_boundaries(fs, bid, r, a.chapter):
                 if a.status != "all" and b["status"] != a.status:
@@ -183,6 +195,7 @@ def main() -> int:
         return 0
     # table + per-reciter summary
     from collections import Counter
+
     cur = None
     tally = Counter()
     for row in out:
