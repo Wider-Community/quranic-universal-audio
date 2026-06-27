@@ -51,7 +51,6 @@
     import { wordBoundaryScan } from '../../lib/utils/word-boundary';
     import { loadCatalog as loadPublicCatalog, catalogData } from '../dashboard/stores/catalog-data';
     import TimestampsWaveform from './components/TimestampsWaveform.svelte';
-    import TsFlaggedAccordion from './components/TsFlaggedAccordion.svelte';
     import TsValidationPanel from './components/TsValidationPanel.svelte';
     import UnifiedDisplay from './components/UnifiedDisplay.svelte';
     import {
@@ -80,7 +79,6 @@
     } from './stores/display';
     import { tsLoading } from './stores/loading';
     import { initTajweedSettings } from './stores/tajweed-settings';
-    import { loadTsFlags, tsFlaggedVerses } from './stores/ts-flags';
     import { exitLoop, loopTarget } from './stores/playback';
     import { manualShuffleRequest, shuffleAyah, shuffleMode } from './stores/shuffle';
     import { tsValidation } from './stores/validation';
@@ -125,7 +123,6 @@
     let loadedChapterKey = ''; // `${slug}:${chapter}` currently assembled
     let focusIdx = -1; // index into `chapterOccasions` of the focused occasion
     let focusRef = ''; // ref of the focused occasion (for display / verse nav)
-    let lastFlagsSlug = ''; // reciter whose user-reported flags are loaded
     let manifestSlugs = new Set<string>();
     /** Set when a context switch should seek to a specific verse once the new
      *  chapter's data + audio are ready (shuffle / validation jump / entry). */
@@ -359,13 +356,6 @@
                 });
             } else {
                 tsValidation.set(null);
-            }
-
-            // Public user-reported verse flags — reciter-scoped, so only reload
-            // when the reciter actually changes (not on every chapter switch).
-            if (slug !== lastFlagsSlug) {
-                lastFlagsSlug = slug;
-                void loadTsFlags(slug);
             }
 
             // Apply a queued seek (entry / shuffle / validation jump), else focus
@@ -1017,17 +1007,10 @@
     style:--analysis-letter-font-size={cfg?.analysis_letter_font_size ?? ''}
 >
     <main>
-        {#if $tsValidation || $tsFlaggedVerses.length}
+        {#if $tsValidation}
             <div class="ts-validation-row">
-                {#if $tsValidation}
-                    <TsValidationPanel
-                        doc={$tsValidation}
-                        activeVerse={$selectedVerse}
-                        onselect={jumpToFlaggedVerse}
-                    />
-                {/if}
-                <TsFlaggedAccordion
-                    flags={$tsFlaggedVerses}
+                <TsValidationPanel
+                    doc={$tsValidation}
                     activeVerse={$selectedVerse}
                     onselect={jumpToFlaggedVerse}
                 />

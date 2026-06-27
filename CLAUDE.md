@@ -60,7 +60,7 @@ inspector/
 ├── config.py         Env-overridable tunables (paths, timeouts, thresholds)
 ├── constants.py      Domain literals (validation categories, muqattaat, qalqala)
 ├── routes/           Thin Flask blueprints (subpackages: admin/ audio/ auth/ claims/ public/ segments/ timestamps/)
-├── services/         Business logic, Flask-free (except auth/auth.py authlib glue) — subpackages: db/ storage/ audio/ auth/ admin/ state/ segments/ validation/ activity/ reference/ quran_foundation/
+├── services/         Business logic, Flask-free (except auth/auth.py authlib glue) — subpackages: db/ storage/ audio/ auth/ admin/ state/ segments/ validation/ activity/ reference/ ts_reports/ quran_foundation/
 ├── domain/           Pure model — Segment, SegmentCommand, identity
 ├── adapters/         JSON ↔ domain conversion
 ├── utils/            Pure utilities + cross-cutting decorators

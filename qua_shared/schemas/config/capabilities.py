@@ -168,12 +168,13 @@ CAPABILITIES: tuple[Capability, ...] = (
         maintainer=True,
     ),
     _c(
-        "timestamps.flag",
+        "timestamps.report",
         G_VIEW,
         "Report a timestamps issue",
-        "Use the Timestamps-tab Report button to flag the playing verse and "
-        "leave an optional comment about its alignment. Open to everyone incl. "
-        "anonymous by default; turn anonymous off to require sign-in.",
+        "Use the Timestamps-tab Report flow to file a categorized issue "
+        "(audio / timing / mapping / tajweed / other) on the playing verse or a "
+        "specific cell. Open to everyone incl. anonymous by default; turn "
+        "anonymous off to require sign-in.",
         anon=True,
         contributor=True,
         maintainer=True,
@@ -453,6 +454,25 @@ CAPABILITIES: tuple[Capability, ...] = (
         maintainer=True,
     ),
     _c(
+        "timestamps.resolve_report",
+        G_ADMIN,
+        "Resolve a timestamps report",
+        "Mark a submitted Timestamps-tab report as resolved (with an optional "
+        "note). The reporter is notified. Owner-only by default; delegate to "
+        "maintainers to share triage.",
+        contributor=False,
+        maintainer=False,
+    ),
+    _c(
+        "timestamps.view_stale_reports",
+        G_ADMIN,
+        "View stale timestamps reports",
+        "Filter to Timestamps reports invalidated by a later timestamp "
+        "regeneration (their targeted content changed). Owner-only by default.",
+        contributor=False,
+        maintainer=False,
+    ),
+    _c(
         "announcements.send",
         G_ADMIN,
         "Send announcements",
@@ -534,12 +554,12 @@ CAPABILITIES: tuple[Capability, ...] = (
         maintainer=True,
     ),
     _c(
-        "timestamps.see_flagger_identity",
+        "timestamps.see_reporter_identity",
         G_IDENTITY,
         "See who reported a timestamps issue",
-        "Reveal the login next to each comment on a Timestamps-tab verse flag "
-        "(and in the flag notification). Others see the comment text only. "
-        "Owner-only by default; delegate to maintainers to share triage.",
+        "Reveal the login next to each Timestamps-tab report (and in the report "
+        "notification). Others see the report only. Owner-only by default; "
+        "delegate to maintainers to share triage.",
         contributor=False,
         maintainer=False,
     ),

@@ -125,12 +125,13 @@
                     go: () => gotoSegments(slug, { openFlagged: true, focusFlaggedUid: uid }),
                 };
             }
-            case 'ts_flag.created': {
+            case 'ts_report.created':
+            case 'ts_report.resolved': {
                 const verseKey =
                     typeof n.payload?.verse_key === 'string' ? n.payload.verse_key : '';
                 if (!slug || !verseKey) return null;
                 return {
-                    label: 'View flagged verse',
+                    label: 'View reported verse',
                     go: () => gotoTimestamps(slug, verseKey),
                 };
             }
@@ -166,18 +167,20 @@
                 return 'Flag · comment';
             case 'flag.replied':
                 return 'Flag · reply';
-            case 'ts_flag.created':
+            case 'ts_report.created':
                 return 'Timestamps · report';
+            case 'ts_report.resolved':
+                return 'Timestamps · resolved';
             default:
                 return null;
         }
     }
 
-    /** Card body — for a timestamps-flag report, identity-capable owners also
-     *  see who reported it (appended from the payload). Everyone else sees the
-     *  verse + comment only. */
+    /** Card body — for a timestamps report, identity-capable owners also see who
+     *  reported it (appended from the payload). Everyone else sees the verse +
+     *  category only. */
     function cardBody(n: UserNotification, showReporter: boolean): string | null {
-        if (n.event === 'ts_flag.created' && showReporter) {
+        if (n.event === 'ts_report.created' && showReporter) {
             const login =
                 typeof n.payload?.author_login === 'string' ? n.payload.author_login : null;
             const who = login ?? 'an anonymous listener';

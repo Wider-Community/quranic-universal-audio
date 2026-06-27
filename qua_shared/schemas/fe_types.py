@@ -146,13 +146,16 @@ from .wire.seg import (
     SegValidateResponse,
 )
 from .wire.timestamps import TsConfigResponse, TsManifestResponse
-from .wire.ts_flags import (
-    TsFlagAuthor,
-    TsFlagComment,
-    TsFlagCreateRequest,
-    TsFlagVerseCount,
-    TsReciterFlags,
-    TsVerseFlags,
+from .wire.ts_reports import (
+    TsReciterReports,
+    TsReport,
+    TsReportAuthor,
+    TsReportCreateRequest,
+    TsReportResolveRequest,
+    TsReportSnapshot,
+    TsReportTarget,
+    TsReportVerseCount,
+    TsVerseReports,
 )
 
 __all__ = [
@@ -184,12 +187,15 @@ __all__ = [
     "SegmentsChapterSummary",
     "TsConfigResponse",
     "TsManifestResponse",
-    "TsFlagAuthor",
-    "TsFlagComment",
-    "TsFlagCreateRequest",
-    "TsFlagVerseCount",
-    "TsReciterFlags",
-    "TsVerseFlags",
+    "TsReciterReports",
+    "TsReport",
+    "TsReportAuthor",
+    "TsReportCreateRequest",
+    "TsReportResolveRequest",
+    "TsReportSnapshot",
+    "TsReportTarget",
+    "TsReportVerseCount",
+    "TsVerseReports",
     "AutoGenTsConfig",
     "AutomationConfig",
     "AutomationResponse",

@@ -238,6 +238,65 @@ def test_complete_regen_refuses_when_no_shards(monkeypatch):
     assert ts_current["version"] == "job-old"
 
 
+def test_complete_regen_stales_report_whose_content_changed(monkeypatch):
+    """A regen on a released reciter flags an open report stale when the new
+    shard changed its targeted content (here: a dropped tajweed rule)."""
+    from services import db
+    from services.db import repo_ts_reports
+    from services.ts_reports import ts_target_snapshot
+
+    _seed_released_with_ledger("rec_a", ts_version="job-old")
+    monkeypatch.setattr(timestamps_jobs, "_has_any_shard", lambda slug: True)
+
+    with db.transaction():
+        row, _ = repo_ts_reports.create(
+            slug="rec_a",
+            verse_key="2:45",
+            category="tajweed",
+            subtype="wrong_rule",
+            target={"kind": "cell", "word_index": 0, "cell_index": 0},
+            snapshot={
+                "chars": "ب",
+                "role": "base",
+                "status": "present",
+                "tag": "qalqala_sughra",
+                "secondary_tags": [],
+                "phoneme_rule_tags": [],
+            },
+            comment=None,
+            hf_user_id=None,
+            anon_token="anon-1",
+            login_at_time=None,
+            role_at_time=None,
+        )
+
+    # The regenerated shard drops the qalqala rule on that cell.
+    changed = {
+        "_meta": {"schema_version": 9, "chapter": 2, "audio_category": "by_ayah_audio"},
+        "segments": [
+            {
+                "ref": "2:45",
+                "t": [0, 20],
+                "words": [
+                    [
+                        1,
+                        0,
+                        20,
+                        [["ب", 0, 10]],
+                        [["b", 0, 10]],
+                        [["ب", "base", "present", [0], 0, None, None]],
+                    ]
+                ],
+            }
+        ],
+    }
+    monkeypatch.setattr(ts_target_snapshot, "_load_shard", lambda slug, ch: changed)
+
+    timestamps_jobs.complete_timestamps_job("rec_a", "job-new")
+
+    assert repo_ts_reports.get(row["id"])["stale"] is True
+
+
 def test_complete_noop_when_not_marked_ready(monkeypatch):
     from services.state import state as state_service
     from tests.conftest import _seed_state
