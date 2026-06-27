@@ -4,9 +4,13 @@
      * grid centred under the player's play button — Noon/Meem and Madd on top,
      * Other rules and the Waqf stop-sign key on the bottom. Each rule row is a
      * colour chip (click → native colour picker, live recolour, hover reveals a
-     * dropper) with a mini enable toggle, label and ḥarakāt duration. Qalqala is
-     * two coupled rows (ṣughrā / kubrā) sharing the `qalqala` key, the kubrā chip
-     * previewing the side-wrap. The Other quadrant closes with two non-interactive
+     * dropper) with a mini enable toggle, label and ḥarakāt duration. Each group
+     * header (Noon / Meem / Madd / Other) carries a switch that quick-disables the
+     * whole group and restores the previously-enabled set on re-enable; it reads as
+     * on whenever any member rule is on. Ghunnah heads both Noon and Meem (it governs
+     * a sākin noon and a sākin mīm) — the two rows couple colour + toggle via the
+     * shared `ghunnah` key. Qalqala is two coupled rows (ṣughrā / kubrā) sharing the
+     * `qalqala` key, the kubrā chip previewing the side-wrap. The Other quadrant closes with two non-interactive
      * keys explaining the dashed (sounded-but-unwritten) and greyed (written-but-
      * silent) cells; the Waqf quadrant lists the five mushaf pause marks, each in a
      * real analysis cell with the shared per-glyph calibration. All state lives in
@@ -16,12 +20,18 @@
     import { harakaRenderStyle } from '../utils/haraka-render';
     import { LEGEND, type LegendRow } from '../utils/tajweed-rules';
     import {
+        isGroupEnabled,
         resetAllTajweed,
+        setGroupEnabled,
         setRuleColor,
         setRuleEnabled,
         tajweedSettings,
     } from '../stores/tajweed-settings';
     import { waqfRenderStyle } from '../utils/waqf-render';
+
+    /** Distinct legendKeys of a row list, in order — the set a group toggle drives
+     *  (qalqala's two rows collapse to one key). */
+    const keysOf = (rows: LegendRow[]): string[] => [...new Set(rows.map((r) => r.legendKey))];
 
     // The two dashed-haraka exemplars in the Other-rules key, positioned with the
     // real per-glyph calibration (damma U+064F pinned above, kasra U+0650 below).
@@ -147,15 +157,32 @@
         </div>
     {/snippet}
 
+    {#snippet groupHead(title: string, keys: string[])}
+        {@const on = isGroupEnabled($tajweedSettings, keys)}
+        <h4 class="tjs-h4">
+            <span>{title}</span>
+            <button
+                type="button"
+                class="tjs-toggle tjs-grp-toggle"
+                class:on
+                role="switch"
+                aria-checked={on}
+                aria-label={`Turn all ${title} rules ${on ? 'off' : 'on'}`}
+                title={on ? 'Disable all in group' : 'Enable all in group'}
+                onclick={() => setGroupEnabled(title, keys, !on)}
+            ><span class="knob"></span></button>
+        </h4>
+    {/snippet}
+
     <div class="tjs-cols">
         {#each orderedGroups as group (group.title)}
-            <section class="tjs-group" class:fill={group.category !== 'other'}>
+            <section class="tjs-group fill">
                 {#if group.subgroups}
                     <!-- Noon / Meem: two sub-sections, each its own header, distributed to fill height. -->
                     <div class="tjs-body">
                         {#each group.subgroups as sg (sg.title)}
                             <div class="tjs-subsec">
-                                <h4>{sg.title}</h4>
+                                {@render groupHead(sg.title, keysOf(sg.rows))}
                                 {#each sg.rows as row (row.label)}
                                     {@render ruleRow(row)}
                                 {/each}
@@ -163,12 +190,14 @@
                         {/each}
                     </div>
                 {:else if group.category === 'other'}
-                    <h4>{group.title}</h4>
-                    {#each group.rows ?? [] as row (row.label)}
-                        {@render ruleRow(row)}
-                    {/each}
+                    {@render groupHead(group.title, keysOf(group.rows ?? []))}
+                    <div class="tjs-body">
+                        {#each group.rows ?? [] as row (row.label)}
+                            {@render ruleRow(row)}
+                        {/each}
+                    </div>
                 {:else}
-                    <h4>{group.title}</h4>
+                    {@render groupHead(group.title, keysOf(group.rows ?? []))}
                     <div
                         class="tjs-body"
                         class:rows-6={(group.rows?.length ?? 0) === WAQF_KEYS.length}
@@ -289,10 +318,19 @@
         color: var(--text-primary);
         border-bottom: 1px solid var(--border-quiet);
     }
-    /* Noon/Meem, Madd and Waqf columns fill the shared (tallest-column) height:
-       the body grows and distributes its rows + sub-headers with even vertical
-       spacing. The Other column keeps its natural top-packed flow (its key block
-       fills it). */
+    /* Group header carrying the quick-disable switch — title left, toggle right. */
+    .tjs-h4 {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--s-2);
+    }
+    .tjs-grp-toggle {
+        flex: 0 0 auto;
+    }
+    /* Every column fills the shared (tallest-column) height: the body grows and
+       distributes its rows + sub-headers with even vertical spacing. In the Other
+       column the body grows to pin its dashed/silent key block to the bottom. */
     .tjs-group.fill {
         display: flex;
         flex-direction: column;
