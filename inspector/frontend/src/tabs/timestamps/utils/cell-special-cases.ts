@@ -67,36 +67,3 @@ export const shedSilahMaddah = (chars: string): string => chars.replace(MADDAH, 
 
 /** The silah carrier's glyph with the relocated maddah (ۥ → ۥٓ). */
 export const wearSilahMaddah = (chars: string): string => chars + MADDAH;
-
-// ── Hamza-waṣl ibtidaa madd (ٱئْتُونِى started-on) ─────────────────────────────
-
-/** Hamza letters that can seat a hamza — the silent carrier in a started-on
- *  hamza-waṣl ibtidaa madd (ٱئْتُونِى → ʔ iː t … : the ئ). */
-const HAMZA_SEATS = new Set(['ء', 'أ', 'ؤ', 'إ', 'ئ']);
-
-/** Started-on ٱئْتُونِى (`ʔ iː t uː n iː`): the phonemizer inserts a long helping
- *  vowel on the hamzat-waṣl, and the following hamza-seat (ئ) is dropped — but it
- *  acts as that vowel's madd CARRIER. Re-pair the synthetic kasra + the seat into
- *  one shared vowel group (the seat reuses the kasra's phoneme index — adds none —
- *  and is re-cast as a co-lit madd carrier, like ـِى), so the FE renders them as a
- *  stuck [kasra, carrier] unit instead of a lone kasra + a greyed seat. No-op for
- *  any word without the pattern. Phonemes are unchanged. */
-export function applyHamzaWaslMadd(cells: TsCell[]): TsCell[] {
-    const k = cells.findIndex(
-        (c) => c.role === 'haraka' && c.tag === 'hamza_wasl_vowel' && c.phonemeIndices.length > 0,
-    );
-    if (k < 0) return cells;
-    const seat = cells.findIndex((c, i) => i > k && c.role === 'base');
-    if (seat < 0) return cells;
-    const s = cells[seat]!;
-    if (s.phonemeIndices.length > 0 || ![...s.chars].some((ch) => HAMZA_SEATS.has(ch))) return cells;
-    const sg = Math.max(-1, ...cells.map((c) => c.shareGroup ?? -1)) + 1;
-    return cells.map((c, i): TsCell => {
-        if (i === k) return { ...c, shareGroup: sg }; // the kasra joins the shared group
-        if (i === seat) {
-            // the ئ seat becomes the madd carrier sounding the kasra's long vowel
-            return { ...c, role: 'madd', status: 'present', phonemeIndices: cells[k]!.phonemeIndices, shareGroup: sg, tag: 'madd_tabii' };
-        }
-        return c;
-    });
-}

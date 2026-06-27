@@ -11,7 +11,7 @@
 import { ALEF_MAKSURA, DAGGER, FATHA, MEEM, MEEM_HI, MEEM_LO, NOON, OPEN_TANWEEN, OPEN_TANWEEN_TAGS, SHADDA, SUKUN, cellGlyph, cellSlot, firstMark, implicitMaddGlyph } from './tajweed-script';
 import { badgesForTags, silentTooltip, tagsForLegend } from './tajweed-rules';
 import type { TjBadge } from './tajweed-rules';
-import { applyHamzaWaslMadd, iqlabNoonMiniMeem, iqlabNoonSilentBase, shedSilahMaddah, silahMaddahSources, wearSilahMaddah } from './cell-special-cases';
+import { iqlabNoonMiniMeem, iqlabNoonSilentBase, shedSilahMaddah, silahMaddahSources, wearSilahMaddah } from './cell-special-cases';
 import { harakaRenderStyle } from './haraka-render';
 import { _heavyIkhfaaDisplay } from './phoneme-columns';
 import type { PhonemeInterval, TsCell, TsWord } from '../../../lib/types/ts-client';
@@ -335,12 +335,8 @@ export function cellGroupsFor(
 ): RenderedGroup[] {
     const { folded, srcToFold } = foldedLettersFor(word);
     // The iltiqaa-kasra cell is lifted into a cross-word bridge — drop it from
-    // the word's own letter row so it renders only between the two words. The
-    // hamza-waṣl ibtidaa madd (ٱئْتُونِى) re-pairs its kasra + dropped seat into a
-    // shared vowel group — see cell-special-cases (no-op for other words).
-    const cells = applyHamzaWaslMadd(
-        (word.cells ?? []).filter((c) => !(liftIltiqaa && c.tag === 'iltiqaa_kasra')),
-    );
+    // the word's own letter row so it renders only between the two words.
+    const cells = (word.cells ?? []).filter((c) => !(liftIltiqaa && c.tag === 'iltiqaa_kasra'));
     // A renderable anchor is a base cell OR a real madd carrier (chars != '').
     // Muqattaat whose letters are all spelled-out names (كٓهيعٓصٓ, عٓسٓقٓ, صٓ, قٓ …)
     // carry no base cell but ARE full graphemes — they render through the main
@@ -612,9 +608,11 @@ export function cellGroupsFor(
             status: c.status,
             tag: c.tag,
             implicit: false,
-            // The written madd-ʿiwaḍ alef (substitutes the fatḥatan at waqf) is
-            // "added, not in the rasm" → the muted dashed inserted border.
-            inserted: c.tag === 'madd_iwad',
+            // A written cell carrying the muted dashed "transform" border: the
+            // madd-ʿiwaḍ alef (substitutes the fatḥatan at waqf), or a contextual
+            // transform seat the phonemizer flags `inserted` (started-on ٱئْتُونِى's
+            // ئ→ي madd carrier) — both are "altered, not the plain rasm".
+            inserted: c.tag === 'madd_iwad' || c.status === 'inserted',
             isBase,
             cellStart: start,
             cellEnd: end,
