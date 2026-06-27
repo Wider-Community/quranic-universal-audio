@@ -99,8 +99,8 @@
     }
 
     // Centre the tajweed panel on the footer's play button (the centred transport
-    // column = true viewport centre), so its middle column lines up under play.
-    // Falls back to viewport-clamped if the wide box would overflow an edge.
+    // column = true viewport centre), so the 2×2 grid's column gap lines up under
+    // play. Falls back to viewport-clamped if the wide box would overflow an edge.
     function centerOnPlay(node: HTMLElement) {
         const margin = 8;
         const place = (): void => {

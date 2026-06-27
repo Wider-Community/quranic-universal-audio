@@ -36,6 +36,7 @@ Can access from `HF_TOKEN` in `.env`
 |---|---|
 | First-time setup (FE + BE deps) | `scripts/devenv/setup.sh` (`frontend` / `backend` to scope) |
 | Build frontend | `cd frontend && npm install && npm run build` |
+| **Run the app (any mode/worktree, conflict-free)** | `python scripts/devenv/launch.py` (the `/launch` skill) — defaults to **dev-remote** (real data + audio/analysis, works on Windows, never touches prod); `--mode dev` for a local backend, `--mode prod-remote` for a light read-only prod peek. Free ports, isolated DB, readiness wait, `list`/`down`/`doctor`, `--smoke`. Prefer this over hand-running the two below. |
 | Run server (dev) | `python3 inspector/app.py` → http://localhost:5000 |
 | Frontend HMR | `cd frontend && npm run dev` → http://localhost:5173 (proxies `/api`) |
 | Frontend test / typecheck / lint | `npm run test` / `npm run check` / `npm run lint` |

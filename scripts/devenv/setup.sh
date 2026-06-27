@@ -24,6 +24,19 @@ setup_frontend() {
     npm --prefix "$ROOT/inspector/frontend" ci
 }
 
+setup_hooks() {
+    # Install the repo-ROOT deps (husky + lint-staged) so the root `prepare`
+    # script runs `husky`, which sets `core.hooksPath=.husky` and arms the
+    # committed pre-commit (lint-staged) + pre-push (ruff + pyright) hooks.
+    # Without this the hooks never fire in a fresh checkout. Best-effort: a
+    # missing npm or offline box must not abort the rest of setup.
+    echo "==> Git hooks (repo root): npm install (activates husky)"
+    if ! npm --prefix "$ROOT" install; then
+        echo "   WARN: root 'npm install' failed; git hooks not armed" \
+             "(pre-commit/pre-push won't run). Re-run once npm is available." >&2
+    fi
+}
+
 setup_backend() {
     echo "==> Backend deps (inspector): pip install requirements + dev"
     local reqs=(-r "$ROOT/inspector/requirements.txt" -r "$ROOT/inspector/requirements-dev.txt")
@@ -37,8 +50,8 @@ setup_backend() {
 }
 
 case "$target" in
-    all)         setup_frontend; setup_backend ;;
-    frontend|fe) setup_frontend ;;
+    all)         setup_frontend; setup_hooks; setup_backend ;;
+    frontend|fe) setup_frontend; setup_hooks ;;
     backend|be)  setup_backend ;;
     *) echo "usage: setup.sh [all|frontend|backend]" >&2; exit 2 ;;
 esac
