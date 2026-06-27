@@ -59,6 +59,7 @@ no-op-or-error by design. Idempotent `backfill_*`/`purge_*`/`convert_*` stay in
 ### `diagnostics/`
 - `bench_storage.py` — benchmark backend read/write hot paths
 - `check_eligibility_parity.py` — assert DB-backed eligibility == legacy git-tracked set
+- `ts_cell_drift.py` — scan a bucket's TS shards for the FE cell-snap precondition (stored phones ≠ phonemizer), classify each divergence (waqf / ibtidāʾ-waṣl / merger / domain), and flag structurally-broken re-stamps
 
 ### `migrations/`
 Frozen, completed one-shot schema moves — see [`migrations/README.md`](migrations/README.md).
