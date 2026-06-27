@@ -16,7 +16,7 @@ import type {
     TsReportTarget,
 } from '../../../lib/types/generated/schemas';
 import { getAnonToken } from '../../../lib/utils/anon-token';
-import type { StagedAnnotation } from '../stores/report-mode';
+import { isStagedComplete, type StagedAnnotation } from '../stores/report-mode';
 import { createReportsBatch, deleteReport } from './reports-client';
 
 function anonTokenIfNeeded(): string | null {
@@ -56,12 +56,15 @@ export async function submitReportSession(
     deleteIds: number[],
 ): Promise<SubmitResult> {
     const anon = anonTokenIfNeeded();
+    // Defensive: only complete items persist (the UI auto-discards incompletes on
+    // focus-move, but a half-filled focused cell may still be in the set).
+    const ready = staged.filter(isStagedComplete);
     try {
         for (const id of deleteIds) {
             await deleteReport(slug, id, anon);
         }
-        if (staged.length > 0) {
-            const items = staged.map(toItem) as [TsReportBatchItem, ...TsReportBatchItem[]];
+        if (ready.length > 0) {
+            const items = ready.map(toItem) as [TsReportBatchItem, ...TsReportBatchItem[]];
             const res = await createReportsBatch(slug, {
                 verse_key: verseKey,
                 items,

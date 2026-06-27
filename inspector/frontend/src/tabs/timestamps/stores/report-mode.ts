@@ -10,9 +10,14 @@
  * - `timing` forces letters-only (snapshots + restores the display toggles) and
  *   loops the selected cell (the loop is driven by `loopTarget`, set by the
  *   grid click). Each flagged cell is its own row; rows group by word at submit.
- * - `tajweed` keeps the current rows; the wrong/missing subtype toggle flips the
- *   spotlight (UnifiedDisplay reads `reportMode`). Each flagged cell is its own
- *   report. wrong_rule carries the picked internal rule tag(s).
+ * - `tajweed` keeps the current rows but forces every legend colour on (snapshot
+ *   + restore) so all rules are visible to target. The subtype (`wrong_rule` /
+ *   `missing_rule`) is fixed at entry. Each flagged cell is its own report, unique
+ *   per cell PER subtype; wrong_rule carries the picked internal rule tag(s).
+ *
+ * Switching focus to a new cell auto-discards the previously focused annotation
+ * when it is still incomplete (missing a required subtype / rule pick / comment),
+ * so only complete items survive to Submit.
  */
 import { derived, get, writable } from 'svelte/store';
 
@@ -21,6 +26,11 @@ import { exitLoop } from '../../../lib/playback/loop';
 import type { TsReportTarget } from '../../../lib/types/generated/schemas';
 import { type CellKey, targetCellKey } from '../utils/report-target';
 import { showLetters, showPhonemes } from './display';
+import {
+    forceAllTajweedEnabled,
+    restoreTajweedSettings,
+    type TajweedSettings,
+} from './tajweed-settings';
 import { currentVerseReports } from './ts-reports';
 
 export type TimingSubtype = 'too_long' | 'too_short' | 'other';
@@ -82,12 +92,38 @@ export function clearStaged(): void {
     staged.set(new Map());
 }
 
-let displaySnapshot: { letters: boolean; phonemes: boolean } | null = null;
+/** Whether a staged annotation has all its required fields — the bar for it to
+ *  survive Submit (and not be auto-discarded when focus moves away). */
+export function isStagedComplete(a: StagedAnnotation): boolean {
+    if (a.kind === 'timing') {
+        if (!a.subtype) return false;
+        return a.subtype !== 'other' || a.comment.trim().length > 0;
+    }
+    const needsRule = a.subtype === 'wrong_rule' && a.ruleOptions.length > 0;
+    if (needsRule && a.selectedRuleTags.length === 0) return false;
+    return a.comment.trim().length > 0; // every tajweed report needs a comment
+}
 
-function seedOwnFlags(category: 'timing' | 'tajweed'): void {
+/** Move focus to `key`, auto-discarding the previously focused annotation when it
+ *  is still incomplete (no hard block — abandoning an unfinished cell drops it). */
+export function focusCell(key: CellKey | null): void {
+    const prev = get(focusedCellKey);
+    if (prev && prev !== key) {
+        const a = get(staged).get(prev);
+        if (a && !isStagedComplete(a)) removeStaged(prev);
+    }
+    focusedCellKey.set(key);
+}
+
+let displaySnapshot: { letters: boolean; phonemes: boolean } | null = null;
+let tajweedSnapshot: TajweedSettings | null = null;
+
+function seedOwnFlags(category: 'timing' | 'tajweed', subtype?: TajweedSubtype): void {
     const m = new Map<CellKey, StagedAnnotation>();
     for (const r of get(currentVerseReports)) {
         if (!r.mine || r.status !== 'open' || r.category !== category) continue;
+        // A tajweed session is single-subtype — only seed the matching subtype.
+        if (category === 'tajweed' && subtype && r.subtype !== subtype) continue;
         const key = targetCellKey(r.target);
         if (category === 'timing') {
             m.set(key, {
@@ -131,14 +167,11 @@ export function enterTiming(slug: string, verseKey: string): void {
 export function enterTajweed(slug: string, verseKey: string, subtype: TajweedSubtype): void {
     dashPort.pause();
     displaySnapshot = null; // tajweed keeps whatever rows are on
+    tajweedSnapshot = forceAllTajweedEnabled(); // every rule visible to target
     reportContext.set({ slug, verseKey });
     focusedCellKey.set(null);
-    seedOwnFlags('tajweed');
+    seedOwnFlags('tajweed', subtype);
     reportMode.set({ kind: 'tajweed', subtype });
-}
-
-export function setTajweedSubtype(subtype: TajweedSubtype): void {
-    reportMode.update((m) => (m.kind === 'tajweed' ? { kind: 'tajweed', subtype } : m));
 }
 
 export function exitReportMode(): void {
@@ -146,6 +179,10 @@ export function exitReportMode(): void {
         showLetters.set(displaySnapshot.letters);
         showPhonemes.set(displaySnapshot.phonemes);
         displaySnapshot = null;
+    }
+    if (tajweedSnapshot) {
+        restoreTajweedSettings(tajweedSnapshot);
+        tajweedSnapshot = null;
     }
     exitLoop();
     clearStaged();

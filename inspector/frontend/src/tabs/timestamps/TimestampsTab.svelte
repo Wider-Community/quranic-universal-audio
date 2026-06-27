@@ -298,6 +298,17 @@
         void loadVerseReports(slug, verseKey);
     }
 
+    // Arm the whole-verse playback lock when a report session starts (exit clears
+    // the loop itself). With the playhead pinned, the focus verse only changes on a
+    // genuine manual nav — which _syncVerseReports above turns into exit + discard.
+    let _reportLockArmed = false;
+    $: _syncReportLock($reportModeActive);
+    function _syncReportLock(active: boolean): void {
+        if (active === _reportLockArmed) return;
+        _reportLockArmed = active;
+        if (active) armVerseLock();
+    }
+
     async function syncChapter(slug: string, chapter: number): Promise<void> {
         if (!slug || !chapter) return;
         if (!manifestSlugs.has(slug)) return; // non-published reciter on dashboard
@@ -434,6 +445,17 @@
         if (i >= 0 && i !== focusIdx) setFocusByIndex(i);
     }
 
+    /** Lock playback to the focused occasion for a report session: a whole-verse
+     *  loop covering its trailing silence up to the next verse's start. Pins the
+     *  playhead inside the verse so free play can't auto-advance (or fire shuffle)
+     *  out of the session; selecting a timing cell narrows this to the cell loop. */
+    function armVerseLock(): void {
+        const occ = chapterOccasions[focusIdx];
+        if (!occ) return;
+        exitLoop(); // drop any prior loop so the anchor re-captures this verse
+        loopTarget.set({ kind: 'word', startSec: 0, endSec: (occ.endMs - occ.startMs) / 1000, wordIndex: -1 });
+    }
+
     /** True while a cross-source jump is mid-swap: the shared player already points
      *  at (and may already be playing) the new chapter, but `chapterOccasions` /
      *  `focusRef` / `loadedVerse` still describe the previous chapter until
@@ -502,7 +524,7 @@
             occasions: chapterOccasions,
             ms,
             swapInFlight: chapterSwapInFlight(),
-            armed: getActiveTab() === TAB_NAMES.TIMESTAMPS && !get(loopTarget) && get(shuffleAyah),
+            armed: getActiveTab() === TAB_NAMES.TIMESTAMPS && !get(loopTarget) && get(shuffleAyah) && !get(reportModeActive),
             focusEndMs: fv ? fv.tsSegEnd * 1000 : null,
             guardMs: SHUFFLE_END_GUARD_MS,
             firedForCurrentFocus: shuffleFiredForIdx === focusIdx,
@@ -527,6 +549,7 @@
     // Dashboard playback (its own gapless advance owns dashPort.onEnded when active).
     function maybeFireShuffle(ms: number): boolean {
         if (getActiveTab() !== TAB_NAMES.TIMESTAMPS) return false;
+        if (get(reportModeActive)) return false; // verse is locked during a report session
         // Mid-swap the timeupdate clock is the NEW chapter's but loadedVerse is the
         // OLD one — measuring against it would fire against the wrong ayah. tick()
         // also freezes focus here, so this is belt-and-braces, not the sole guard.

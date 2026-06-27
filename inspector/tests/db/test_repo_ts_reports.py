@@ -176,6 +176,24 @@ def test_redelete_already_hidden_is_noop(fresh_db):
     assert second is False
 
 
+def test_tajweed_same_cell_different_subtypes_are_separate_rows(fresh_db):
+    cell = _target("cell", word_index=0, cell_index=1)
+    _create(category="tajweed", subtype="wrong_rule", target=cell, comment="wrong")
+    _create(category="tajweed", subtype="missing_rule", target=cell, comment="missing")
+    rows = repo.list_for_verse("reciter-a", "2:45")
+    assert len(rows) == 2
+    assert {r["subtype"] for r in rows} == {"wrong_rule", "missing_rule"}
+
+
+def test_tajweed_same_cell_same_subtype_upserts_in_place(fresh_db):
+    cell = _target("cell", word_index=0, cell_index=1)
+    _create(category="tajweed", subtype="wrong_rule", target=cell, comment="first")
+    row, created = _create(category="tajweed", subtype="wrong_rule", target=cell, comment="second")
+    assert created is False
+    assert row["comment"] == "second"
+    assert len(repo.list_for_verse("reciter-a", "2:45")) == 1
+
+
 def test_selected_rule_tags_roundtrip(fresh_db):
     row, _ = _create(
         category="tajweed",

@@ -29,7 +29,7 @@ one). Re-filing the same category+target updates in place (upsert). Key columns:
 | `category` | `audio` · `timing` · `mapping` · `tajweed` · `other` |
 | `subtype` | timing `too_long\|too_short\|other`; tajweed `wrong_rule\|missing_rule\|should_be_silent\|should_not_be_silent`; else NULL |
 | `target_kind` + `word_index` / `source_letter_index` / `cell_index` / `phoneme_flat_index` / `share_group` | the flexible target descriptor (`verse\|word\|cell\|phoneme\|column\|cell_group`) |
-| `target_key` | canonical descriptor string (`kind:wi:sli:ci:pi:sg`) the per-identity unique index keys on |
+| `target_key` | canonical descriptor string (`kind:wi:sli:ci:pi:sg`, **plus `:subtype` for tajweed**) the per-identity unique index keys on — built in `repo_ts_reports.target_key()` |
 | `snap_*` | denormalized snapshot of the targeted shard content at create time — the drift fingerprint (no per-cell hash) |
 | `selected_rule_tags` | JSON: the internal tajweed tag id(s) the reporter marked wrong (`wrong_rule` only) |
 | `comment` | mandatory for `audio`/`mapping`/`other` + `timing.other` + every tajweed; optional otherwise |
@@ -43,7 +43,11 @@ one). Re-filing the same category+target updates in place (upsert). Key columns:
   `(slug, verse_key, word_index, category='timing', identity)` is ONE logical
   report — one owner notification, resolved as a unit. Computed from existing
   columns via `repo_ts_reports.word_group_key()`; never a stored `group_key`.
-- **Tajweed** reports are **per cell** (each flagged cell is its own report).
+- **Tajweed** reports are **per cell PER subtype** — the same cell can carry both
+  a `wrong_rule` and a `missing_rule` report (two rows, two notifications). The
+  `subtype` rides in `target_key` for tajweed only, so same cell + same subtype
+  still upserts. No SQL migration: the unique index is unchanged; the key string
+  carries the distinction.
 
 Rows stay per-cell either way (so per-cell subtype + comment survive); grouping
 lives only in the notify/resolve/display layers.
@@ -87,13 +91,14 @@ in `qua_shared/schemas/config/capabilities.py`.
 
 | File | What |
 |---|---|
-| `stores/report-mode.ts` | the mode state machine (`inactive` / `timing` / `tajweed` + subtype), `staged` Map of annotations keyed by cell, `focusedCellKey`, `reportContext`; `enterTiming`/`enterTajweed` (pause playback, snapshot+force display toggles, seed own flags) / `exitReportMode` (restore toggles, `exitLoop`, clear) |
+| `stores/report-mode.ts` | the mode state machine (`inactive` / `timing` / `tajweed` + subtype fixed at entry), `staged` Map keyed by cell, `focusedCellKey`, `reportContext`; `enterTiming` (pause, force letters-only) / `enterTajweed` (pause, `forceAllTajweedEnabled` so every legend colour shows) seed own flags by category+subtype; `focusCell`/`isStagedComplete` auto-discard an incomplete cell on focus-move; `exitReportMode` restores display + tajweed snapshots, `exitLoop`, clears |
+| `stores/tajweed-settings.ts` | `forceAllTajweedEnabled()` / `restoreTajweedSettings()` — transient (non-persisted) bulk enable used by tajweed report mode |
 | `stores/ts-reports.ts` | `reportedVerses` (reciter counts → button highlight) + `currentVerseReports` / `loadVerseReports` (the focus verse's reports → in-grid public flags + report-mode seeds) |
 | `utils/report-target.ts` | the ONE keying place — `cellKey`/`wordKey`/`targetCellKey` (DOM- and wire-derived keys must agree), `cellTargetFromEl`, `elCellKey`, `elHasTajweed` |
 | `utils/cell-model.ts` | threads `cellIndex` (raw `word.cells[]` index = the target's `cell_index`) and `ruleTags` (internal tajweed tag ids = the picker's options) onto rendered cells |
-| `components/UnifiedDisplay.svelte` | stamps `data-cell-index`/`-source-letter-index`/`-share-group`/`-has-tj`/`-tj-tags`; a delegated capture-phase click that STAGES (and loops, for timing) instead of seeking; three reactive `report-*` passes (spotlight dim, staged flag, public flag) |
-| `components/TimestampsFooterReport.svelte` + `report/ReportMenu.svelte` + `ReportComposer.svelte` | the drop-up: category list, inline audio/other composer, and `onenterMode` → report mode |
-| `components/report/ReportControlStrip.svelte` | the strip that replaces the waveform — header + tajweed wrong/missing toggle, staged chips, per-cell annotation editor (timing subtype / tajweed rule picker), Cancel + Submit |
+| `components/UnifiedDisplay.svelte` | stamps `data-cell-index`/`-source-letter-index`/`-share-group`/`-has-tj`/`-tj-tags`; a delegated capture-phase click that STAGES (and loops, for timing) instead of seeking, via `focusCell` (auto-discard); in tajweed only cells stage (words swallowed); reactive `report-*` passes (`report-dim`+`report-inert` spotlight, staged/focused/public flags) |
+| `components/TimestampsFooterReport.svelte` + `report/ReportMenu.svelte` + `ReportComposer.svelte` | the drop-up: category list, inline audio/other composer (fixed-height field so it never reflows the drop-up), and `onenterMode` → report mode |
+| `components/report/ReportControlStrip.svelte` | the strip that replaces the waveform — header (title + static subtype label, no toggle), Cancel + Submit, and ONE inline row per staged cell (`label · subtype/rule control · comment · ✕`) |
 | `services/report-submit.ts` + `reports-client.ts` | build `TsReportBatchCreateRequest` from staged + reconcile removed own reports (`deleteReport`); the fetch client |
 
 Mount: `TimestampsTab.svelte` swaps `<TimestampsWaveform>` ↔ `<ReportControlStrip>`
@@ -105,17 +110,32 @@ verse-scoped).
 
 The `report-*` classes are toggled **imperatively on a cached node list from a
 reactive one-shot, never inside the 60fps `updateHighlights()`** (the disjoint
-class names keep the two off each other). `report-dim` (opacity) spotlights
-tajweed wrong-rule cells; `report-flag-staged` / `report-flag-public` draw a red
-`outline` ring (outline, not box-shadow, so it never collides with the tajweed
-underline and never reflows); `report-focused` adds the accent ring. Styles live
-in `styles/timestamps.css`; the tooltip line is appended by `_tipTextFor`.
+class names keep the two off each other). In tajweed `wrong_rule`, rule-less cells
+get `report-dim` (opacity) **and** `report-inert` (`pointer-events:none`, killing
+both click and hover tooltip), so only rule-bearing cells stay interactive; a
+silent cell that *carries* a rule (`data-has-tj='1'`) is un-greyed + selectable in
+report mode. `report-flag-staged` / `report-flag-public` draw a red `outline` ring
+(outline, not box-shadow, so it never collides with the tajweed underline and
+never reflows); `report-focused` adds the accent ring. Styles live in
+`styles/timestamps.css`; the tooltip line is appended by `_tipTextFor`.
 
 ## Invariants / gotchas
 
-- **Pause + loop on entry.** Entering report mode pauses playback; selecting a
-  timing cell **sets its loop directly** (not a seek) so the focus verse can't
-  auto-advance out of the session.
+- **Verse lock for the whole session.** Entering report mode pauses playback and
+  `TimestampsTab.armVerseLock()` arms a whole-verse loop (`[verse start, next
+  verse start)` — covers the trailing silence). That pin stops free play from
+  auto-advancing and suppresses shuffle (`maybeFireShuffle` also bails on
+  `reportModeActive`). Selecting a timing cell narrows the loop to that cell. Only
+  a **manual** ayah/reciter change moves the focus verse → `_syncVerseReports`
+  exits the session + discards staged. `exitReportMode` clears the loop.
+- **Auto-discard incomplete.** Moving focus to another cell drops the previously
+  focused annotation when it is still missing a required field (timing subtype /
+  tajweed rule pick when >1 option / mandatory comment); `report-submit` re-filters
+  defensively. No hard block — keeps flagging frictionless.
+- **Subtype is fixed at entry.** The drop-up's `wrong_rule` / `missing_rule` rows
+  enter the session with that subtype; the strip shows it as a static label (no
+  in-mode toggle). A different subtype on the same cell is a separate session +
+  separate report.
 - **`cell_index` is the raw `word.cells[]` index** (matches backend
   `word_cells(word)`), captured before the hamza-waṣl transform; synthesized
   cells fall back to `source_letter_index`.

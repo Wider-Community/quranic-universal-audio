@@ -202,6 +202,26 @@ def test_batch_mixed_notification_counts(flask_client, seed_role):
     assert len(notes) == 3  # 1 timing word + 2 tajweed cells
 
 
+def test_batch_tajweed_same_cell_both_subtypes_fire_two_notifications(flask_client, seed_role):
+    seed_role("owner-1", login="owner", role="owner")
+    cell = {"kind": "cell", "word_index": 0, "cell_index": 1}
+    items = [
+        {
+            "category": "tajweed",
+            "subtype": "wrong_rule",
+            "target": cell,
+            "comment": "wrong",
+            "selected_rule_tags": ["qalqala"],
+        },
+        {"category": "tajweed", "subtype": "missing_rule", "target": cell, "comment": "missing"},
+    ]
+    assert _post_batch(flask_client, items).status_code == 201
+    rows = flask_client.get(f"/api/ts/{_SLUG}/reports/2:45?anon_token=anon-1").get_json()["reports"]
+    assert {r["subtype"] for r in rows} == {"wrong_rule", "missing_rule"}
+    notes = [n for n in repo_notifications.list_active("owner-1") if n["event"] == "ts_report.created"]
+    assert len(notes) == 2
+
+
 def test_batch_tajweed_selected_rule_tags_roundtrip(flask_client):
     assert _post_batch(flask_client, [_tajweed_item(0)]).status_code == 201
     rep = flask_client.get(f"/api/ts/{_SLUG}/reports/2:45?anon_token=anon-1").get_json()["reports"][0]

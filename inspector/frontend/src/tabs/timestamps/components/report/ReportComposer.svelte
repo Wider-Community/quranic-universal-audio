@@ -186,8 +186,8 @@
 
     .field {
         width: 100%;
-        resize: vertical;
-        min-height: 60px;
+        resize: none;
+        height: 66px;
         padding: var(--s-2);
         color: var(--text-primary);
         background: var(--canvas-inset);
@@ -236,6 +236,8 @@
     }
     .saved-body {
         margin: 0;
+        max-height: 140px;
+        overflow-y: auto;
         color: var(--text-primary);
         font-size: var(--fs-body);
         line-height: 1.5;

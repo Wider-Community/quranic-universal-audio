@@ -35,25 +35,29 @@ def chapter_of(verse_key: str) -> int:
     return int(verse_key.split(":", 1)[0])
 
 
-def target_key(target: dict[str, Any]) -> str:
+def target_key(target: dict[str, Any], category: str = "", subtype: str | None = None) -> str:
     """Canonical key for a target descriptor (NULLs as empty), for ON CONFLICT.
 
-    ``kind:word_index:source_letter_index:cell_index:phoneme_flat_index:share_group``.
+    ``kind:word_index:source_letter_index:cell_index:phoneme_flat_index:share_group``,
+    with ``:subtype`` appended for ``tajweed`` only — a tajweed report is unique per
+    cell PER subtype (the same cell can carry both a ``wrong_rule`` and a
+    ``missing_rule`` report), whereas timing/audio/other stay one-per-target.
     """
 
     def _s(v: Any) -> str:
         return "" if v is None else str(v)
 
-    return ":".join(
-        (
-            str(target.get("kind", "")),
-            _s(target.get("word_index")),
-            _s(target.get("source_letter_index")),
-            _s(target.get("cell_index")),
-            _s(target.get("phoneme_flat_index")),
-            _s(target.get("share_group")),
-        )
-    )
+    parts = [
+        str(target.get("kind", "")),
+        _s(target.get("word_index")),
+        _s(target.get("source_letter_index")),
+        _s(target.get("cell_index")),
+        _s(target.get("phoneme_flat_index")),
+        _s(target.get("share_group")),
+    ]
+    if category == "tajweed":
+        parts.append(_s(subtype))
+    return ":".join(parts)
 
 
 def word_group_key(slug: str, verse_key: str, word_index: int, category: str) -> str:
@@ -226,7 +230,7 @@ def create(
         raise ValueError("exactly one of hf_user_id / anon_token must be set")
     if hf_user_id is not None:
         repo_access.ensure_user(hf_user_id)
-    tkey = target_key(target)
+    tkey = target_key(target, category, subtype)
     snap = snapshot or {}
     # A hidden row still occupies the unique slot (so the upsert un-hides it),
     # but re-surfacing it counts as a NEW report for the notify-on-create path.

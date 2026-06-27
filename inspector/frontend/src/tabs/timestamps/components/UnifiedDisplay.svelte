@@ -41,6 +41,7 @@
     import type { TsLoopTarget } from '../stores/playback';
     import { loopTarget } from '../stores/playback';
     import {
+        focusCell,
         focusedCellKey,
         reportMode,
         type ReportMode,
@@ -228,7 +229,13 @@
         rootEl.querySelectorAll<HTMLElement>(
             '.report-flag-staged, .report-flag-public, .report-focused, .report-dim',
         ).forEach((c) => {
-            c.classList.remove('report-flag-staged', 'report-flag-public', 'report-focused', 'report-dim');
+            c.classList.remove(
+                'report-flag-staged',
+                'report-flag-public',
+                'report-focused',
+                'report-dim',
+                'report-inert',
+            );
             if (c.dataset.reportTip) delete c.dataset.reportTip;
         });
     }
@@ -275,9 +282,12 @@
         const els = rootEl.querySelectorAll<HTMLElement>('[data-cell-index], .mega-phoneme, .mega-block');
         els.forEach((el) => {
             const key = elCellKey(el);
-            // Dim every cell/phoneme that carries no rule (letters + phonemes both
-            // expose data-has-tj); blocks have none, so they never dim.
-            el.classList.toggle('report-dim', dimWrong && el.hasAttribute('data-has-tj') && el.getAttribute('data-has-tj') !== '1');
+            // wrong_rule spotlights tajweed-bearing cells: dim + make inert every
+            // cell/phoneme that carries no rule (letters + phonemes both expose
+            // data-has-tj; blocks have none). Inert kills click AND hover tooltip.
+            const noTj = dimWrong && el.hasAttribute('data-has-tj') && el.getAttribute('data-has-tj') !== '1';
+            el.classList.toggle('report-dim', noTj);
+            el.classList.toggle('report-inert', noTj);
             el.classList.toggle('report-flag-staged', active && !!key && stagedMap.has(key));
             el.classList.toggle('report-focused', active && !!key && key === focused);
             const reps = key ? pub.get(key) : undefined;
@@ -295,18 +305,25 @@
         if (mode.kind === 'inactive') return;
         const tgt = e.target as HTMLElement;
         const cellEl = tgt.closest<HTMLElement>('[data-cell-index]');
-        if (cellEl && rootEl.contains(cellEl)) {
+        if (cellEl && rootEl.contains(cellEl) && !cellEl.classList.contains('report-inert')) {
             e.stopPropagation();
             e.preventDefault();
             _reportSelectCell(cellEl, mode);
             return;
         }
-        const blockEl = tgt.closest<HTMLElement>('.mega-block');
-        if (blockEl && mode.kind === 'timing' && rootEl.contains(blockEl)) {
-            e.stopPropagation();
-            e.preventDefault();
-            _reportSelectWord(blockEl);
+        if (mode.kind === 'timing') {
+            const blockEl = tgt.closest<HTMLElement>('.mega-block');
+            if (blockEl && rootEl.contains(blockEl)) {
+                e.stopPropagation();
+                e.preventDefault();
+                _reportSelectWord(blockEl);
+            }
+            return;
         }
+        // tajweed: cells only — swallow any other in-grid click so it can't fall
+        // through to the normal seek/select-word handler.
+        e.stopPropagation();
+        e.preventDefault();
     }
     function _num(v: string | undefined): number | null {
         if (v == null || v === '') return null;
@@ -333,7 +350,7 @@
                 });
             }
         }
-        focusedCellKey.set(key);
+        focusCell(key); // auto-discards a previously focused incomplete cell
         if (mode.kind === 'timing') {
             const lv = get(loadedVerse);
             if (!lv) return;
@@ -369,7 +386,7 @@
                 comment: '',
             });
         }
-        focusedCellKey.set(key);
+        focusCell(key); // auto-discards a previously focused incomplete cell
     }
     $: if (rootEl && !_reportClickBound) {
         rootEl.addEventListener('click', _onReportClickCapture, true);

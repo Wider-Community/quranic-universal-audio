@@ -1063,6 +1063,20 @@
     opacity: 0.3;
     transition: opacity var(--t-fast, 140ms) ease;
 }
+/* …and make those rule-less cells inert — kills both click and hover tooltip in
+   one go, so only rule-bearing cells stay interactive in wrong_rule. */
+.report-inert {
+    pointer-events: none;
+}
+/* A silent cell that carries a tajweed rule (hamza-waṣl, lām shamsiyyah, …) is a
+   valid wrong_rule target: un-grey it and make it selectable so it stands with
+   the other spotlighted cells instead of reading as dimmed. */
+.report-mode .mega-letter.silent[data-has-tj='1'] {
+    color: inherit;
+    opacity: 1;
+    pointer-events: auto;
+    cursor: pointer;
+}
 /* A flagged cell (own staged or anyone's persisted) — red ring + tooltip. */
 .report-flag-public,
 .report-flag-staged {
