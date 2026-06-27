@@ -111,6 +111,45 @@
     let lastTimeMs = -1; // previous frame's audio time, for seek detection
     let fillGlideTimer: ReturnType<typeof setTimeout> | null = null;
 
+    // Cross-verse waṣl merge animation (dynamic boundaries only). `liveWaslIdx` is
+    // the left-cell index whose outgoing boundary is being bridged by the LIVE take
+    // (drives the connector intensify + the dynamic join). `dynMerge[i]` is the
+    // animated 0..1 merge fraction of a dynamic boundary; static boundaries skip it
+    // (always merged). `lastFrameMs` paces the ease to wall-clock dt.
+    let liveWaslIdx = $state(-1);
+    let dynMerge = $state<number[]>([]);
+    let lastFrameMs = -1;
+    /** Left-cell indices of the dynamic boundaries (bridge in one take, stop in
+     *  another). Empty for the overwhelmingly common all-static chapter → the
+     *  merge animator no-ops and `cells` never depends on `dynMerge`. */
+    const dynBoundaries = $derived(
+        model.cells.reduce<number[]>((acc, c, i) => {
+            if (c.waslNext && c.waslDynamic) acc.push(i);
+            return acc;
+        }, []),
+    );
+
+    /** Ease each dynamic boundary's merge fraction toward its target (1 when the
+     *  live take bridges it, else 0) with an ease-out matched to the glide velocity
+     *  (`GLIDE_MIN_MS` time constant), so a join/break travels like a scroll glide.
+     *  Only writes `dynMerge` when something actually changed (settled = no
+     *  recompute). */
+    function stepWaslMerge(dtMs: number): void {
+        if (!dynBoundaries.length) return;
+        const n = model.cells.length;
+        const arr = dynMerge.length === n ? dynMerge.slice() : new Array<number>(n).fill(0);
+        const k = reducedMotion ? 1 : 1 - Math.exp(-Math.max(0, dtMs) / GLIDE_MIN_MS);
+        let changed = false;
+        for (const i of dynBoundaries) {
+            const target = i === liveWaslIdx ? 1 : 0;
+            const cur = arr[i] ?? 0;
+            let next = cur + (target - cur) * k;
+            if (Math.abs(next - target) < 0.003) next = target;
+            if (next !== cur) { arr[i] = next; changed = true; }
+        }
+        if (changed) dynMerge = arr;
+    }
+
     const reducedMotion = typeof matchMedia === 'function'
         && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -129,8 +168,20 @@
         w: number; // visible width (floored to filmstripMinCellPx)
         aw: number; // active span the cursor crosses (time-true, ≤ w)
         cumBefore: number; // px before this cell's left (cells + gaps)
-        gapAfter: number; // px gap to the right (silence-scaled)
+        gapAfter: number; // px gap to the right (silence-scaled; 0 when merged)
         missing: CellMissing;
+        /** This verse waṣl-bridges into the next present verse → render the link
+         *  connector at its right edge. */
+        waslNext: boolean;
+        /** Outgoing-merge amount 0..1 (1 = fully merged/gapless). Static pairs are
+         *  always 1; dynamic pairs animate. Drives the connector opacity. */
+        waslMerge: number;
+        /** Right corners squared + seam border dropped (outgoing boundary visually
+         *  merged: static, or dynamic past the half-merge point). */
+        mergeRight: boolean;
+        /** Left corners squared + seam border dropped (the previous verse bridges
+         *  into this one and is visually merged). */
+        mergeLeft: boolean;
     }
 
     // The strip is a fixed-scale time-ruler at the global `filmstripPxPerSec`:
@@ -157,8 +208,24 @@
                 ? PLACEHOLDER_CELL_PX
                 : Math.max(1, Math.round(c.canonDurSec * pxPerSec));
             const w = c.missing === 'full' ? PLACEHOLDER_CELL_PX : Math.max(minPx, aw);
-            const gapAfter = Math.round(Math.max(config.filmstripGapPx, c.nextGapSec * pxPerSec));
-            out.push({ ayah: c.ayah, w, aw, cumBefore: cum, gapAfter, missing: c.missing });
+            const baseGap = Math.round(Math.max(config.filmstripGapPx, c.nextGapSec * pxPerSec));
+            // Cross-verse waṣl merge: a STATIC pair (bridges in every take) is always
+            // gapless; a DYNAMIC pair (also stops elsewhere) animates the gap closed
+            // as the live bridging take plays (`dynMerge[i]`: 0 = separated, 1 =
+            // merged). The cursor stays centered, so cells slide together at the
+            // glide velocity. Geometry below derives from `gapAfter`, so seek/scroll
+            // stay consistent automatically.
+            const mergeAmt = c.waslNext ? (c.waslDynamic ? (dynMerge[i] ?? 0) : 1) : 0;
+            const gapAfter = c.waslNext ? Math.round(baseGap * (1 - mergeAmt)) : baseGap;
+            const prev = mc[i - 1];
+            const prevMerge = i > 0 && prev!.waslNext
+                ? (prev!.waslDynamic ? (dynMerge[i - 1] ?? 0) : 1)
+                : 0;
+            out.push({
+                ayah: c.ayah, w, aw, cumBefore: cum, gapAfter, missing: c.missing,
+                waslNext: c.waslNext, waslMerge: mergeAmt,
+                mergeRight: mergeAmt > 0.5, mergeLeft: prevMerge > 0.5,
+            });
             cum += w + gapAfter;
         }
         return out;
@@ -215,7 +282,7 @@
     );
     const pad = $derived(cw / 2); // leading/trailing spacer so edges can center
 
-    interface Reci { unitIdx: number; idx: number; frac: number; }
+    interface Reci { unitIdx: number; idx: number; frac: number; waslTo?: string; }
 
     /** First index into `sorted` whose interval starts at/after `s` (bsearch). */
     function lowerBoundStart(s: number): number {
@@ -290,7 +357,7 @@
         if (!h) return null;
         const idx = model.cellOfUnit[h.unitIdx] ?? -1;
         if (idx < 0) return null;
-        return { unitIdx: h.unitIdx, idx, frac: takeFrac(idx, h.unitIdx, h.ivStart, tSec) };
+        return { unitIdx: h.unitIdx, idx, frac: takeFrac(idx, h.unitIdx, h.ivStart, tSec), waslTo: h.waslTo };
     }
 
     function offsetForCellCenter(i: number): number {
@@ -454,6 +521,11 @@
     /** One rAF step of recitation-driven playback. */
     function drivePlayback(): void {
         const nowMs = getTimeMs();
+        // Wall-clock frame delta paces the waṣl merge ease (independent of audio
+        // time, which can jump on a seek).
+        const frameMs = typeof performance !== 'undefined' ? performance.now() : nowMs;
+        const dtMs = lastFrameMs >= 0 ? Math.min(100, frameMs - lastFrameMs) : 16;
+        lastFrameMs = frameMs;
         const tSec = (nowMs + config.leadMs) / 1000;
         const r = recitationAt(tSec, lastActiveUnit);
         // A large audio-time jump in one frame is a seek (e.g. a linear-bar
@@ -469,6 +541,10 @@
             // reciter's mid-verse pause doesn't grey or move the cursor.
             silent = true;
             crossingGap = false;
+            // No live take is bridging during a silence → ease any dynamic pair
+            // back toward separated (a waqf stop of a dynamic boundary breaks it).
+            liveWaslIdx = -1;
+            stepWaslMerge(dtMs);
             if (config.filmstripMotion !== 'snap' && frozenIdx >= 0) {
                 const nextIv = nextIntervalAfter(sorted, tSec);
                 const nextIdx = nextIv ? (model.cellOfUnit[nextIv.unitIdx] ?? -1) : -1;
@@ -491,6 +567,13 @@
         activeIdx = r.idx;
         cellFrac = r.frac;
         frozenIdx = r.idx;
+
+        // The live take bridges out of cell `r.idx` when its located occurrence
+        // carries `waslTo` pointing at the immediately-following cell. Drives the
+        // connector intensify + the dynamic merge join.
+        const wTgt = r.waslTo ? (model.indexByAyahKey.get(r.waslTo) ?? -1) : -1;
+        liveWaslIdx = wTgt === r.idx + 1 ? r.idx : -1;
+        stepWaslMerge(dtMs);
 
         const snap = config.filmstripMotion === 'snap';
         const target = snap ? offsetForCellCenter(r.idx) : offsetForReci(r);
@@ -525,6 +608,7 @@
     $effect(() => {
         if (!playing) return;
         lastTimeMs = -1; // don't read the first frame as a seek
+        lastFrameMs = -1; // first frame seeds dt without a stale delta
         let raf = 0;
         const loop = (): void => {
             if (!dragging && scrubMs == null) drivePlayback();
@@ -555,6 +639,9 @@
         fillIdx = -1;
         lastActiveUnit = -1;
         lastTimeMs = -1;
+        lastFrameMs = -1;
+        liveWaslIdx = -1;
+        dynMerge = [];
         scroll.cancel();
         if (fillGlideTimer) clearTimeout(fillGlideTimer);
         jumping = false;
@@ -660,6 +747,9 @@
         lastActiveUnit = -1;
         lastTimeMs = -1;
         scroll.cancel();
+        liveWaslIdx = -1;
+        dynMerge = [];
+        lastFrameMs = -1;
         containerEl?.style.removeProperty('--cell-active-fill');
         scroll.snap(offsetForCellCenter(0));
     }
@@ -713,6 +803,8 @@
                     class:cursor={i === cursorIdx}
                     class:missing-words={c.missing === 'words'}
                     class:missing-full={c.missing === 'full'}
+                    class:merge-r={c.mergeRight}
+                    class:merge-l={c.mergeLeft}
                     title={missingTitle(c)}
                     style:width="{c.w}px"
                     style:margin-right="{c.gapAfter}px"
@@ -724,6 +816,21 @@
                 </div>
             {/each}
             <div class="pad" style:width="{pad}px"></div>
+            <!-- Waṣl link connectors — a separate overlay layer (the cells clip
+                 overflow). One per bridging cell, anchored at the seam (right edge
+                 of the left member), riding the track transform. Opacity follows
+                 the merge amount; brightens while the live take bridges. -->
+            {#each cells as c, i (c.ayah)}
+                {#if c.waslNext && c.missing !== 'full'}
+                    <div
+                        class="wasl-link"
+                        class:wasl-live={i === liveWaslIdx}
+                        style:left="{pad + c.cumBefore + c.w}px"
+                        style:opacity={c.waslMerge}
+                        aria-hidden="true"
+                    ></div>
+                {/if}
+            {/each}
         </div>
         {#if config.filmstripMotion !== 'snap' && (!silent || crossingGap)}
             <div class="needle" class:silent={crossingGap} aria-hidden="true"></div>
@@ -832,6 +939,47 @@
     }
     .cell.missing-full .cell-num {
         color: var(--state-missing-fg);
+    }
+    /* ---- Cross-verse waṣl merge -------------------------------------------
+     * A merged pair reads as one rounded "mega-cell": the touching inner corners
+     * square and the seam border drops, so the two cells form a single capsule (a
+     * link connector straddles the seam, rendered on the overlay layer below). The
+     * rules sit AFTER the state rules so the transparent seam wins over
+     * active/reached/frozen border-color. Dynamic pairs animate the GAP in JS
+     * (keeps the needle in sync); the corner/border state toggles past the
+     * half-merge point. */
+    .cell.merge-r {
+        border-top-right-radius: 0;
+        border-bottom-right-radius: 0;
+        border-right-color: transparent;
+    }
+    .cell.merge-l {
+        border-top-left-radius: 0;
+        border-bottom-left-radius: 0;
+        border-left-color: transparent;
+    }
+    /* The link connector — a short rounded weld centered on the seam (overlay
+     * sibling of the cells, so the cells' `overflow:hidden` doesn't clip it).
+     * Border-toned at rest; accent + glow while the LIVE take bridges it. */
+    .wasl-link {
+        position: absolute;
+        top: 50%;
+        width: 12px;
+        height: 3px;
+        transform: translate(-50%, -50%);
+        background: var(--border-default);
+        border-radius: 999px;
+        pointer-events: none;
+        transition: background var(--t-fast), box-shadow var(--t-fast), opacity var(--t-fast);
+    }
+    .wasl-link.wasl-live {
+        background: var(--accent);
+        box-shadow: 0 0 6px var(--accent-tint);
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .wasl-link {
+            transition: none;
+        }
     }
     .cell-fill {
         position: absolute;

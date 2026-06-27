@@ -17,13 +17,18 @@
  */
 
 import type { TsVerseData } from '../types/ts-client';
-import type { AnimUnit, AyahBoundary, ChapterRecitation } from './types';
+import type { AnimUnit, AyahBoundary, ChapterRecitation, TimeSpan } from './types';
 
 /** One assembled occasion (a contiguous recitation of a verse). A verse may
  *  recur across the chapter, so `verseRef` is not unique across the list. */
 export interface AssembledVerse {
     verseRef: string;
     data: TsVerseData;
+    /** Target ayahKey when this occasion's LAST word continues into the next
+     *  verse without a stop (cross-verse waṣl); from `ChapterOccasion.bridgesOutTo`. */
+    bridgesOutTo?: string | null;
+    /** Whether that boundary is take-dependent; from `ChapterOccasion.bridgesDynamic`. */
+    bridgesDynamic?: boolean;
 }
 
 function parseLocation(location: string): { surah: number; ayah: number; word: number } {
@@ -58,12 +63,19 @@ export function buildChapterRecitation(
     // Flatten every occasion's words to chapter-absolute units — one per recited
     // occurrence (repeats included).
     const flat: AnimUnit[] = [];
-    for (const { data } of occasions) {
+    for (const { data, bridgesOutTo, bridgesDynamic } of occasions) {
         const offsetSec = data.time_start_ms / 1000;
-        for (const w of data.words) {
+        for (let wi = 0; wi < data.words.length; wi++) {
+            const w = data.words[wi]!;
             const { surah, ayah, word } = parseLocation(w.location);
             const start = w.start + offsetSec;
             const end = w.end + offsetSec;
+            // The waṣl flag rides the LAST word of the bridging take only.
+            const isLastWord = wi === data.words.length - 1;
+            const span: TimeSpan =
+                isLastWord && bridgesOutTo
+                    ? { start, end, waslTo: bridgesOutTo, waslDynamic: !!bridgesDynamic }
+                    : { start, end };
             flat.push({
                 location: w.location,
                 ayahKey: `${surah}:${ayah}`,
@@ -73,7 +85,7 @@ export function buildChapterRecitation(
                 text: w.display_text || w.text,
                 start,
                 end,
-                intervals: [{ start, end }],
+                intervals: [span],
                 letters: w.letters.map((lt) => ({
                     char: lt.char,
                     start: lt.start === null ? null : lt.start + offsetSec,
@@ -91,7 +103,15 @@ export function buildChapterRecitation(
     for (const u of flat) {
         const existing = byLoc.get(u.location);
         if (existing) {
-            existing.intervals.push({ start: u.start, end: u.end });
+            // Carry the per-occurrence waṣl flag with its span so only the
+            // bridging take of a repeated word keeps it (case 6).
+            const iv = u.intervals[0]!;
+            existing.intervals.push({
+                start: u.start,
+                end: u.end,
+                waslTo: iv.waslTo,
+                waslDynamic: iv.waslDynamic,
+            });
             if (u.start < existing.start) existing.start = u.start;
             if (u.end > existing.end) existing.end = u.end;
         } else {

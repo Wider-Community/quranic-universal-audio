@@ -78,6 +78,14 @@ export interface VerseCell {
      *  unrecited verses kept in the strip so the gap is visible, but skipped by
      *  playback + navigation. Default `none` when no coverage is supplied. */
     missing: CellMissing;
+    /** True when some take of this verse waṣl-bridges into the NEXT present verse
+     *  (cross-verse continuation). Drives the gapless mega-cell + link connector.
+     *  `false` on placeholders + the last cell. */
+    waslNext: boolean;
+    /** True when that boundary is take-dependent (bridges in one take, stops in
+     *  another) → the filmstrip animates the join/break; `false` → permanently
+     *  merged. Only meaningful when `waslNext`. */
+    waslDynamic: boolean;
 }
 
 export interface FilmstripModel {
@@ -118,6 +126,8 @@ function placeholderCell(surah: number, ayah: number): VerseCell {
         canonEndSec: -1,
         nextGapSec: 0,
         missing: 'full',
+        waslNext: false,
+        waslDynamic: false,
     };
 }
 
@@ -178,6 +188,8 @@ export function buildFilmstripModel(
             canonEndSec,
             nextGapSec: 0,
             missing: coverage?.status.get(head.ayah) === 'words' ? 'words' : 'none',
+            waslNext: false, // refined in `_assemble` (needs the next present cell)
+            waslDynamic: false,
         });
     }
 
@@ -220,13 +232,28 @@ function _assemble(cells: VerseCell[], units: AnimUnit[]): FilmstripModel {
     for (let i = 0; i < cells.length; i++) {
         const c = cells[i]!;
         if (c.canonStartSec < 0) continue;
-        let nextStart = -1;
+        let nextIdx = -1;
         for (let j = i + 1; j < cells.length; j++) {
             if (cells[j]!.canonStartSec < 0) continue;
-            nextStart = cells[j]!.canonStartSec;
+            nextIdx = j;
             break;
         }
-        if (nextStart < 0) continue; // last present cell — no next, gap stays 0
+        if (nextIdx < 0) continue; // last present cell — no next, gap stays 0
+        const nextStart = cells[nextIdx]!.canonStartSec;
+        // Cross-verse waṣl: does any take of this verse bridge into the next
+        // present verse? The flag rides the bridging take's last-word occurrence
+        // (`waslTo` = target ayahKey); `waslDynamic` says whether that boundary is
+        // also crossed as a stop (animate) vs always merged.
+        const nextKey = cells[nextIdx]!.ayahKey;
+        for (let u = c.unitStart; u < c.unitEnd && !c.waslNext; u++) {
+            for (const iv of units[u]!.intervals) {
+                if (iv.waslTo === nextKey) {
+                    c.waslNext = true;
+                    c.waslDynamic = !!iv.waslDynamic;
+                    break;
+                }
+            }
+        }
         let fwdEnd = -Infinity;
         for (let u = c.unitStart; u < c.unitEnd; u++) {
             for (const iv of units[u]!.intervals) {
