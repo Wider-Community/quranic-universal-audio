@@ -1,6 +1,66 @@
 #!/usr/bin/env sh
-# Intentionally a no-op. CI is the ground-truth gate for pushes:
-# inspector-deploy.yml + docker-publish.yml run the full lint/typecheck/test/
-# build via the reusable inspector-checks.yml workflow. Keeping push instant
-# avoids local friction; the staged-only pre-commit hook is the cheap local pass.
-exit 0
+# Fast local gate for the two checks CI runs that pytest does NOT: ruff
+# (lint + format) and pyright. Scoped to the Python files changed vs the remote
+# default branch so it stays ~seconds. Bypass with `git push --no-verify`.
+#
+# Graceful by design: a missing tool (ruff / npx / pyright) prints a warning and
+# skips that check rather than blocking — minimal envs still push. A real
+# finding from a tool that IS installed fails the push.
+
+set -u
+
+# Files changed vs the merge-base with the remote default branch (fallbacks:
+# origin/HEAD, then the whole working tree's tracked python). Added/Copied/
+# Modified/Renamed only — deleted paths would break the file-list checks.
+base=$(git merge-base HEAD origin/main 2>/dev/null \
+    || git merge-base HEAD origin/HEAD 2>/dev/null \
+    || echo "")
+if [ -n "$base" ]; then
+    files=$(git diff --name-only --diff-filter=ACMR "$base"...HEAD -- '*.py')
+else
+    files=$(git diff --name-only --diff-filter=ACMR HEAD -- '*.py')
+fi
+
+# Drop paths that no longer exist on disk (e.g. a rename's old side slipping in).
+existing=""
+for f in $files; do
+    [ -f "$f" ] && existing="$existing $f"
+done
+files=$(printf '%s' "$existing" | sed 's/^ *//')
+
+if [ -z "$files" ]; then
+    exit 0
+fi
+
+# Resolve ruff the way lint-staged.config.mjs does — interpreter names vary and
+# ruff may be a bare console script (as in CI).
+ruff=""
+for cand in "python -m ruff" "python3 -m ruff" "ruff"; do
+    # shellcheck disable=SC2086
+    if $cand --version >/dev/null 2>&1; then ruff="$cand"; break; fi
+done
+
+status=0
+
+if [ -n "$ruff" ]; then
+    echo "pre-push: ruff check + format on changed Python …"
+    # shellcheck disable=SC2086
+    $ruff check --force-exclude $files || status=1
+    # shellcheck disable=SC2086
+    $ruff format --check --force-exclude $files || status=1
+else
+    echo "pre-push: ruff not found (python -m ruff / ruff); skipping ruff." >&2
+fi
+
+if command -v npx >/dev/null 2>&1; then
+    echo "pre-push: pyright on changed Python …"
+    # shellcheck disable=SC2086
+    npx -y pyright --pythonversion 3.11 --level error $files || status=1
+else
+    echo "pre-push: npx not found; skipping pyright." >&2
+fi
+
+if [ "$status" -ne 0 ]; then
+    echo "pre-push: checks failed. Fix above, or bypass with 'git push --no-verify'." >&2
+fi
+exit "$status"
