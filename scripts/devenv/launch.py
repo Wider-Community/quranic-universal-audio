@@ -442,7 +442,13 @@ def backend_env(root: Path, mode: str) -> dict[str, str]:
         env["INSPECTOR_BACKEND"] = "filesystem"
         env["INSPECTOR_FILESYSTEM_ROOT"] = str(fx)
         env["INSPECTOR_AUTO_MOUNT"] = "0"
-    # mode == "dev": defaults (bucket backend -> DEV bucket via .env HF_TOKEN).
+    else:
+        # mode == "dev": read the DEV bucket (the documented contract). Force it
+        # explicitly — a worktree `.env` with INSPECTOR_BACKEND=filesystem would
+        # otherwise leak through (app.py's dotenv load only fills UNSET keys), so
+        # "dev" would silently read empty fixtures and 404 every audio/shard read.
+        env["INSPECTOR_BACKEND"] = "bucket"
+        env.pop("INSPECTOR_FILESYSTEM_ROOT", None)
     return env
 
 
@@ -532,6 +538,7 @@ def cmd_up(args: argparse.Namespace) -> int:
 
     try:
         if want_backend:
+            assert backend_port is not None  # want_backend => allocated above
             print(
                 f"launch: starting backend on :{backend_port} (mode={mode}, db isolated to {short})...",
                 flush=True,
@@ -554,6 +561,7 @@ def cmd_up(args: argparse.Namespace) -> int:
             )
 
         if want_vite:
+            assert vite_port is not None  # want_vite => allocated above
             print(
                 f"launch: starting Vite on :{vite_port} (proxy -> {_proxy_label(mode, backend_port)})...",
                 flush=True,
