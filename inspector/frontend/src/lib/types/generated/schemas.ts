@@ -2089,6 +2089,11 @@ export interface TsShardMeta {
  * ``[start_ms, end_ms]`` span. A verse may recur across several entries
  * (loopbacks / re-dos) — every accepted occurrence is one entry, emitted in
  * recitation order.
+ *
+ * ``wasl`` (v10, optional) marks an occurrence that continued into the *next*
+ * occurrence without a stop: its junction word carries waṣl (not waqf)
+ * phonemes, and the FE walks consecutive flagged occurrences to reconstruct a
+ * waṣl group. Absent (= False) on a stop/waqf occurrence.
  */
 export interface TsShardSegment {
   ref: string;
@@ -2098,6 +2103,7 @@ export interface TsShardSegment {
    */
   t: [unknown, unknown];
   words?: TsShardWord[];
+  wasl?: boolean;
 }
 /**
  * The ``ts_validation.json`` document — meta + verse-keyed flags.
