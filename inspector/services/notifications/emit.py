@@ -321,14 +321,17 @@ def notify_owners_ts_report(
     author_login: str | None,
     report_id: int,
     at_utc: str,
+    source_key: str | None = None,
 ) -> None:
     """Fan a new Timestamps-tab report out to the review-alert recipients.
 
     Fires once per NEW report (re-submits of the same category+target don't
     re-notify). Anonymous reports have ``author_id``/``author_login`` ``None``.
     ``author_login`` rides in the payload so the rail can show it to
-    identity-capable owners; the body stays identity-free. Opens its own
-    ``durable_transaction``; self-suppressed for a signed-in reporter.
+    identity-capable owners; the body stays identity-free. ``source_key``
+    defaults to a per-report key; a batch submit passes a word-group key so the
+    cells flagged in one timing word coalesce into a single owner alert. Opens
+    its own ``durable_transaction``; self-suppressed for a signed-in reporter.
     Best-effort. Clicking the card deep-links to the Timestamps tab at this
     reciter + verse.
     """
@@ -356,7 +359,7 @@ def notify_owners_ts_report(
                         "author_id": author_id,
                         "author_login": author_login,
                     },
-                    source_key=f"tsreport:{slug}:{report_id}",
+                    source_key=source_key or f"tsreport:{slug}:{report_id}",
                 )
     except Exception:  # noqa: BLE001 — best-effort; never break the report write
         logger.exception(

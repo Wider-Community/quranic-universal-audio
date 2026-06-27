@@ -10,7 +10,9 @@ Served by ``inspector/routes/timestamps/reports.py``:
 - ``GET    /api/ts/<slug>/reports/<verse_key>``   → ``TsVerseReports`` (a verse's reports)
 - ``GET    /api/ts/<slug>/reports/mine``          → caller's own reports
 - ``POST   /api/ts/<slug>/reports``               ← ``TsReportCreateRequest`` → ``TsReport``
+- ``POST   /api/ts/<slug>/reports/batch``         ← ``TsReportBatchCreateRequest`` → ``TsReportBatchResult``
 - ``POST   /api/ts/<slug>/reports/<id>/resolve``  ← ``TsReportResolveRequest`` → ``TsReport``
+- ``POST   /api/ts/<slug>/reports/<verse>/word/<wi>/<cat>/resolve`` ← ``TsReportResolveRequest`` → ``TsVerseReports``
 - ``DELETE /api/ts/<slug>/reports/<id>``
 
 ``author`` on a report is populated only when the caller holds
@@ -70,6 +72,39 @@ _COMMENT_REQUIRED = frozenset({"audio", "mapping", "other"})
 def _verse_key_ok(verse_key: str) -> bool:
     parts = verse_key.split(":")
     return len(parts) == 2 and all(p.isdigit() and 1 <= len(p) <= 3 for p in parts)
+
+
+def _validate_report_item(
+    category: str,
+    subtype: str | None,
+    target: TsReportTarget,
+    comment: str | None,
+    selected_rule_tags: list[str] | None,
+) -> None:
+    """Per-item rules shared by single + batch create (keeps them from drifting):
+    subtype↔category, target-kind↔category, mandatory comment, and the
+    ``selected_rule_tags`` gate. Raises ``ValueError``."""
+    if category == "timing":
+        if subtype not in _TIMING_SUBTYPES:
+            raise ValueError("timing reports require subtype too_long|too_short|other")
+    elif category == "tajweed":
+        if subtype not in _TAJWEED_SUBTYPES:
+            raise ValueError(
+                "tajweed reports require subtype "
+                "wrong_rule|missing_rule|should_be_silent|should_not_be_silent"
+            )
+    elif subtype is not None:
+        raise ValueError(f"{category} reports take no subtype")
+    if target.kind not in _ALLOWED_KINDS[category]:
+        raise ValueError(
+            f"{category} reports cannot target {target.kind!r}; "
+            f"allowed: {sorted(_ALLOWED_KINDS[category])}"
+        )
+    needs_comment = category in _COMMENT_REQUIRED or (category == "timing" and subtype == "other")
+    if needs_comment and not comment:
+        raise ValueError(f"{category} reports require a comment")
+    if selected_rule_tags and not (category == "tajweed" and subtype == "wrong_rule"):
+        raise ValueError("selected_rule_tags is only valid on tajweed wrong_rule reports")
 
 
 class TsReportTarget(BaseModel):
@@ -154,6 +189,8 @@ class TsReport(BaseModel):
     target: TsReportTarget
     snapshot: TsReportSnapshot | None = None
     comment: str | None = None
+    #: Internal tajweed tag id(s) the reporter marked wrong (wrong_rule only).
+    selected_rule_tags: list[str] = Field(default_factory=list)
     status: Literal["open", "resolved"]
     stale: bool = False
     resolver_comment: str | None = None
@@ -203,6 +240,8 @@ class TsReportCreateRequest(BaseModel):
     subtype: ReportSubtype | None = None
     target: TsReportTarget
     comment: str | None = None
+    #: Internal tajweed tag id(s) marked wrong (wrong_rule only).
+    selected_rule_tags: list[str] = Field(default_factory=list)
     #: Anonymous browser token (omitted/ignored when the caller is signed in).
     anon_token: str | None = None
 
@@ -223,34 +262,15 @@ class TsReportCreateRequest(BaseModel):
 
     @model_validator(mode="after")
     def _check(self) -> TsReportCreateRequest:
-        cat = self.category
-        # subtype ↔ category
-        if cat == "timing":
-            if self.subtype not in _TIMING_SUBTYPES:
-                raise ValueError("timing reports require subtype too_long|too_short|other")
-        elif cat == "tajweed":
-            if self.subtype not in _TAJWEED_SUBTYPES:
-                raise ValueError(
-                    "tajweed reports require subtype "
-                    "wrong_rule|missing_rule|should_be_silent|should_not_be_silent"
-                )
-        elif self.subtype is not None:
-            raise ValueError(f"{cat} reports take no subtype")
-        # target kind ↔ category
-        if self.target.kind not in _ALLOWED_KINDS[cat]:
-            raise ValueError(
-                f"{cat} reports cannot target {self.target.kind!r}; "
-                f"allowed: {sorted(_ALLOWED_KINDS[cat])}"
-            )
-        # mandatory comment
-        needs_comment = cat in _COMMENT_REQUIRED or (cat == "timing" and self.subtype == "other")
-        if needs_comment and not self.comment:
-            raise ValueError(f"{cat} reports require a comment")
+        _validate_report_item(
+            self.category, self.subtype, self.target, self.comment, self.selected_rule_tags
+        )
         return self
 
 
 class TsReportResolveRequest(BaseModel):
-    """Resolve a report (``POST .../reports/<id>/resolve``). Owner-gated."""
+    """Resolve a report (``POST .../reports/<id>/resolve``, or a timing
+    word-group via ``.../word/<word_index>/<category>/resolve``). Owner-gated."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -262,3 +282,63 @@ class TsReportResolveRequest(BaseModel):
         if v is None:
             return None
         return v.strip() or None
+
+
+class TsReportBatchItem(BaseModel):
+    """One staged cell-annotation in a batch submit. Verse + identity are
+    batch-level, so an item carries only its own category/subtype/target/comment
+    (+ ``selected_rule_tags`` for tajweed wrong_rule). Same per-category rules as
+    a single create (shared ``_validate_report_item``)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    category: ReportCategory
+    subtype: ReportSubtype | None = None
+    target: TsReportTarget
+    comment: str | None = None
+    selected_rule_tags: list[str] = Field(default_factory=list)
+
+    @field_validator("comment")
+    @classmethod
+    def _trim_comment(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        return v.strip() or None
+
+    @model_validator(mode="after")
+    def _check(self) -> TsReportBatchItem:
+        _validate_report_item(
+            self.category, self.subtype, self.target, self.comment, self.selected_rule_tags
+        )
+        return self
+
+
+class TsReportBatchCreateRequest(BaseModel):
+    """Submit many staged annotations on ONE verse in a single transaction
+    (``POST .../reports/batch``). Items may mix categories (timing + tajweed)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    verse_key: str
+    items: list[TsReportBatchItem] = Field(min_length=1, max_length=200)
+    #: Anonymous browser token (ignored when the caller is signed in).
+    anon_token: str | None = None
+
+    @field_validator("verse_key")
+    @classmethod
+    def _verse_key(cls, v: str) -> str:
+        if not _verse_key_ok(v):
+            raise ValueError("verse_key must be 'surah:ayah' (e.g. '2:45')")
+        return v
+
+
+class TsReportBatchResult(BaseModel):
+    """Echo of a batch submit: the created/updated reports in input order, plus
+    insert vs upsert counts."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    verse_key: str
+    reports: list[TsReport] = Field(default_factory=list)
+    created_count: int
+    updated_count: int

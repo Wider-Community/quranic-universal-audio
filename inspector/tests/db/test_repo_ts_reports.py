@@ -141,3 +141,198 @@ def test_delete_other_identity_is_noop(fresh_db):
         removed = repo.delete(report_id=row["id"], hf_user_id=None, anon_token="anon-other")
     assert removed is False
     assert len(repo.list_for_verse("reciter-a", "2:45")) == 1
+
+
+def test_soft_deleted_report_drops_from_counts_and_mine(fresh_db):
+    row, _ = _create(anon_token="anon-x")
+    with db.transaction():
+        repo.delete(report_id=row["id"], hf_user_id=None, anon_token="anon-x")
+    assert repo.verse_counts("reciter-a") == []
+    assert repo.my_reports("reciter-a", hf_user_id=None, anon_token="anon-x") == []
+    # Retained internally: the row still exists, just hidden.
+    raw = db.get_conn().execute("SELECT hidden_at FROM ts_reports WHERE id = ?", (row["id"],))
+    assert raw.fetchone()["hidden_at"] is not None
+
+
+def test_refiling_a_hidden_target_unhides_and_counts_as_new(fresh_db):
+    row, _ = _create(anon_token="anon-x", comment="first")
+    with db.transaction():
+        repo.delete(report_id=row["id"], hf_user_id=None, anon_token="anon-x")
+    again, created = _create(anon_token="anon-x", comment="second")
+    assert created is True  # re-surfacing a hidden report notifies as new
+    assert again["id"] == row["id"]  # same slot un-hidden, not a duplicate
+    assert again["comment"] == "second"
+    assert repo.verse_counts("reciter-a") == [
+        {"verse_key": "2:45", "open_count": 1, "resolved_count": 0}
+    ]
+
+
+def test_redelete_already_hidden_is_noop(fresh_db):
+    row, _ = _create(anon_token="anon-x")
+    with db.transaction():
+        first = repo.delete(report_id=row["id"], hf_user_id=None, anon_token="anon-x")
+        second = repo.delete(report_id=row["id"], hf_user_id=None, anon_token="anon-x")
+    assert first is True
+    assert second is False
+
+
+def test_selected_rule_tags_roundtrip(fresh_db):
+    row, _ = _create(
+        category="tajweed",
+        subtype="wrong_rule",
+        target=_target("cell", word_index=0, cell_index=1),
+        comment="wrong rule here",
+        selected_rule_tags=["noon_ghunnah", "ikhfaa_noon"],
+    )
+    assert row["selected_rule_tags"] == ["noon_ghunnah", "ikhfaa_noon"]
+    fetched = repo.list_for_verse("reciter-a", "2:45")[0]
+    assert fetched["selected_rule_tags"] == ["noon_ghunnah", "ikhfaa_noon"]
+
+
+def _timing_item(cell_index: int, *, word_index: int = 0, subtype: str = "too_long") -> dict:
+    return {
+        "category": "timing",
+        "subtype": subtype,
+        "target": _target("cell", word_index=word_index, cell_index=cell_index),
+        "snapshot": None,
+        "comment": None,
+        "selected_rule_tags": None,
+    }
+
+
+def _batch(items, *, anon_token="anon-1", verse_key="2:45"):
+    with db.transaction():
+        return repo.create_many(
+            slug="reciter-a",
+            verse_key=verse_key,
+            items=items,
+            hf_user_id=None,
+            anon_token=anon_token,
+            login_at_time=None,
+            role_at_time=None,
+        )
+
+
+def test_create_many_groups_timing_cells_under_one_word(fresh_db):
+    results = _batch([_timing_item(0), _timing_item(1), _timing_item(2)])
+    assert [created for _, created in results] == [True, True, True]
+    rows = repo.list_for_verse("reciter-a", "2:45")
+    assert len(rows) == 3
+    assert {r["target"]["word_index"] for r in rows} == {0}
+
+
+def test_create_many_mixed_categories_are_separate_rows(fresh_db):
+    results = _batch(
+        [
+            _timing_item(0),
+            {
+                "category": "tajweed",
+                "subtype": "wrong_rule",
+                "target": _target("cell", word_index=0, cell_index=0),
+                "snapshot": None,
+                "comment": "x",
+                "selected_rule_tags": ["qalqala"],
+            },
+        ]
+    )
+    assert len(results) == 2
+    rows = repo.list_for_verse("reciter-a", "2:45")
+    assert {r["category"] for r in rows} == {"timing", "tajweed"}
+
+
+def test_create_many_resubmit_marks_not_created(fresh_db):
+    _batch([_timing_item(0), _timing_item(1)])
+    again = _batch([_timing_item(0), _timing_item(1)])
+    assert [created for _, created in again] == [False, False]
+    assert len(repo.list_for_verse("reciter-a", "2:45")) == 2
+
+
+def test_resolve_group_resolves_all_open_timing_rows(fresh_db):
+    _batch([_timing_item(0), _timing_item(1), _timing_item(2)])
+    with db.transaction():
+        rows = repo.resolve_group(
+            slug="reciter-a",
+            verse_key="2:45",
+            word_index=0,
+            category="timing",
+            resolver_hf_user_id="owner-1",
+            resolver_login="owner",
+            resolver_comment="fixed",
+        )
+    assert len(rows) == 3
+    assert all(r["status"] == "resolved" for r in rows)
+    assert repo.verse_counts("reciter-a") == [
+        {"verse_key": "2:45", "open_count": 0, "resolved_count": 3}
+    ]
+
+
+def test_resolve_group_empty_when_none_open(fresh_db):
+    _batch([_timing_item(0)])
+    with db.transaction():
+        repo.resolve_group(
+            slug="reciter-a",
+            verse_key="2:45",
+            word_index=0,
+            category="timing",
+            resolver_hf_user_id="owner-1",
+            resolver_login="owner",
+            resolver_comment=None,
+        )
+    with db.transaction():
+        again = repo.resolve_group(
+            slug="reciter-a",
+            verse_key="2:45",
+            word_index=0,
+            category="timing",
+            resolver_hf_user_id="owner-1",
+            resolver_login="owner",
+            resolver_comment=None,
+        )
+    assert again == []
+
+
+def test_resolve_group_spans_two_identities(fresh_db):
+    _batch([_timing_item(0)], anon_token="anon-1")
+    _batch([_timing_item(1)], anon_token="anon-2")
+    with db.transaction():
+        rows = repo.resolve_group(
+            slug="reciter-a",
+            verse_key="2:45",
+            word_index=0,
+            category="timing",
+            resolver_hf_user_id="owner-1",
+            resolver_login="owner",
+            resolver_comment=None,
+        )
+    assert {r["anon_token"] for r in rows} == {"anon-1", "anon-2"}
+
+
+def test_resolve_group_ignores_other_word_and_tajweed(fresh_db):
+    _batch(
+        [
+            _timing_item(0, word_index=0),
+            _timing_item(0, word_index=1),
+            {
+                "category": "tajweed",
+                "subtype": "wrong_rule",
+                "target": _target("cell", word_index=0, cell_index=9),
+                "snapshot": None,
+                "comment": "x",
+                "selected_rule_tags": None,
+            },
+        ]
+    )
+    with db.transaction():
+        rows = repo.resolve_group(
+            slug="reciter-a",
+            verse_key="2:45",
+            word_index=0,
+            category="timing",
+            resolver_hf_user_id="owner-1",
+            resolver_login="owner",
+            resolver_comment=None,
+        )
+    assert len(rows) == 1  # only word-0 timing
+    assert repo.verse_counts("reciter-a") == [
+        {"verse_key": "2:45", "open_count": 2, "resolved_count": 1}
+    ]

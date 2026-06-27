@@ -26,6 +26,8 @@ from qua_shared.schemas.wire.ts_reports import (
     TsReciterReports,
     TsReport,
     TsReportAuthor,
+    TsReportBatchCreateRequest,
+    TsReportBatchResult,
     TsReportCreateRequest,
     TsReportResolveRequest,
     TsReportSnapshot,
@@ -103,6 +105,7 @@ def _report_view(row: dict, *, mine: bool, show_author: bool) -> TsReport:
         target=TsReportTarget(**row["target"]),
         snapshot=_snapshot_view(row["snapshot"]),
         comment=row["comment"],
+        selected_rule_tags=row.get("selected_rule_tags") or [],
         status=row["status"],
         stale=row["stale"],
         resolver_comment=row["resolver_comment"],
@@ -225,6 +228,7 @@ def create_report(slug: str):
                 anon_token=anon_token,
                 login_at_time=login_at_time,
                 role_at_time=role_at_time,
+                selected_rule_tags=req.selected_rule_tags,
             )
     except Exception:  # noqa: BLE001
         logger.exception("ts_reports.create_report failed for %s %s", slug, req.verse_key)
@@ -247,6 +251,120 @@ def create_report(slug: str):
     return jsonify(_report_view(row, mine=True, show_author=show_author).model_dump(mode="json")), (
         201 if created else 200
     )
+
+
+def _fan_batch_notifications(
+    slug: str,
+    verse_key: str,
+    results: list[tuple[dict, bool]],
+    author_id: str | None,
+    author_login: str | None,
+) -> None:
+    """Owner notifications for a batch submit: one per NEW timing word-group,
+    one per NEW tajweed cell. Re-submitted (``created=False``) rows never
+    notify; multiple timing cells in one word coalesce on the word-group key."""
+    seen_timing_words: set[int] = set()
+    for row, created in results:
+        if not created:
+            continue
+        at_utc = _serde.to_iso(row["created_at"])
+        if at_utc is None:
+            continue
+        category = row["category"]
+        if category == "timing":
+            wi = row["target"]["word_index"]
+            if wi in seen_timing_words:
+                continue
+            seen_timing_words.add(wi)
+            _notify.notify_owners_ts_report(
+                slug=slug,
+                verse_key=verse_key,
+                category="timing",
+                author_id=author_id,
+                author_login=author_login,
+                report_id=row["id"],
+                at_utc=at_utc,
+                source_key=repo_ts_reports.word_group_key(slug, verse_key, wi, "timing"),
+            )
+        else:
+            _notify.notify_owners_ts_report(
+                slug=slug,
+                verse_key=verse_key,
+                category=category,
+                author_id=author_id,
+                author_login=author_login,
+                report_id=row["id"],
+                at_utc=at_utc,
+            )
+
+
+@ts_reports_bp.route("/<slug>/reports/batch", methods=["POST"])
+@require_same_origin
+def create_reports_batch(slug: str):
+    """Submit many staged cell-annotations on one verse in a single transaction.
+    Notifications fire grouped: one per timing word, one per tajweed cell."""
+    user = auth_service.current_user()
+    if not cap_service.can(user, _REPORT_CAP):
+        return jsonify({"error": "not available"}), 403
+    try:
+        req = TsReportBatchCreateRequest.model_validate(request.get_json(silent=True) or {})
+    except ValidationError as e:
+        return jsonify({"error": "invalid batch", "detail": _validation_detail(e)}), 400
+
+    if user is not None:
+        hf_user_id: str | None = user.hf_user_id
+        anon_token: str | None = None
+        login_at_time: str | None = user.login
+        role_at_time: str | None = role_of(user).value
+    else:
+        anon = (req.anon_token or "").strip()
+        if not anon:
+            return jsonify({"error": "anon_token required for anonymous reports"}), 400
+        hf_user_id, anon_token = None, anon
+        login_at_time = role_at_time = None
+
+    # Snapshots read shards — build them BEFORE opening the write transaction.
+    items: list[dict] = []
+    for it in req.items:
+        target = it.target.model_dump()
+        items.append(
+            {
+                "category": it.category,
+                "subtype": it.subtype,
+                "target": target,
+                "comment": it.comment,
+                "selected_rule_tags": it.selected_rule_tags,
+                "snapshot": ts_target_snapshot.build_snapshot(slug, req.verse_key, target),
+            }
+        )
+
+    try:
+        with _sync.durable_transaction():
+            results = repo_ts_reports.create_many(
+                slug=slug,
+                verse_key=req.verse_key,
+                items=items,
+                hf_user_id=hf_user_id,
+                anon_token=anon_token,
+                login_at_time=login_at_time,
+                role_at_time=role_at_time,
+            )
+    except Exception:  # noqa: BLE001
+        logger.exception("ts_reports.create_reports_batch failed for %s %s", slug, req.verse_key)
+        return jsonify({"error": "failed to save reports"}), 500
+
+    _fan_batch_notifications(slug, req.verse_key, results, hf_user_id, login_at_time)
+
+    show_author = cap_service.can(user, _IDENTITY_CAP)
+    rows = [_report_view(r, mine=True, show_author=show_author) for r, _ in results]
+    created_count = sum(1 for _, c in results if c)
+    resp = TsReportBatchResult(
+        verse_key=req.verse_key,
+        reports=rows,
+        created_count=created_count,
+        updated_count=len(results) - created_count,
+    )
+    return jsonify(resp.model_dump(mode="json")), 201
 
 
 @ts_reports_bp.route("/<slug>/reports/<int:report_id>/resolve", methods=["POST"])
@@ -293,10 +411,69 @@ def resolve_report(slug: str, report_id: int):
     return jsonify(_report_view(row, mine=False, show_author=show_author).model_dump(mode="json"))
 
 
+@ts_reports_bp.route(
+    "/<slug>/reports/<verse_key>/word/<int:word_index>/<category>/resolve", methods=["POST"]
+)
+@require_same_origin
+def resolve_word_group(slug: str, verse_key: str, word_index: int, category: str):
+    """Resolve a timing word-group as a unit (owner-gated). Notifies each
+    distinct signed-in reporter in the group once."""
+    user = auth_service.current_user()
+    if not cap_service.can(user, _RESOLVE_CAP):
+        return jsonify({"error": "not available"}), 403
+    if category != "timing":
+        return jsonify({"error": "group resolve is only for timing word-groups"}), 400
+    try:
+        req = TsReportResolveRequest.model_validate(request.get_json(silent=True) or {})
+    except ValidationError as e:
+        return jsonify({"error": "invalid resolve", "detail": _validation_detail(e)}), 400
+
+    try:
+        with _sync.durable_transaction():
+            rows = repo_ts_reports.resolve_group(
+                slug=slug,
+                verse_key=verse_key,
+                word_index=word_index,
+                category=category,
+                resolver_hf_user_id=user.hf_user_id if user is not None else None,
+                resolver_login=user.login if user is not None else None,
+                resolver_comment=req.comment,
+            )
+    except Exception:  # noqa: BLE001
+        logger.exception(
+            "ts_reports.resolve_word_group failed for %s %s w%s", slug, verse_key, word_index
+        )
+        return jsonify({"error": "failed to resolve group"}), 500
+
+    if not rows:
+        return jsonify({"error": "no open reports in group"}), 404
+
+    at_utc = _serde.to_iso(rows[0]["resolved_at"])
+    if at_utc is not None:
+        for reporter_id in {r["hf_user_id"] for r in rows if r["hf_user_id"]}:
+            _notify.notify_reporter_ts_report_resolved(
+                reporter_id=reporter_id,
+                slug=slug,
+                verse_key=verse_key,
+                resolver_comment=req.comment,
+                report_id=rows[0]["id"],
+                at_utc=at_utc,
+            )
+
+    show_author = cap_service.can(user, _IDENTITY_CAP)
+    return jsonify(
+        TsVerseReports(
+            verse_key=verse_key,
+            reports=[_report_view(r, mine=False, show_author=show_author) for r in rows],
+        ).model_dump(mode="json")
+    )
+
+
 @ts_reports_bp.route("/<slug>/reports/<int:report_id>", methods=["DELETE"])
 @require_same_origin
 def delete_report(slug: str, report_id: int):
-    """Delete the caller's own report."""
+    """Remove the caller's own report. Soft delete — the row drops out of every
+    view but is retained internally; re-filing the same target un-hides it."""
     user = auth_service.current_user()
     if not cap_service.can(user, _REPORT_CAP):
         return jsonify({"error": "not available"}), 403

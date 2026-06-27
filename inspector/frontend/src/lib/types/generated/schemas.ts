@@ -2011,6 +2011,7 @@ export interface TsReport {
   target: TsReportTarget;
   snapshot?: TsReportSnapshot | null;
   comment?: string | null;
+  selected_rule_tags?: string[];
   status: "open" | "resolved";
   stale?: boolean;
   resolver_comment?: string | null;
@@ -2066,6 +2067,44 @@ export interface TsReportAuthor {
   role?: string | null;
 }
 /**
+ * Submit many staged annotations on ONE verse in a single transaction
+ * (``POST .../reports/batch``). Items may mix categories (timing + tajweed).
+ */
+export interface TsReportBatchCreateRequest {
+  verse_key: string;
+  /**
+   * @minItems 1
+   * @maxItems 200
+   */
+  items: [TsReportBatchItem, ...TsReportBatchItem[]];
+  anon_token?: string | null;
+}
+/**
+ * One staged cell-annotation in a batch submit. Verse + identity are
+ * batch-level, so an item carries only its own category/subtype/target/comment
+ * (+ ``selected_rule_tags`` for tajweed wrong_rule). Same per-category rules as
+ * a single create (shared ``_validate_report_item``).
+ */
+export interface TsReportBatchItem {
+  category: "audio" | "timing" | "mapping" | "tajweed" | "other";
+  subtype?:
+    | ("too_long" | "too_short" | "other" | "wrong_rule" | "missing_rule" | "should_be_silent" | "should_not_be_silent")
+    | null;
+  target: TsReportTarget;
+  comment?: string | null;
+  selected_rule_tags?: string[];
+}
+/**
+ * Echo of a batch submit: the created/updated reports in input order, plus
+ * insert vs upsert counts.
+ */
+export interface TsReportBatchResult {
+  verse_key: string;
+  reports?: TsReport[];
+  created_count: number;
+  updated_count: number;
+}
+/**
  * Create the caller's report on a verse (``POST .../reports``).
  */
 export interface TsReportCreateRequest {
@@ -2076,10 +2115,12 @@ export interface TsReportCreateRequest {
     | null;
   target: TsReportTarget;
   comment?: string | null;
+  selected_rule_tags?: string[];
   anon_token?: string | null;
 }
 /**
- * Resolve a report (``POST .../reports/<id>/resolve``). Owner-gated.
+ * Resolve a report (``POST .../reports/<id>/resolve``, or a timing
+ * word-group via ``.../word/<word_index>/<category>/resolve``). Owner-gated.
  */
 export interface TsReportResolveRequest {
   comment?: string | null;
