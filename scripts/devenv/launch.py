@@ -68,6 +68,9 @@ except Exception:  # noqa: BLE001 - optional; stdlib fallbacks below
     psutil = None
 
 IS_WIN = os.name == "nt"
+# Suppress the console window every native-exe subprocess (git/netstat/taskkill/
+# node/python) would otherwise flash on Windows. No-op off Windows.
+NO_WINDOW = subprocess.CREATE_NO_WINDOW if IS_WIN else 0
 
 # Space hostnames for the remote modes (overridable via env).
 DEV_SPACE_URL = os.environ.get(
@@ -98,6 +101,7 @@ def _git(args: list[str], cwd: Path | None = None) -> str:
         capture_output=True,
         text=True,
         check=True,
+        creationflags=NO_WINDOW,
     )
     return out.stdout.strip()
 
@@ -161,7 +165,9 @@ def port_listeners(port: int) -> list[int]:
     # Fallback: parse netstat (Windows) / ss (POSIX).
     try:
         if IS_WIN:
-            out = subprocess.run(["netstat", "-ano"], capture_output=True, text=True).stdout
+            out = subprocess.run(
+                ["netstat", "-ano"], capture_output=True, text=True, creationflags=NO_WINDOW
+            ).stdout
             for ln in out.splitlines():
                 parts = ln.split()
                 if len(parts) >= 5 and parts[0].startswith("TCP") and parts[3] == "LISTENING":
@@ -186,7 +192,10 @@ def pid_alive(pid: int) -> bool:
         return psutil.pid_exists(pid)
     if IS_WIN:
         out = subprocess.run(
-            ["tasklist", "/FI", f"PID eq {pid}"], capture_output=True, text=True
+            ["tasklist", "/FI", f"PID eq {pid}"],
+            capture_output=True,
+            text=True,
+            creationflags=NO_WINDOW,
         ).stdout
         return str(pid) in out
     try:
@@ -215,7 +224,9 @@ def kill_tree(pid: int) -> None:
         except Exception:  # noqa: BLE001
             pass
     if IS_WIN:
-        subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True)
+        subprocess.run(
+            ["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, creationflags=NO_WINDOW
+        )
     else:
         with contextlib.suppress(ProcessLookupError):
             os.kill(pid, 15)
@@ -422,7 +433,12 @@ def ensure_fixtures(root: Path) -> Path:
     if (fx / "db" / "inspector.db").is_file():
         return fx
     print("launch: seeding offline fixtures (one-time download)...", flush=True)
-    subprocess.run([sys.executable, "scripts/devenv/seed_fixtures.py"], cwd=str(root), check=True)
+    subprocess.run(
+        [sys.executable, "scripts/devenv/seed_fixtures.py"],
+        cwd=str(root),
+        check=True,
+        creationflags=NO_WINDOW,
+    )
     if not (fx / "db" / "inspector.db").is_file():
         raise SystemExit(
             "launch: fixtures seed did not produce inspector/.fixtures/db/inspector.db"
@@ -853,6 +869,7 @@ def run_smoke(root: Path, url: str) -> int:
         cwd=str(frontend_dir(root)),
         capture_output=True,
         text=True,
+        creationflags=NO_WINDOW,
     )
     sys.stdout.write(proc.stdout)
     if proc.returncode != 0:
