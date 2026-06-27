@@ -13,11 +13,12 @@
  * (fill + ink + idle, with that tier's own tints/opacity/customs). Global
  * fields (theme, the accent→triad mapping) and the karaoke track are shared.
  *
- * The shipped defaults (`DEFAULT_HIGHLIGHT_MODEL`) reproduce the current
- * deep-fill + white-text treatment exactly, so with the highlight lab closed the
- * output is unchanged. The lab (`tabs/timestamps/stores/highlight-lab`) feeds
- * overrides to explore alternatives (bright/tint fills, auto/accent inks, the
- * karaoke track colour, the legible band + hue mapping, a light theme) live.
+ * The shipped defaults (`DEFAULT_HIGHLIGHT_MODEL`) are the tuned treatment: an
+ * accent-tint fill per tier (dark ink on the bold word, white on the smaller
+ * letter/phoneme cells), with lightness held in the legible band. The lab
+ * (`tabs/timestamps/stores/highlight-lab`) feeds overrides to explore
+ * alternatives (deep/bright fills, auto/accent inks, the karaoke track colour,
+ * the band + hue mapping, a light theme) live.
  */
 import {
     analogousTriadCfg,
@@ -69,29 +70,26 @@ export interface HighlightModel {
     trackCustom: string;
 }
 
-const DEEP_TIER: TierStyle = {
-    fill: 'deep',
-    tintPct: 22,
-    opacityPct: 100,
-    deepMaxLum: 0.15,
-    ink: 'white',
-    inkCustom: '#ffffff',
-    idle: 'accent',
-    idleCustom: '#aaaaaa',
-};
-
 export const DEFAULT_HIGHLIGHT_MODEL: HighlightModel = {
     theme: 'dark',
     letterShift: 40,
     phonemeShift: -40,
     chromaFloor: 0.085,
-    bandMinL: 0.62,
-    bandMaxL: 0.84,
-    word: { ...DEEP_TIER, idle: 'accent' },
-    letterPhoneme: { ...DEEP_TIER, idle: 'grey' },
+    bandMinL: 0.66,
+    bandMaxL: 0.86,
+    // Active word: a 70% accent tint with dark (bold, large) ink.
+    word: {
+        fill: 'tint', tintPct: 70, opacityPct: 100, deepMaxLum: 0.245,
+        ink: 'black', inkCustom: '#ffffff', idle: 'grey', idleCustom: '#aaaaaa',
+    },
+    // Active letter/phoneme cells: a darker 50% tint with white ink.
+    letterPhoneme: {
+        fill: 'tint', tintPct: 50, opacityPct: 100, deepMaxLum: 0.275,
+        ink: 'white', inkCustom: '#ffffff', idle: 'grey', idleCustom: '#aaaaaa',
+    },
     track: 'fill',
-    trackPct: 30,
-    trackCustom: '#0f0f23',
+    trackPct: 20,
+    trackCustom: '#727288',
 };
 
 /** The shipping accent palette — the quick-pick swatches in the user's droplet
