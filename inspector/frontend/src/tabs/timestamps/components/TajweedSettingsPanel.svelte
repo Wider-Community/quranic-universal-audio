@@ -588,7 +588,7 @@
        between their ink centres — kept wide (and the marks scaled down) so the two
        three-dot clusters read as a clear either/or pair inside the fixed cell. */
     .waqf-cell.pair {
-        gap: 16px;
+        gap: 11px;
     }
     .waqf-cell.pair .waqf-mark {
         font-size: calc(var(--analysis-word-font-size, 1.3rem) * var(--waqf-scale, 1) * 0.55);
