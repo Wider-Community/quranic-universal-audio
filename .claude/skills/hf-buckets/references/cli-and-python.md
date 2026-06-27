@@ -104,6 +104,13 @@ batch_bucket_files("user/b", copy=[
 
 `batch_bucket_files` is **non-transactional** — partial success is possible if an error occurs mid-batch. Check return / re-run with `--dry-run` semantics if order matters.
 
+**Perf — pass PATHS, not bytes; batch, don't loop `fs.open`.** For many small files the write method dominates (measured on ~114 shards):
+- `fs.open(path,'wb')` per file = one commit per file → ~457 s.
+- `add=[(bytes, existing_path)]` (raw bytes **overwriting** an existing path) hits a pathological server path → ~297 s.
+- `add=[(local_path, existing_path)]` (stage to a temp FILE, pass the path) → ~12 s.
+
+So stage each blob to a local temp file and pass the path. In this repo use the shared helper `scripts/bucket/_bootstrap.py::batch_write(bucket_id, {dest_path: bytes})` — it temp-stages, batches and retries 429. The first `batch_bucket_files` call in a process also pays a one-time Xet cold-start (dedup-index fetch), so batching wins doubly.
+
 ---
 
 ## Download

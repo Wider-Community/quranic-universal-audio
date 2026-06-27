@@ -132,6 +132,7 @@ def process_reciter(fs, bucket: str, slug: str, *, write: bool, restamp: bool, l
     tags = Counter()
     total_cells = skipped = 0
     violations: list = []
+    to_write: dict[str, bytes] = {}
     for _ch, path in shards:
         data = json.loads(gzip.decompress(_rl(fs.read_bytes, path)))
         if data.get("_meta", {}).get("schema_version", 0) >= SEGMENT_SCHEMA_VERSION and not restamp:
@@ -144,8 +145,10 @@ def process_reciter(fs, bucket: str, slug: str, *, write: bool, restamp: bool, l
         violations += viol
         if write and not viol:
             data.setdefault("_meta", {})["schema_version"] = SEGMENT_SCHEMA_VERSION
-            with fs.open(path, "wb") as fh:
-                fh.write(gzip_shard(data))
+            to_write[f"reciters/{slug}/timestamps/{_ch}.json.gz"] = gzip_shard(data)
+    # One Xet batch per reciter (paths, not bytes) — far faster than a commit/file.
+    if to_write:
+        bs.batch_write(bucket, to_write)
     log(
         f"{slug:44} shards={len(shards):3} cells={total_cells:6} skipped={skipped:3} "
         f"violations={len(violations)}"
