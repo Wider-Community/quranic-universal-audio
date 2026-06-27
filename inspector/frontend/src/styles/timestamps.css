@@ -1077,20 +1077,27 @@
     pointer-events: auto;
     cursor: pointer;
 }
-/* A flagged cell (own staged or anyone's persisted) — red ring + tooltip. */
+/* A flagged cell (own staged or anyone's persisted) — red ring + tooltip. The
+   ring is INSET (negative offset) so it stays within the cell box and never
+   bleeds into a connected neighbour (a letter + its diacritic). */
 .report-flag-public,
 .report-flag-staged {
     outline: 2px solid var(--state-missing-fg);
-    outline-offset: 1px;
+    outline-offset: -2px;
     border-radius: 2px;
 }
+/* Words are spaced apart, so their ring can sit outset without crossing a neighbour. */
 .mega-block.report-flag-public,
 .mega-block.report-flag-staged {
     outline-offset: 2px;
 }
-/* The cell currently being annotated in the strip — accent ring on top. */
+/* The cell currently being annotated in the strip — accent ring on top. Inset for
+   cells (kept outset for spaced word blocks). */
 .report-focused {
     outline: 2px solid var(--accent);
+    outline-offset: -2px;
+}
+.mega-block.report-focused {
     outline-offset: 2px;
 }
 @media (prefers-reduced-motion: reduce) {

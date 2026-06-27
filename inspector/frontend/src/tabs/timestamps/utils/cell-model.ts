@@ -134,6 +134,9 @@ export interface RenderedPhoneme {
     interval: PhonemeInterval;
     /** Flat interval index (for highlight matching + click seek). */
     index: number;
+    /** Word-local indexable-phone index (render-only Q + geminate_end skipped) —
+     *  the `phoneme_flat_index` a report target keys on. */
+    wordLocalIndex: number;
     /** Ordered tajweed underline badges (bottom→top, tafkheem on top). */
     tjBadges: TjBadge[];
     /** DISPLAY-only phone override (the shard keeps `interval.phone`): a heavy
@@ -391,10 +394,12 @@ export function cellGroupsFor(
     // Internal tajweed tag id(s) on the cell — the report rule-picker's options
     // (primary + secondary + the synthesized iẓhar default), keyed by the
     // data-model id, never a display label.
-    const cellRuleTags = (c: TsCell): string[] =>
-        [c.tag, ...(c.secondaryTags ?? []), izharCellTag.get(c)].filter(
+    const cellRuleTags = (c: TsCell): string[] => {
+        const groupTag = c.shareGroup != null ? idghamGroupTags.get(c.shareGroup) : undefined;
+        return [c.tag, ...(c.secondaryTags ?? []), izharCellTag.get(c), groupTag].filter(
             (t): t is string => !!t,
         );
+    };
     // Context-derived silent-rule names (need the cell's neighbours): a trailing
     // dropped ḥaraka/tanwīn with nothing sounding after it is the word-final
     // vowel silenced at the stop → "Waqf"; the dropped fatḥatan whose

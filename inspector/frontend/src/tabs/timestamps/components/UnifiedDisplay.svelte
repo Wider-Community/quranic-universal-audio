@@ -311,6 +311,14 @@
             _reportSelectCell(cellEl, mode);
             return;
         }
+        // A phoneme span (no cell index) is also a selectable cell in both modes.
+        const phEl = tgt.closest<HTMLElement>('.mega-phoneme');
+        if (phEl && rootEl.contains(phEl) && !phEl.classList.contains('report-inert')) {
+            e.stopPropagation();
+            e.preventDefault();
+            _reportSelectCell(phEl, mode);
+            return;
+        }
         if (mode.kind === 'timing') {
             const blockEl = tgt.closest<HTMLElement>('.mega-block');
             if (blockEl && rootEl.contains(blockEl)) {
@@ -351,25 +359,34 @@
             }
         }
         focusCell(key); // auto-discards a previously focused incomplete cell
-        if (mode.kind === 'timing') {
-            const lv = get(loadedVerse);
-            if (!lv) return;
-            const s = _num(el.dataset.letterStart) ?? _num(el.dataset.cellStart);
-            const en = _num(el.dataset.letterEnd) ?? _num(el.dataset.cellEnd);
+        // Loop the selected cell in BOTH modes (audio reference). A phoneme span
+        // loops on its own phone (verse-flat `data-index`); a letter/diacritic
+        // cell loops on its letter span. Silent cells with no timing skip.
+        const lv = get(loadedVerse);
+        if (!lv) return;
+        const wi = parseInt(el.dataset.wordIndex ?? '-1', 10);
+        const isPhoneme = el.dataset.phonemeFlatIndex != null;
+        const s = isPhoneme
+            ? _num(el.dataset.cellStart)
+            : (_num(el.dataset.letterStart) ?? _num(el.dataset.cellStart));
+        const en = isPhoneme
+            ? _num(el.dataset.cellEnd)
+            : (_num(el.dataset.letterEnd) ?? _num(el.dataset.cellEnd));
+        if (s == null || en == null) return; // silent cell with no own timing — no loop
+        // Set the loop directly so playback stays pinned to this verse (it must
+        // not run on and advance the focus verse out of the session).
+        if (isPhoneme) {
+            const childIndex = parseInt(el.dataset.index ?? '-1', 10);
+            loopTarget.set({ kind: 'phoneme', startSec: s, endSec: en, wordIndex: wi, childIndex });
+        } else {
             const ci = parseInt(el.dataset.cellIndex ?? '-1', 10);
-            const wi = parseInt(el.dataset.wordIndex ?? '-1', 10);
-            if (s != null && en != null) {
-                // Enter (or move) loop mode on the selected cell — set the loop
-                // directly so playback stays pinned to this verse (it must not
-                // run on and advance the focus verse out of the session).
-                loopTarget.set({ kind: 'letter', startSec: s, endSec: en, wordIndex: wi, childIndex: ci });
-                if (dashPort.element) {
-                    const targetMs = (s + lv.tsSegOffset) * 1000;
-                    ensureDashCovering(targetMs);
-                    dashPort.seek(targetMs);
-                    if (dashPort.paused) dashPort.play();
-                }
-            }
+            loopTarget.set({ kind: 'letter', startSec: s, endSec: en, wordIndex: wi, childIndex: ci });
+        }
+        if (dashPort.element) {
+            const targetMs = (s + lv.tsSegOffset) * 1000;
+            ensureDashCovering(targetMs);
+            dashPort.seek(targetMs);
+            if (dashPort.paused) dashPort.play();
         }
     }
     function _reportSelectWord(el: HTMLElement): void {
@@ -387,6 +404,17 @@
             });
         }
         focusCell(key); // auto-discards a previously focused incomplete cell
+        // Loop the whole word for audio reference (same span as onWordClick).
+        const lv = get(loadedVerse);
+        const word = lv?.data.words[wi];
+        if (!lv || !word) return;
+        loopTarget.set({ kind: 'word', startSec: word.start, endSec: word.end, wordIndex: wi });
+        if (dashPort.element) {
+            const targetMs = (word.start + lv.tsSegOffset) * 1000;
+            ensureDashCovering(targetMs);
+            dashPort.seek(targetMs);
+            if (dashPort.paused) dashPort.play();
+        }
     }
     $: if (rootEl && !_reportClickBound) {
         rootEl.addEventListener('click', _onReportClickCapture, true);
@@ -1196,6 +1224,12 @@
                                             class="mega-letter null-ts"
                                             class:silent={f.silent}
                                             style="grid-column:{ci + 1}; justify-self:stretch"
+                                            data-word-index={block.wordIndex}
+                                            data-cell-index={f.cellIndex}
+                                            data-source-letter-index={f.letterIndex}
+                                            data-share-group={f.shareGroup}
+                                            data-has-tj={f.tjBadges.length || f.silentRules.length ? '1' : '0'}
+                                            data-tj-tags={f.ruleTags.join(',')}
                                             style:box-shadow={tjShadowFor(f.tjBadges, $tajweedSettings)}
                                             class:tj-kubra={!!tjKubraFor(f.tjBadges, $tajweedSettings)}
                                             style:--tj-kubra={tjKubraFor(f.tjBadges, $tajweedSettings)}
@@ -1293,6 +1327,10 @@
                                                 ph.interval.phone === 'sp'}
                                             class:geminate={ph.interval.geminate_start}
                                             data-index={ph.index}
+                                            data-word-index={block.wordIndex}
+                                            data-phoneme-flat-index={ph.wordLocalIndex}
+                                            data-cell-start={ph.interval.start}
+                                            data-cell-end={ph.interval.end}
                                             data-has-tj={ph.tjBadges.length ? '1' : '0'}
                                             style:box-shadow={tjShadowFor(ph.tjBadges, $tajweedSettings)}
                         class:tj-kubra={!!tjKubraFor(ph.tjBadges, $tajweedSettings)}
@@ -1325,6 +1363,10 @@
                                 ph.interval.phone === 'sp'}
                             class:geminate={ph.interval.geminate_start}
                             data-index={ph.index}
+                            data-word-index={block.wordIndex}
+                            data-phoneme-flat-index={ph.wordLocalIndex}
+                            data-cell-start={ph.interval.start}
+                            data-cell-end={ph.interval.end}
                             on:click={(e) => onPhonemeClick(e, ph.interval, ph.index, block.wordIndex)}
                             on:dblclick={(e) => onPhonemeDblClick(e, ph.interval, ph.index, block.wordIndex)}
                             on:mouseenter={(e) => onPhonemeEnter(e, ph.interval)}

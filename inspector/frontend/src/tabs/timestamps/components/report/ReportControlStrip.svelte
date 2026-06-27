@@ -155,6 +155,12 @@
                                         onclick={() => pickRule(a, tag)}
                                     >{ruleLabel(tag)}</button>
                                 {/each}
+                            {:else if a.subtype === 'missing_rule' && a.ruleOptions.length > 0}
+                                <!-- Read-only context: the rules already on the cell. -->
+                                <span class="existing-lbl">Existing:</span>
+                                {#each a.ruleOptions as tag (tag)}
+                                    <span class="rule-chip">{ruleLabel(tag)}</span>
+                                {/each}
                             {/if}
                         </div>
                         <input
@@ -229,6 +235,13 @@
     }
     .opt:hover, .rule:hover { color: var(--text-primary); border-color: var(--border-strong); }
     .opt.on, .rule.on { color: var(--accent); background: var(--accent-tint); border-color: var(--accent); }
+
+    .existing-lbl { font-size: var(--fs-meta); color: var(--text-muted); }
+    .rule-chip {
+        display: inline-flex; align-items: center; padding: 3px var(--s-2); font-size: var(--fs-meta);
+        color: var(--text-secondary); background: var(--panel); border: 1px dashed var(--border-default);
+        border-radius: var(--r-2);
+    }
 
     .cmt {
         flex: 1 1 140px; min-width: 110px; padding: 4px var(--s-2); color: var(--text-primary);

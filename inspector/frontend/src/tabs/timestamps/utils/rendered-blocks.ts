@@ -219,7 +219,7 @@ export function buildRendered(
             if (target < words.length) {
                 bridgeBeforeBlock.set(target, {
                     phonemes: [{
-                        interval: intervals[pi]!, index: pi,
+                        interval: intervals[pi]!, index: pi, wordLocalIndex: -1,
                         tjBadges: phonemeBadges.get(pi) ?? badgesForTags([intervals[pi]!.bridge]),
                     }],
                     letter: null,
@@ -241,7 +241,7 @@ export function buildRendered(
             const glyph = cellGlyph(kasra.chars, kasra.tag, iv.phone);
             const sr = silentTooltip(kasra.tag);
             bridgeBeforeBlock.set(wi + 1, {
-                phonemes: [{ interval: iv, index: kpi, tjBadges: [] }],
+                phonemes: [{ interval: iv, index: kpi, wordLocalIndex: -1, tjBadges: [] }],
                 letter: {
                     glyph,
                     style: harakaRenderStyle(glyph),
@@ -264,17 +264,24 @@ export function buildRendered(
         const bridge: RenderedBridge | null = bridgeBeforeBlock.get(wi) ?? null;
 
         const phonemes: RenderedPhoneme[] = [];
+        // Word-local indexable-phone counter — matches the shard's indexable space
+        // (render-only Q + geminate_end excluded), so a phoneme's `wordLocalIndex`
+        // is the `phoneme_flat_index` a report target keys on.
+        let wli = 0;
         for (const pi of word.phoneme_indices ?? []) {
-            if (excluded.has(pi)) continue;
             const iv = intervals[pi];
-            if (iv && !iv.geminate_end) {
+            if (!iv) continue;
+            const indexable = iv.phone !== 'Q' && !iv.geminate_end;
+            if (!excluded.has(pi) && !iv.geminate_end) {
                 phonemes.push({
                     interval: iv,
                     index: pi,
+                    wordLocalIndex: indexable ? wli : -1,
                     tjBadges: phonemeBadges.get(pi) ?? [],
                     displayPhone: _heavyIkhfaaDisplay(iv.phone, intervals[pi + 1]?.phone),
                 });
             }
+            if (indexable) wli++;
         }
 
         const groups = cellGroupsFor(word, intervals, shareUnions, nasalUnions, idghamGroupTags, izharCellTag, liftedIltiqaa.has(wi));
