@@ -120,7 +120,7 @@ const SILENT_TOOLTIPS = {
 // hamzat-waṣl ibtidāʾ vowels + the raw tanwīn-iltiqāʾ the SDK rewrites). A new
 // phonemizer rule (e.g. a future riwāyah) lands in `TajweedRule` via codegen and
 // breaks this assertion until classified — never a silently-dropped underline.
-const PIPELINE_ONLY_TAGS = [
+const _PIPELINE_ONLY_TAGS = [
     'hamza_wasl_fatha',
     'hamza_wasl_kasra',
     'hamza_wasl_damma',
@@ -128,7 +128,7 @@ const PIPELINE_ONLY_TAGS = [
 ] as const satisfies readonly TajweedRule[];
 
 type RenderedTag = keyof typeof COLOR_RULES | keyof typeof SILENT_TOOLTIPS;
-type UnclassifiedRule = Exclude<TajweedRule, RenderedTag | (typeof PIPELINE_ONLY_TAGS)[number]>;
+type UnclassifiedRule = Exclude<TajweedRule, RenderedTag | (typeof _PIPELINE_ONLY_TAGS)[number]>;
 const _assertAllRulesClassified: UnclassifiedRule extends never ? true : UnclassifiedRule = true;
 void _assertAllRulesClassified;
 
