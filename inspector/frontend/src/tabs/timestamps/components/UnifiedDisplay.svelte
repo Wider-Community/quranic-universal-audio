@@ -40,6 +40,16 @@
     } from '../stores/display';
     import type { TsLoopTarget } from '../stores/playback';
     import { loopTarget } from '../stores/playback';
+    import {
+        focusedCellKey,
+        reportMode,
+        type ReportMode,
+        staged,
+        upsertStaged,
+    } from '../stores/report-mode';
+    import { currentVerseReports } from '../stores/ts-reports';
+    import type { TsReport } from '../../../lib/types/generated/schemas';
+    import { cellTargetFromEl, elCellKey, targetCellKey } from '../utils/report-target';
     import { loadedVerse } from '../stores/verse';
     import { TS_CLICK_DELAY_MS } from '../utils/constants';
     import WordTranslation from './WordTranslation.svelte';
@@ -214,7 +224,150 @@
         });
         rootEl.querySelectorAll<HTMLElement>('.group-hover').forEach((c) => c.classList.remove('group-hover'));
         rootEl.querySelectorAll<HTMLElement>('.mega-grid').forEach((g) => { g.dataset.hoverGi = ''; });
+        // Strip report flags off reused keyed nodes so a verse switch starts clean.
+        rootEl.querySelectorAll<HTMLElement>(
+            '.report-flag-staged, .report-flag-public, .report-focused, .report-dim',
+        ).forEach((c) => {
+            c.classList.remove('report-flag-staged', 'report-flag-public', 'report-focused', 'report-dim');
+            if (c.dataset.reportTip) delete c.dataset.reportTip;
+        });
     }
+
+    // ---- Report mode: in-grid cell flagging (staged + persisted-public) ----
+    // Reactive one-shot passes — deliberately NOT in the 60fps updateHighlights
+    // loop. They toggle `report-*` classes on the cells whenever the mode, the
+    // staged set, the focus, or the verse's reports change. Disjoint class names
+    // from the imperative active-cell path, so the two never clobber.
+    let _reportClickBound = false;
+    $: $reportMode, $staged, $focusedCellKey, $currentVerseReports, rendered,
+        untrack(() => void tick().then(applyReportPasses));
+
+    function _publicByKey(): Map<string, TsReport[]> {
+        const m = new Map<string, TsReport[]>();
+        for (const r of get(currentVerseReports)) {
+            if (r.status !== 'open') continue;
+            const k = targetCellKey(r.target);
+            const arr = m.get(k);
+            if (arr) arr.push(r);
+            else m.set(k, [r]);
+        }
+        return m;
+    }
+    function _composeReportTip(reps: TsReport[]): string {
+        return reps
+            .map((r) => {
+                const sub = r.subtype ? ` · ${r.subtype.replace(/_/g, ' ')}` : '';
+                const rule = r.selected_rule_tags?.length ? ` (${r.selected_rule_tags.join(', ')})` : '';
+                const c = r.comment ? `: ${r.comment}` : '';
+                return `⚑ ${r.category}${sub}${rule}${c}`;
+            })
+            .join('\n');
+    }
+    function applyReportPasses(): void {
+        if (!rootEl) return;
+        const mode = get(reportMode);
+        const active = mode.kind !== 'inactive';
+        rootEl.classList.toggle('report-mode', active);
+        const stagedMap = get(staged);
+        const focused = get(focusedCellKey);
+        const pub = _publicByKey();
+        const dimWrong = mode.kind === 'tajweed' && mode.subtype === 'wrong_rule';
+        const els = rootEl.querySelectorAll<HTMLElement>('[data-cell-index], .mega-block');
+        els.forEach((el) => {
+            const key = elCellKey(el);
+            const isCell = el.hasAttribute('data-cell-index');
+            el.classList.toggle('report-dim', dimWrong && isCell && el.getAttribute('data-has-tj') !== '1');
+            el.classList.toggle('report-flag-staged', active && !!key && stagedMap.has(key));
+            el.classList.toggle('report-focused', active && !!key && key === focused);
+            const reps = key ? pub.get(key) : undefined;
+            el.classList.toggle('report-flag-public', !!reps?.length);
+            if (reps?.length) el.dataset.reportTip = _composeReportTip(reps);
+            else if (el.dataset.reportTip) delete el.dataset.reportTip;
+        });
+    }
+
+    // Delegated capture-phase click: in report mode a cell/word click STAGES (and,
+    // for timing, loops the cell) instead of seeking. stopPropagation blocks the
+    // normal letter/word handlers from also firing.
+    function _onReportClickCapture(e: MouseEvent): void {
+        const mode = get(reportMode);
+        if (mode.kind === 'inactive') return;
+        const tgt = e.target as HTMLElement;
+        const cellEl = tgt.closest<HTMLElement>('[data-cell-index]');
+        if (cellEl && rootEl.contains(cellEl)) {
+            e.stopPropagation();
+            e.preventDefault();
+            _reportSelectCell(cellEl, mode);
+            return;
+        }
+        const blockEl = tgt.closest<HTMLElement>('.mega-block');
+        if (blockEl && mode.kind === 'timing' && rootEl.contains(blockEl)) {
+            e.stopPropagation();
+            e.preventDefault();
+            _reportSelectWord(blockEl);
+        }
+    }
+    function _num(v: string | undefined): number | null {
+        if (v == null || v === '') return null;
+        const n = parseFloat(v);
+        return Number.isNaN(n) ? null : n;
+    }
+    function _reportSelectCell(el: HTMLElement, mode: ReportMode): void {
+        const key = elCellKey(el);
+        const target = cellTargetFromEl(el);
+        if (!key || !target) return;
+        if (!get(staged).has(key)) {
+            if (mode.kind === 'timing') {
+                upsertStaged({ kind: 'timing', cellKey: key, target, wordIndex: target.word_index ?? -1, subtype: null, comment: '' });
+            } else if (mode.kind === 'tajweed') {
+                const opts = (el.getAttribute('data-tj-tags') || '').split(',').filter(Boolean);
+                upsertStaged({
+                    kind: 'tajweed',
+                    cellKey: key,
+                    target,
+                    subtype: mode.subtype,
+                    ruleOptions: opts,
+                    selectedRuleTags: opts.length === 1 ? opts : [],
+                    comment: '',
+                });
+            }
+        }
+        focusedCellKey.set(key);
+        if (mode.kind === 'timing') {
+            const lv = get(loadedVerse);
+            if (!lv) return;
+            const s = _num(el.dataset.letterStart) ?? _num(el.dataset.cellStart);
+            const en = _num(el.dataset.letterEnd) ?? _num(el.dataset.cellEnd);
+            const ci = parseInt(el.dataset.cellIndex ?? '-1', 10);
+            const wi = parseInt(el.dataset.wordIndex ?? '-1', 10);
+            if (s != null && en != null) {
+                _swapLoopOrSeek({ kind: 'letter', startSec: s, endSec: en, wordIndex: wi, childIndex: ci }, s + lv.tsSegOffset);
+            }
+        }
+    }
+    function _reportSelectWord(el: HTMLElement): void {
+        const wi = parseInt(el.dataset.wordIndex ?? '-1', 10);
+        if (wi < 0) return;
+        const key = `w${wi}`;
+        if (!get(staged).has(key)) {
+            upsertStaged({
+                kind: 'timing',
+                cellKey: key,
+                target: { kind: 'word', word_index: wi, source_letter_index: null, cell_index: null, phoneme_flat_index: null, share_group: null },
+                wordIndex: wi,
+                subtype: null,
+                comment: '',
+            });
+        }
+        focusedCellKey.set(key);
+    }
+    $: if (rootEl && !_reportClickBound) {
+        rootEl.addEventListener('click', _onReportClickCapture, true);
+        _reportClickBound = true;
+    }
+    onDestroy(() => {
+        if (rootEl) rootEl.removeEventListener('click', _onReportClickCapture, true);
+    });
 
     // Waveform hover → re-run highlights. The rAF loop is stopped while paused,
     // so without this reactive trigger hover-driven previews wouldn't repaint.
@@ -797,6 +950,8 @@
         if (ms != null) lines.push(`${ms} ms`);
         const rules = el.dataset.tjRules;
         if (rules) lines.push(rules);
+        const report = el.dataset.reportTip;
+        if (report) lines.push(report);
         return lines.length ? lines.join('\n') : null;
     }
 
@@ -994,6 +1149,9 @@
                                             data-cell-start={f.cellStart}
                                             data-cell-end={f.cellEnd}
                                             data-word-index={block.wordIndex}
+                                            data-cell-index={f.cellIndex}
+                                            data-has-tj={f.tjBadges.length || f.silentRules.length ? '1' : '0'}
+                                            data-tj-tags={f.ruleTags.join(',')}
                                             style:box-shadow={tjShadowFor(f.tjBadges, $tajweedSettings)}
                                             class:tj-kubra={!!tjKubraFor(f.tjBadges, $tajweedSettings)}
                                             style:--tj-kubra={tjKubraFor(f.tjBadges, $tajweedSettings)}
@@ -1038,6 +1196,11 @@
                                             data-letter-end={f.letterEnd}
                                             data-word-index={block.wordIndex}
                                             data-letter-index={f.letterIndex}
+                                            data-cell-index={f.cellIndex}
+                                            data-source-letter-index={f.letterIndex}
+                                            data-share-group={f.shareGroup}
+                                            data-has-tj={f.tjBadges.length || f.silentRules.length ? '1' : '0'}
+                                            data-tj-tags={f.ruleTags.join(',')}
                                             style:box-shadow={tjShadowFor(f.tjBadges, $tajweedSettings)}
                                             class:tj-kubra={!!tjKubraFor(f.tjBadges, $tajweedSettings)}
                                             style:--tj-kubra={tjKubraFor(f.tjBadges, $tajweedSettings)}
@@ -1066,6 +1229,10 @@
                                             data-cell-end={c.cellEnd}
                                             data-word-index={block.wordIndex}
                                             data-dia-loop-idx={c.phoneIdx.length ? c.phoneIdx[0] : undefined}
+                                            data-cell-index={c.cellIndex}
+                                            data-share-group={c.shareGroup}
+                                            data-has-tj={c.tjBadges.length || c.silentRules.length ? '1' : '0'}
+                                            data-tj-tags={c.ruleTags.join(',')}
                                             style:box-shadow={tjShadowFor(c.tjBadges, $tajweedSettings)}
                                             class:tj-kubra={!!tjKubraFor(c.tjBadges, $tajweedSettings)}
                                             style:--tj-kubra={tjKubraFor(c.tjBadges, $tajweedSettings)}

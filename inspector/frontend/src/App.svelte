@@ -24,6 +24,7 @@
     import { segPort } from './tabs/segments/stores/playback';
     import TimestampsFooterAnalysis from './tabs/timestamps/components/TimestampsFooterAnalysis.svelte';
     import TimestampsFooterLeft from './tabs/timestamps/components/TimestampsFooterLeft.svelte';
+    import TimestampsFooterReport from './tabs/timestamps/components/TimestampsFooterReport.svelte';
     import TimestampsTab from './tabs/timestamps/TimestampsTab.svelte';
 
     // `activeTab` follows the shared store so external navigation (e.g. the
@@ -178,6 +179,11 @@
                         delivery={$playerContext.delivery}
                         on:select={onCombinationSelect}
                     />
+                {/if}
+            </svelte:fragment>
+            <svelte:fragment slot="loc-lead">
+                {#if activeTab === TAB_NAMES.TIMESTAMPS}
+                    <TimestampsFooterReport />
                 {/if}
             </svelte:fragment>
             <svelte:fragment slot="center-trail">

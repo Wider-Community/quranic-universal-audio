@@ -51,6 +51,9 @@
     import { wordBoundaryScan } from '../../lib/utils/word-boundary';
     import { loadCatalog as loadPublicCatalog, catalogData } from '../dashboard/stores/catalog-data';
     import TimestampsWaveform from './components/TimestampsWaveform.svelte';
+    import ReportControlStrip from './components/report/ReportControlStrip.svelte';
+    import { exitReportMode, reportContext, reportModeActive } from './stores/report-mode';
+    import { loadVerseReports } from './stores/ts-reports';
     import TsValidationPanel from './components/TsValidationPanel.svelte';
     import UnifiedDisplay from './components/UnifiedDisplay.svelte';
     import {
@@ -280,6 +283,20 @@
     // Chapter focus data — react to the shared player's reciter + surah
     // ---------------------------------------------------------------------
     $: void syncChapter($playerContext.delivery?.slug ?? '', $playerContext.surahNum ?? 0);
+
+    // Load the focus verse's reports (in-grid public flags + report-mode seeds)
+    // on every verse change, and discard an active report session if the verse
+    // moves out from under it (report mode is verse-scoped).
+    let _verseReportsKey = '';
+    $: void _syncVerseReports($playerContext.delivery?.slug ?? '', $selectedVerse);
+    function _syncVerseReports(slug: string, verseKey: string): void {
+        const key = `${slug}|${verseKey}`;
+        if (key === _verseReportsKey) return;
+        _verseReportsKey = key;
+        const ctx = get(reportContext);
+        if (ctx && (ctx.slug !== slug || ctx.verseKey !== verseKey)) exitReportMode();
+        void loadVerseReports(slug, verseKey);
+    }
 
     async function syncChapter(slug: string, chapter: number): Promise<void> {
         if (!slug || !chapter) return;
@@ -1018,7 +1035,11 @@
         {/if}
 
         <div class="waveform-words-row" class:ts-region-loading={$tsLoading}>
-            <TimestampsWaveform bind:this={waveformTabEl} />
+            {#if $reportModeActive}
+                <ReportControlStrip />
+            {:else}
+                <TimestampsWaveform bind:this={waveformTabEl} />
+            {/if}
             <UnifiedDisplay bind:this={unifiedEl} />
         </div>
     </main>

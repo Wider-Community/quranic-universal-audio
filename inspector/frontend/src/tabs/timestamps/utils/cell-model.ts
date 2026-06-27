@@ -40,6 +40,12 @@ export interface RenderedFull {
     isNull: boolean;
     /** Rendered-letter index this base cell maps to (loop-highlight identity). */
     letterIndex: number;
+    /** Index into the raw `word.cells[]` (the report target's `cell_index`);
+     *  -1 for synthesized cells with no raw source. */
+    cellIndex: number;
+    /** Internal tajweed tag id(s) on the cell (primary + secondary) — the
+     *  report rule-picker's options, keyed by the data-model tag not a label. */
+    ruleTags: string[];
     shareGroup: number | null;
     /** Flat interval indices this cell sounds — placed under its own column. */
     phoneIdx: number[];
@@ -62,6 +68,11 @@ export interface RenderedSmall {
     cellStart: number | null;
     cellEnd: number | null;
     shareGroup: number | null;
+    /** Index into the raw `word.cells[]` (the report target's `cell_index`);
+     *  -1 for synthesized cells with no raw source. */
+    cellIndex: number;
+    /** Internal tajweed tag id(s) on the cell — the report rule-picker's options. */
+    ruleTags: string[];
     /** Per-glyph centring style string (`--haraka-*`). */
     renderStyle: string;
     /** inserted graphemeless vowel (hamza-waṣl / iltiqaa) — affordance only. */
@@ -338,6 +349,13 @@ export function cellGroupsFor(
     // the word's own letter row so it renders only between the two words. The
     // hamza-waṣl ibtidaa madd (ٱئْتُونِى) re-pairs its kasra + dropped seat into a
     // shared vowel group — see cell-special-cases (no-op for other words).
+    // Raw `word.cells[]` index per cell (the report target's `cell_index`),
+    // captured BEFORE the hamza-waṣl transform reorders/replaces objects.
+    // Synthesized special-case cells (iqlab mini-meem, …) miss → -1, and fall
+    // back to source_letter_index when addressed as a report target.
+    const rawIndexOf = new Map<TsCell, number>();
+    (word.cells ?? []).forEach((c, i) => rawIndexOf.set(c, i));
+    const cellIndexOf = (c: TsCell): number => rawIndexOf.get(c) ?? -1;
     const cells = applyHamzaWaslMadd(
         (word.cells ?? []).filter((c) => !(liftIltiqaa && c.tag === 'iltiqaa_kasra')),
     );
@@ -370,6 +388,13 @@ export function cellGroupsFor(
             heavyIkhfaa ? 'tafkheem' : undefined,
         ]);
     };
+    // Internal tajweed tag id(s) on the cell — the report rule-picker's options
+    // (primary + secondary + the synthesized iẓhar default), keyed by the
+    // data-model id, never a display label.
+    const cellRuleTags = (c: TsCell): string[] =>
+        [c.tag, ...(c.secondaryTags ?? []), izharCellTag.get(c)].filter(
+            (t): t is string => !!t,
+        );
     // Context-derived silent-rule names (need the cell's neighbours): a trailing
     // dropped ḥaraka/tanwīn with nothing sounding after it is the word-final
     // vowel silenced at the stop → "Waqf"; the dropped fatḥatan whose
@@ -508,6 +533,8 @@ export function cellGroupsFor(
             cellStart: start,
             cellEnd: end,
             shareGroup: c.shareGroup,
+            cellIndex: cellIndexOf(c),
+            ruleTags: cellRuleTags(c),
             renderStyle: harakaRenderStyle(sizeGlyph, 0),
             inserted: opts.inserted ?? (c.chars === '' && c.status === 'inserted'),
             phoneIdx: c.phonemeIndices,
@@ -622,6 +649,8 @@ export function cellGroupsFor(
             letterEnd: lEnd,
             isNull,
             letterIndex,
+            cellIndex: cellIndexOf(c),
+            ruleTags: cellRuleTags(c),
             shareGroup: c.shareGroup,
             phoneIdx: c.phonemeIndices,
             tjBadges: badges,
@@ -647,6 +676,8 @@ export function cellGroupsFor(
             letterEnd: null,
             isNull: true,
             letterIndex: -1,
+            cellIndex: cellIndexOf(c),
+            ruleTags: cellRuleTags(c),
             shareGroup: c.shareGroup,
             phoneIdx: c.phonemeIndices,
             // Implicit madd (dagger-alef of Allah / ʿiwaḍ alef) — both underline
@@ -779,6 +810,8 @@ export function cellGroupsFor(
             letterEnd: fl.end,
             isNull: fl.isNull,
             letterIndex: i,
+            cellIndex: -1,
+            ruleTags: [],
             shareGroup: null,
             phoneIdx: [],
             tjBadges: [],
