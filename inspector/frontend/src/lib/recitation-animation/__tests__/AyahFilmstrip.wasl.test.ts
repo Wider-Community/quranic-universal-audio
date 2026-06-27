@@ -86,6 +86,35 @@ describe('AyahFilmstrip — waṣl merge', () => {
         expect(parseFloat(link!.style.opacity || '1')).toBeCloseTo(1, 2);
     });
 
+    it('lays a merged short verse time-true (no min-width floor) so the capsule keeps constant velocity', async () => {
+        const px = DEFAULT_RECITATION_CONFIG.filmstripPxPerSec;
+        const minPx = DEFAULT_RECITATION_CONFIG.filmstripMinCellPx;
+        // 1:1 (0.5s) waṣl»1:2 (0.5s) contiguous → static capsule; 1:3 (0.5s) is a
+        // solo short verse after a gap. 0.5s × pxPerSec is below minCellPx, so a
+        // SOLO short cell floors for legibility but a MERGED member stays time-true
+        // (w === aw) — no floor surplus to jerk the cursor at the gapless seam.
+        const units = [
+            unitW('1:1:1', [[0, 0.5]], { to: '1:2' }),
+            unitW('1:2:1', [[0.5, 1.0]]),
+            unitW('1:3:1', [[6, 6.5]]),
+        ];
+        const model = buildFilmstripModel(units, 'duration');
+        const { container } = render(AyahFilmstrip, {
+            units, model, durationMs: 7000, getTimeMs, playing: false,
+            config: { ...DEFAULT_RECITATION_CONFIG, leadMs: 0, filmstripMotion: 'hybrid' },
+            onSeek: () => {},
+        });
+        await tick();
+
+        const cells = container.querySelectorAll<HTMLElement>('.cell');
+        const width = (el: HTMLElement): number => parseFloat(el.style.width) || 0;
+        const aw = Math.round(0.5 * px);
+        expect(aw).toBeLessThan(minPx); // precondition: short enough to floor when solo
+        expect(width(cells[0]!)).toBe(aw); // merged left member — time-true
+        expect(width(cells[1]!)).toBe(aw); // merged right member — time-true
+        expect(width(cells[2]!)).toBe(minPx); // solo short verse — still floored
+    });
+
     it('animates a DYNAMIC bridge closed as the bridging take plays + lights the connector', async () => {
         // 1:1 (waṣl»1:2, DYNAMIC), gap of 2s to 1:2 so the closing gap is visible.
         const units = [

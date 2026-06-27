@@ -189,10 +189,14 @@
     // between-verse gap = silence seconds × pxPerSec, so a given silence renders to
     // the same px in every surah and for every reciter (no per-chapter
     // normalization). `aw` uses the CANONICAL recited duration, so a loopback's
-    // later occurrence never inflates it. A too-short verse is floored to
+    // later occurrence never inflates it. A too-short SOLO verse is floored to
     // `filmstripMinCellPx` for legibility (visible width `w`); the cursor still
     // crosses only the centered `aw` at the ruler velocity (see `offsetForReci`),
-    // the surplus `w − aw` folding into the adjacent gap. An unrecited placeholder
+    // the surplus `w − aw` folding into the adjacent gap. That floor DISSOLVES as a
+    // cell merges into a waṣl capsule (`merged` → `w = aw`): a continuous-recitation
+    // group has no inter-verse gap/silence to absorb the surplus, so keeping the
+    // floor would jerk the cursor at each gapless seam — a merged group is laid out
+    // time-true and crossed at the one constant velocity. An unrecited placeholder
     // gets a fixed visible width; a near-zero silence floors to `filmstripGapPx`.
     // Geometry is identical across motion modes, so toggling never shifts layout.
     const cells = $derived.by((): Cell[] => {
@@ -204,27 +208,34 @@
         let cum = 0;
         for (let i = 0; i < mc.length; i++) {
             const c = mc[i]!;
-            const aw = c.missing === 'full'
+            const placeholder = c.missing === 'full';
+            const aw = placeholder
                 ? PLACEHOLDER_CELL_PX
                 : Math.max(1, Math.round(c.canonDurSec * pxPerSec));
-            const w = c.missing === 'full' ? PLACEHOLDER_CELL_PX : Math.max(minPx, aw);
-            const baseGap = Math.round(Math.max(config.filmstripGapPx, c.nextGapSec * pxPerSec));
-            // Cross-verse waṣl merge: a STATIC pair (bridges in every take) is always
-            // gapless; a DYNAMIC pair (also stops elsewhere) animates the gap closed
-            // as the live bridging take plays (`dynMerge[i]`: 0 = separated, 1 =
-            // merged). The cursor stays centered, so cells slide together at the
-            // glide velocity. Geometry below derives from `gapAfter`, so seek/scroll
-            // stay consistent automatically.
-            const mergeAmt = c.waslNext ? (c.waslDynamic ? (dynMerge[i] ?? 0) : 1) : 0;
-            const gapAfter = c.waslNext ? Math.round(baseGap * (1 - mergeAmt)) : baseGap;
+            // Cross-verse waṣl merge amounts on each side (1 = fully gapless capsule
+            // member). A STATIC pair (bridges in every take) is always 1; a DYNAMIC
+            // pair (also stops elsewhere) animates closed via `dynMerge` as the live
+            // bridging take plays (0 = separated, 1 = merged). The cursor stays
+            // centered, so cells slide together at the glide velocity.
+            const outMerge = c.waslNext ? (c.waslDynamic ? (dynMerge[i] ?? 0) : 1) : 0;
             const prev = mc[i - 1];
-            const prevMerge = i > 0 && prev!.waslNext
+            const inMerge = i > 0 && prev!.waslNext
                 ? (prev!.waslDynamic ? (dynMerge[i - 1] ?? 0) : 1)
                 : 0;
+            // Visible width: the legibility floor, dissolved by how merged the cell
+            // is (either side) so a capsule member is time-true (`w = aw`) and the
+            // group crosses at constant velocity. `gapAfter` derives the same way, so
+            // seek/scroll stay consistent automatically.
+            const merged = Math.max(outMerge, inMerge);
+            const w = placeholder
+                ? PLACEHOLDER_CELL_PX
+                : Math.round(aw + Math.max(0, minPx - aw) * (1 - merged));
+            const baseGap = Math.round(Math.max(config.filmstripGapPx, c.nextGapSec * pxPerSec));
+            const gapAfter = c.waslNext ? Math.round(baseGap * (1 - outMerge)) : baseGap;
             out.push({
                 ayah: c.ayah, w, aw, cumBefore: cum, gapAfter, missing: c.missing,
-                waslNext: c.waslNext, waslMerge: mergeAmt,
-                mergeRight: mergeAmt > 0.5, mergeLeft: prevMerge > 0.5,
+                waslNext: c.waslNext, waslMerge: outMerge,
+                mergeRight: outMerge > 0.5, mergeLeft: inMerge > 0.5,
             });
             cum += w + gapAfter;
         }
@@ -1020,20 +1031,43 @@
     }
     .needle {
         position: absolute;
-        top: 4px;
-        bottom: 4px;
+        /* Aligned to the cell band (cells are 12px shorter than the strip, centred)
+           so the cursor sits INSIDE the capsule instead of overhanging it. */
+        top: 6px;
+        bottom: 6px;
         left: 50%;
         width: 2px;
         transform: translateX(-50%);
-        background: var(--accent);
+        /* A neutral core reads cleanly over BOTH the dark inter-cell gaps and the
+           accent-tinted active capsule (an accent needle would melt into the
+           active cell's tint); the soft accent bloom keeps it on-brand. */
+        background: var(--text-primary);
         border-radius: 1px;
         pointer-events: none;
-        box-shadow: 0 0 8px var(--accent-tint);
+        box-shadow: 0 0 5px var(--accent);
         transition: background var(--t-fast), box-shadow var(--t-fast);
     }
-    /* Silence: the needle keeps traveling (across the gap) but greys out so the
-       pause reads as "not reciting" without losing the position cursor. */
+    /* A small "now" cap at the top edge — a deliberate playhead marker so the line
+       reads as a cursor, not a stray rule, especially across a merged capsule. */
+    .needle::before {
+        content: '';
+        position: absolute;
+        top: -2px;
+        left: 50%;
+        width: 5px;
+        height: 5px;
+        transform: translateX(-50%);
+        background: var(--text-primary);
+        border-radius: 50%;
+        box-shadow: 0 0 4px var(--accent);
+    }
+    /* Silence: the needle keeps traveling (across the gap) but greys + drops its
+       glow so the pause reads as "not reciting" without losing the position cursor. */
     .needle.silent {
+        background: var(--text-muted);
+        box-shadow: none;
+    }
+    .needle.silent::before {
         background: var(--text-muted);
         box-shadow: none;
     }
