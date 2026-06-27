@@ -914,7 +914,9 @@
 
 /* ============ Loop perma-highlight ============ */
 /* Outline — not background — so `.active`/`.past` styles remain readable
-   when the looped element is also the currently-playing one. */
+   when the looped element is also the currently-playing one. Only the word
+   (block) tier carries the outline; looped letter/phoneme/diacritic cells stay
+   borderless (the thick offset ring crowded the small cells). */
 /* position:relative + z-index lifts the looped element above its flex
    siblings so the offset outline isn't clipped by the next box's background
    (painting order otherwise covers the outline on the leading/trailing edge). */
@@ -922,25 +924,6 @@
     outline: 2px solid var(--anim-highlight-color, #f0a500);
     outline-offset: 2px;
     position: relative;
-    z-index: 1;
-}
-.mega-letter.loop {
-    outline: 2px solid var(--ts-letter-color, var(--hl-letter-color));
-    outline-offset: 2px;
-    position: relative;
-    z-index: 1;
-}
-.mega-phoneme.loop {
-    outline: 2px solid var(--ts-phoneme-color, var(--hl-phoneme-color));
-    outline-offset: 2px;
-    position: relative;
-    z-index: 1;
-}
-/* A looped diacritic (haraka / tanwīn) small-cell — outlined in the letter hue,
-   matching its sibling letter cells (one highlight colour across the row). */
-.haraka-cell.loop {
-    outline: 2px solid var(--ts-letter-color, var(--hl-letter-color));
-    outline-offset: 1px;
     z-index: 1;
 }
 #animation-display .anim-word.loop {

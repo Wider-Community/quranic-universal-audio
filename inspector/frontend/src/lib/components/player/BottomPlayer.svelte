@@ -803,6 +803,7 @@
         z-index: 50;
     }
     .speed-btn {
+        box-sizing: border-box;
         padding: 4px var(--s-2);
         font-family: var(--font-mono);
         font-size: 11px;
@@ -812,7 +813,9 @@
         border-radius: var(--r-2);
         cursor: pointer;
         transition: border-color var(--t-fast), color var(--t-fast);
-        min-width: 36px;
+        /* Static width sized to the widest label ("1.25×" = 5 mono chars) so
+           cycling speeds never reflows the analysis cluster beside it. */
+        min-width: calc(5ch + var(--s-2) * 2 + 2px);
         text-align: center;
     }
     .speed-btn:hover {

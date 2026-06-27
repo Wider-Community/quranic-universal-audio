@@ -1,14 +1,17 @@
 <script lang="ts">
     /**
-     * Tajweed legend + per-rule settings drop-up for the Timestamps footer. Three
-     * equal columns — Noon / Meem, Madd, Other rules — each row a colour chip
-     * (click → native colour picker, live recolour, hover reveals a dropper) with a
-     * mini enable toggle, label and ḥarakāt duration. Qalqala is two coupled rows
-     * (ṣughrā / kubrā) sharing the `qalqala` key, the kubrā chip previewing the
-     * side-wrap. The Other column closes with two non-interactive keys explaining
-     * the dashed (sounded-but-unwritten) and greyed (written-but-silent) cells. All
-     * state lives in the `tajweed-settings` store; colours apply via `--tj-*`
-     * overrides, toggles drive the per-cell underline.
+     * Tajweed legend + per-rule settings drop-up for the Timestamps footer. A 2×2
+     * grid centred under the player's play button — Noon/Meem and Madd on top,
+     * Other rules and the Waqf stop-sign key on the bottom. Each rule row is a
+     * colour chip (click → native colour picker, live recolour, hover reveals a
+     * dropper) with a mini enable toggle, label and ḥarakāt duration. Qalqala is
+     * two coupled rows (ṣughrā / kubrā) sharing the `qalqala` key, the kubrā chip
+     * previewing the side-wrap. The Other quadrant closes with two non-interactive
+     * keys explaining the dashed (sounded-but-unwritten) and greyed (written-but-
+     * silent) cells; the Waqf quadrant lists the five mushaf pause marks, each in a
+     * real analysis cell with the shared per-glyph calibration. All state lives in
+     * the `tajweed-settings` store; colours apply via `--tj-*` overrides, toggles
+     * drive the per-cell underline.
      */
     import { harakaRenderStyle } from '../utils/haraka-render';
     import { LEGEND, type LegendRow } from '../utils/tajweed-rules';
@@ -18,11 +21,23 @@
         setRuleEnabled,
         tajweedSettings,
     } from '../stores/tajweed-settings';
+    import { waqfRenderStyle } from '../utils/waqf-render';
 
     // The two dashed-haraka exemplars in the Other-rules key, positioned with the
     // real per-glyph calibration (damma U+064F pinned above, kasra U+0650 below).
     const DAMMA = 'ُ';
     const KASRA = 'ِ';
+
+    // Waqf stop-sign key — the five mushaf pause marks, each shown in a real
+    // analysis cell via the shared per-glyph calibration (`waqfRenderStyle`).
+    // Ordered from the most permissive (stop or continue) to the prohibition.
+    const WAQF_KEYS: { mark: string; label: string }[] = [
+        { mark: 'ۚ', label: 'Stop or Continue' }, // ۚ jīm (jāʾiz)
+        { mark: 'ۗ', label: 'Better to Stop' }, // ۗ qila (al-waqf awlā)
+        { mark: 'ۖ', label: 'Better to Continue' }, // ۖ ṣala (al-waṣl awlā)
+        { mark: 'ۘ', label: 'Must Stop' }, // ۘ mīm (lāzim)
+        { mark: 'ۙ', label: 'Should Not Stop' }, // ۙ lā
+    ];
 
     // Hidden native colour inputs, one per row, opened by clicking its chip.
     let inputs: Record<string, HTMLInputElement | undefined> = $state({});
@@ -177,6 +192,20 @@
                 {/if}
             </section>
         {/each}
+
+        <section class="tjs-group tjs-waqf">
+            <h4>Waqf · stop signs</h4>
+            <div class="waqf-body">
+                {#each WAQF_KEYS as wk (wk.label)}
+                    <div class="waqf-row">
+                        <span class="waqf-cell">
+                            <span class="waqf-mark" style={waqfRenderStyle(wk.mark)}>{wk.mark}</span>
+                        </span>
+                        <span class="waqf-cap">{wk.label}</span>
+                    </div>
+                {/each}
+            </div>
+        </section>
     </div>
 </div>
 
@@ -220,9 +249,11 @@
         color: var(--text-primary);
         border-color: var(--border-default);
     }
+    /* 2×2: Noon/Meem + Madd on top, Other rules + Waqf key on the bottom. The
+       column gap lands under the player's play button (see `centerOnPlay`). */
     .tjs-cols {
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: var(--s-3);
         align-items: stretch;
     }
@@ -488,5 +519,45 @@
         color: var(--text-muted);
         line-height: 1.35;
         white-space: normal;
+    }
+
+    /* Waqf key: each pause mark in a real analysis pause-cell (dark resting tile),
+       the lone combining glyph scaled + nudged by the shared `--waqf-*` calibration
+       projected by `waqfRenderStyle` — same data the live `.pause-waqf` cell reads. */
+    .waqf-body {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+    .waqf-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: var(--fs-meta);
+        color: var(--text-secondary);
+        white-space: nowrap;
+    }
+    .waqf-cell {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        width: 28px;
+        height: 24px;
+        background: var(--hl-cell-rest);
+        border: 1px solid var(--border-default);
+        border-radius: 3px;
+        overflow: hidden;
+    }
+    .waqf-mark {
+        display: inline-block;
+        line-height: 1;
+        color: #cfd3e6;
+        font-family: 'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
+        font-size: calc(var(--analysis-word-font-size, 1.3rem) * var(--waqf-scale, 1));
+        transform: translate(var(--waqf-shift, 0), var(--waqf-raise, 0));
+    }
+    .waqf-cap {
+        flex: 1 1 auto;
     }
 </style>
