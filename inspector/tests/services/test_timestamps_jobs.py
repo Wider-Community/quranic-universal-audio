@@ -294,7 +294,8 @@ def test_complete_regen_stales_report_whose_content_changed(monkeypatch):
 
     timestamps_jobs.complete_timestamps_job("rec_a", "job-new")
 
-    assert repo_ts_reports.get(row["id"])["stale"] is True
+    got = repo_ts_reports.get(row["id"])
+    assert got is not None and got["stale"] is True
 
 
 def test_complete_noop_when_not_marked_ready(monkeypatch):

@@ -89,7 +89,12 @@ def test_non_owner_cannot_resolve(signed_in_client):
 
 def test_owner_resolve_notifies_signed_in_reporter(signed_in_client):
     reporter, ruser = signed_in_client(role="contributor")
-    body = {"verse_key": "2:45", "category": "audio", "comment": "noise", "target": {"kind": "verse"}}
+    body = {
+        "verse_key": "2:45",
+        "category": "audio",
+        "comment": "noise",
+        "target": {"kind": "verse"},
+    }
     assert _post(reporter, body).status_code == 201
     rid = reporter.get(f"/api/ts/{_SLUG}/reports/2:45").get_json()["reports"][0]["id"]
 

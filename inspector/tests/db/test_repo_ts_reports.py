@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from services import db
 from services.db import repo_ts_reports as repo
 
@@ -20,7 +22,7 @@ def _target(kind: str = "verse", **kw) -> dict:
 
 
 def _create(**kw):
-    defaults = dict(
+    defaults: dict[str, Any] = dict(
         slug="reciter-a",
         verse_key="2:45",
         category="other",
@@ -50,7 +52,9 @@ def test_create_anon_then_verse_counts(fresh_db):
 def test_distinct_category_or_target_are_separate_rows(fresh_db):
     _create(category="other", target=_target("verse"))
     _create(category="audio", target=_target("verse"), comment="audio bad")
-    _create(category="tajweed", subtype="wrong_rule", target=_target("cell", word_index=0, cell_index=1))
+    _create(
+        category="tajweed", subtype="wrong_rule", target=_target("cell", word_index=0, cell_index=1)
+    )
     rows = repo.list_for_verse("reciter-a", "2:45")
     assert len(rows) == 3
     assert {r["category"] for r in rows} == {"other", "audio", "tajweed"}
@@ -113,7 +117,8 @@ def test_mark_stale_excludes_from_recheck(fresh_db):
     with db.transaction():
         changed = repo.mark_stale([row["id"]])
     assert changed == 1
-    assert repo.get(row["id"])["stale"] is True
+    got = repo.get(row["id"])
+    assert got is not None and got["stale"] is True
     assert repo.list_open_for_recheck("reciter-a", chapters=[2]) == []
 
 

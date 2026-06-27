@@ -39,21 +39,24 @@ def _report(category: str, target: dict, doc: dict) -> dict:
 
 def test_resolve_verse_and_word():
     doc = _doc()
-    assert snap.resolve_target(doc, "2:45", {"kind": "verse"})["verse_text"] == "بَ"
+    vsnap = snap.resolve_target(doc, "2:45", {"kind": "verse"})
+    assert vsnap is not None and vsnap["verse_text"] == "بَ"
     wsnap = snap.resolve_target(doc, "2:45", {"kind": "word", "word_index": 0})
-    assert wsnap["word_text"] == "بَ"
+    assert wsnap is not None and wsnap["word_text"] == "بَ"
 
 
 def test_resolve_cell_and_column_and_phoneme():
     doc = _doc()
     cell = snap.resolve_target(doc, "2:45", {"kind": "cell", "word_index": 0, "cell_index": 0})
-    assert cell["chars"] == "ب" and cell["tag"] == "qalqala_sughra"
+    assert cell is not None and cell["chars"] == "ب" and cell["tag"] == "qalqala_sughra"
     col = snap.resolve_target(
         doc, "2:45", {"kind": "column", "word_index": 0, "source_letter_index": 0}
     )
-    assert col["chars"] == "ب" and col["phones"] == ["b"]
-    ph = snap.resolve_target(doc, "2:45", {"kind": "phoneme", "word_index": 0, "phoneme_flat_index": 1})
-    assert ph["chars"] == "a"
+    assert col is not None and col["chars"] == "ب" and col["phones"] == ["b"]
+    ph = snap.resolve_target(
+        doc, "2:45", {"kind": "phoneme", "word_index": 0, "phoneme_flat_index": 1}
+    )
+    assert ph is not None and ph["chars"] == "a"
 
 
 def test_missing_verse_returns_none():

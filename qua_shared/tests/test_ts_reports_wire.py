@@ -50,17 +50,32 @@ def test_other_requires_comment():
 def test_timing_subtype_and_conditional_comment():
     # too_long is fine without a comment
     TsReportCreateRequest.model_validate(
-        _req(category="timing", subtype="too_long", comment=None, target={"kind": "word", "word_index": 0})
+        _req(
+            category="timing",
+            subtype="too_long",
+            comment=None,
+            target={"kind": "word", "word_index": 0},
+        )
     )
     # other requires a comment
     with pytest.raises(ValidationError):
         TsReportCreateRequest.model_validate(
-            _req(category="timing", subtype="other", comment=None, target={"kind": "word", "word_index": 0})
+            _req(
+                category="timing",
+                subtype="other",
+                comment=None,
+                target={"kind": "word", "word_index": 0},
+            )
         )
     # missing subtype
     with pytest.raises(ValidationError):
         TsReportCreateRequest.model_validate(
-            _req(category="timing", subtype=None, comment="x", target={"kind": "word", "word_index": 0})
+            _req(
+                category="timing",
+                subtype=None,
+                comment="x",
+                target={"kind": "word", "word_index": 0},
+            )
         )
 
 
@@ -90,7 +105,9 @@ def test_tajweed_subtype_and_target():
 
 def test_subtype_rejected_for_audio_and_other():
     with pytest.raises(ValidationError):
-        TsReportCreateRequest.model_validate(_req(category="audio", comment="x", subtype="too_long"))
+        TsReportCreateRequest.model_validate(
+            _req(category="audio", comment="x", subtype="too_long")
+        )
 
 
 def test_bad_verse_key_rejected():

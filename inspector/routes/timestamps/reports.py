@@ -51,6 +51,7 @@ def _validation_detail(e: ValidationError) -> list[dict]:
     """JSON-safe error summary (``e.errors()`` embeds raw ValueError ``ctx``)."""
     return [{"loc": list(err["loc"]), "msg": err["msg"], "type": err["type"]} for err in e.errors()]
 
+
 _REPORT_CAP = "timestamps.report"
 _RESOLVE_CAP = "timestamps.resolve_report"
 _IDENTITY_CAP = "timestamps.see_reporter_identity"
@@ -177,9 +178,7 @@ def get_verse_reports(slug: str, verse_key: str):
             )
             for r in rows
         ]
-        return jsonify(
-            TsVerseReports(verse_key=verse_key, reports=reports).model_dump(mode="json")
-        )
+        return jsonify(TsVerseReports(verse_key=verse_key, reports=reports).model_dump(mode="json"))
     except Exception:  # noqa: BLE001
         logger.exception("ts_reports.get_verse_reports failed for %s %s", slug, verse_key)
         return jsonify({"error": "failed to load reports"}), 500
@@ -245,9 +244,9 @@ def create_report(slug: str):
             )
 
     show_author = cap_service.can(user, _IDENTITY_CAP)
-    return jsonify(
-        _report_view(row, mine=True, show_author=show_author).model_dump(mode="json")
-    ), (201 if created else 200)
+    return jsonify(_report_view(row, mine=True, show_author=show_author).model_dump(mode="json")), (
+        201 if created else 200
+    )
 
 
 @ts_reports_bp.route("/<slug>/reports/<int:report_id>/resolve", methods=["POST"])

@@ -249,9 +249,7 @@ def create(
             snap.get("status"),
             snap.get("tag"),
             _serde.json_dumps(snap["secondary_tags"]) if snap.get("secondary_tags") else None,
-            _serde.json_dumps(snap["phoneme_rule_tags"])
-            if snap.get("phoneme_rule_tags")
-            else None,
+            _serde.json_dumps(snap["phoneme_rule_tags"]) if snap.get("phoneme_rule_tags") else None,
             _serde.json_dumps(snap["phones"]) if snap.get("phones") else None,
             snap.get("share_group"),
             snap.get("word_text"),
