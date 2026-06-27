@@ -58,6 +58,7 @@
     import { TAB_NAMES } from '../../utils/constants';
     import { DASHBOARD_SPEEDS } from '../../utils/speed-control';
     import { getSurahInfo, surahInfoReady } from '../../utils/surah-info';
+    import HighlightColorPicker from './HighlightColorPicker.svelte';
     import PlayerControls from './PlayerControls.svelte';
     import PlayerMetaChip from './PlayerMetaChip.svelte';
     import PlayerProgress from './PlayerProgress.svelte';
@@ -679,6 +680,9 @@
                     on:click={cycleSpeed}
                     title="Playback speed"
                 >{$playerContext.speed}×</button>
+
+                <!-- Highlight accent picker (the droplet), right of speed. -->
+                <HighlightColorPicker />
 
                 <!-- Tab-specific cluster (Timestamps: analysis row). -->
                 <slot name="center-trail"></slot>

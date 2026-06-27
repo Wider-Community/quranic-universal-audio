@@ -44,7 +44,7 @@
     import { playerContext, setIsLoading, setIsPlaying } from '../../lib/stores/player-context';
     import type { TsConfigResponse } from '../../lib/types/generated/schemas';
     import { getActiveTab, activeTab as activeTabStore } from '../../lib/utils/active-tab';
-    import { analogousTriad, deepFor } from '../../lib/utils/color-derive';
+    import { DEFAULT_HIGHLIGHT_MODEL, resolveHighlightVars } from '../../lib/utils/highlight-model';
     import { LS_KEYS, TAB_NAMES } from '../../lib/utils/constants';
     import { shouldHandleKey } from '../../lib/utils/keyboard-guard';
     import { prewarmVersePeaks } from '../../lib/utils/peaks-fetch';
@@ -141,17 +141,16 @@
     let loopAnchorIdx = -1;
 
     // ---------------------------------------------------------------------
-    // Colors (shared accent → analysis triad)
+    // Colors (shared accent → analysis highlight vars)
     // ---------------------------------------------------------------------
+    // One resolve owns every highlight CSS var (idle/active cells, both modes,
+    // the karaoke track, light/dark) so the surfaces can't drift. See
+    // `lib/utils/highlight-model.ts`.
     $: cfg = $tsConfig;
-    $: triad = analogousTriad($recitationConfigStore.highlightColor);
-    $: highlightColor = triad.word;
-    // Deep fill: each active cell paints a dark, saturated shade of its layer
-    // colour with white glyphs (on-theme), in both highlight modes — the karaoke
-    // wipe animates this same fill in from a darker base (see `deepFor`).
-    $: wordDeep = deepFor(triad.word);
-    $: letterDeep = deepFor(triad.letter);
-    $: phonemeDeep = deepFor(triad.phoneme);
+    $: hlVars = resolveHighlightVars($recitationConfigStore.highlightColor, DEFAULT_HIGHLIGHT_MODEL);
+    $: hlVarsText = Object.entries(hlVars)
+        .map(([k, v]) => `${k}: ${v}`)
+        .join('; ');
     $: wordDur =
         cfg && cfg.anim_transition_easing !== TS_EASING_NONE
             ? `${cfg.anim_word_transition_duration}s`
@@ -1001,13 +1000,8 @@
 
 <div
     id="timestamps-panel"
+    style={hlVarsText}
     style:--unified-display-max-height="{cfg?.unified_display_max_height ?? TS_UNIFIED_DISPLAY_MAX_HEIGHT_PX}px"
-    style:--anim-highlight-color={highlightColor}
-    style:--ts-letter-color={triad.letter}
-    style:--ts-phoneme-color={triad.phoneme}
-    style:--ts-word-deep={wordDeep}
-    style:--ts-letter-deep={letterDeep}
-    style:--ts-phoneme-deep={phonemeDeep}
     style:--anim-word-transition={wordTransition}
     style:--anim-char-transition={charTransition}
     style:--anim-word-spacing={cfg?.anim_word_spacing ?? ''}
