@@ -17,13 +17,14 @@ wrong branch" failures come from. This script owns all of it:
     ``down`` / ``doctor`` can see and clean them - including the foreign
     double-bind that silently serves stale code.
 
-Modes (``--mode``, default ``prod-remote``):
-  prod-remote  (default) Vite only, /api proxied to the live PROD Space — real
-               published data, no local backend, fast, works on Windows (no
-               hf-mount needed). The everyday "run the app / test the FE" mode.
-  dev-remote   Vite only, /api proxied to the live DEV Space — the dev bucket's
-               data (WIP / unpublished reciters). Use to experiment against what's
-               in the dev bucket.
+Modes (``--mode``, default ``dev-remote``):
+  dev-remote   (default) Vite only, /api proxied to the live DEV Space — real
+               data with a mounted bucket, so audio + analysis work, fast, and
+               works on Windows (no hf-mount needed). The everyday "run the app /
+               test the FE" mode. Hits the DEV environment, never production.
+  prod-remote  Vite only, /api proxied to the live PROD Space. A quick read-only
+               look at production data. The Space is SINGLE-WORKER — never smoke
+               or hammer it (``--smoke`` is refused here); use dev-remote instead.
   dev          local Flask against the DEV bucket (read-write) + Vite. The only
                mode that runs your branch's BACKEND. On Windows the no-mount hffs
                path can't serve audio/shards, so audio + analysis won't load —
@@ -38,8 +39,8 @@ Commands:
   smoke   drive Dashboard + Timestamps in headless chromium against a stack
 
 Examples:
-  python scripts/devenv/launch.py                     # prod-remote, this worktree
-  python scripts/devenv/launch.py up --mode dev-remote   # against the dev bucket
+  python scripts/devenv/launch.py                     # dev-remote, this worktree
+  python scripts/devenv/launch.py up --smoke             # dev-remote + verify tabs
   python scripts/devenv/launch.py up --mode dev --no-vite # local backend only
   python scripts/devenv/launch.py list
   python scripts/devenv/launch.py down --all
@@ -471,6 +472,22 @@ def cmd_up(args: argparse.Namespace) -> int:
     logs = root / ".local" / "launch" / "logs"
     short = root.name
 
+    # prod-remote proxies /api to the LIVE production Space (single-worker). It's
+    # for a quick read-only look, never for load: never auto-smoke it, and warn so
+    # nobody points heavy dev/agent traffic at production. dev-remote (the default)
+    # hits the dev Space and is the right mode for real-data testing.
+    if mode == "prod-remote":
+        if args.smoke:
+            raise SystemExit(
+                "launch: refusing --smoke against prod-remote (it would load the live PROD "
+                "Space). Use --mode dev-remote for smoke/automated testing."
+            )
+        print(
+            "launch: NOTE — prod-remote proxies to the LIVE production Space (single-worker). "
+            "Keep it light; use dev-remote for anything heavy.",
+            flush=True,
+        )
+
     if (
         mode == "dev"
         and want_backend
@@ -865,7 +882,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="cmd")
 
     up = sub.add_parser("up", help="start a stack (default command)")
-    up.add_argument("--mode", choices=MODES, default="prod-remote")
+    up.add_argument("--mode", choices=MODES, default="dev-remote")
     up.add_argument("--worktree", help="worktree name or path (default: current)")
     up.add_argument("--no-vite", action="store_true", help="backend only")
     up.add_argument("--no-backend", action="store_true", help="Vite only (implied for *-remote)")
