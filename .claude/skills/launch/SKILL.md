@@ -17,10 +17,10 @@ The script (`scripts/devenv/launch.py`) owns everything that used to go wrong by
 
 | Goal | Command |
 |---|---|
-| Dev (real DEV-bucket data, this worktree) | `python scripts/devenv/launch.py` |
+| **Run the app (real prod data, default)** | `python scripts/devenv/launch.py` |
+| Experiment against the dev bucket's data | `python scripts/devenv/launch.py up --mode dev-remote` |
+| Run your branch's local backend | `python scripts/devenv/launch.py up --mode dev` |
 | Fully offline (no token/network) | `python scripts/devenv/launch.py up --mode fixtures` |
-| Read-only view of the live DEV Space | `python scripts/devenv/launch.py up --mode dev-remote` |
-| Read-only view of the live PROD Space | `python scripts/devenv/launch.py up --mode prod-remote` |
 | Run a different worktree | `… up --worktree <name|path>` |
 | Start + verify Dashboard & Timestamps | `… up --smoke` |
 | Open in a browser too | `… up --open` |
@@ -32,9 +32,10 @@ The script (`scripts/devenv/launch.py`) owns everything that used to go wrong by
 
 ## Modes
 
-- **dev** — local Flask against the DEV bucket (real, read-write) + Vite HMR. The default. Needs `HF_TOKEN` (from `.env`); without it, use `fixtures`.
+- **prod-remote** *(default)* — Vite only, `/api` proxied to the live PROD Space. Real published data, no local backend, fast, and works on Windows (no `hf-mount` needed). The everyday "run the app / test the FE" mode; serves audio + analysis for published reciters. Read-only and prod-safe.
+- **dev-remote** — Vite only, `/api` proxied to the live DEV Space. The dev bucket's data (WIP / unpublished reciters). Use when you want to see what's in the dev bucket.
+- **dev** — local Flask against the DEV bucket (read-write) + Vite HMR. The only mode that runs your branch's **backend**. Needs `HF_TOKEN`. On Windows the no-mount hffs path can't serve the audio-manifest sidecar or timestamps shards, so **audio + analysis won't load** — use it for backend/catalog work, not playback.
 - **fixtures** — fully offline: filesystem backend on seeded fixtures (auto-seeds on first run) + Vite. No token, no network.
-- **dev-remote** / **prod-remote** — Vite only, `/api` proxied to the live Space. No local backend, read-only, fast. Use to look at real deployed data or for FE-only work. `prod-remote` never touches the prod bucket locally, so it's safe.
 
 ## For agents (Playwright / Chrome MCP)
 
@@ -47,6 +48,6 @@ Two worktrees (or two stacks) can run at once: ports are allocated free + reserv
 ## Notes
 
 - First run in a fresh worktree needs deps: `scripts/devenv/setup.sh` (or `npm ci` in `inspector/frontend`). The `wt` skill's setup does this.
-- On Windows there's no `hf-mount`, so `dev` reads fall back to slower hffs; first reciter load takes a few seconds. `fixtures` and the `*-remote` modes avoid that.
+- **Windows + audio/analysis → use a `*-remote` mode.** There's no `hf-mount` on Windows, so local `dev` reads go through the hffs fallback, which doesn't serve the audio-manifest sidecar or timestamps shards — so audio won't play and the analysis frame stays empty in `dev`. `prod-remote` (published reciters) and `dev-remote` proxy to a Space with the mounted bucket, so both work. FE changes (your branch's `inspector/frontend`) are always live in any mode via local Vite.
 - Logs: `<worktree>/.local/launch/logs/`. Registry: `<main-worktree>/.local/launch/registry.json` (gitignored).
 - Python changes need a `down` + `up` (Flask reloader is off by design — single-worker invariant). Vite changes hot-reload.
