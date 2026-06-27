@@ -772,6 +772,9 @@ def _normalize_from_results(chapters, results_by_ch, audio_category):
                     "time_end": seg_end_ms,
                     "words_by_verse": words_by_verse,
                     "segment_uid": seg.get("segment_uid"),
+                    # Per-occurrence waṣl flag (whole-verse path only): this
+                    # occurrence continues into the next via waṣl (no stop).
+                    "wasl": bool(result.get("wasl", False)),
                 }
             )
         if ch_occ:
@@ -824,13 +827,19 @@ def _shift_word_times(w: dict, delta_sec: float) -> dict:
 
 
 def _group_verse_items(segments: list, refresh_ayahs: set | None = None) -> list[dict]:
-    """Group a chapter's KEPT segments into whole-verse ITEMS, raw + faithful.
+    """Group a chapter's KEPT segments into recitation ITEMS, raw + faithful.
 
-    Walk kept segments in TIME order; a maximal run of consecutive segments
-    sharing one output verse-key is ONE item (continuous recitation incl.
-    mid-verse / partial repeats — concatenated). A verse revisited later (a
-    RETAKE) starts a separate item. No dedup — that is a publish-only concern.
-    Returns ``[{"vk", "seg_idxs":[...]}, ...]`` (indices into ``segments``).
+    Walk kept segments in TIME order. A maximal run of consecutive segments is ONE
+    item when each adjacent pair is *continuous* — either the same output verse-key
+    (mid-verse / partial repeats, concatenated) OR the earlier segment carries
+    ``is_wasl`` (a cross-verse waṣl: the reciter continued into the next verse
+    without stopping). A verse revisited later with a stop between (a RETAKE)
+    starts a separate item. No dedup — that is a publish-only concern.
+
+    Returns ``[{"vk", "seg_idxs":[...], "wasl_after":[bool,...]}, ...]`` where
+    ``wasl_after[k]`` is the boundary type between ``seg_idxs[k]`` and
+    ``seg_idxs[k+1]`` — True = waṣl (continuous phonemes, no psil), False =
+    silence (psil). Indices are into ``segments``.
     """
     kept = [
         si for si, seg in enumerate(segments)
@@ -841,16 +850,22 @@ def _group_verse_items(segments: list, refresh_ayahs: set | None = None) -> list
     kept.sort(key=lambda si: segments[si].get("time_start", 0))
     items: list[dict] = []
     cur: dict | None = None
+    last_vk: str | None = None
+    prev_si: int | None = None
     for si in kept:
         vk = _matched_ref_to_output_key(segments[si].get("matched_ref", ""))
         if vk is None:
             continue
-        if cur and cur["vk"] == vk:
+        prev_wasl = bool(segments[prev_si].get("is_wasl")) if prev_si is not None else False
+        if cur and (last_vk == vk or prev_wasl):
             cur["seg_idxs"].append(si)
+            cur["wasl_after"].append(prev_wasl)
         else:
             if cur:
                 items.append(cur)
-            cur = {"vk": vk, "seg_idxs": [si]}
+            cur = {"vk": vk, "seg_idxs": [si], "wasl_after": []}
+        last_vk = vk
+        prev_si = si
     if cur:
         items.append(cur)
     return items
@@ -909,6 +924,12 @@ def _align_whole_verse(
 
         for it in items:
             sidx = it["seg_idxs"]
+            wasl_after = it.get("wasl_after") or [False] * (len(sidx) - 1)
+            # Per-segment occurrence flag: does this segment continue into the next
+            # via waṣl? (the last segment of an item never does). Stamped on the
+            # shard so the FE reconstructs waṣl groups per-occurrence (retake-safe).
+            def _wasl_of(j, _wa=wasl_after, _n=len(sidx)):
+                return bool(_wa[j]) if j < _n - 1 else False
             t0 = int(segments[sidx[0]].get("time_start", 0))
             t1 = int(segments[sidx[-1]].get("time_end", t0))
             span = audio_f[int(t0 * sample_rate / 1000): int(t1 * sample_rate / 1000)]
@@ -916,16 +937,18 @@ def _align_whole_verse(
             too_short = len(span) < sample_rate // 50
             for b in beams:
                 if too_short:
-                    rows = [(si, {"status": "error", "error": "empty span"}) for si in sidx]
+                    rows = [(si, {"status": "error", "error": "empty span", "wasl": _wasl_of(j)})
+                            for j, si in enumerate(sidx)]
                 else:
                     try:
                         vres = aligner.align_verse(
                             refs, span, sample_rate, beam=b, retry_beam=b,
                             include_letters=True, padding=padding,
-                            wb_allocation_resolved=wb)
+                            wasl_after=wasl_after, wb_allocation_resolved=wb)
                     except Exception as e:
-                        rows = [(si, {"status": "error", "error": f"{type(e).__name__}: {e}"})
-                                for si in sidx]
+                        rows = [(si, {"status": "error", "error": f"{type(e).__name__}: {e}",
+                                      "wasl": _wasl_of(j)})
+                                for j, si in enumerate(sidx)]
                     else:
                         rows = []
                         for j, si in enumerate(sidx):
@@ -933,7 +956,7 @@ def _align_whole_verse(
                             delta = (t0 - int(segments[si].get("time_start", 0))) / 1000.0
                             shifted = [_shift_word_times(w, delta) for w in words]
                             rows.append((si, {"status": "ok" if shifted else "error",
-                                              "words": shifted,
+                                              "words": shifted, "wasl": _wasl_of(j),
                                               **({} if shifted else {"error": "no words"})}))
                 results_by_beam[b].setdefault(ch_idx, []).extend(rows)
     return results_by_beam
