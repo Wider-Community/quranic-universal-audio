@@ -80,10 +80,14 @@ describe('AyahFilmstrip — waṣl merge', () => {
         // Capsule: left member squares its right corners, right member its left.
         expect(cells[0]!.classList.contains('merge-r')).toBe(true);
         expect(cells[1]!.classList.contains('merge-l')).toBe(true);
-        // The link connector is rendered (full opacity for a static pair).
-        const link = container.querySelector<HTMLElement>('.wasl-link');
-        expect(link).not.toBeNull();
-        expect(parseFloat(link!.style.opacity || '1')).toBeCloseTo(1, 2);
+        // No seam connector; the capsule shows ONE range label, and the merged
+        // members drop their per-verse numbers (the range stands in).
+        expect(container.querySelector('.wasl-link'), 'connector removed').toBeNull();
+        const range = container.querySelector<HTMLElement>('.wasl-range');
+        expect(range?.textContent).toMatch(/^\s*1\s*\D\s*2\s*$/);
+        const nums = [...container.querySelectorAll('.cell .cell-num')].map((e) => e.textContent);
+        expect(nums).not.toContain('1');
+        expect(nums).not.toContain('2');
     });
 
     it('lays a merged short verse time-true (no min-width floor) so the capsule keeps constant velocity', async () => {
@@ -137,9 +141,11 @@ describe('AyahFilmstrip — waṣl merge', () => {
         expect(gapSeparated).toBeGreaterThan(8);
 
         // Play the bridging last word (1:1:2 spans 1–2s) over several frames; the
-        // merge eases closed and the connector goes live.
+        // merge eases closed and the pair reads as one capsule with a range label.
         for (const ms of [1200, 1400, 1600, 1800]) await step(ms);
         expect(marginRight(leftCell())).toBeLessThan(gapSeparated * 0.6);
-        expect(container.querySelector('.wasl-link.wasl-live')).not.toBeNull();
+        const range = container.querySelector<HTMLElement>('.wasl-range');
+        expect(range?.textContent).toMatch(/^\s*1\s*\D\s*2\s*$/);
+        expect(container.querySelector('.wasl-link')).toBeNull();
     });
 });

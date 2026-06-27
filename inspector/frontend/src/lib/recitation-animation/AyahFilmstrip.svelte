@@ -94,6 +94,11 @@
      *  duration to scale from, and playback skips it, so it gets a fixed visible
      *  width purely to stay legible as a skipped slot. */
     const PLACEHOLDER_CELL_PX = 30;
+    /** An inter-verse gap shorter than this (seconds) is connected flow, not a
+     *  waqf stop: it's laid out time-true (no visual floor) and the needle holds lit
+     *  straight through it instead of greying + bursting across a floored gap it has
+     *  no time to cross. A real stop is far longer; loopback/waqf pauses unaffected. */
+    const MICRO_GAP_SEC = 0.06;
 
     let containerEl = $state<HTMLDivElement | undefined>(undefined);
     let cw = $state(0); // container width
@@ -113,7 +118,7 @@
 
     // Cross-verse waṣl merge animation (dynamic boundaries only). `liveWaslIdx` is
     // the left-cell index whose outgoing boundary is being bridged by the LIVE take
-    // (drives the connector intensify + the dynamic join). `dynMerge[i]` is the
+    // (drives the dynamic merge join). `dynMerge[i]` is the
     // animated 0..1 merge fraction of a dynamic boundary; static boundaries skip it
     // (always merged). `lastFrameMs` paces the ease to wall-clock dt.
     let liveWaslIdx = $state(-1);
@@ -170,11 +175,12 @@
         cumBefore: number; // px before this cell's left (cells + gaps)
         gapAfter: number; // px gap to the right (silence-scaled; 0 when merged)
         missing: CellMissing;
-        /** This verse waṣl-bridges into the next present verse → render the link
-         *  connector at its right edge. */
+        /** This verse waṣl-bridges into the next present verse (member of a
+         *  capsule). */
         waslNext: boolean;
         /** Outgoing-merge amount 0..1 (1 = fully merged/gapless). Static pairs are
-         *  always 1; dynamic pairs animate. Drives the connector opacity. */
+         *  always 1; dynamic pairs animate. Drives `gapAfter` + the merge-corner
+         *  toggle. */
         waslMerge: number;
         /** Right corners squared + seam border dropped (outgoing boundary visually
          *  merged: static, or dynamic past the half-merge point). */
@@ -197,7 +203,8 @@
     // group has no inter-verse gap/silence to absorb the surplus, so keeping the
     // floor would jerk the cursor at each gapless seam — a merged group is laid out
     // time-true and crossed at the one constant velocity. An unrecited placeholder
-    // gets a fixed visible width; a near-zero silence floors to `filmstripGapPx`.
+    // gets a fixed visible width; an audible silence keeps a `filmstripGapPx` floor
+    // while a sub-perceptual micro-gap stays time-true (see `MICRO_GAP_SEC`).
     // Geometry is identical across motion modes, so toggling never shifts layout.
     const cells = $derived.by((): Cell[] => {
         const mc = model.cells;
@@ -230,7 +237,14 @@
             const w = placeholder
                 ? PLACEHOLDER_CELL_PX
                 : Math.round(aw + Math.max(0, minPx - aw) * (1 - merged));
-            const baseGap = Math.round(Math.max(config.filmstripGapPx, c.nextGapSec * pxPerSec));
+            // Time-ruler gap: px ∝ silence seconds. A clearly-audible gap keeps a
+            // small visual floor; a sub-perceptual micro-gap (connected flow) stays
+            // time-true so the cursor never bursts across a floored gap it has no
+            // time to cross (paired with the silence-hold in `drivePlayback`).
+            const sec = c.nextGapSec;
+            const baseGap = Math.round(
+                sec < MICRO_GAP_SEC ? sec * pxPerSec : Math.max(config.filmstripGapPx, sec * pxPerSec),
+            );
             const gapAfter = c.waslNext ? Math.round(baseGap * (1 - outMerge)) : baseGap;
             out.push({
                 ayah: c.ayah, w, aw, cumBefore: cum, gapAfter, missing: c.missing,
@@ -240,6 +254,41 @@
             cum += w + gapAfter;
         }
         return out;
+    });
+
+    interface WaslGroup {
+        leftPx: number; // group's left edge (track px, pre-pad)
+        rightPx: number; // group's right edge
+        first: number; // first ayah in the capsule
+        last: number; // last ayah in the capsule
+        seams: number[]; // inner verse-boundary x-positions (track px, pre-pad)
+    }
+    /** Contiguous waṣl capsules — each a maximal run of merged cells, rendered as
+     *  ONE cell carrying an `N–N+k` range label + subtle inner verse-boundary ticks
+     *  (in place of per-verse numbers and a seam connector). A group runs from its
+     *  `mergeRight`-only start through its `mergeLeft`-only end. Empty for the
+     *  all-solo common case → the overlay renders nothing. */
+    const waslGroups = $derived.by((): WaslGroup[] => {
+        const groups: WaslGroup[] = [];
+        let i = 0;
+        while (i < cells.length) {
+            if (cells[i]!.mergeRight && !cells[i]!.mergeLeft) {
+                let j = i;
+                while (j < cells.length - 1 && cells[j]!.mergeRight) j++;
+                const start = cells[i]!;
+                const end = cells[j]!;
+                const seams: number[] = [];
+                for (let k = i; k < j; k++) seams.push(cells[k]!.cumBefore + cells[k]!.w);
+                groups.push({
+                    leftPx: start.cumBefore, rightPx: end.cumBefore + end.w,
+                    first: start.ayah, last: end.ayah, seams,
+                });
+                i = j + 1;
+            } else {
+                i++;
+            }
+        }
+        return groups;
     });
 
     /** A cell that can be navigated to / recited. `full` placeholders (unrecited
@@ -550,22 +599,36 @@
             // travel back to the re-take, not a freeze). Within-verse / leading /
             // trailing silence is left untouched (needle hidden, held), so a
             // reciter's mid-verse pause doesn't grey or move the cursor.
-            silent = true;
-            crossingGap = false;
             // No live take is bridging during a silence → ease any dynamic pair
             // back toward separated (a waqf stop of a dynamic boundary breaks it).
             liveWaslIdx = -1;
             stepWaslMerge(dtMs);
-            if (config.filmstripMotion !== 'snap' && frozenIdx >= 0) {
-                const nextIv = nextIntervalAfter(sorted, tSec);
-                const nextIdx = nextIv ? (model.cellOfUnit[nextIv.unitIdx] ?? -1) : -1;
-                // Scroll any inter-take silence (forward OR backward), but NOT a
-                // within-verse pause (nextIdx === frozenIdx → hold, needle hidden).
-                if (nextIdx >= 0 && nextIdx !== frozenIdx) {
-                    crossingGap = true;
-                    scrollThroughGap(tSec, nextIv!, nextIdx);
-                    fillIdx = cellSpanningOffset(scroll.offset);
-                }
+            const nextIv = config.filmstripMotion !== 'snap' && frozenIdx >= 0
+                ? nextIntervalAfter(sorted, tSec)
+                : null;
+            const nextIdx = nextIv ? (model.cellOfUnit[nextIv.unitIdx] ?? -1) : -1;
+            // A sub-perceptual gap to the IMMEDIATE next verse (connected flow, not
+            // a waqf stop) isn't a silence: hold the verse lit + the needle on so the
+            // cursor glides straight through instead of greying/snapping for a frame
+            // or two. The cells are laid out gapless for such a gap, so the next verse
+            // picks up exactly where this one ended. Restricted to the forward
+            // neighbour (`frozenIdx + 1`) so a backward loopback or a forward skip —
+            // whose own pause can be brief — still scrolls a greyed needle.
+            const microGap = nextIdx === frozenIdx + 1
+                && (model.cells[frozenIdx]?.nextGapSec ?? Infinity) < MICRO_GAP_SEC;
+            if (microGap) {
+                silent = false;
+                crossingGap = false;
+                return;
+            }
+            silent = true;
+            crossingGap = false;
+            // Scroll any inter-take silence (forward OR backward), but NOT a
+            // within-verse pause (nextIdx === frozenIdx → hold, needle hidden).
+            if (nextIv && nextIdx >= 0 && nextIdx !== frozenIdx) {
+                crossingGap = true;
+                scrollThroughGap(tSec, nextIv, nextIdx);
+                fillIdx = cellSpanningOffset(scroll.offset);
             }
             return;
         }
@@ -581,7 +644,7 @@
 
         // The live take bridges out of cell `r.idx` when its located occurrence
         // carries `waslTo` pointing at the immediately-following cell. Drives the
-        // connector intensify + the dynamic merge join.
+        // dynamic merge join.
         const wTgt = r.waslTo ? (model.indexByAyahKey.get(r.waslTo) ?? -1) : -1;
         liveWaslIdx = wTgt === r.idx + 1 ? r.idx : -1;
         stepWaslMerge(dtMs);
@@ -823,24 +886,28 @@
                     {#if c.missing !== 'full'}
                         <div class="cell-fill" class:glide={jumping && i === fillIdx}></div>
                     {/if}
-                    <span class="cell-num">{c.ayah}</span>
+                    {#if !c.mergeRight && !c.mergeLeft}
+                        <span class="cell-num">{c.ayah}</span>
+                    {/if}
                 </div>
             {/each}
             <div class="pad" style:width="{pad}px"></div>
-            <!-- Waṣl link connectors — a separate overlay layer (the cells clip
-                 overflow). One per bridging cell, anchored at the seam (right edge
-                 of the left member), riding the track transform. Opacity follows
-                 the merge amount; brightens while the live take bridges. -->
-            {#each cells as c, i (c.ayah)}
-                {#if c.waslNext && c.missing !== 'full'}
-                    <div
-                        class="wasl-link"
-                        class:wasl-live={i === liveWaslIdx}
-                        style:left="{pad + c.cumBefore + c.w}px"
-                        style:opacity={c.waslMerge}
-                        aria-hidden="true"
-                    ></div>
-                {/if}
+            <!-- Waṣl capsules — an overlay layer (the cells clip overflow), riding
+                 the track transform. Each merged group renders as ONE labelled cell:
+                 a centred `N–N+k` range + subtle inner verse-boundary ticks (the
+                 merged seam border is dropped, so the ticks are the only divider). -->
+            {#each waslGroups as g (g.first)}
+                <div
+                    class="wasl-group"
+                    style:left="{pad + g.leftPx}px"
+                    style:width="{g.rightPx - g.leftPx}px"
+                    aria-hidden="true"
+                >
+                    <span class="wasl-range">{g.first}–{g.last}</span>
+                </div>
+                {#each g.seams as sx (sx)}
+                    <div class="wasl-seam" style:left="{pad + sx}px" aria-hidden="true"></div>
+                {/each}
             {/each}
         </div>
         {#if config.filmstripMotion !== 'snap' && (!silent || crossingGap)}
@@ -953,12 +1020,11 @@
     }
     /* ---- Cross-verse waṣl merge -------------------------------------------
      * A merged pair reads as one rounded "mega-cell": the touching inner corners
-     * square and the seam border drops, so the two cells form a single capsule (a
-     * link connector straddles the seam, rendered on the overlay layer below). The
-     * rules sit AFTER the state rules so the transparent seam wins over
-     * active/reached/frozen border-color. Dynamic pairs animate the GAP in JS
-     * (keeps the needle in sync); the corner/border state toggles past the
-     * half-merge point. */
+     * square and the seam border drops, so the two cells form a single capsule (one
+     * range label + subtle inner ticks ride the overlay layer below). The rules sit
+     * AFTER the state rules so the transparent seam wins over active/reached/frozen
+     * border-color. Dynamic pairs animate the GAP in JS (keeps the needle in sync);
+     * the corner/border state toggles past the half-merge point. */
     .cell.merge-r {
         border-top-right-radius: 0;
         border-bottom-right-radius: 0;
@@ -969,28 +1035,44 @@
         border-bottom-left-radius: 0;
         border-left-color: transparent;
     }
-    /* The link connector — a short rounded weld centered on the seam (overlay
-     * sibling of the cells, so the cells' `overflow:hidden` doesn't clip it).
-     * Border-toned at rest; accent + glow while the LIVE take bridges it. */
-    .wasl-link {
+    /* A waṣl capsule's single range label — overlay sibling of the cells (so their
+     * `overflow:hidden` doesn't clip it), centred over the whole group span and
+     * standing in for the per-verse numbers the merged members drop. */
+    .wasl-group {
         position: absolute;
         top: 50%;
-        width: 12px;
-        height: 3px;
-        transform: translate(-50%, -50%);
-        background: var(--border-default);
-        border-radius: 999px;
+        transform: translateY(-50%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
         pointer-events: none;
-        transition: background var(--t-fast), box-shadow var(--t-fast), opacity var(--t-fast);
     }
-    .wasl-link.wasl-live {
-        background: var(--accent);
-        box-shadow: 0 0 6px var(--accent-tint);
+    .wasl-range {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: 0.01em;
+        color: var(--text-secondary);
+        white-space: nowrap;
     }
-    @media (prefers-reduced-motion: reduce) {
-        .wasl-link {
-            transition: none;
-        }
+    /* Subtle inner verse-boundary tick — a hairline at each seam, fading out top
+     * and bottom, the only divider once the merged border is dropped. Faint enough
+     * that the capsule still reads as one cell, but enough to mark where each verse
+     * begins. */
+    .wasl-seam {
+        position: absolute;
+        top: 7px;
+        bottom: 7px;
+        width: 1px;
+        transform: translateX(-50%);
+        background: linear-gradient(
+            to bottom,
+            transparent,
+            color-mix(in oklch, var(--border-strong) 90%, transparent) 30%,
+            color-mix(in oklch, var(--border-strong) 90%, transparent) 70%,
+            transparent
+        );
+        pointer-events: none;
     }
     .cell-fill {
         position: absolute;
