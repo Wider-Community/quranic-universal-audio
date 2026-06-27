@@ -178,6 +178,7 @@ describe('tajweed-rules — tooltip names', () => {
         expect(noonMeem.subgroups?.map((s) => s.title)).toEqual(['Noon', 'Meem']);
         const meem = noonMeem.subgroups!.find((s) => s.title === 'Meem')!;
         expect(meem.rows.map((r) => r.legendKey)).toEqual([
+            'ghunnah',
             'ikhfaa_shafawi',
             'idgham_shafawi',
             'izhar_shafawi',
@@ -193,10 +194,10 @@ describe('tajweed-rules — tooltip names', () => {
 });
 
 describe('tajweed-rules — legend + defaults', () => {
-    it('qalqala is the only repeated legendKey; LEGEND_KEYS dedups it', () => {
+    it('ghunnah + qalqala are the mirrored/repeated legendKeys; LEGEND_KEYS dedups them', () => {
         const keys = LEGEND.flatMap((g) => legendRows(g).map((r) => r.legendKey));
         const dups = keys.filter((k, i) => keys.indexOf(k) !== i);
-        expect(dups).toEqual(['qalqala']);
+        expect(dups).toEqual(['ghunnah', 'qalqala']);
         expect(new Set(LEGEND_KEYS).size).toBe(LEGEND_KEYS.length);
         for (const g of LEGEND) for (const r of legendRows(g)) expect(r.colorVar).toMatch(/^--tj-/);
     });
