@@ -446,6 +446,7 @@ def main() -> int:
     # Validate + emit/apply manifests.
     bad = 0
     written = []
+    to_write: dict[str, bytes] = {}
     for r in results:
         if r.get("error"):
             continue
@@ -460,11 +461,15 @@ def main() -> int:
         written.append(r)
         body = json.dumps(r["sidecar"], ensure_ascii=False, indent=2)
         if a.apply:
-            bs.confirm_mutation(a, f"write {r['man_rel']}")
-            with fs.open(bs.abs_path(bucket, r["man_rel"]), "wb") as f:
-                f.write(body.encode("utf-8"))
+            to_write[r["man_rel"]] = body.encode("utf-8")
         else:
             (out_dir / f"{r['slug']}.json").write_text(body, encoding="utf-8")
+
+    # Apply every manifest in ONE Xet batch (paths, not bytes) instead of a
+    # commit per reciter.
+    if to_write:
+        bs.confirm_mutation(a, f"write {len(to_write)} manifests")
+        bs.batch_write(bucket, to_write)
 
     if bad:
         print(f"\n{bad} slugs failed schema validation — not written", file=sys.stderr)

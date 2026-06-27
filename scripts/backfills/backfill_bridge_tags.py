@@ -67,11 +67,6 @@ def _rl(fn, *args, **kwargs):
     raise RuntimeError("rate-limit retries exhausted")
 
 
-def _write_shard(fs, path: str, blob: bytes) -> None:
-    with fs.open(path, "wb") as fh:
-        fh.write(blob)
-
-
 def _list_reciters(fs, bucket: str) -> list[str]:
     base = bs.abs_path(bucket, "reciters")
     return sorted(p.split("/")[-1] for p in _rl(fs.ls, base, detail=False))
@@ -120,6 +115,7 @@ def process_reciter(fs, bucket: str, slug: str, *, write: bool, log) -> dict:
     dist = Counter()
     total_tagged = total_repeat = 0
     violations = []
+    to_write: dict[str, bytes] = {}
     for _ch, path in shards:
         data = json.loads(gzip.decompress(_rl(fs.read_bytes, path)))
         n, rep, viol = _tag_shard(data)
@@ -133,7 +129,10 @@ def process_reciter(fs, bucket: str, slug: str, *, write: bool, log) -> dict:
                         dist[phn[5]] += 1
         if write:
             data.setdefault("_meta", {})["schema_version"] = SEGMENT_SCHEMA_VERSION
-            _rl(_write_shard, fs, path, gzip_shard(data))
+            to_write[f"reciters/{slug}/timestamps/{_ch}.json.gz"] = gzip_shard(data)
+    # One Xet batch per reciter (paths, not bytes) — far faster than a commit/file.
+    if to_write:
+        bs.batch_write(bucket, to_write)
     log(
         f"{slug:44} shards={len(shards):3} tagged={total_tagged:6} "
         f"repeat_segs={total_repeat:4} violations={len(violations)}"
