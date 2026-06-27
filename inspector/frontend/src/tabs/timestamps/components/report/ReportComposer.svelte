@@ -22,13 +22,17 @@
         verseReports,
         onchanged,
         onback,
+        inline = false,
     }: {
         slug: string;
         verseKey: string;
         category: ReportCategoryDef;
         verseReports: TsReport[];
         onchanged: () => void;
-        onback: () => void;
+        onback?: () => void;
+        /** Rendered inside the category accordion — the row above is the header,
+         *  so the composer's own back/title header is hidden. */
+        inline?: boolean;
     } = $props();
 
     const mine = $derived(
@@ -104,13 +108,15 @@
 </script>
 
 <div class="composer">
-    <header class="head">
-        <button type="button" class="back" onclick={onback} aria-label="Back to categories">
-            <ReportIcon name="back" size={15} />
-        </button>
-        <span class="cat-ic"><ReportIcon name={category.id} size={15} /></span>
-        <h4>{category.label}</h4>
-    </header>
+    {#if !inline}
+        <header class="head">
+            <button type="button" class="back" onclick={() => onback?.()} aria-label="Back to categories">
+                <ReportIcon name="back" size={15} />
+            </button>
+            <span class="cat-ic"><ReportIcon name={category.id} size={15} /></span>
+            <h4>{category.label}</h4>
+        </header>
+    {/if}
 
     {#if mine && !editing}
         <div class="saved">

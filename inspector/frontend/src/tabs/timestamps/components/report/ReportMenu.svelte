@@ -3,12 +3,12 @@
      * Category picker for the Report drop-up.
      *
      * Lists the report taxonomy (audio · timing · mapping · tajweed · other).
-     * Comment-flow categories (audio, other) open an inline composer via
-     * `onpickComment`. `timing` enters the in-grid report mode directly;
-     * `tajweed` expands to its wrong/missing subtype, each entering report mode
-     * via `onenterMode`. `mapping` stays deferred (`soon`). A category that
-     * already carries an open report on this verse gets the amber "reported"
-     * highlight + a count.
+     * Comment-flow categories (audio, other) expand a comment composer INLINE in
+     * the row's accordion (the menu stays visible). `timing` enters the in-grid
+     * report mode directly; `tajweed` expands to its wrong/missing subtype, each
+     * entering report mode via `onenterMode`. `mapping` stays deferred (`soon`).
+     * A category that already carries an open report on this verse gets the amber
+     * "reported" highlight + a count.
      */
     import type { TsReport } from '../../../../lib/types/generated/schemas';
     import type { TajweedSubtype } from '../../stores/report-mode';
@@ -16,17 +16,20 @@
         REPORT_CATEGORIES,
         type ReportCategoryDef,
     } from '../../domain/report-categories';
+    import ReportComposer from './ReportComposer.svelte';
     import ReportIcon from './ReportIcon.svelte';
 
     let {
+        slug,
         verseKey,
         verseReports,
-        onpickComment,
+        onchanged,
         onenterMode,
     }: {
+        slug: string;
         verseKey: string;
         verseReports: TsReport[];
-        onpickComment: (cat: ReportCategoryDef) => void;
+        onchanged: () => void;
         onenterMode: (mode: 'timing' | 'tajweed', subtype?: TajweedSubtype) => void;
     } = $props();
 
@@ -48,15 +51,11 @@
     let expandedId = $state<string | null>(null);
 
     function onRow(cat: ReportCategoryDef): void {
-        if (cat.flow === 'comment') {
-            onpickComment(cat);
-            return;
-        }
         if (cat.entersMode === 'timing') {
             onenterMode('timing');
             return;
         }
-        // tajweed (expand to subtype) + mapping (deferred soon hint)
+        // comment (audio/other inline composer), tajweed (subtypes), mapping (hint)
         expandedId = expandedId === cat.id ? null : cat.id;
     }
 </script>
@@ -70,7 +69,7 @@
     <div class="rows">
         {#each REPORT_CATEGORIES as cat (cat.id)}
             {@const count = openByCategory.get(cat.id) ?? 0}
-            {@const expandable = cat.id === 'tajweed' || !cat.entersMode && cat.flow === 'target'}
+            {@const expandable = cat.flow === 'comment' || cat.id === 'tajweed' || (!cat.entersMode && cat.flow === 'target')}
             {@const deferred = cat.flow === 'target' && !cat.entersMode}
             {@const open = expandedId === cat.id}
             <div class="group" class:open>
@@ -95,7 +94,16 @@
 
                 {#if expandable && open}
                     <div class="sub">
-                        {#if cat.entersMode === 'tajweed'}
+                        {#if cat.flow === 'comment'}
+                            <ReportComposer
+                                inline
+                                {slug}
+                                {verseKey}
+                                category={cat}
+                                {verseReports}
+                                {onchanged}
+                            />
+                        {:else if cat.entersMode === 'tajweed'}
                             {#each TAJWEED_ENTRIES as e (e.subtype)}
                                 <button type="button" class="sub-row act" onclick={() => onenterMode('tajweed', e.subtype)}>
                                     <span class="sub-ic"><ReportIcon name={e.icon} size={14} /></span>

@@ -7,9 +7,8 @@
      *
      * The verse + reciter are SNAPSHOTTED when the drop-up opens, so the report
      * targets what the user was hearing even if playback advances. The drop-up
-     * shows the category taxonomy (ReportMenu); audio/other open a comment
-     * composer (ReportComposer); the grid-target categories defer to the
-     * upcoming target picker.
+     * shows the category taxonomy (ReportMenu); audio/other expand a comment
+     * composer INLINE in their row; the grid-target categories enter report mode.
      * The button (and each reported category) lights amber when the playing
      * verse already carries open reports.
      */
@@ -17,12 +16,10 @@
     import { can } from '../../../lib/stores/capabilities';
     import { playerContext } from '../../../lib/stores/player-context';
     import type { TsReport } from '../../../lib/types/generated/schemas';
-    import type { ReportCategoryDef } from '../domain/report-categories';
     import { getVerseReports } from '../services/reports-client';
     import { enterTajweed, enterTiming, type TajweedSubtype } from '../stores/report-mode';
     import { loadReciterReports, openReportedVerseKeys } from '../stores/ts-reports';
     import { selectedVerse } from '../stores/verse';
-    import ReportComposer from './report/ReportComposer.svelte';
     import ReportIcon from './report/ReportIcon.svelte';
     import ReportMenu from './report/ReportMenu.svelte';
 
@@ -31,7 +28,6 @@
     let open = $state(false);
     let snapSlug = $state('');
     let snapVerse = $state('');
-    let composerCat = $state<ReportCategoryDef | null>(null);
     let verseReports = $state<TsReport[]>([]);
 
     const curSlug = $derived($playerContext.delivery?.slug ?? '');
@@ -68,7 +64,6 @@
         if (disabled) return;
         snapSlug = curSlug;
         snapVerse = curVerse;
-        composerCat = null;
         verseReports = [];
         open = true;
         void loadVerse();
@@ -123,23 +118,13 @@
 
         {#if open}
             <div class="report-pop" use:keepInView>
-                {#if composerCat}
-                    <ReportComposer
-                        slug={snapSlug}
-                        verseKey={snapVerse}
-                        category={composerCat}
-                        {verseReports}
-                        onchanged={onChanged}
-                        onback={() => (composerCat = null)}
-                    />
-                {:else}
-                    <ReportMenu
-                        verseKey={snapVerse}
-                        {verseReports}
-                        onpickComment={(cat) => (composerCat = cat)}
-                        onenterMode={onEnterMode}
-                    />
-                {/if}
+                <ReportMenu
+                    slug={snapSlug}
+                    verseKey={snapVerse}
+                    {verseReports}
+                    onchanged={onChanged}
+                    onenterMode={onEnterMode}
+                />
             </div>
         {/if}
     </div>
