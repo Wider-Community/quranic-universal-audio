@@ -26,13 +26,15 @@
  *
  *  3. One ink across the karaoke wipe. The continuous "wipe" highlight reveals
  *     the fill across a cell over time, so the glyph spans both filled and
- *     not-yet-filled regions at once. `mutedFor()` gives the unfilled "ghost"
- *     track: the same hue at low chroma, nudged to the SAME side of the ink
- *     crossover as the full fill — so the single `inkFor()` glyph reads over the
- *     whole sweep and the wipe's end-state is identical to the discrete fill.
+ *     not-yet-filled regions at once. The active analysis cell uses a DEEP fill
+ *     in both highlight modes: `deepFor()` darkens the layer colour to the
+ *     deepest-but-as-vivid-as-possible shade that still clears white text, so the
+ *     cell reads as a dark accent block with white glyphs (on-theme), and the
+ *     karaoke wipe just animates that same deep fill in from a dark base — same
+ *     look as the discrete fill, white text throughout.
  *
- * Changing the accent live-recolours all three layers, their inks, the waveform
- * overlay and the teleprompter as one reactive family.
+ * Changing the accent live-recolours all three layers, their deep fills, the
+ * waveform overlay and the teleprompter as one reactive family.
  */
 
 const LETTER_HUE_SHIFT = 40; // OKLCh degrees
@@ -46,11 +48,11 @@ const MAX_L = 0.84;
 // Chroma floor for the derived siblings so a near-grey accent still yields
 // distinguishable layers (the word keeps the accent's own chroma).
 const MIN_C = 0.085;
-// Ghost (unfilled karaoke track) shaping: keep the hue, collapse chroma to a
-// fraction of the fill's, and nudge lightness toward the readable side of the
-// ink crossover so the fill's auto-contrast ink reads on the ghost too.
-const GHOST_C = 0.32;
-const GHOST_L_SHIFT = 0.12;
+// Deep-fill ceiling: the active cell fill must stay dark enough that white text
+// clears WCAG AA (≈4.5:1). White-on-fill hits 4.5:1 at a fill relative-luminance
+// of ~0.179; we target a touch below for margin, then take the lightest L that
+// still respects it (keeping the accent as vivid as the dark band allows).
+const DEEP_MAX_LUM = 0.15;
 
 // Ink endpoints. A near-black navy (matches the panel family) and pure white;
 // `inkFor` picks whichever clears WCAG contrast on the given fill.
@@ -222,18 +224,28 @@ export function analogousTriad(accentHex: string): ColorTriad {
 }
 
 /**
- * The unfilled "ghost" track for the karaoke wipe of a given fill: same hue,
- * collapsed chroma, lightness pushed AWAY from the fill's ink (lighter when the
- * ink is dark, darker when the ink is light). The wipe then sweeps a desaturated
- * faint version of the colour up to its full self while the single auto-contrast
- * ink — `inkFor(fill)` — stays readable across both regions. Returns the input
- * verbatim for an unparseable colour.
+ * The DEEP fill for an active analysis cell: the layer colour darkened — same
+ * hue and chroma — to the lightest shade whose luminance still lets white text
+ * clear WCAG AA. The active cell then reads as a dark, saturated accent block
+ * with white glyphs (on the dark theme) in both highlight modes, and the karaoke
+ * wipe animates this same fill in from a darker base. Returns the input verbatim
+ * for an unparseable colour.
  */
-export function mutedFor(fillHex: string): string {
+export function deepFor(fillHex: string): string {
     const rgb = parseHex(fillHex);
     if (!rgb) return fillHex;
     const base = hexToOklch(rgb);
-    const inkIsDark = relLuminance(rgb.r, rgb.g, rgb.b) > INK_CROSSOVER;
-    const L = clamp(base.L + (inkIsDark ? GHOST_L_SHIFT : -GHOST_L_SHIFT), 0.08, 0.97);
-    return oklchToHex({ L, C: base.C * GHOST_C, h: base.h });
+    // Binary-search the highest L (≤ the colour's own) at this hue+chroma whose
+    // sRGB luminance stays under the white-text ceiling — gamut-mapped to a real
+    // colour. Vivid where the dark band allows; never too light for white text.
+    let lo = 0;
+    let hi = base.L;
+    for (let i = 0; i < 14; i++) {
+        const mid = (lo + hi) / 2;
+        const c = parseHex(oklchToHex({ L: mid, C: base.C, h: base.h }));
+        const lum = c ? relLuminance(c.r, c.g, c.b) : 1;
+        if (lum <= DEEP_MAX_LUM) lo = mid;
+        else hi = mid;
+    }
+    return oklchToHex({ L: lo, C: base.C, h: base.h });
 }

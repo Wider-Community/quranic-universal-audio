@@ -291,8 +291,8 @@
 }
 
 .mega-letter.active {
-    background: var(--ts-letter-color, var(--hl-letter-color));
-    color: var(--ts-letter-ink, #fff);
+    background: var(--ts-letter-deep, var(--hl-letter-color));
+    color: #fff;
     border-color: var(--ts-letter-color, var(--hl-letter-color));
 }
 
@@ -388,10 +388,10 @@
 /* Active highlight uses the SAME hue as a letter cell — one highlight colour
    across the whole letter row, never a separate diacritic colour. */
 .haraka-cell.active {
-    background: var(--ts-letter-color, var(--hl-letter-color));
+    background: var(--ts-letter-deep, var(--hl-letter-color));
 }
 .haraka-cell.active .g {
-    color: var(--ts-letter-ink, #fff);
+    color: #fff;
 }
 .haraka-cell.hover-preview {
     background: color-mix(in srgb, var(--ts-letter-color, var(--hl-letter-color)) 30%, transparent);
@@ -437,8 +437,8 @@
     opacity: 0.5;
 }
 .mega-letter.implicit.active {
-    background: var(--ts-letter-color, var(--hl-letter-color));
-    color: var(--ts-letter-ink, #fff);
+    background: var(--ts-letter-deep, var(--hl-letter-color));
+    color: #fff;
 }
 
 /* --- Seekable diacritic / implicit-madd cells --------------------------- */
@@ -589,10 +589,10 @@
     transform: translate(var(--haraka-shift, 0em), var(--haraka-raise, 0em));
 }
 .bridge-letter.active .bg {
-    background: var(--ts-letter-color, var(--hl-letter-color));
+    background: var(--ts-letter-deep, var(--hl-letter-color));
 }
 .bridge-letter.active .g {
-    color: var(--ts-letter-ink, #fff);
+    color: #fff;
 }
 .bridge-letter:hover .bg {
     background: color-mix(in srgb, var(--ts-letter-color, var(--hl-letter-color)) 30%, transparent);
@@ -636,9 +636,9 @@
 /* The CELL lights (background fill), mirroring .mega-word/.mega-phoneme active —
    the glyph just rides the contrast, it is never recolored on its own. */
 .pause-bridge.active {
-    background: var(--anim-highlight-color);
+    background: var(--ts-word-deep, var(--anim-highlight-color));
     border-color: var(--anim-highlight-color);
-    color: var(--ts-word-ink, #1a1a2e);
+    color: #fff;
 }
 .pause-bridge.hover-preview {
     background: color-mix(in srgb, var(--anim-highlight-color) 30%, var(--hl-cell-rest));
@@ -767,47 +767,46 @@
    instead of a discrete cross-fade. Letters + harakas wipe right→left with the
    recitation flow; phonemes (LTR) wipe L→R.
 
-   The sweep runs from the tier's `--ts-*-muted` GHOST (a faint, desaturated
-   same-hue track) up to its full `--ts-*-color`, so the end-state matches the
-   discrete fill exactly. The ghost shares the fill's ink side, so the cell's own
-   auto-contrast ink (`--ts-*-ink`) reads across the whole sweep — same ink as
-   discrete mode, no fixed-white exception. */
+   The sweep fills the tier's `--ts-*-deep` (a dark, saturated accent) in from a
+   darker accent-tinted base, so the cell reads as a dark accent block colouring
+   in — its end-state matches the discrete deep fill exactly, and the white glyph
+   stays legible across the whole sweep (both ends are dark). */
 .hl-track .mega-letter.active,
 .hl-track .haraka-cell.active,
 .hl-track .mega-block.active .mega-letter.active,
 .hl-track .mega-block.active .haraka-cell.active {
     background: linear-gradient(
         to left,
-        var(--ts-letter-color, var(--hl-letter-color)) calc(var(--fill, 0) * 100%),
-        var(--ts-letter-muted, var(--hl-cell-rest)) 0
+        var(--ts-letter-deep, var(--hl-letter-color)) calc(var(--fill, 0) * 100%),
+        color-mix(in srgb, var(--ts-letter-deep, var(--hl-letter-color)) 30%, var(--hl-cell-rest)) 0
     );
-    color: var(--ts-letter-ink, #fff);
+    color: #fff;
     transition: none;
 }
 .hl-track .haraka-cell.active .g {
-    color: var(--ts-letter-ink, #fff);
+    color: #fff;
 }
 .hl-track .mega-phoneme.active,
 .hl-track .mega-block.active .mega-phoneme.active {
     background: linear-gradient(
         to left,
-        var(--ts-phoneme-color, var(--hl-phoneme-color)) calc(var(--fill, 0) * 100%),
-        var(--ts-phoneme-muted, var(--hl-cell-rest)) 0
+        var(--ts-phoneme-deep, var(--hl-phoneme-color)) calc(var(--fill, 0) * 100%),
+        color-mix(in srgb, var(--ts-phoneme-deep, var(--hl-phoneme-color)) 30%, var(--hl-cell-rest)) 0
     );
-    color: var(--ts-phoneme-ink, #fff);
+    color: #fff;
     transition: none;
 }
 
 /* Active states */
 .mega-phoneme.active {
-    background: var(--ts-phoneme-color, var(--hl-phoneme-color));
-    color: var(--ts-phoneme-ink, #fff);
+    background: var(--ts-phoneme-deep, var(--hl-phoneme-color));
+    color: #fff;
     border-color: var(--ts-phoneme-color, var(--hl-phoneme-color));
 }
 
 .mega-block.active .mega-word {
-    background: var(--anim-highlight-color);
-    color: var(--ts-word-ink, #1a1a2e);
+    background: var(--ts-word-deep, var(--anim-highlight-color));
+    color: #fff;
     font-weight: bold;
     border-color: var(--anim-highlight-color);
 }
@@ -823,8 +822,8 @@
 }
 
 .mega-block.active .mega-phoneme.active {
-    background: var(--ts-phoneme-color, var(--hl-phoneme-color));
-    color: var(--ts-phoneme-ink, #fff);
+    background: var(--ts-phoneme-deep, var(--hl-phoneme-color));
+    color: #fff;
     border-color: var(--ts-phoneme-color, var(--hl-phoneme-color));
 }
 
@@ -842,8 +841,8 @@
 }
 
 .mega-block.active .mega-letter.active {
-    background: var(--ts-letter-color, var(--hl-letter-color));
-    color: var(--ts-letter-ink, #fff);
+    background: var(--ts-letter-deep, var(--hl-letter-color));
+    color: #fff;
     border-color: var(--ts-letter-color, var(--hl-letter-color));
 }
 
@@ -974,7 +973,7 @@
     font-size: 0.85rem;
     text-align: center;
 }
-.ts-view-btn.active, .ts-mode-btn.active { background: var(--anim-highlight-color); color: var(--ts-word-ink, #1a1a2e); font-weight: bold; }
+.ts-view-btn.active, .ts-mode-btn.active { background: var(--anim-highlight-color); color: #1a1a2e; font-weight: bold; }
 /* Translations toggle + language picker span the full group width (its own
    row under the Analysis/Animation + Letters/Phonemes rows). */
 .ts-translations-toggle {
