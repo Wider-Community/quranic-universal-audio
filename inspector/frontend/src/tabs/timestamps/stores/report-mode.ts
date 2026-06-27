@@ -16,6 +16,7 @@
  */
 import { derived, get, writable } from 'svelte/store';
 
+import { dashPort } from '../../../lib/playback/dash-port';
 import { exitLoop } from '../../../lib/playback/loop';
 import type { TsReportTarget } from '../../../lib/types/generated/schemas';
 import { type CellKey, targetCellKey } from '../utils/report-target';
@@ -116,6 +117,8 @@ function seedOwnFlags(category: 'timing' | 'tajweed'): void {
 }
 
 export function enterTiming(slug: string, verseKey: string): void {
+    // Pause so the focus verse can't auto-advance out from under the session.
+    dashPort.pause();
     displaySnapshot = { letters: get(showLetters), phonemes: get(showPhonemes) };
     showLetters.set(true);
     showPhonemes.set(false);
@@ -126,6 +129,7 @@ export function enterTiming(slug: string, verseKey: string): void {
 }
 
 export function enterTajweed(slug: string, verseKey: string, subtype: TajweedSubtype): void {
+    dashPort.pause();
     displaySnapshot = null; // tajweed keeps whatever rows are on
     reportContext.set({ slug, verseKey });
     focusedCellKey.set(null);

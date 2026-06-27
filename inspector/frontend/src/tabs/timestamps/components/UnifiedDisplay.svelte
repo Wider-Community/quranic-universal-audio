@@ -272,11 +272,12 @@
         const focused = get(focusedCellKey);
         const pub = _publicByKey();
         const dimWrong = mode.kind === 'tajweed' && mode.subtype === 'wrong_rule';
-        const els = rootEl.querySelectorAll<HTMLElement>('[data-cell-index], .mega-block');
+        const els = rootEl.querySelectorAll<HTMLElement>('[data-cell-index], .mega-phoneme, .mega-block');
         els.forEach((el) => {
             const key = elCellKey(el);
-            const isCell = el.hasAttribute('data-cell-index');
-            el.classList.toggle('report-dim', dimWrong && isCell && el.getAttribute('data-has-tj') !== '1');
+            // Dim every cell/phoneme that carries no rule (letters + phonemes both
+            // expose data-has-tj); blocks have none, so they never dim.
+            el.classList.toggle('report-dim', dimWrong && el.hasAttribute('data-has-tj') && el.getAttribute('data-has-tj') !== '1');
             el.classList.toggle('report-flag-staged', active && !!key && stagedMap.has(key));
             el.classList.toggle('report-focused', active && !!key && key === focused);
             const reps = key ? pub.get(key) : undefined;
@@ -341,7 +342,16 @@
             const ci = parseInt(el.dataset.cellIndex ?? '-1', 10);
             const wi = parseInt(el.dataset.wordIndex ?? '-1', 10);
             if (s != null && en != null) {
-                _swapLoopOrSeek({ kind: 'letter', startSec: s, endSec: en, wordIndex: wi, childIndex: ci }, s + lv.tsSegOffset);
+                // Enter (or move) loop mode on the selected cell — set the loop
+                // directly so playback stays pinned to this verse (it must not
+                // run on and advance the focus verse out of the session).
+                loopTarget.set({ kind: 'letter', startSec: s, endSec: en, wordIndex: wi, childIndex: ci });
+                if (dashPort.element) {
+                    const targetMs = (s + lv.tsSegOffset) * 1000;
+                    ensureDashCovering(targetMs);
+                    dashPort.seek(targetMs);
+                    if (dashPort.paused) dashPort.play();
+                }
             }
         }
     }
@@ -1266,6 +1276,7 @@
                                                 ph.interval.phone === 'sp'}
                                             class:geminate={ph.interval.geminate_start}
                                             data-index={ph.index}
+                                            data-has-tj={ph.tjBadges.length ? '1' : '0'}
                                             style:box-shadow={tjShadowFor(ph.tjBadges, $tajweedSettings)}
                         class:tj-kubra={!!tjKubraFor(ph.tjBadges, $tajweedSettings)}
                         style:--tj-kubra={tjKubraFor(ph.tjBadges, $tajweedSettings)}
