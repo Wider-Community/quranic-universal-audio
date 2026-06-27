@@ -34,7 +34,7 @@ The script (`scripts/devenv/launch.py`) owns everything that used to go wrong by
 
 - **dev-remote** *(default)* — Vite only, `/api` proxied to the live DEV Space. Real data on a mounted bucket, so **audio + analysis work**; fast, no local backend, works on Windows (no `hf-mount`). Hits the DEV environment, never production. The everyday "run the app / test the FE" mode.
 - **prod-remote** — Vite only, `/api` proxied to the live PROD Space. A quick **read-only peek at production**. The Space is single-worker, so this is for a human glance, not load: `--smoke` is refused here and you shouldn't point automated/agent traffic at it. Use `dev-remote` for testing.
-- **dev** — local Flask against the DEV bucket (read-write) + Vite HMR. The only mode that runs your branch's **backend**. Needs `HF_TOKEN`. On Windows the no-mount hffs path can't serve the audio-manifest sidecar or timestamps shards, so **audio + analysis won't load** — use it for backend/catalog work, not playback.
+- **dev** — local Flask against the DEV bucket (read-write) + Vite HMR. The only mode that runs your branch's **backend**. Needs `HF_TOKEN`. On Windows there's no `hf-mount`, so bucket reads (audio-manifest sidecar, timestamps shards) go through the `hffs` fallback — **slower than a mount (sub-second to a few seconds per read), but they work**; audio also CDN-falls-back via the proxy. So the **full app — audio + analysis — does run locally on Windows in `dev`**; reach for `dev-remote` only if the hffs latency is annoying.
 - **fixtures** — fully offline: filesystem backend on seeded fixtures (auto-seeds on first run) + Vite. No token, no network.
 
 ## For agents (Playwright / Chrome MCP)
@@ -48,6 +48,6 @@ Two worktrees (or two stacks) can run at once: ports are allocated free + reserv
 ## Notes
 
 - First run in a fresh worktree needs deps: `scripts/devenv/setup.sh` (or `npm ci` in `inspector/frontend`). The `wt` skill's setup does this.
-- **Windows + audio/analysis → use `dev-remote` (the default).** There's no `hf-mount` on Windows, so local `dev` reads go through the hffs fallback, which doesn't serve the audio-manifest sidecar or timestamps shards — audio won't play and the analysis frame stays empty in `dev`. `dev-remote` proxies to the dev Space (mounted bucket), so both work. FE changes (your branch's `inspector/frontend`) are always live in any mode via local Vite.
+- **Windows local `dev` runs the full app** — audio + analysis included. There's no `hf-mount` on Windows, so bucket reads (audio-manifest sidecar, timestamps shards) go through the `hffs` fallback: slower than a mount but sub-second-to-seconds and fully functional, and audio additionally CDN-falls-back via the proxy. Prefer `dev-remote` (mounted bucket, faster reads) only when the hffs latency bites; the hybrid `INSPECTOR_LOCAL_REPORTS=1` proxy is just a speed dodge, never a requirement. A shard 404 in `dev` is the released-gate (the reciter isn't `released` in this worktree's isolated DB) or missing bucket data, **not** a platform limit. FE changes (your branch's `inspector/frontend`) are always live in any mode via local Vite.
 - Logs: `<worktree>/.local/launch/logs/`. Registry: `<main-worktree>/.local/launch/registry.json` (gitignored).
 - Python changes need a `down` + `up` (Flask reloader is off by design — single-worker invariant). Vite changes hot-reload.
