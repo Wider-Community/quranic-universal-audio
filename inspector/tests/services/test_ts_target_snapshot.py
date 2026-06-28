@@ -28,11 +28,13 @@ def _doc() -> dict:
     }
 
 
-def _report(category: str, target: dict, doc: dict) -> dict:
+def _report(category: str, target: dict, doc: dict, *, onset=None, offset=None) -> dict:
     return {
         "category": category,
         "verse_key": "2:45",
         "target": target,
+        "onset": onset,
+        "offset": offset,
         "snapshot": snap.resolve_target(doc, "2:45", target),
     }
 
@@ -79,16 +81,44 @@ def test_tajweed_stale_when_rule_changes():
     assert snap.is_stale_after_restamp(report, changed) is True
 
 
-def test_timing_stale_when_cell_vanishes_not_when_ms_shift():
+def test_timing_stale_on_identity_change_and_flagged_onset_shift():
     doc = _doc()
     target = {"kind": "cell", "word_index": 0, "cell_index": 0}
-    report = _report("timing", target, doc)
-    shifted = copy.deepcopy(doc)
-    shifted["segments"][0]["words"][0][4][0][1] = 5  # phone start ms shift only
-    assert snap.is_stale_after_restamp(report, shifted) is False
+    report = _report("timing", target, doc, onset="early")  # flags the START only
+
+    # the unflagged offset moving does NOT stale
+    off_shift = copy.deepcopy(doc)
+    off_shift["segments"][0]["words"][0][3][0][2] = 500  # letter end 10 -> 500
+    assert snap.is_stale_after_restamp(report, off_shift) is False
+
+    # a small onset shift (< 100ms threshold) does NOT stale
+    small = copy.deepcopy(doc)
+    small["segments"][0]["words"][0][3][0][1] = 50  # letter start 0 -> 50
+    assert snap.is_stale_after_restamp(report, small) is False
+
+    # a large onset shift (> threshold) stales
+    big = copy.deepcopy(doc)
+    big["segments"][0]["words"][0][3][0][1] = 300  # letter start 0 -> 300
+    assert snap.is_stale_after_restamp(report, big) is True
+
+    # identity change (cell removed) always stales
     removed = copy.deepcopy(doc)
-    removed["segments"][0]["words"][0][5] = []  # cell removed
+    removed["segments"][0]["words"][0][5] = []
     assert snap.is_stale_after_restamp(report, removed) is True
+
+
+def test_timing_offset_only_report_ignores_onset_shift():
+    doc = _doc()
+    target = {"kind": "cell", "word_index": 0, "cell_index": 0}
+    report = _report("timing", target, doc, offset="late")  # flags the END only
+
+    big_offset = copy.deepcopy(doc)
+    big_offset["segments"][0]["words"][0][3][0][2] = 300  # letter end 10 -> 300
+    assert snap.is_stale_after_restamp(report, big_offset) is True
+
+    onset_only = copy.deepcopy(doc)
+    onset_only["segments"][0]["words"][0][3][0][1] = 300  # letter start moves, end unchanged
+    assert snap.is_stale_after_restamp(report, onset_only) is False
 
 
 def test_mapping_stale_when_binding_changes():

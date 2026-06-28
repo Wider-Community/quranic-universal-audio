@@ -2005,9 +2005,9 @@ export interface TsReport {
   id: number;
   verse_key: string;
   category: "audio" | "timing" | "mapping" | "tajweed" | "other";
-  subtype?:
-    | ("too_long" | "too_short" | "other" | "wrong_rule" | "missing_rule" | "should_be_silent" | "should_not_be_silent")
-    | null;
+  subtype?: ("wrong_rule" | "missing_rule" | "should_be_silent" | "should_not_be_silent") | null;
+  onset?: ("early" | "late") | null;
+  offset?: ("early" | "late") | null;
   target: TsReportTarget;
   snapshot?: TsReportSnapshot | null;
   comment?: string | null;
@@ -2087,9 +2087,9 @@ export interface TsReportBatchCreateRequest {
  */
 export interface TsReportBatchItem {
   category: "audio" | "timing" | "mapping" | "tajweed" | "other";
-  subtype?:
-    | ("too_long" | "too_short" | "other" | "wrong_rule" | "missing_rule" | "should_be_silent" | "should_not_be_silent")
-    | null;
+  subtype?: ("wrong_rule" | "missing_rule" | "should_be_silent" | "should_not_be_silent") | null;
+  onset?: ("early" | "late") | null;
+  offset?: ("early" | "late") | null;
   target: TsReportTarget;
   comment?: string | null;
   selected_rule_tags?: string[];
@@ -2110,9 +2110,9 @@ export interface TsReportBatchResult {
 export interface TsReportCreateRequest {
   verse_key: string;
   category: "audio" | "timing" | "mapping" | "tajweed" | "other";
-  subtype?:
-    | ("too_long" | "too_short" | "other" | "wrong_rule" | "missing_rule" | "should_be_silent" | "should_not_be_silent")
-    | null;
+  subtype?: ("wrong_rule" | "missing_rule" | "should_be_silent" | "should_not_be_silent") | null;
+  onset?: ("early" | "late") | null;
+  offset?: ("early" | "late") | null;
   target: TsReportTarget;
   comment?: string | null;
   selected_rule_tags?: string[];

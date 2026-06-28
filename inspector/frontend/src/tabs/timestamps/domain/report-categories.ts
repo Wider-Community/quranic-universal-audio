@@ -58,11 +58,9 @@ export const REPORT_CATEGORIES: ReportCategoryDef[] = [
         flow: 'target',
         entersMode: 'timing',
         targetHint: 'Pick the word or cell on the analysis grid',
-        subtypes: [
-            { id: 'too_long', label: 'Too long' },
-            { id: 'too_short', label: 'Too short' },
-            { id: 'other', label: 'Other timing issue' },
-        ],
+        // Timing classification is the two-axis onset/offset picker in the in-grid
+        // control strip, not a category-level subtype list.
+        subtypes: [],
     },
     {
         id: 'mapping',

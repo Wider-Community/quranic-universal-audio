@@ -27,14 +27,15 @@ one). Re-filing the same category+target updates in place (upsert). Key columns:
 | Column | Meaning |
 |---|---|
 | `category` | `audio` · `timing` · `mapping` · `tajweed` · `other` |
-| `subtype` | timing `too_long\|too_short\|other`; tajweed `wrong_rule\|missing_rule\|should_be_silent\|should_not_be_silent`; else NULL |
+| `subtype` | tajweed only: `wrong_rule\|missing_rule\|should_be_silent\|should_not_be_silent`; else NULL |
+| `timing_onset` / `timing_offset` | timing only: each `early\|late\|NULL` (NULL = that boundary is fine), ≥1 set. The human label (too short/long, shifted, starts/finishes early/late) is derived via `qua_shared...ts_reports.timing_label()` — never stored |
 | `target_kind` + `word_index` / `source_letter_index` / `cell_index` / `phoneme_flat_index` / `share_group` | the flexible target descriptor (`verse\|word\|cell\|phoneme\|column\|cell_group`) |
-| `target_key` | canonical descriptor string (`kind:wi:sli:ci:pi:sg`, **plus `:subtype` for tajweed**) the per-identity unique index keys on — built in `repo_ts_reports.target_key()` |
-| `snap_*` | denormalized snapshot of the targeted shard content at create time — the drift fingerprint (no per-cell hash) |
+| `target_key` | canonical descriptor string (`kind:wi:sli:ci:pi:sg`, **plus `:subtype` for tajweed**) the per-identity unique index keys on — built in `repo_ts_reports.target_key()`. Timing is subtype/axis-free → one timing report per target+identity |
+| `snap_*` | denormalized snapshot of the targeted shard content at create time — the drift fingerprint (no per-cell hash). Includes `snap_onset_ms`/`snap_offset_ms`, the target's boundary ms for timing staleness |
 | `selected_rule_tags` | JSON: the internal tajweed tag id(s) the reporter marked wrong (`wrong_rule` only) |
-| `comment` | mandatory for `audio`/`mapping`/`other` + `timing.other` + every tajweed; optional otherwise |
+| `comment` | mandatory for `audio`/`mapping`/`other` + every tajweed; optional for timing |
 | `status` / `resolved_*` | single terminal `resolved` outcome + optional owner note |
-| `stale` / `stale_at` | set when a shard regen changed the targeted content |
+| `stale` / `stale_at` | set when a shard regen changed the targeted content (see Staleness below) |
 | `hidden_at` | soft-delete stamp — NULL = visible. Every read filters `hidden_at IS NULL`; re-filing un-hides |
 
 ### Grouping (a domain concept, no schema column)
@@ -51,6 +52,17 @@ one). Re-filing the same category+target updates in place (upsert). Key columns:
 
 Rows stay per-cell either way (so per-cell subtype + comment survive); grouping
 lives only in the notify/resolve/display layers.
+
+### Staleness (per-category, on shard regen)
+
+`recheck_reports_staleness` re-resolves every open report against the new shard and
+`mark_stale`s only those whose **category-relevant** content changed (`audio` never
+stales). For **timing**, that is the targeted cell's identity (chars/role) changing
+OR a boundary the report flagged moving: if `onset` is set and the target's start ms
+shifted by more than `config.TS_REPORT_BOUNDARY_STALE_MS` (default 100), or likewise
+`offset` and the end ms — staled for owner re-check (NOT auto-resolved). A pure ms
+shift on a boundary the report did **not** flag does not stale it. The boundary ms
+are captured at create in `snap_onset_ms`/`snap_offset_ms`.
 
 ## Backend
 

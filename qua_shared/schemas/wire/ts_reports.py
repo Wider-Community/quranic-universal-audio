@@ -23,8 +23,9 @@ is set when a timestamp regeneration changed the targeted content.
 
 Per-category rules (enforced by ``TsReportCreateRequest`` validators):
 - ``audio``   — comment mandatory; target verse|word.
-- ``timing``  — subtype too_long|too_short|other; comment mandatory iff subtype
-                is ``other``; target word|cell|phoneme|column|cell_group.
+- ``timing``  — two boundary axes ``onset``/``offset`` (each early|late, ≥1 set),
+                no subtype; comment optional; target word|cell|phoneme|column|cell_group.
+                The human label is derived via ``timing_label``.
 - ``tajweed`` — subtype wrong_rule|missing_rule|should_be_silent|should_not_be_silent;
                 comment optional; target cell|phoneme|cell_group.
 - ``mapping`` — no subtype; comment mandatory; target column.

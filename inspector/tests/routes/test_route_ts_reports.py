@@ -122,10 +122,10 @@ def test_identity_redaction_owner_sees_author(signed_in_client):
 # --- batch create + group resolve ------------------------------------------
 
 
-def _timing_item(cell_index: int, *, word_index: int = 0, subtype: str = "too_long") -> dict:
+def _timing_item(cell_index: int, *, word_index: int = 0, onset: str = "early") -> dict:
     return {
         "category": "timing",
-        "subtype": subtype,
+        "onset": onset,
         "target": {"kind": "cell", "word_index": word_index, "cell_index": cell_index},
     }
 
@@ -166,7 +166,7 @@ def test_batch_anon_requires_token(flask_client):
 
 def test_batch_validation_error_bubbles(flask_client):
     bad = {"category": "timing", "target": {"kind": "cell", "word_index": 0, "cell_index": 0}}
-    assert _post_batch(flask_client, [bad]).status_code == 400  # timing needs subtype
+    assert _post_batch(flask_client, [bad]).status_code == 400  # timing needs an onset/offset axis
 
 
 def test_batch_creates_rows_and_echoes(flask_client):

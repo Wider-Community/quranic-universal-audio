@@ -207,10 +207,10 @@ def test_selected_rule_tags_roundtrip(fresh_db):
     assert fetched["selected_rule_tags"] == ["noon_ghunnah", "ikhfaa_noon"]
 
 
-def _timing_item(cell_index: int, *, word_index: int = 0, subtype: str = "too_long") -> dict:
+def _timing_item(cell_index: int, *, word_index: int = 0, onset: str = "early") -> dict:
     return {
         "category": "timing",
-        "subtype": subtype,
+        "onset": onset,
         "target": _target("cell", word_index=word_index, cell_index=cell_index),
         "snapshot": None,
         "comment": None,
@@ -237,6 +237,14 @@ def test_create_many_groups_timing_cells_under_one_word(fresh_db):
     rows = repo.list_for_verse("reciter-a", "2:45")
     assert len(rows) == 3
     assert {r["target"]["word_index"] for r in rows} == {0}
+
+
+def test_timing_axes_round_trip(fresh_db):
+    _batch([_timing_item(0, onset="late")])
+    row = repo.list_for_verse("reciter-a", "2:45")[0]
+    assert row["onset"] == "late"
+    assert row["offset"] is None
+    assert row["subtype"] is None
 
 
 def test_create_many_mixed_categories_are_separate_rows(fresh_db):

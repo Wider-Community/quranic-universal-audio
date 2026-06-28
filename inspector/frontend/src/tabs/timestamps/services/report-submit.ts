@@ -16,19 +16,33 @@ import type {
     TsReportTarget,
 } from '../../../lib/types/generated/schemas';
 import { getAnonToken } from '../../../lib/utils/anon-token';
-import { isStagedComplete, type StagedAnnotation } from '../stores/report-mode';
+import {
+    isStagedComplete,
+    type StagedAnnotation,
+    type TimingSubtype,
+} from '../stores/report-mode';
 import { createReportsBatch, deleteReport } from './reports-client';
 
 function anonTokenIfNeeded(): string | null {
     return get(currentUser).hf_user_id === null ? getAnonToken() : null;
 }
 
+/** Map the interim timing pill to the two boundary axes (the backend contract).
+ * The polished onset/offset picker is a later pass; this keeps submissions valid. */
+const TIMING_AXES: Record<TimingSubtype, { onset: 'early' | 'late' | null; offset: 'early' | 'late' | null }> = {
+    too_long: { onset: 'early', offset: 'late' },
+    too_short: { onset: 'late', offset: 'early' },
+    other: { onset: 'early', offset: null },
+};
+
 function toItem(a: StagedAnnotation): TsReportBatchItem {
     const target: TsReportTarget = a.target;
     if (a.kind === 'timing') {
+        const axes = TIMING_AXES[a.subtype ?? 'too_long'];
         return {
             category: 'timing',
-            subtype: a.subtype,
+            onset: axes.onset,
+            offset: axes.offset,
             target,
             comment: a.comment.trim() || null,
             selected_rule_tags: [],

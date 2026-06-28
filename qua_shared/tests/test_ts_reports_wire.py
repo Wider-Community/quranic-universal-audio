@@ -9,6 +9,7 @@ from qua_shared.schemas.wire.ts_reports import (
     TsReportBatchCreateRequest,
     TsReportBatchItem,
     TsReportCreateRequest,
+    timing_label,
 )
 
 
@@ -51,36 +52,34 @@ def test_other_requires_comment():
         TsReportCreateRequest.model_validate(_req(category="other", comment="   "))
 
 
-def test_timing_subtype_and_conditional_comment():
-    # too_long is fine without a comment
+def test_timing_axes_required_no_subtype():
+    word = {"kind": "word", "word_index": 0}
+    # one axis is enough; comment optional
+    TsReportCreateRequest.model_validate(_req(category="timing", comment=None, onset="early", target=word))
+    TsReportCreateRequest.model_validate(_req(category="timing", comment=None, offset="late", target=word))
+    # both axes set is fine
     TsReportCreateRequest.model_validate(
-        _req(
-            category="timing",
-            subtype="too_long",
-            comment=None,
-            target={"kind": "word", "word_index": 0},
-        )
+        _req(category="timing", comment=None, onset="late", offset="early", target=word)
     )
-    # other requires a comment
+    # neither axis → rejected
+    with pytest.raises(ValidationError):
+        TsReportCreateRequest.model_validate(_req(category="timing", comment="x", target=word))
+    # subtype is timing-illegal
     with pytest.raises(ValidationError):
         TsReportCreateRequest.model_validate(
-            _req(
-                category="timing",
-                subtype="other",
-                comment=None,
-                target={"kind": "word", "word_index": 0},
-            )
+            _req(category="timing", subtype="wrong_rule", onset="early", target=word)
         )
-    # missing subtype
-    with pytest.raises(ValidationError):
-        TsReportCreateRequest.model_validate(
-            _req(
-                category="timing",
-                subtype=None,
-                comment="x",
-                target={"kind": "word", "word_index": 0},
-            )
-        )
+
+
+def test_timing_label_matrix():
+    assert timing_label("early", "late") == "Too long"
+    assert timing_label("late", "early") == "Too short"
+    assert timing_label("early", "early") == "Shifted earlier"
+    assert timing_label("late", "late") == "Shifted later"
+    assert timing_label("early", None) == "Starts early"
+    assert timing_label("late", None) == "Starts late"
+    assert timing_label(None, "early") == "Finishes early"
+    assert timing_label(None, "late") == "Finishes late"
 
 
 def test_tajweed_subtype_and_target():
@@ -96,7 +95,7 @@ def test_tajweed_subtype_and_target():
         TsReportCreateRequest.model_validate(
             _req(
                 category="tajweed",
-                subtype="too_long",
+                subtype="not_a_real_subtype",
                 comment=None,
                 target={"kind": "cell", "word_index": 0, "cell_index": 2},
             )
@@ -107,10 +106,22 @@ def test_tajweed_subtype_and_target():
         )
 
 
-def test_subtype_rejected_for_audio_and_other():
-    with pytest.raises(ValidationError):
+def test_subtype_and_axes_rejected_for_non_timing():
+    with pytest.raises(ValidationError):  # audio takes no subtype
         TsReportCreateRequest.model_validate(
-            _req(category="audio", comment="x", subtype="too_long")
+            _req(category="audio", comment="x", subtype="wrong_rule")
+        )
+    with pytest.raises(ValidationError):  # onset/offset are timing-only
+        TsReportCreateRequest.model_validate(_req(category="audio", comment="x", onset="early"))
+    with pytest.raises(ValidationError):  # tajweed cannot carry axes
+        TsReportCreateRequest.model_validate(
+            _req(
+                category="tajweed",
+                subtype="wrong_rule",
+                comment=None,
+                onset="early",
+                target={"kind": "cell", "word_index": 0, "cell_index": 2},
+            )
         )
 
 
@@ -166,14 +177,14 @@ def test_selected_rule_tags_only_on_tajweed_wrong_rule():
 
 
 def _item(**kw) -> dict:
-    base = {"category": "timing", "subtype": "too_long", "target": {"kind": "word", "word_index": 0}}
+    base = {"category": "timing", "onset": "early", "target": {"kind": "word", "word_index": 0}}
     base.update(kw)
     return base
 
 
 def test_batch_item_shares_validation_with_single_create():
-    # A bad input (timing without subtype) is rejected identically by both.
-    bad = _item(subtype=None)
+    # A bad input (timing with neither boundary axis) is rejected identically by both.
+    bad = _item(onset=None)
     with pytest.raises(ValidationError):
         TsReportBatchItem.model_validate(bad)
     with pytest.raises(ValidationError):
@@ -182,7 +193,7 @@ def test_batch_item_shares_validation_with_single_create():
 
 def test_batch_item_requires_comment_when_mandatory():
     with pytest.raises(ValidationError):
-        TsReportBatchItem.model_validate(_item(category="mapping", subtype=None, comment=None,
+        TsReportBatchItem.model_validate(_item(category="mapping", onset=None, comment=None,
                                                target={"kind": "column", "word_index": 0,
                                                        "source_letter_index": 1}))
 
@@ -205,6 +216,7 @@ def test_batch_request_accepts_mixed_items():
                 _item(),
                 _item(
                     category="tajweed",
+                    onset=None,
                     subtype="wrong_rule",
                     comment="x",
                     target={"kind": "cell", "word_index": 0, "cell_index": 1},

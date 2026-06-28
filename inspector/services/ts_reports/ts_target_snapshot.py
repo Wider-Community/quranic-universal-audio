@@ -11,7 +11,10 @@ What "changed" means per category (the report stays valid otherwise — e.g. a
 regen that only shifts timing ms does NOT stale a timing report):
 - ``tajweed`` — rule tags / silence (role/status) / cell chars changed.
 - ``mapping`` — the column binding (grapheme chars ↔ mapped phones) changed.
-- ``timing`` — the reported cell's identity (chars/role) changed or it vanished.
+- ``timing`` — the reported cell's identity (chars/role) changed or vanished, OR
+  a boundary the report flagged (onset/offset) moved past
+  ``config.TS_REPORT_BOUNDARY_STALE_MS`` (a pure ms shift on an unflagged boundary
+  does NOT stale).
 - ``audio``  — never auto-staled (not bound to shard cells).
 - ``other`` / verse-level — the verse vanished or its text changed.
 
@@ -156,7 +159,8 @@ def resolve_target(
     ``None`` means the target no longer resolves (verse/word vanished) — a strong
     staleness signal. Snapshot keys mirror what ``repo_ts_reports`` persists
     (``chars``/``role``/``status``/``tag``/``secondary_tags``/``phoneme_rule_tags``/
-    ``phones``/``share_group``/``word_text``/``verse_text``/``schema_version``).
+    ``phones``/``share_group``/``word_text``/``verse_text``/``schema_version`` plus
+    ``onset_ms``/``offset_ms``, the target's boundary ms for timing staleness).
     """
     seg = _first_segment(doc, verse_key)
     if seg is None:
@@ -291,7 +295,17 @@ def is_stale_after_restamp(report: dict[str, Any], doc: dict[str, Any]) -> bool:
         return any(_norm(old.get(f)) != _norm(new.get(f)) for f in fields)
 
     if category == "timing":
-        return differs("chars", "role")
+        # Identity change (the cell vanished / became a different letter) always
+        # stales. Otherwise, only a move of a boundary THIS report flagged past
+        # the threshold stales it — a shift on an unflagged boundary is ignored.
+        if differs("chars", "role"):
+            return True
+        thr = TS_REPORT_BOUNDARY_STALE_MS
+        if report.get("onset") and _shifted(old.get("onset_ms"), new.get("onset_ms"), thr):
+            return True
+        if report.get("offset") and _shifted(old.get("offset_ms"), new.get("offset_ms"), thr):
+            return True
+        return False
     if category == "tajweed":
         return differs("chars", "role", "status", "tag", "secondary_tags", "phoneme_rule_tags")
     if category == "mapping":
