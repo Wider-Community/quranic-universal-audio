@@ -97,6 +97,7 @@ from services.errors import Codes, error_body
 # scripts/backfills/backfill_boundary_adj.py (the only remaining consumer).
 from services.secrets_guard import MissingSecret, get_session_secret
 from services.state.state import InvalidTransition, NotAuthorizedForTransition, UnknownReciter
+from services.storage.hf_bucket import StorageReadOnly
 from utils.json_response import orjson_response
 
 # ---------------------------------------------------------------------------
@@ -519,6 +520,18 @@ def _handle_not_authorized_transition(e: NotAuthorizedForTransition):
                 code=getattr(e, "code", None) or Codes.NOT_AUTHORIZED,
                 context=getattr(e, "context", None),
             )
+        ),
+        403,
+    )
+
+
+@app.errorhandler(StorageReadOnly)
+def _handle_read_only(e: StorageReadOnly):
+    """A write was attempted while INSPECTOR_READ_ONLY=1 (e.g. `launch --mode
+    prod`). Fail clean with 403 instead of a generic 500 so the FE can say so."""
+    return (
+        jsonify(
+            error_body("This instance is read-only; changes aren't saved.", code=Codes.READ_ONLY)
         ),
         403,
     )

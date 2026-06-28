@@ -34,7 +34,7 @@ The script (`scripts/devenv/launch.py`) owns everything that used to go wrong by
 **Every mode is fully local** — your branch's Flask backend + Vite, no HF Space proxy, no `hf-mount`. Bucket reads use the `hffs` fallback (sub-second on the dev bucket; the bigger prod bucket is slower, multi-second cold); audio CDN-falls-back via the proxy. The only thing that changes between modes is **which data the backend reads**. Needs `HF_TOKEN` (in `.env`) for the bucket modes.
 
 - **dev** *(default)* — backend reads the **DEV bucket**, read-write. The everyday mode: runs your branch end-to-end (audio + analysis included), HMR for FE changes.
-- **prod** — backend reads the **PROD bucket**, **read-only**: bucket write-back is disarmed (`INSPECTOR_DB_SYNC=0`), so a stray edit can never sync the full-file DB over production. A safe local look at real production data. First reads are slow (big uncached prod bucket over hffs).
+- **prod** — backend reads the **PROD bucket**, **read-only** (two guards: `INSPECTOR_READ_ONLY=1` makes the storage backend refuse *every* write — segment saves, manifests, job records — and `INSPECTOR_DB_SYNC=0` keeps DB commits local). Nothing local can mutate production by any path; an edit attempt fails loud rather than corrupting prod. A safe look at real production data. First reads are slow (big uncached prod bucket over hffs).
 - **fixtures** — fully offline: filesystem backend on seeded fixtures (auto-seeds on first run) + Vite. No token, no network.
 
 ## For agents (Playwright / Chrome MCP)

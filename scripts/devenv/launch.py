@@ -25,9 +25,10 @@ between modes is which data the backend reads.
 Modes (``--mode``, default ``dev``):
   dev    (default) local Flask + Vite reading the DEV bucket (read-write). The
          everyday mode: runs your branch end-to-end, audio + analysis included.
-  prod   local Flask + Vite reading the PROD bucket, READ-ONLY (bucket
-         write-back disarmed via INSPECTOR_DB_SYNC=0, so a stray edit can never
-         clobber production). A safe local look at real production data.
+  prod   local Flask + Vite reading the PROD bucket, READ-ONLY. Two guards:
+         INSPECTOR_READ_ONLY=1 makes the storage backend refuse every write
+         (segment saves, manifests, job records), and INSPECTOR_DB_SYNC=0 keeps
+         DB commits local — nothing local can mutate production by any path.
   fixtures  fully offline (filesystem backend, seeded fixtures) + Vite.
 
 Commands:
@@ -463,11 +464,16 @@ def backend_env(root: Path, mode: str) -> dict[str, str]:
     env["INSPECTOR_BACKEND"] = "bucket"
     env.pop("INSPECTOR_FILESYSTEM_ROOT", None)
     if mode == "prod":
-        # Point the local backend at the PROD bucket, READ-ONLY: acknowledge the
-        # prod guard, and disarm bucket write-back so no edit can ever sync the
-        # full-file DB back over production state.
+        # Point the local backend at the PROD bucket, READ-ONLY. Two guards,
+        # belt-and-suspenders, so nothing local can mutate production:
+        #   INSPECTOR_READ_ONLY=1 — the storage backend refuses EVERY write
+        #     (segment save, manifests, job records — not just the DB), and
+        #   INSPECTOR_DB_SYNC=0   — DB commits stay local, never upload, so the
+        #     boot scan doesn't even attempt a bucket write.
+        # (ALLOW_PROD_BUCKET acknowledges the prod-bucket guard so it resolves.)
         env["INSPECTOR_BUCKET_REPO"] = PROD_BUCKET_REPO
         env["INSPECTOR_ALLOW_PROD_BUCKET"] = "1"
+        env["INSPECTOR_READ_ONLY"] = "1"
         env["INSPECTOR_DB_SYNC"] = "0"
     # dev: leave INSPECTOR_BUCKET_REPO to the child — a contributor's `.env` may
     # name their own dev bucket; otherwise resolve_bucket_repo defaults to dev.
