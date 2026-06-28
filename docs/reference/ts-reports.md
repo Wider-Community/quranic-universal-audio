@@ -91,12 +91,12 @@ in `qua_shared/schemas/config/capabilities.py`.
 
 | File | What |
 |---|---|
-| `stores/report-mode.ts` | the mode state machine (`inactive` / `timing` / `tajweed` + subtype fixed at entry), `staged` Map keyed by cell, `focusedCellKey`, `reportContext`; `enterTiming` (pause, force letters-only) / `enterTajweed` (pause, `forceAllTajweedEnabled` so every legend colour shows) seed own flags by category+subtype; `focusCell`/`isStagedComplete` auto-discard an incomplete cell on focus-move; `exitReportMode` restores display + tajweed snapshots, `exitLoop`, clears |
+| `stores/report-mode.ts` | the mode state machine (`inactive` / `timing` / `tajweed` + subtype fixed at entry), `staged` Map keyed by cell, `focusedCellKey`, `reportContext`; `enterTiming` / `enterTajweed` both pause + force letters-only (snapshot/restore `showLetters`/`showPhonemes`) — phonemes are never a target; tajweed additionally `forceAllTajweedEnabled` so every legend colour shows. Seed own flags by category+subtype; `focusCell`/`isStagedComplete` auto-discard an incomplete cell on focus-move; `exitReportMode` restores display + tajweed snapshots, `exitLoop`, clears |
 | `stores/tajweed-settings.ts` | `forceAllTajweedEnabled()` / `restoreTajweedSettings()` — transient (non-persisted) bulk enable used by tajweed report mode |
 | `stores/ts-reports.ts` | `reportedVerses` (reciter counts → button highlight) + `currentVerseReports` / `loadVerseReports` (the focus verse's reports → in-grid public flags + report-mode seeds) |
 | `utils/report-target.ts` | the ONE keying place — `cellKey`/`wordKey`/`targetCellKey` (DOM- and wire-derived keys must agree), `cellTargetFromEl`, `elCellKey`, `elHasTajweed` |
 | `utils/cell-model.ts` | threads `cellIndex` (raw `word.cells[]` index = the target's `cell_index`) and `ruleTags` (internal tajweed tag ids = the picker's options) onto rendered cells |
-| `components/UnifiedDisplay.svelte` | stamps `data-cell-index`/`-source-letter-index`/`-share-group`/`-has-tj`/`-tj-tags`; a delegated capture-phase click that STAGES (and loops, for timing) instead of seeking, via `focusCell` (auto-discard); in tajweed only cells stage (words swallowed); reactive `report-*` passes (`report-dim`+`report-inert` spotlight, staged/focused/public flags) |
+| `components/UnifiedDisplay.svelte` | stamps `data-cell-index`/`-source-letter-index`/`-share-group`/`-has-tj`/`-tj-tags`; a delegated capture-phase click that STAGES via `focusCell` (auto-discard) instead of seeking. **Only timing loops/seeks the cell** — tajweed stages only, leaving play/pause + the whole-verse loop untouched. In tajweed only cells stage (words swallowed). Reactive `report-*` passes (`report-dim`+`report-inert` spotlight, staged/focused/public flags). `data-has-tj='1'` ⇐ the cell carries a `ruleTag` (pickable rule) OR a badge/silent name |
 | `components/TimestampsFooterReport.svelte` + `report/ReportMenu.svelte` + `ReportComposer.svelte` | the drop-up: category list, inline audio/other composer (fixed-height field so it never reflows the drop-up), and `onenterMode` → report mode |
 | `components/report/ReportControlStrip.svelte` | the strip that replaces the waveform — header (title + static subtype label, no toggle), Cancel + Submit, and ONE inline row per staged cell (`label · subtype/rule control · comment · ✕`) |
 | `services/report-submit.ts` + `reports-client.ts` | build `TsReportBatchCreateRequest` from staged + reconcile removed own reports (`deleteReport`); the fetch client |
@@ -110,11 +110,16 @@ verse-scoped).
 
 The `report-*` classes are toggled **imperatively on a cached node list from a
 reactive one-shot, never inside the 60fps `updateHighlights()`** (the disjoint
-class names keep the two off each other). In tajweed `wrong_rule`, rule-less cells
-get `report-dim` (opacity) **and** `report-inert` (`pointer-events:none`, killing
-both click and hover tooltip), so only rule-bearing cells stay interactive; a
-silent cell that *carries* a rule (`data-has-tj='1'`) is un-greyed + selectable in
-report mode. `report-flag-staged` / `report-flag-public` draw a red `outline` ring
+class names keep the two off each other). The spotlight dims + inerts
+(`report-dim` opacity + `report-inert` `pointer-events:none`, killing click AND
+hover tooltip) the cells that can't carry the current report: in tajweed
+`wrong_rule`, every cell with `data-has-tj!='1'` (no rule); in **timing**, every
+cell with `data-cell-timed!='1'` (a silent letter has no duration to call
+too-long/short — words stay live). So only rule-bearing cells (tajweed) or
+timed letters (timing) stay interactive. The `wrong_rule` rule-picker offers
+only **labelable** tags — sentinels like `silent_unclassified` are dropped
+(`ruleHasLabel`), so it never shows a raw tag id; the cell's true rule name still
+shows on the grid hover tooltip via `data-tj-rules`. `report-flag-staged` / `report-flag-public` draw a red `outline` ring
 (outline, not box-shadow, so it never collides with the tajweed underline and
 never reflows); `report-focused` adds the accent ring. Styles live in
 `styles/timestamps.css`; the tooltip line is appended by `_tipTextFor`.
@@ -125,9 +130,11 @@ never reflows); `report-focused` adds the accent ring. Styles live in
   `TimestampsTab.armVerseLock()` arms a whole-verse loop (`[verse start, next
   verse start)` — covers the trailing silence). That pin stops free play from
   auto-advancing and suppresses shuffle (`maybeFireShuffle` also bails on
-  `reportModeActive`). Selecting a timing cell narrows the loop to that cell. Only
-  a **manual** ayah/reciter change moves the focus verse → `_syncVerseReports`
-  exits the session + discards staged. `exitReportMode` clears the loop.
+  `reportModeActive`). Selecting a **timing** cell narrows the loop to that cell;
+  selecting a **tajweed** cell does NOT touch the loop or play/pause (you judge a
+  rule against the running verse, not an isolated cell). Only a **manual**
+  ayah/reciter change moves the focus verse → `_syncVerseReports` exits the
+  session + discards staged. `exitReportMode` clears the loop.
 - **Auto-discard incomplete.** Moving focus to another cell drops the previously
   focused annotation when it is still missing a required field (timing subtype /
   tajweed rule pick when >1 option / mandatory comment); `report-submit` re-filters
@@ -139,9 +146,10 @@ never reflows); `report-focused` adds the accent ring. Styles live in
 - **`cell_index` is the raw `word.cells[]` index** (matches backend
   `word_cells(word)`), captured before the hamza-waṣl transform; synthesized
   cells fall back to `source_letter_index`.
-- **Phoneme-direct tajweed targeting is deferred** — the FE phoneme index is
-  verse-flat while the wire `phoneme_flat_index` is word-local; report mode
-  targets cells (which carry the rule via `phoneme_rule_tags`), not phonemes.
+- **Phonemes are hidden in report mode** — both modes force letters-only and
+  disable the letters/phonemes footer toggles (`reportModeActive`), so phonemes
+  are never a click target. Report mode targets cells (which carry the rule via
+  `phoneme_rule_tags`); phoneme-direct targeting stays deferred.
 - **One key function.** DOM keys (`elCellKey`) and wire keys (`targetCellKey`)
   must agree or public flags won't land on the right cell.
 - **dev-remote can't exercise the real endpoints** (the deployed dev Space

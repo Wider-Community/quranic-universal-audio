@@ -7,11 +7,14 @@
  * Submit; Cancel discards. The caller's own open reports of the active category
  * are seeded on entry so they show as editable flags.
  *
- * - `timing` forces letters-only (snapshots + restores the display toggles) and
- *   loops the selected cell (the loop is driven by `loopTarget`, set by the
- *   grid click). Each flagged cell is its own row; rows group by word at submit.
- * - `tajweed` keeps the current rows but forces every legend colour on (snapshot
- *   + restore) so all rules are visible to target. The subtype (`wrong_rule` /
+ * Both modes force letters-only (phonemes are never a targetable rule/timing
+ * surface) and snapshot + restore the display toggles on exit.
+ *
+ * - `timing` loops the selected cell (the loop is driven by `loopTarget`, set by
+ *   the grid click). Each flagged cell is its own row; rows group by word at submit.
+ * - `tajweed` additionally forces every legend colour on (snapshot + restore) so
+ *   all rules are visible to target, and does NOT loop the cell — playback keeps
+ *   its play/pause state and the whole-verse loop. The subtype (`wrong_rule` /
  *   `missing_rule`) is fixed at entry. Each flagged cell is its own report, unique
  *   per cell PER subtype; wrong_rule carries the picked internal rule tag(s).
  *
@@ -166,7 +169,11 @@ export function enterTiming(slug: string, verseKey: string): void {
 
 export function enterTajweed(slug: string, verseKey: string, subtype: TajweedSubtype): void {
     dashPort.pause();
-    displaySnapshot = null; // tajweed keeps whatever rows are on
+    // Letters-only: phonemes never carry a targetable tajweed rule, so hide them
+    // and force letters on (restored on exit) to keep the click surface clean.
+    displaySnapshot = { letters: get(showLetters), phonemes: get(showPhonemes) };
+    showLetters.set(true);
+    showPhonemes.set(false);
     tajweedSnapshot = forceAllTajweedEnabled(); // every rule visible to target
     reportContext.set({ slug, verseKey });
     focusedCellKey.set(null);

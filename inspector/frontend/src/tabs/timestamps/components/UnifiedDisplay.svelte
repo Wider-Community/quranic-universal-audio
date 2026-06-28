@@ -22,6 +22,7 @@
     import { splitPhone } from '../utils/phoneme-columns';
     import { buildRendered, groupUnits } from '../utils/rendered-blocks';
     import {
+        ruleHasLabel,
         tjKubraColor,
         tjRuleNames,
         tjShadow,
@@ -279,6 +280,7 @@
         const focused = get(focusedCellKey);
         const pub = _publicByKey();
         const dimWrong = mode.kind === 'tajweed' && mode.subtype === 'wrong_rule';
+        const timing = mode.kind === 'timing';
         const els = rootEl.querySelectorAll<HTMLElement>('[data-cell-index], .mega-phoneme, .mega-block');
         els.forEach((el) => {
             const key = elCellKey(el);
@@ -286,8 +288,12 @@
             // cell/phoneme that carries no rule (letters + phonemes both expose
             // data-has-tj; blocks have none). Inert kills click AND hover tooltip.
             const noTj = dimWrong && el.hasAttribute('data-has-tj') && el.getAttribute('data-has-tj') !== '1';
-            el.classList.toggle('report-dim', noTj);
-            el.classList.toggle('report-inert', noTj);
+            // timing spotlights letters that own playback time: a silent letter has
+            // no duration to call too-long/short, so dim + inert it (words keep on).
+            const noTiming = timing && el.hasAttribute('data-cell-index') && el.dataset.cellTimed !== '1';
+            const off = noTj || noTiming;
+            el.classList.toggle('report-dim', off);
+            el.classList.toggle('report-inert', off);
             el.classList.toggle('report-flag-staged', active && !!key && stagedMap.has(key));
             el.classList.toggle('report-focused', active && !!key && key === focused);
             const reps = key ? pub.get(key) : undefined;
@@ -346,7 +352,12 @@
             if (mode.kind === 'timing') {
                 upsertStaged({ kind: 'timing', cellKey: key, target, wordIndex: target.word_index ?? -1, subtype: null, comment: '' });
             } else if (mode.kind === 'tajweed') {
-                const opts = (el.getAttribute('data-tj-tags') || '').split(',').filter(Boolean);
+                // Only real, labelable rules are pickable — drop sentinels like
+                // `silent_unclassified` so the picker never shows a raw tag id.
+                const opts = (el.getAttribute('data-tj-tags') || '')
+                    .split(',')
+                    .filter(Boolean)
+                    .filter(ruleHasLabel);
                 upsertStaged({
                     kind: 'tajweed',
                     cellKey: key,
@@ -359,9 +370,12 @@
             }
         }
         focusCell(key); // auto-discards a previously focused incomplete cell
-        // Loop the selected cell in BOTH modes (audio reference). A phoneme span
-        // loops on its own phone (verse-flat `data-index`); a letter/diacritic
-        // cell loops on its letter span. Silent cells with no timing skip.
+        // Only timing loops the selected cell (audio reference). Tajweed keeps the
+        // current play/pause state + the whole-verse loop untouched — a tajweed
+        // judgement doesn't need the cell isolated on a loop.
+        if (mode.kind !== 'timing') return;
+        // A letter/diacritic cell loops on its letter span; silent cells with no
+        // timing skip (handled below).
         const lv = get(loadedVerse);
         if (!lv) return;
         const wi = parseInt(el.dataset.wordIndex ?? '-1', 10);
@@ -1205,7 +1219,7 @@
                                             data-cell-end={f.cellEnd}
                                             data-word-index={block.wordIndex}
                                             data-cell-index={f.cellIndex}
-                                            data-has-tj={f.tjBadges.length || f.silentRules.length ? '1' : '0'}
+                                            data-has-tj={f.ruleTags.length || f.tjBadges.length || f.silentRules.length ? '1' : '0'}
                                             data-tj-tags={f.ruleTags.join(',')}
                                             style:box-shadow={tjShadowFor(f.tjBadges, $tajweedSettings)}
                                             class:tj-kubra={!!tjKubraFor(f.tjBadges, $tajweedSettings)}
@@ -1228,7 +1242,7 @@
                                             data-cell-index={f.cellIndex}
                                             data-source-letter-index={f.letterIndex}
                                             data-share-group={f.shareGroup}
-                                            data-has-tj={f.tjBadges.length || f.silentRules.length ? '1' : '0'}
+                                            data-has-tj={f.ruleTags.length || f.tjBadges.length || f.silentRules.length ? '1' : '0'}
                                             data-tj-tags={f.ruleTags.join(',')}
                                             style:box-shadow={tjShadowFor(f.tjBadges, $tajweedSettings)}
                                             class:tj-kubra={!!tjKubraFor(f.tjBadges, $tajweedSettings)}
@@ -1260,7 +1274,7 @@
                                             data-cell-index={f.cellIndex}
                                             data-source-letter-index={f.letterIndex}
                                             data-share-group={f.shareGroup}
-                                            data-has-tj={f.tjBadges.length || f.silentRules.length ? '1' : '0'}
+                                            data-has-tj={f.ruleTags.length || f.tjBadges.length || f.silentRules.length ? '1' : '0'}
                                             data-tj-tags={f.ruleTags.join(',')}
                                             style:box-shadow={tjShadowFor(f.tjBadges, $tajweedSettings)}
                                             class:tj-kubra={!!tjKubraFor(f.tjBadges, $tajweedSettings)}
@@ -1292,7 +1306,7 @@
                                             data-dia-loop-idx={c.phoneIdx.length ? c.phoneIdx[0] : undefined}
                                             data-cell-index={c.cellIndex}
                                             data-share-group={c.shareGroup}
-                                            data-has-tj={c.tjBadges.length || c.silentRules.length ? '1' : '0'}
+                                            data-has-tj={c.ruleTags.length || c.tjBadges.length || c.silentRules.length ? '1' : '0'}
                                             data-tj-tags={c.ruleTags.join(',')}
                                             style:box-shadow={tjShadowFor(c.tjBadges, $tajweedSettings)}
                                             class:tj-kubra={!!tjKubraFor(c.tjBadges, $tajweedSettings)}
