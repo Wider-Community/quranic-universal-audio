@@ -127,6 +127,22 @@ export function buildRendered(
         if (isBridgeTag(c.tag) && c.shareGroup != null) idghamGroupTags.set(c.shareGroup, c.tag!);
     }
 
+    // Every rule tag present ANYWHERE in a share group → so a co-lit partner that
+    // owns no tag (a vowel co-lit with its madd letter, an idgham receiver) is
+    // still reportable as that shared rule. Drives `cellRuleTags` (report
+    // targetability), not the visual badge.
+    const shareGroupRuleTags = new Map<number, string[]>();
+    for (const c of allCells) {
+        if (c.shareGroup == null) continue;
+        const own = [c.tag, ...(c.secondaryTags ?? []), izharCellTag.get(c)].filter(
+            (t): t is string => !!t,
+        );
+        if (!own.length) continue;
+        const cur = shareGroupRuleTags.get(c.shareGroup) ?? [];
+        for (const t of own) if (!cur.includes(t)) cur.push(t);
+        shareGroupRuleTags.set(c.shareGroup, cur);
+    }
+
     // Per-flat-index underline badges, built verse-wide — the single source for
     // BOTH inline phoneme boxes and the cross-word bridge tile (a merger phone is
     // the receiver's). A cell contributes its own tag + secondary tafkheem +
@@ -284,7 +300,7 @@ export function buildRendered(
             if (indexable) wli++;
         }
 
-        const groups = cellGroupsFor(word, intervals, shareUnions, nasalUnions, idghamGroupTags, izharCellTag, liftedIltiqaa.has(wi));
+        const groups = cellGroupsFor(word, intervals, shareUnions, nasalUnions, idghamGroupTags, shareGroupRuleTags, izharCellTag, liftedIltiqaa.has(wi));
         _buildColumns(groups, phonemes);
 
         blocks.push({

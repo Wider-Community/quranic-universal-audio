@@ -793,6 +793,33 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         }
     });
 
+    it('share group: a tag-less co-lit partner inherits the group rule so report mode can select it', () => {
+        // A madd letter (carries the rule) co-lights with its vowel (no own tag)
+        // through one share group. In report mode BOTH must be flaggable as that
+        // shared rule — the partner must expose data-has-tj='1' + the rule tag,
+        // not just the cell that literally owns the tag.
+        const intervals: PhonemeInterval[] = [
+            { phone: 'a', start: 0, end: 0.1 },
+            { phone: 'aː', start: 0.1, end: 0.4 },
+        ];
+        const word = w(
+            [{ char: 'ب', start: 0, end: 0.1, silent: false }, { char: 'ا', start: 0.1, end: 0.4, silent: false }],
+            [
+                base(0, [0], { chars: 'ب' }),
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [0], sourceLetterIndex: 0, tag: null, shareGroup: 3 },
+                base(1, [1], { chars: 'ا', tag: 'madd_tabii', shareGroup: 3 }),
+            ],
+            [0, 1],
+        );
+        const { container } = mount([word], intervals);
+        const vowel = container.querySelector<HTMLElement>('.haraka-cell')!;
+        expect(vowel.dataset.hasTj).toBe('1');
+        expect(vowel.dataset.tjTags).toContain('madd_tabii');
+        const maddLetter = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter'))
+            .find((e) => e.textContent === 'ا')!;
+        expect(maddLetter.dataset.hasTj).toBe('1');
+    });
+
     it('idgham shafawi: the absorbed vowel lights on its own haraka interval, disjoint from the meems', () => {
         // The vowel now lives ONLY on the receiving meem's haraka (its own interval, no
         // merger group). Looping the haraka lights its vowel [0.1, 0.25] without

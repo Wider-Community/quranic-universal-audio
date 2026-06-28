@@ -2,11 +2,14 @@
 --
 -- Categorized, cell-addressable Timestamps-tab reports (the rework of the
 -- verse-level-comment-only `ts_verse_flags`). A report names a category
--- (audio / timing / mapping / tajweed / other) with an optional per-category
--- subtype, and points at a flexible target: the whole verse, a word, a
--- letter/grapheme cell, a phoneme, a grapheme↔phoneme column, or a co-timed
--- cell-group (`share_group`). Owners resolve a report (single terminal
--- `resolved` outcome + optional comment); the reporter is notified.
+-- (audio / timing / mapping / tajweed / other) and points at a flexible target:
+-- the whole verse, a word, a letter/grapheme cell, a phoneme, a grapheme↔phoneme
+-- column, or a co-timed cell-group (`share_group`). Owners resolve a report
+-- (single terminal `resolved` outcome + optional comment); the reporter is notified.
+--
+-- Classification differs by category: `tajweed` uses `subtype`; `timing` uses two
+-- boundary axes (`timing_onset` / `timing_offset`, each early|late, ≥1 set) from
+-- which the human label is derived; audio/mapping/other carry neither.
 --
 -- Identity mirrors `ts_verse_flags`: EITHER a signed-in HF account
 -- (`hf_user_id` + cookie snapshot in `login_at_time`/`role_at_time`) OR an
@@ -37,7 +40,14 @@ CREATE TABLE ts_reports (
 
     -- Classification
     category              TEXT NOT NULL,                       -- audio|timing|mapping|tajweed|other
-    subtype               TEXT,                                -- per-category enum; NULL for audio/mapping/other
+    subtype               TEXT,                                -- tajweed enum; NULL for audio/timing/mapping/other
+
+    -- Timing boundary axes (timing category only; NULL elsewhere). A timing
+    -- report flags the onset (start) and/or offset (end); at least one is set.
+    -- The human label (too short/long, shifted, starts/finishes early/late) is
+    -- derived from the pair (qua_shared/schemas/wire/ts_reports.py::timing_label).
+    timing_onset          TEXT,                                -- early|late|NULL (NULL = start is fine)
+    timing_offset         TEXT,                                -- early|late|NULL (NULL = end is fine)
 
     -- Target descriptor (all nullable; a verse-level report leaves them NULL)
     target_kind           TEXT NOT NULL,                       -- verse|word|cell|phoneme|column|cell_group
@@ -60,6 +70,8 @@ CREATE TABLE ts_reports (
     snap_word_text        TEXT,
     snap_verse_text       TEXT,
     snap_schema_version   INTEGER,
+    snap_onset_ms         INTEGER,                             -- target start ms at create (timing boundary-shift fp)
+    snap_offset_ms        INTEGER,                             -- target end ms at create
 
     -- Reporter identity (exactly one of hf_user_id / anon_token)
     hf_user_id            TEXT REFERENCES users(hf_user_id),   -- NULL for anonymous

@@ -41,19 +41,20 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 ReportCategory = Literal["audio", "timing", "mapping", "tajweed", "other"]
 TargetKind = Literal["verse", "word", "cell", "phoneme", "column", "cell_group"]
 
-#: Union of every per-category subtype. The owning category constrains which
-#: values are valid (see ``TsReportCreateRequest._check``).
+#: Per-category subtype — tajweed only. The owning category constrains which
+#: values are valid (see ``TsReportCreateRequest._check``). Timing does NOT use
+#: a subtype; it carries the ``onset``/``offset`` boundary axes instead.
 ReportSubtype = Literal[
-    "too_long",
-    "too_short",
-    "other",
     "wrong_rule",
     "missing_rule",
     "should_be_silent",
     "should_not_be_silent",
 ]
 
-_TIMING_SUBTYPES = frozenset({"too_long", "too_short", "other"})
+#: A timing boundary's error direction. A timing report sets ``onset`` and/or
+#: ``offset`` (≥1); ``None`` on an axis means that boundary is fine.
+TimingDir = Literal["early", "late"]
+
 _TAJWEED_SUBTYPES = frozenset(
     {"wrong_rule", "missing_rule", "should_be_silent", "should_not_be_silent"}
 )
@@ -65,7 +66,7 @@ _ALLOWED_KINDS: dict[str, frozenset[str]] = {
     "mapping": frozenset({"column"}),
     "other": frozenset({"verse", "word", "cell", "phoneme", "column", "cell_group"}),
 }
-#: categories whose comment is always mandatory (timing.other is handled inline).
+#: categories whose comment is always mandatory.
 _COMMENT_REQUIRED = frozenset({"audio", "mapping", "other"})
 
 
@@ -80,31 +81,67 @@ def _validate_report_item(
     target: TsReportTarget,
     comment: str | None,
     selected_rule_tags: list[str] | None,
+    onset: str | None = None,
+    offset: str | None = None,
 ) -> None:
     """Per-item rules shared by single + batch create (keeps them from drifting):
-    subtype↔category, target-kind↔category, mandatory comment, and the
-    ``selected_rule_tags`` gate. Raises ``ValueError``."""
+    classification↔category, target-kind↔category, mandatory comment, and the
+    ``selected_rule_tags`` gate. Raises ``ValueError``.
+
+    Timing carries the ``onset``/``offset`` boundary axes (≥1 set) and no
+    ``subtype``; tajweed carries a ``subtype`` and no axes; audio/mapping/other
+    carry neither.
+    """
     if category == "timing":
-        if subtype not in _TIMING_SUBTYPES:
-            raise ValueError("timing reports require subtype too_long|too_short|other")
+        if subtype is not None:
+            raise ValueError("timing reports use onset/offset, not subtype")
+        if onset is None and offset is None:
+            raise ValueError("timing reports require at least one of onset/offset")
     elif category == "tajweed":
         if subtype not in _TAJWEED_SUBTYPES:
             raise ValueError(
                 "tajweed reports require subtype "
                 "wrong_rule|missing_rule|should_be_silent|should_not_be_silent"
             )
-    elif subtype is not None:
-        raise ValueError(f"{category} reports take no subtype")
+        if onset is not None or offset is not None:
+            raise ValueError("onset/offset are timing-only")
+    else:
+        if subtype is not None:
+            raise ValueError(f"{category} reports take no subtype")
+        if onset is not None or offset is not None:
+            raise ValueError("onset/offset are timing-only")
     if target.kind not in _ALLOWED_KINDS[category]:
         raise ValueError(
             f"{category} reports cannot target {target.kind!r}; "
             f"allowed: {sorted(_ALLOWED_KINDS[category])}"
         )
-    needs_comment = category in _COMMENT_REQUIRED or (category == "timing" and subtype == "other")
-    if needs_comment and not comment:
+    if category in _COMMENT_REQUIRED and not comment:
         raise ValueError(f"{category} reports require a comment")
     if selected_rule_tags and not (category == "tajweed" and subtype == "wrong_rule"):
         raise ValueError("selected_rule_tags is only valid on tajweed wrong_rule reports")
+
+
+def timing_label(onset: str | None, offset: str | None) -> str:
+    """Human label for a timing report's boundary axes (the report matrix).
+
+    onset/offset each ``early`` | ``late`` | ``None`` (fine). Both-None is not a
+    valid timing report (the validator rejects it) and maps to ``"Timing"`` here
+    defensively. Single source of truth for the derived label — BE notification
+    copy and the FE both call this rather than hardcoding."""
+    pair = (onset, offset)
+    both = {
+        ("early", "late"): "Too long",
+        ("late", "early"): "Too short",
+        ("early", "early"): "Shifted earlier",
+        ("late", "late"): "Shifted later",
+    }
+    if pair in both:
+        return both[pair]
+    if onset and offset is None:
+        return "Starts early" if onset == "early" else "Starts late"
+    if offset and onset is None:
+        return "Finishes early" if offset == "early" else "Finishes late"
+    return "Timing"
 
 
 class TsReportTarget(BaseModel):
@@ -186,6 +223,9 @@ class TsReport(BaseModel):
     verse_key: str
     category: ReportCategory
     subtype: ReportSubtype | None = None
+    #: Timing boundary axes (timing only); ``None`` on an axis = that boundary is fine.
+    onset: TimingDir | None = None
+    offset: TimingDir | None = None
     target: TsReportTarget
     snapshot: TsReportSnapshot | None = None
     comment: str | None = None
@@ -238,6 +278,9 @@ class TsReportCreateRequest(BaseModel):
     verse_key: str
     category: ReportCategory
     subtype: ReportSubtype | None = None
+    #: Timing boundary axes (timing only; ≥1 set). ``None`` = that boundary is fine.
+    onset: TimingDir | None = None
+    offset: TimingDir | None = None
     target: TsReportTarget
     comment: str | None = None
     #: Internal tajweed tag id(s) marked wrong (wrong_rule only).
@@ -263,7 +306,13 @@ class TsReportCreateRequest(BaseModel):
     @model_validator(mode="after")
     def _check(self) -> TsReportCreateRequest:
         _validate_report_item(
-            self.category, self.subtype, self.target, self.comment, self.selected_rule_tags
+            self.category,
+            self.subtype,
+            self.target,
+            self.comment,
+            self.selected_rule_tags,
+            self.onset,
+            self.offset,
         )
         return self
 
@@ -294,6 +343,9 @@ class TsReportBatchItem(BaseModel):
 
     category: ReportCategory
     subtype: ReportSubtype | None = None
+    #: Timing boundary axes (timing only; ≥1 set). ``None`` = that boundary is fine.
+    onset: TimingDir | None = None
+    offset: TimingDir | None = None
     target: TsReportTarget
     comment: str | None = None
     selected_rule_tags: list[str] = Field(default_factory=list)
@@ -308,7 +360,13 @@ class TsReportBatchItem(BaseModel):
     @model_validator(mode="after")
     def _check(self) -> TsReportBatchItem:
         _validate_report_item(
-            self.category, self.subtype, self.target, self.comment, self.selected_rule_tags
+            self.category,
+            self.subtype,
+            self.target,
+            self.comment,
+            self.selected_rule_tags,
+            self.onset,
+            self.offset,
         )
         return self
 

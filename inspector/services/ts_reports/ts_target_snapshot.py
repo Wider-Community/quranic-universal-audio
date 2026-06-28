@@ -25,6 +25,7 @@ import json
 import logging
 from typing import Any
 
+from config import TS_REPORT_BOUNDARY_STALE_MS
 from qua_shared.ts_shard_cells import CellRow, word_cells
 from services.storage import data_dir
 
@@ -69,13 +70,14 @@ def _verse_text(seg: dict[str, Any]) -> str:
     return " ".join(_letters_text(w) for w in (seg.get("words") or []))
 
 
-def _indexable_phones(word: Any) -> list[str]:
-    """Word phone strings in the word-local indexable coordinate space."""
+def _indexable_phone_rows(word: Any) -> list[Any]:
+    """Word phone ROWS (``[phone, start_ms, end_ms, ...]``) in the word-local
+    indexable coordinate space (render-only markers like ``Q`` excluded)."""
     try:
         phones = word[4] or []
     except (IndexError, TypeError):
         return []
-    out: list[str] = []
+    out: list[Any] = []
     for row in phones:
         try:
             p = str(row[0])
@@ -83,8 +85,41 @@ def _indexable_phones(word: Any) -> list[str]:
             continue
         if p in _RENDER_ONLY_PHONES:
             continue
-        out.append(p)
+        out.append(row)
     return out
+
+
+def _indexable_phones(word: Any) -> list[str]:
+    """Word phone strings in the word-local indexable coordinate space."""
+    return [str(r[0]) for r in _indexable_phone_rows(word)]
+
+
+def _row_bounds(rows: Any, idx: int) -> tuple[int | None, int | None]:
+    """``(start_ms, end_ms)`` from a letter/phone row at ``idx``; ``(None, None)``
+    on a miss or null timing."""
+    try:
+        r = rows[idx]
+        return r[1], r[2]
+    except (IndexError, TypeError):
+        return None, None
+
+
+def _word_bounds(word: Any) -> tuple[int | None, int | None]:
+    try:
+        return word[1], word[2]
+    except (IndexError, TypeError):
+        return None, None
+
+
+def _letter_bounds(word: Any, source_letter_index: Any) -> tuple[int | None, int | None]:
+    """Boundary ms of a cell's anchoring letter (``None`` for an implicit cell)."""
+    if not isinstance(source_letter_index, int) or source_letter_index < 0:
+        return None, None
+    try:
+        letters = word[3] or []
+    except (IndexError, TypeError):
+        return None, None
+    return _row_bounds(letters, source_letter_index)
 
 
 def _word_at(seg: dict[str, Any], word_index: int) -> Any | None:
@@ -132,6 +167,8 @@ def resolve_target(
 
     kind = target.get("kind")
     if kind == "verse":
+        t = seg.get("t") or []
+        snap["onset_ms"], snap["offset_ms"] = (t[0], t[1]) if len(t) >= 2 else (None, None)
         return snap
 
     wi = target.get("word_index")
@@ -140,6 +177,7 @@ def resolve_target(
         return None
     snap["word_text"] = _letters_text(word)
     if kind == "word":
+        snap["onset_ms"], snap["offset_ms"] = _word_bounds(word)
         return snap
 
     cells = word_cells(word)
@@ -153,6 +191,7 @@ def resolve_target(
         if c is None:
             return None
         snap.update(_cell_snapshot(c))
+        snap["onset_ms"], snap["offset_ms"] = _letter_bounds(word, c.source_letter_index)
         return snap
 
     if kind == "column":
@@ -163,14 +202,16 @@ def resolve_target(
         snap.update(_cell_snapshot(c))
         idx = _indexable_phones(word)
         snap["phones"] = [idx[i] for i in c.phoneme_indices if 0 <= i < len(idx)]
+        snap["onset_ms"], snap["offset_ms"] = _letter_bounds(word, c.source_letter_index)
         return snap
 
     if kind == "phoneme":
         pi = target.get("phoneme_flat_index")
-        idx = _indexable_phones(word)
-        if not isinstance(pi, int) or not (0 <= pi < len(idx)):
+        rows = _indexable_phone_rows(word)
+        if not isinstance(pi, int) or not (0 <= pi < len(rows)):
             return None
-        snap["chars"] = idx[pi]
+        snap["chars"] = str(rows[pi][0])
+        snap["onset_ms"], snap["offset_ms"] = _row_bounds(rows, pi)
         owner = next((c for c in cells if pi in c.phoneme_indices), None)
         if owner is not None:
             snap["role"] = owner.role
@@ -190,6 +231,11 @@ def resolve_target(
         snap["share_group"] = sg
         tags = sorted({c.tag for c in group if c.tag})
         snap["secondary_tags"] = tags
+        bounds = [_letter_bounds(word, c.source_letter_index) for c in group]
+        starts = [s for s, _ in bounds if s is not None]
+        ends = [e for _, e in bounds if e is not None]
+        snap["onset_ms"] = min(starts) if starts else None
+        snap["offset_ms"] = max(ends) if ends else None
         return snap
 
     return None
@@ -218,6 +264,11 @@ def _norm(v: Any) -> Any:
     if isinstance(v, list):
         return tuple(v)
     return v
+
+
+def _shifted(a: Any, b: Any, threshold_ms: int) -> bool:
+    """Did a boundary move beyond the threshold? Needs both ms known."""
+    return isinstance(a, int) and isinstance(b, int) and abs(a - b) > threshold_ms
 
 
 def is_stale_after_restamp(report: dict[str, Any], doc: dict[str, Any]) -> bool:

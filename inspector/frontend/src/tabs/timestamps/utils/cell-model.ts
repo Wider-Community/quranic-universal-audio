@@ -344,6 +344,7 @@ export function cellGroupsFor(
     shareUnions: Map<number, [number, number]>,
     nasalUnions: Map<number, [number, number]>,
     idghamGroupTags: Map<number, string>,
+    shareGroupRuleTags: Map<number, string[]>,
     izharCellTag: Map<TsCell, string>,
     liftIltiqaa = false,
 ): RenderedGroup[] {
@@ -392,13 +393,18 @@ export function cellGroupsFor(
         ]);
     };
     // Internal tajweed tag id(s) on the cell — the report rule-picker's options
-    // (primary + secondary + the synthesized iẓhar default), keyed by the
-    // data-model id, never a display label.
+    // (primary + secondary + the synthesized iẓhar default + every rule shared
+    // across the cell's co-highlight group, so a tag-less co-lit partner is still
+    // reportable as the shared rule), keyed by the data-model id, never a label.
     const cellRuleTags = (c: TsCell): string[] => {
-        const groupTag = c.shareGroup != null ? idghamGroupTags.get(c.shareGroup) : undefined;
-        return [c.tag, ...(c.secondaryTags ?? []), izharCellTag.get(c), groupTag].filter(
-            (t): t is string => !!t,
-        );
+        const grp = c.shareGroup != null ? shareGroupRuleTags.get(c.shareGroup) : undefined;
+        return [
+            ...new Set(
+                [c.tag, ...(c.secondaryTags ?? []), izharCellTag.get(c), ...(grp ?? [])].filter(
+                    (t): t is string => !!t,
+                ),
+            ),
+        ];
     };
     // Context-derived silent-rule names (need the cell's neighbours): a trailing
     // dropped ḥaraka/tanwīn with nothing sounding after it is the word-final
