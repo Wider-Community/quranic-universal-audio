@@ -455,10 +455,14 @@ _OWNED_KNOBS = (
     "INSPECTOR_READ_ONLY",
     "INSPECTOR_DB_SYNC",
     "INSPECTOR_AUTO_MOUNT",
+    "INSPECTOR_AUDIO_FROM_BUCKET",
+    "INSPECTOR_PEAKS_FROM_BUCKET",
 )
 
 
-def backend_env(root: Path, mode: str) -> dict[str, str]:
+def backend_env(
+    root: Path, mode: str, *, bucket_audio: bool = False, ffmpeg_peaks: bool = False
+) -> dict[str, str]:
     """Per-worktree backend env, authoritative for every run-mode knob.
 
     The launcher determines the run profile — which backend, which bucket,
@@ -476,15 +480,23 @@ def backend_env(root: Path, mode: str) -> dict[str, str]:
     env["INSPECTOR_DB_PATH"] = str(root / ".local" / "launch" / "inspector.db")
     env.setdefault("INSPECTOR_RELEASE_POLL", "0")  # dev: no HF-Job polling loop
 
+    # Peaks honour --ffmpeg-peaks in every mode (ffmpeg works offline too).
+    env["INSPECTOR_PEAKS_FROM_BUCKET"] = "0" if ffmpeg_peaks else "1"
+
     if mode == "fixtures":
         fx = ensure_fixtures(root)
         env["INSPECTOR_BACKEND"] = "filesystem"
         env["INSPECTOR_FILESYSTEM_ROOT"] = str(fx)
         env["INSPECTOR_AUTO_MOUNT"] = "0"
+        # Offline: audio must come from the local fixtures, never the CDN.
+        env["INSPECTOR_AUDIO_FROM_BUCKET"] = "1"
         return env
 
     # dev / prod read a bucket.
     env["INSPECTOR_BACKEND"] = "bucket"
+    # Audio: default to the CDN (fast); the bucket's hffs full-MP3 read is slow
+    # locally. --bucket-audio forces the bucket (to verify re-encoded audio).
+    env["INSPECTOR_AUDIO_FROM_BUCKET"] = "1" if bucket_audio else "0"
     if mode == "prod":
         # PROD bucket, READ-ONLY. Two guards so nothing local can mutate prod:
         #   INSPECTOR_READ_ONLY=1 — the storage backend refuses EVERY write
@@ -606,7 +618,9 @@ def cmd_up(args: argparse.Namespace) -> int:
             pid = spawn_detached(
                 [sys.executable, "inspector/app.py", "--port", str(backend_port)],
                 cwd=root,
-                env=backend_env(root, mode),
+                env=backend_env(
+                    root, mode, bucket_audio=args.bucket_audio, ffmpeg_peaks=args.ffmpeg_peaks
+                ),
                 log_path=logs / f"backend-{backend_port}.log",
             )
             stack.backend_pid = pid
@@ -948,6 +962,16 @@ def build_parser() -> argparse.ArgumentParser:
     up.add_argument("--worktree", help="worktree name or path (default: current)")
     up.add_argument("--no-vite", action="store_true", help="backend only")
     up.add_argument("--no-backend", action="store_true", help="(requires --no-vite)")
+    up.add_argument(
+        "--bucket-audio",
+        action="store_true",
+        help="read audio from the bucket instead of the CDN (slower; verifies re-encoded audio)",
+    )
+    up.add_argument(
+        "--ffmpeg-peaks",
+        action="store_true",
+        help="skip bucket peaks; compute per-segment peaks via ffmpeg",
+    )
     up.add_argument(
         "--smoke", action="store_true", help="run the Dashboard+Timestamps smoke after ready"
     )

@@ -37,6 +37,15 @@ The script (`scripts/devenv/launch.py`) owns everything that used to go wrong by
 - **prod** — backend reads the **PROD bucket**, **read-only** (two guards: `INSPECTOR_READ_ONLY=1` makes the storage backend refuse *every* write — segment saves, manifests, job records — and `INSPECTOR_DB_SYNC=0` keeps DB commits local). Nothing local can mutate production by any path; an edit attempt fails loud rather than corrupting prod. A safe look at real production data. First reads are slow (big uncached prod bucket over hffs).
 - **fixtures** — fully offline: filesystem backend on seeded fixtures (auto-seeds on first run) + Vite. No token, no network.
 
+### Per-content read source
+
+The bucket isn't the fastest source for every content type locally. By default in `dev`/`prod`:
+- **Audio → CDN** (not the bucket): the bucket's hffs full-MP3 read is slow locally, and the CDN is the same audio for most reciters. `--bucket-audio` forces the bucket (to verify the re-encoded/stereo-fixed audio that can differ from the CDN). `fixtures` always reads local audio (offline, no CDN).
+- **Peaks → bucket** (slim `peaks/*.json.gz`): `--ffmpeg-peaks` skips them so the FE computes per-segment peaks via ffmpeg instead.
+- **Shards / detailed / manifest → bucket** always (no toggle).
+
+Knobs: `INSPECTOR_AUDIO_FROM_BUCKET` / `INSPECTOR_PEAKS_FROM_BUCKET` (the launcher owns these per mode; the flags above override).
+
 ## For agents (Playwright / Chrome MCP)
 
 Run `up` (it starts both backend + Vite), read the `LAUNCH_JSON` line for the `url`, then drive that URL. Use **dev** (the default). `--smoke` runs a bundled headless-chromium check of the Dashboard (catalog fetches succeed) and Timestamps (the first TS reciter renders a non-empty waveform); screenshots + `result.json` land in `<worktree>/.local/launch/smoke/`.
