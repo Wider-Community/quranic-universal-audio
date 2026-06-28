@@ -205,6 +205,48 @@ describe('AyahFilmstrip loopback (recitation-driven)', () => {
         expect(off).toBeLessThanOrEqual(v1Right);
         expect(Math.abs(off - resumeOffset)).toBeLessThan(Math.abs(off - v1Left));
     });
+
+    // v1 (2 words) · v2 (4 words, FULL first take) · v3 (2 words), then a partial
+    // v2 re-take (words 1-2 only, 10-12s) that DEPARTS mid-verse and loops back to
+    // v1 (13-15s). The gap of interest is 12-13s: the audio left from v2's word 2
+    // (mid-cell), not v2's end. Symmetric with the resume-word test above.
+    const departUnits: AnimUnit[] = [
+        unit('1:1:1', [[0, 1], [13, 14]]),
+        unit('1:1:2', [[1, 2], [14, 15]]),
+        unit('1:2:1', [[2, 3], [10, 11]]),
+        unit('1:2:2', [[3, 4], [11, 12]]),
+        unit('1:2:3', [[4, 5]]),
+        unit('1:2:4', [[5, 6]]),
+        unit('1:3:1', [[6, 7]]),
+        unit('1:3:2', [[7, 8]]),
+    ];
+    const departModel = buildFilmstripModel(departUnits, 'duration');
+
+    it('scrolls the gap FROM the mid-verse departure word, not the verse end', async () => {
+        const { container } = render(AyahFilmstrip, {
+            units: departUnits, model: departModel, durationMs: 16000, getTimeMs, playing: true,
+            config: { ...DEFAULT_RECITATION_CONFIG, filmstripMotion: 'hybrid', filmstripPxPerSec: 50 },
+            onSeek: () => {},
+        });
+        await tick();
+
+        const [v2Left, v2Right] = cellSpans(container)[1]!; // verse 2 region
+        const awV2 = v2Right - v2Left; // 4 words × 1s × 50px/s = 200px
+        // Word 2's end sits at frac1 = 0.5 → mid of the verse cell.
+        const departOffset = v2Left + 0.5 * awV2;
+
+        // Forward play through v1·v2·v3, then the partial v2 re-take (words 1-2).
+        for (const ms of [500, 2500, 3500, 4500, 5500, 6500, 10_500, 11_500]) await step(ms);
+        expect(activeCellAyah(container)).toBe(2);
+
+        // Just inside the 12-13s loopback gap (p≈0) — the scroll must START from the
+        // mid-verse departure word, not jerk forward to verse 2's end first.
+        await step(12_080);
+        const off = scrollOffset(container);
+        expect(off).toBeLessThan(v2Right - 0.25 * awV2); // not parked at verse 2's end…
+        expect(off).toBeGreaterThan(v2Left); // …still inside verse 2…
+        expect(Math.abs(off - departOffset)).toBeLessThan(Math.abs(off - v2Right)); // …near the mid-verse depart
+    });
 });
 
 describe('AyahFilmstrip gap scale is global (chapter-independent)', () => {

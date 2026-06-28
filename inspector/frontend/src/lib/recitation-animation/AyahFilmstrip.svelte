@@ -486,17 +486,18 @@
         return false;
     }
 
-    /** The end (seconds) of the latest occurrence interval that finished at or
-     *  before `tSec` — the true start of the silence the audio is now inside.
-     *  Robust for a BACKWARD loopback gap, where the audio left from a later
-     *  occurrence than the frozen verse's forward-flowing `canonEndSec`. */
-    function prevIntervalEnd(tSec: number): number {
-        let end = -Infinity;
+    /** The latest occurrence interval that finished at or before `tSec` — the take
+     *  the audio just LEFT, whose `end` is the true start of the silence the audio
+     *  is now inside and whose `unitIdx` is the word it departed from. Robust for a
+     *  BACKWARD loopback gap, where the audio left from a later occurrence than the
+     *  frozen verse's forward-flowing `canonEndSec`. `null` before the first word. */
+    function prevInterval(tSec: number): { end: number; unitIdx: number } | null {
+        let best: { end: number; unitIdx: number } | null = null;
         for (const iv of sorted) {
             if (iv.start > tSec) break; // sorted by start; nothing later can have begun
-            if (iv.end <= tSec && iv.end > end) end = iv.end;
+            if (iv.end <= tSec && (!best || iv.end > best.end)) best = { end: iv.end, unitIdx: iv.unitIdx };
         }
-        return end;
+        return best;
     }
 
     /** Scroll the needle across the inter-cell gap proportionally to the elapsed
@@ -513,15 +514,23 @@
         const cellA = cells[frozenIdx];
         const cellB = cells[nextIdx];
         if (!mcA || !mcB || !cellA || !cellB || mcA.canonEndSec < 0) return;
-        const prevEnd = prevIntervalEnd(tSec);
-        const gapStart = prevEnd > -Infinity ? prevEnd : mcA.canonEndSec;
+        const prev = prevInterval(tSec);
+        const gapStart = prev ? prev.end : mcA.canonEndSec;
         const gapEnd = nextIv.start;
         const p = gapEnd > gapStart ? clamp(0, 1, (tSec - gapStart) / (gapEnd - gapStart)) : 1;
+        // Depart from the WORD the audio actually LEFT (`prev`'s unit), not verse A's
+        // end — a mid-verse loopback leaves mid-cell, so anchoring at frac 1 would
+        // jerk forward to the verse end before travelling back. Symmetric with the
+        // resume-word landing below. Falls back to the verse end when the departure
+        // interval isn't in cell A (the canonical forward-flow case).
+        const departFrac = prev && (model.cellOfUnit[prev.unitIdx] ?? -1) === frozenIdx
+            ? mcA.words[prev.unitIdx - mcA.unitStart]?.frac1 ?? 1
+            : 1;
         // Land on the WORD the reciter actually resumes (`nextIv`'s unit), not verse
         // B's start — a mid-verse loopback resumes mid-cell, so targeting frac 0
         // would overshoot to the verse start then jerk forward to the live word.
         const resumeFrac = mcB.words[nextIv.unitIdx - mcB.unitStart]?.frac0 ?? 0;
-        const from = cellA.cumBefore + (cellA.w + cellA.aw) / 2; // end of A's active span
+        const from = cellA.cumBefore + (cellA.w - cellA.aw) / 2 + departFrac * cellA.aw; // A's depart word
         const to = cellB.cumBefore + (cellB.w - cellB.aw) / 2 + resumeFrac * cellB.aw; // B's resume word
         scroll.snap(lerp(from, to, p));
     }
