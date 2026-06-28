@@ -4,9 +4,11 @@ Reader-facing issue reporting on the **Timestamps** tab: a visitor (anonymous or
 signed-in) flags a problem on the verse they're hearing, an owner resolves it,
 and everyone sees persisted flags in the analysis grid. Two surfaces:
 
-- **Drop-up** (footer Report button) — pick a category. `audio` / `other` open an
-  inline comment composer (verse-level). `timing` / `tajweed` enter report mode.
-  `mapping` is present but deferred (`soon`).
+- **Drop-up** (footer Report button) — pick a category, in order `timing` →
+  `tajweed` → `audio` → `other`. `audio` / `other` open an inline comment
+  composer (verse-level); `timing` / `tajweed` enter report mode. `mapping` is a
+  valid backend category but not surfaced — kept as `MAPPING_CATEGORY` in
+  `domain/report-categories.ts` for if the letter↔sound flow is revisited.
 - **Report mode** — an in-grid mode that replaces the waveform with a control
   strip and turns the analysis grid into the click surface, so a contributor
   annotates specific cells without a modal blocking them.

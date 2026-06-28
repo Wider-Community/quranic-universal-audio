@@ -7,10 +7,11 @@
  * - `comment` — verse-level, no target needed; the drop-up opens a comment
  *   composer inline (audio, other). Wired end-to-end.
  * - `target`  — the issue points at a specific spot (word / cell / phoneme /
- *   column) the user picks on the analysis grid (timing, mapping, tajweed).
- *   The picker is the next step; these rows render but defer to `targetHint`.
+ *   column) the user picks on the analysis grid (timing, tajweed).
  *
- * Order matches the backend category order. Labels/blurbs are user-facing.
+ * Drop-up order is timing → tajweed → audio → other. `mapping` is a valid
+ * backend category but intentionally not surfaced — kept as `MAPPING_CATEGORY`
+ * for if we revisit the letter↔sound flow.
  */
 
 import type { TsReport } from '../../../lib/types/generated/schemas';
@@ -44,14 +45,6 @@ export interface ReportCategoryDef {
 
 export const REPORT_CATEGORIES: ReportCategoryDef[] = [
     {
-        id: 'audio',
-        label: 'Audio',
-        blurb: 'Recording quality, or wrong / missing audio',
-        flow: 'comment',
-        subtypes: [],
-        placeholder: 'What sounds wrong on this verse?',
-    },
-    {
         id: 'timing',
         label: 'Timing',
         blurb: 'A boundary starts or ends off',
@@ -60,14 +53,6 @@ export const REPORT_CATEGORIES: ReportCategoryDef[] = [
         targetHint: 'Pick the word or cell on the analysis grid',
         // Timing classification is the two-axis onset/offset picker in the in-grid
         // control strip, not a category-level subtype list.
-        subtypes: [],
-    },
-    {
-        id: 'mapping',
-        label: 'Mapping',
-        blurb: 'A letter is bound to the wrong sound',
-        flow: 'target',
-        targetHint: 'Pick the letter-to-sound column on the grid',
         subtypes: [],
     },
     {
@@ -85,6 +70,14 @@ export const REPORT_CATEGORIES: ReportCategoryDef[] = [
         ],
     },
     {
+        id: 'audio',
+        label: 'Audio',
+        blurb: 'Recording quality, or wrong / missing audio',
+        flow: 'comment',
+        subtypes: [],
+        placeholder: 'What sounds wrong on this verse?',
+    },
+    {
         id: 'other',
         label: 'Other',
         blurb: 'Anything else about this verse',
@@ -93,3 +86,17 @@ export const REPORT_CATEGORIES: ReportCategoryDef[] = [
         placeholder: 'Describe the issue…',
     },
 ];
+
+/**
+ * `mapping` (a letter bound to the wrong sound) — a valid backend category that
+ * is intentionally not surfaced in the drop-up. Kept here so re-adding it later
+ * is just a matter of slotting it back into `REPORT_CATEGORIES`.
+ */
+export const MAPPING_CATEGORY: ReportCategoryDef = {
+    id: 'mapping',
+    label: 'Mapping',
+    blurb: 'A letter is bound to the wrong sound',
+    flow: 'target',
+    targetHint: 'Pick the letter-to-sound column on the grid',
+    subtypes: [],
+};

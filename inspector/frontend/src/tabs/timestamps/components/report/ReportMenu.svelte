@@ -2,11 +2,12 @@
     /**
      * Category picker for the Report drop-up.
      *
-     * Lists the report taxonomy (audio · timing · mapping · tajweed · other).
+     * Lists the surfaced report taxonomy (timing · tajweed · audio · other).
      * Comment-flow categories (audio, other) expand a comment composer INLINE in
      * the row's accordion (the menu stays visible). `timing` enters the in-grid
      * report mode directly; `tajweed` expands to its wrong/missing subtype, each
-     * entering report mode via `onenterMode`. `mapping` stays deferred (`soon`).
+     * entering report mode via `onenterMode`. A deferred target category (no
+     * `entersMode`, e.g. `mapping` if re-added) renders a `soon` hint row.
      * A category that already carries an open report on this verse gets the amber
      * "reported" highlight + a count.
      */
