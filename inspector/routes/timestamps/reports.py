@@ -1,7 +1,7 @@
 """Public Timestamps-tab report routes (``/api/ts/<slug>/reports``).
 
 The categorized, cell-addressable rework of the verse-flag routes. Any visitor —
-including anonymous — files a typed report (audio / timing / mapping / tajweed /
+including anonymous — files a typed report (audio / timing / tajweed /
 phonemes / other) against a flexible target on the verse currently shown,
 optionally with a comment. A report's targeted shard content is snapshotted
 server-side at create time (the drift fingerprint). A new report fans a
@@ -12,7 +12,7 @@ the reporter.
 Visibility: ``tajweed`` + ``phonemes`` flags are restricted to the reporter and
 to holders of ``timestamps.view_nonpublic_reports`` (maintainer-default) —
 non-holders never receive those rows or their counts (the repo filters in SQL).
-Every other category (``timing`` grid flags + the verse-level audio/other/mapping
+Every other category (``timing`` grid flags + the verse-level audio/other
 reports) stays public.
 
 Gated by ``timestamps.report`` (anon-eligible, open by default). Resolve is gated
@@ -157,28 +157,6 @@ def get_reciter_reports(slug: str):
         return jsonify(resp.model_dump(mode="json"))
     except Exception:  # noqa: BLE001
         logger.exception("ts_reports.get_reciter_reports failed for %s", slug)
-        return jsonify({"error": "failed to load reports"}), 500
-
-
-@ts_reports_bp.route("/<slug>/reports/mine", methods=["GET"])
-def get_my_reports(slug: str):
-    """The caller's own reports (signed-in by cookie, or anon by ``?anon_token=``)."""
-    try:
-        user = auth_service.current_user()
-        if user is not None:
-            hf_user_id: str | None = user.hf_user_id
-            anon_token: str | None = None
-        else:
-            anon_token = (request.args.get("anon_token") or "").strip() or None
-            hf_user_id = None
-            if anon_token is None:
-                return jsonify({"reports": []})
-        rows = repo_ts_reports.my_reports(slug, hf_user_id=hf_user_id, anon_token=anon_token)
-        show_author = cap_service.can(user, _IDENTITY_CAP)
-        reports = [_report_view(r, mine=True, show_author=show_author) for r in rows]
-        return jsonify({"reports": [r.model_dump(mode="json") for r in reports]})
-    except Exception:  # noqa: BLE001
-        logger.exception("ts_reports.get_my_reports failed for %s", slug)
         return jsonify({"error": "failed to load reports"}), 500
 
 

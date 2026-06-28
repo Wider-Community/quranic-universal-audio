@@ -1,7 +1,7 @@
 """Resolve a report target against a shard → content snapshot + staleness diff.
 
 A Timestamps report points at a flexible target (verse / word / cell / phoneme /
-column / cell-group). There is no per-cell hash anywhere, so the denormalized
+cell-group). There is no per-cell hash anywhere, so the denormalized
 *snapshot* of the targeted shard content captured at create time IS the drift
 fingerprint: when a reciter's shards are regenerated, each open report's target
 is re-resolved against the new shard and the report is flagged ``stale`` iff its
@@ -14,7 +14,6 @@ regen that only shifts timing ms does NOT stale a timing report):
   A bridge (cross-word merger) phoneme targets ``phoneme_flat_index = -1`` and is
   resolved by walking the words for the merger phone rendered before the target
   word (see ``_bridge_phone_for_target``).
-- ``mapping`` — the column binding (grapheme chars ↔ mapped phones) changed.
 - ``timing`` — the reported cell's identity (chars/role) changed or vanished, OR
   a boundary the report flagged (onset/offset) moved past
   ``config.TS_REPORT_BOUNDARY_STALE_MS`` (a pure ms shift on an unflagged boundary
@@ -100,11 +99,6 @@ def _indexable_phone_rows(word: Any) -> list[Any]:
             continue
         out.append(row)
     return out
-
-
-def _indexable_phones(word: Any) -> list[str]:
-    """Word phone strings in the word-local indexable coordinate space."""
-    return [str(r[0]) for r in _indexable_phone_rows(word)]
 
 
 def _row_bounds(rows: Any, idx: int) -> tuple[int | None, int | None]:
@@ -262,17 +256,6 @@ def resolve_target(
         snap["onset_ms"], snap["offset_ms"] = _letter_bounds(word, c.source_letter_index)
         return snap
 
-    if kind == "column":
-        sli = target.get("source_letter_index")
-        c = _cell_for_letter(cells, sli) if isinstance(sli, int) else None
-        if c is None:
-            return None
-        snap.update(_cell_snapshot(c))
-        idx = _indexable_phones(word)
-        snap["phones"] = [idx[i] for i in c.phoneme_indices if 0 <= i < len(idx)]
-        snap["onset_ms"], snap["offset_ms"] = _letter_bounds(word, c.source_letter_index)
-        return snap
-
     if kind == "phoneme":
         pi = target.get("phoneme_flat_index")
         if isinstance(pi, int) and pi < 0 and isinstance(wi, int):
@@ -382,8 +365,6 @@ def is_stale_after_restamp(report: dict[str, Any], doc: dict[str, Any]) -> bool:
         return differs("chars", "role", "status", "tag", "secondary_tags", "phoneme_rule_tags")
     if category == "phonemes":
         return differs("chars", "role", "tag")
-    if category == "mapping":
-        return differs("chars", "phones")
     # other / verse-level
     kind = (report.get("target") or {}).get("kind")
     if kind == "word":

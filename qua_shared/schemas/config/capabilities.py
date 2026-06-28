@@ -172,7 +172,7 @@ CAPABILITIES: tuple[Capability, ...] = (
         G_VIEW,
         "Report a timestamps issue",
         "Use the Timestamps-tab Report flow to file a categorized issue "
-        "(audio / timing / mapping / tajweed / other) on the playing verse or a "
+        "(audio / timing / tajweed / other) on the playing verse or a "
         "specific cell. Open to everyone incl. anonymous by default; turn "
         "anonymous off to require sign-in.",
         anon=True,

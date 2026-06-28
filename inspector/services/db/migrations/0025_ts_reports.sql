@@ -2,14 +2,14 @@
 --
 -- Categorized, cell-addressable Timestamps-tab reports (the rework of the
 -- verse-level-comment-only `ts_verse_flags`). A report names a category
--- (audio / timing / mapping / tajweed / other) and points at a flexible target:
--- the whole verse, a word, a letter/grapheme cell, a phoneme, a grapheme↔phoneme
--- column, or a co-timed cell-group (`share_group`). Owners resolve a report
+-- (audio / timing / tajweed / other) and points at a flexible target:
+-- the whole verse, a word, a letter/grapheme cell, a phoneme, or a co-timed
+-- cell-group (`share_group`). Owners resolve a report
 -- (single terminal `resolved` outcome + optional comment); the reporter is notified.
 --
 -- Classification differs by category: `tajweed` uses `subtype`; `timing` uses two
 -- boundary axes (`timing_onset` / `timing_offset`, each early|late, ≥1 set) from
--- which the human label is derived; audio/mapping/other carry neither.
+-- which the human label is derived; audio/other carry neither.
 --
 -- Identity mirrors `ts_verse_flags`: EITHER a signed-in HF account
 -- (`hf_user_id` + cookie snapshot in `login_at_time`/`role_at_time`) OR an
@@ -39,8 +39,8 @@ CREATE TABLE ts_reports (
     chapter               INTEGER NOT NULL,                    -- surah, denormalized for stale-scoping
 
     -- Classification
-    category              TEXT NOT NULL,                       -- audio|timing|mapping|tajweed|other
-    subtype               TEXT,                                -- tajweed enum; NULL for audio/timing/mapping/other
+    category              TEXT NOT NULL,                       -- audio|timing|tajweed|other
+    subtype               TEXT,                                -- tajweed enum; NULL for audio/timing/other
 
     -- Timing boundary axes (timing category only; NULL elsewhere). A timing
     -- report flags the onset (start) and/or offset (end); at least one is set.
@@ -50,7 +50,7 @@ CREATE TABLE ts_reports (
     timing_offset         TEXT,                                -- early|late|NULL (NULL = end is fine)
 
     -- Target descriptor (all nullable; a verse-level report leaves them NULL)
-    target_kind           TEXT NOT NULL,                       -- verse|word|cell|phoneme|column|cell_group
+    target_kind           TEXT NOT NULL,                       -- verse|word|cell|phoneme|cell_group
     word_index            INTEGER,                             -- 0-based word position in the verse
     source_letter_index   INTEGER,                             -- anchoring letter within the word
     cell_index            INTEGER,                             -- index into the word's cells[]
@@ -65,7 +65,7 @@ CREATE TABLE ts_reports (
     snap_tag              TEXT,
     snap_secondary_tags   TEXT,                                -- json array
     snap_phoneme_rule_tags TEXT,                               -- json array (parallel to phoneme_indices)
-    snap_phones           TEXT,                                -- json array of mapped phones (column binding)
+    snap_phones           TEXT,                                -- json array of mapped phones
     snap_share_group      INTEGER,
     snap_word_text        TEXT,
     snap_verse_text       TEXT,

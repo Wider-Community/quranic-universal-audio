@@ -77,7 +77,7 @@ Note: `assignee_*` / `marked_ready` are **not** columns on `delivery_states` —
 | `repo_requests` | `requests`, `request_views` | `submit`, `resolve` (→ accepted/returned/discarded), `delete_pending`, `get_pending`/`has_pending`/`all_pending`, `count_pending`, `all_archived(kind)`, `get_for_slug(kind, slug)`, `get_by_id`, `admin_list_rows(status)`, `counts_by_status`; views: `mark_viewed`/`is_viewed`/`viewed_ids_for_user`/`count_unviewed_open_for_user` | `PendingRequest` / `ArchivedRequest` (archive kind→status: completed→accepted, returned→returned, discarded→discarded) |
 | `repo_activity` | `activity_tombstones` | `delete`/`undelete`/`is_deleted`/`deleted_set` (global tombstones for the public feed; owner-only writes) | `set[str]` keyed on `content_hash` |
 | `repo_guides` | `guide_views` | `record_view` (INSERT OR IGNORE — write-once), `read_views` | `list[str]` of read `view_key`s |
-| `repo_ts_reports` | `ts_reports` | `create(...) -> (row, created)` (per-identity ON CONFLICT on `target_key`), `verse_counts(slug)` (open/resolved), `list_for_verse`, `my_reports`, `resolve(...)`, `list_open_for_recheck`/`mark_stale` (staleness), `delete(...)` | plain dicts (the route assembles the `TsReport` wire model) |
+| `repo_ts_reports` | `ts_reports` | `create(...) -> (row, created)` (per-identity ON CONFLICT on `target_key`), `verse_counts(slug)` (open/resolved), `list_for_verse`, `resolve(...)`, `list_open_for_recheck`/`mark_stale` (staleness), `delete(...)` | plain dicts (the route assembles the `TsReport` wire model) |
 
 `repo_errors` (`errors.py`): `RepoError`, `Duplicate` (PK / partial-unique violation), `NotFound`. Services map these to their own contracts (e.g. catalog's `InvalidCatalogChange`) instead of leaking `sqlite3.IntegrityError`.
 

@@ -181,12 +181,12 @@ def test_delete_other_identity_is_noop(fresh_db):
     assert len(repo.list_for_verse("reciter-a", "2:45")) == 1
 
 
-def test_soft_deleted_report_drops_from_counts_and_mine(fresh_db):
+def test_soft_deleted_report_drops_from_counts(fresh_db):
     row, _ = _create(anon_token="anon-x")
     with db.transaction():
         repo.delete(report_id=row["id"], hf_user_id=None, anon_token="anon-x")
     assert repo.verse_counts("reciter-a") == []
-    assert repo.my_reports("reciter-a", hf_user_id=None, anon_token="anon-x") == []
+    assert repo.list_for_verse("reciter-a", "2:45") == []
     # Retained internally: the row still exists, just hidden.
     raw = db.get_conn().execute("SELECT hidden_at FROM ts_reports WHERE id = ?", (row["id"],))
     assert raw.fetchone()["hidden_at"] is not None

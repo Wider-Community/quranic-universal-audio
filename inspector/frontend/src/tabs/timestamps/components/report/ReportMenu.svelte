@@ -5,10 +5,8 @@
      * Lists the surfaced report taxonomy (timing · tajweed · phonemes · audio ·
      * other). Comment-flow categories (audio, other) expand a comment composer
      * INLINE in the row's accordion (the menu stays visible). `timing` + `phonemes`
-     * enter the in-grid report mode directly; `tajweed` expands to its wrong/missing
-     * subtype, each entering report mode via `onenterMode`. A deferred target
-     * category (no
-     * `entersMode`, e.g. `mapping` if re-added) renders a `soon` hint row.
+     * enter the in-grid report mode directly; `tajweed` + `silence` expand to their
+     * subtypes, each entering report mode via `onenterMode`.
      * A category that already carries an open report on this verse gets the amber
      * "reported" highlight + a count.
      */
@@ -66,7 +64,7 @@
             onenterMode(cat.entersMode);
             return;
         }
-        // comment (audio/other inline composer), tajweed (subtypes), mapping (hint)
+        // comment (audio/other inline composer) or tajweed/silence subtypes
         expandedId = expandedId === cat.id ? null : cat.id;
     }
 </script>
@@ -80,8 +78,7 @@
     <div class="rows">
         {#each REPORT_CATEGORIES as cat (cat.id)}
             {@const count = openByCategory.get(cat.id) ?? 0}
-            {@const expandable = cat.flow === 'comment' || cat.id === 'tajweed' || cat.id === 'silence' || (!cat.entersMode && cat.flow === 'target')}
-            {@const deferred = cat.flow === 'target' && !cat.entersMode}
+            {@const expandable = cat.flow === 'comment' || cat.id === 'tajweed' || cat.id === 'silence'}
             {@const open = expandedId === cat.id}
             <div class="group" class:open>
                 <button
@@ -99,7 +96,6 @@
                     {#if count > 0}
                         <span class="count" title={`${count} open report${count === 1 ? '' : 's'}`}>{count}</span>
                     {/if}
-                    {#if deferred}<span class="soon">soon</span>{/if}
                     <span class="chev" class:open={expandable && open}><ReportIcon name="chevron" size={14} /></span>
                 </button>
 
@@ -136,11 +132,6 @@
                                     <span class="chev"><ReportIcon name="chevron" size={13} /></span>
                                 </button>
                             {/each}
-                        {:else}
-                            <p class="hint">
-                                <span class="hint-ic"><ReportIcon name="check" size={13} /></span>
-                                {cat.targetHint}
-                            </p>
                         {/if}
                     </div>
                 {/if}
@@ -228,18 +219,6 @@
         transition: transform var(--t-fast);
     }
     .chev.open { transform: rotate(90deg); }
-    .soon {
-        flex: 0 0 auto;
-        padding: 1px 6px;
-        font-family: var(--font-mono);
-        font-size: 9.5px;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        color: var(--text-faint);
-        background: var(--panel-2);
-        border: 1px solid var(--border-quiet);
-        border-radius: 999px;
-    }
     .count {
         flex: 0 0 auto;
         min-width: 18px;
@@ -292,17 +271,4 @@
     .sub-text .sub-label { font-weight: 500; }
     .sub-blurb { font-size: var(--fs-meta); color: var(--text-muted); line-height: 1.2; }
     .sub-row .chev { display: inline-flex; flex: 0 0 auto; color: var(--text-faint); }
-    .hint {
-        display: flex;
-        align-items: flex-start;
-        gap: 5px;
-        margin: 4px 0 0;
-        padding: var(--s-2);
-        font-size: var(--fs-meta);
-        line-height: 1.4;
-        color: var(--text-secondary);
-        background: var(--accent-tint-soft);
-        border-radius: var(--r-1);
-    }
-    .hint-ic { flex: 0 0 auto; color: var(--accent); margin-top: 1px; }
 </style>

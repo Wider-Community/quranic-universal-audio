@@ -61,16 +61,6 @@ def test_anon_create_then_get_verse(flask_client):
     assert counts["reports"] == [{"verse_key": "2:45", "open_count": 1, "resolved_count": 0}]
 
 
-def test_create_validation_error_mapping_without_comment(flask_client):
-    body = {
-        "verse_key": "2:45",
-        "category": "mapping",
-        "target": {"kind": "column", "word_index": 0, "source_letter_index": 1},
-        "anon_token": "anon-1",
-    }
-    assert _post(flask_client, body).status_code == 400
-
-
 def test_owner_notified_on_new_report(flask_client, seed_role):
     seed_role("owner-1", login="owner", role="owner")
     assert _post(flask_client, _anon_other()).status_code == 201

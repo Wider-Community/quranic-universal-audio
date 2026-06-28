@@ -25,28 +25,6 @@ def test_audio_requires_comment():
         TsReportCreateRequest.model_validate(_req(category="audio", comment=None))
 
 
-def test_mapping_requires_comment_and_column_target():
-    TsReportCreateRequest.model_validate(
-        _req(
-            category="mapping",
-            comment="wrong map",
-            target={"kind": "column", "word_index": 0, "source_letter_index": 1},
-        )
-    )
-    with pytest.raises(ValidationError):  # missing comment
-        TsReportCreateRequest.model_validate(
-            _req(
-                category="mapping",
-                comment=None,
-                target={"kind": "column", "word_index": 0, "source_letter_index": 1},
-            )
-        )
-    with pytest.raises(ValidationError):  # non-column target
-        TsReportCreateRequest.model_validate(
-            _req(category="mapping", comment="x", target={"kind": "verse"})
-        )
-
-
 def test_other_requires_comment():
     with pytest.raises(ValidationError):
         TsReportCreateRequest.model_validate(_req(category="other", comment="   "))
@@ -188,10 +166,6 @@ def test_target_field_requirements():
         TsReportCreateRequest.model_validate(
             _req(category="other", target={"kind": "cell", "word_index": 0})
         )
-    with pytest.raises(ValidationError):  # column needs source_letter_index
-        TsReportCreateRequest.model_validate(
-            _req(category="mapping", comment="x", target={"kind": "column", "word_index": 0})
-        )
     with pytest.raises(ValidationError):  # phoneme needs phoneme_flat_index
         TsReportCreateRequest.model_validate(
             _req(
@@ -246,9 +220,10 @@ def test_batch_item_shares_validation_with_single_create():
 
 def test_batch_item_requires_comment_when_mandatory():
     with pytest.raises(ValidationError):
-        TsReportBatchItem.model_validate(_item(category="mapping", onset=None, comment=None,
-                                               target={"kind": "column", "word_index": 0,
-                                                       "source_letter_index": 1}))
+        TsReportBatchItem.model_validate(_item(category="tajweed", onset=None, subtype="wrong_rule",
+                                               comment=None,
+                                               target={"kind": "cell", "word_index": 0,
+                                                       "cell_index": 1}))
 
 
 def test_batch_request_rejects_empty_items():

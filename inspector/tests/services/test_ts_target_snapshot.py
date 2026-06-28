@@ -47,14 +47,10 @@ def test_resolve_verse_and_word():
     assert wsnap is not None and wsnap["word_text"] == "بَ"
 
 
-def test_resolve_cell_and_column_and_phoneme():
+def test_resolve_cell_and_phoneme():
     doc = _doc()
     cell = snap.resolve_target(doc, "2:45", {"kind": "cell", "word_index": 0, "cell_index": 0})
     assert cell is not None and cell["chars"] == "ب" and cell["tag"] == "qalqala_sughra"
-    col = snap.resolve_target(
-        doc, "2:45", {"kind": "column", "word_index": 0, "source_letter_index": 0}
-    )
-    assert col is not None and col["chars"] == "ب" and col["phones"] == ["b"]
     ph = snap.resolve_target(
         doc, "2:45", {"kind": "phoneme", "word_index": 0, "phoneme_flat_index": 1}
     )
@@ -170,16 +166,6 @@ def test_phonemes_bridge_stale_when_merger_rule_changes_or_vanishes():
     vanished = copy.deepcopy(doc)
     vanished["segments"][0]["words"][0][4] = [["n", 0, 5]]  # merger phone gone
     assert snap.is_stale_after_restamp(report, vanished) is True
-
-
-def test_mapping_stale_when_binding_changes():
-    doc = _doc()
-    target = {"kind": "column", "word_index": 0, "source_letter_index": 0}
-    report = _report("mapping", target, doc)
-    assert snap.is_stale_after_restamp(report, doc) is False
-    changed = copy.deepcopy(doc)
-    changed["segments"][0]["words"][0][4][0][0] = "p"  # remapped phone
-    assert snap.is_stale_after_restamp(report, changed) is True
 
 
 def test_other_stale_when_verse_text_changes():

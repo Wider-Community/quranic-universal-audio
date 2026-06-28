@@ -3,12 +3,11 @@
 Backs the categorized, cell-addressable Report flow on the Timestamps tab. A
 report names a ``category`` with an optional per-category ``subtype`` and points
 at a flexible ``target`` — the whole verse, a word, a letter/grapheme cell, a
-phoneme, a grapheme↔phoneme column, or a co-timed cell-group.
+phoneme, or a co-timed cell-group.
 
 Served by ``inspector/routes/timestamps/reports.py``:
 - ``GET    /api/ts/<slug>/reports``               → ``TsReciterReports`` (per-verse counts)
 - ``GET    /api/ts/<slug>/reports/<verse_key>``   → ``TsVerseReports`` (a verse's reports)
-- ``GET    /api/ts/<slug>/reports/mine``          → caller's own reports
 - ``POST   /api/ts/<slug>/reports``               ← ``TsReportCreateRequest`` → ``TsReport``
 - ``POST   /api/ts/<slug>/reports/batch``         ← ``TsReportBatchCreateRequest`` → ``TsReportBatchResult``
 - ``POST   /api/ts/<slug>/reports/<id>/resolve``  ← ``TsReportResolveRequest`` → ``TsReport``
@@ -24,15 +23,14 @@ is set when a timestamp regeneration changed the targeted content.
 Per-category rules (enforced by ``TsReportCreateRequest`` validators):
 - ``audio``   — comment mandatory; target verse|word.
 - ``timing``  — two boundary axes ``onset``/``offset`` (each early|late, ≥1 set),
-                no subtype; comment optional; target word|cell|phoneme|column|cell_group.
+                no subtype; comment optional; target word|cell|phoneme|cell_group.
                 The human label is derived via ``timing_label``.
-- ``tajweed`` — subtype wrong_rule|missing_rule|should_be_silent|should_not_be_silent;
+- ``tajweed`` — subtype wrong_rule|missing_rule;
                 comment mandatory; target cell|phoneme|cell_group.
 - ``silence`` — pauses live BETWEEN words, so the target is a word-boundary ``gap``
                 (``word_index`` = the word before the gap). Subtype pause_boundary
                 |pause_wasl|pause_missed; selection-only (no comment); ``pause_boundary``
                 carries the ``onset``/``offset`` axes (the other two are binary). Public.
-- ``mapping`` — no subtype; comment mandatory; target column.
 - ``other``   — no subtype; comment mandatory; any target.
 """
 
@@ -43,8 +41,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-ReportCategory = Literal["audio", "timing", "mapping", "tajweed", "phonemes", "silence", "other"]
-TargetKind = Literal["verse", "word", "cell", "phoneme", "column", "cell_group", "gap"]
+ReportCategory = Literal["audio", "timing", "tajweed", "phonemes", "silence", "other"]
+TargetKind = Literal["verse", "word", "cell", "phoneme", "cell_group", "gap"]
 
 #: Per-category subtype — tajweed + silence. The owning category constrains which
 #: values are valid (see ``TsReportCreateRequest._check``). Timing does NOT use
@@ -52,8 +50,6 @@ TargetKind = Literal["verse", "word", "cell", "phoneme", "column", "cell_group",
 ReportSubtype = Literal[
     "wrong_rule",
     "missing_rule",
-    "should_be_silent",
-    "should_not_be_silent",
     "pause_boundary",
     "pause_wasl",
     "pause_missed",
@@ -64,24 +60,21 @@ ReportSubtype = Literal[
 #: is fine.
 TimingDir = Literal["early", "late"]
 
-_TAJWEED_SUBTYPES = frozenset(
-    {"wrong_rule", "missing_rule", "should_be_silent", "should_not_be_silent"}
-)
+_TAJWEED_SUBTYPES = frozenset({"wrong_rule", "missing_rule"})
 #: silence subtypes — a wrong-boundary pause (dual-axis), a pause that shouldn't
 #: exist (should be waṣl), and a missing pause. All target a ``gap``.
 _SILENCE_SUBTYPES = frozenset({"pause_boundary", "pause_wasl", "pause_missed"})
 #: target_kind values allowed per category.
 _ALLOWED_KINDS: dict[str, frozenset[str]] = {
     "audio": frozenset({"verse", "word"}),
-    "timing": frozenset({"word", "cell", "phoneme", "column", "cell_group"}),
+    "timing": frozenset({"word", "cell", "phoneme", "cell_group"}),
     "tajweed": frozenset({"cell", "phoneme", "cell_group"}),
     "phonemes": frozenset({"phoneme"}),
     "silence": frozenset({"gap"}),
-    "mapping": frozenset({"column"}),
-    "other": frozenset({"verse", "word", "cell", "phoneme", "column", "cell_group"}),
+    "other": frozenset({"verse", "word", "cell", "phoneme", "cell_group"}),
 }
 #: categories whose comment is always mandatory.
-_COMMENT_REQUIRED = frozenset({"audio", "mapping", "tajweed", "other"})
+_COMMENT_REQUIRED = frozenset({"audio", "tajweed", "other"})
 
 
 def _verse_key_ok(verse_key: str) -> bool:
@@ -104,7 +97,7 @@ def _validate_report_item(
 
     Timing carries the ``onset``/``offset`` boundary axes (≥1 set) and no
     ``subtype``; tajweed + silence carry a ``subtype``; silence ``pause_boundary``
-    also carries the axes; audio/mapping/other carry neither.
+    also carries the axes; audio/other carry neither.
     """
     if category == "timing":
         if subtype is not None:
@@ -113,10 +106,7 @@ def _validate_report_item(
             raise ValueError("timing reports require at least one of onset/offset")
     elif category == "tajweed":
         if subtype not in _TAJWEED_SUBTYPES:
-            raise ValueError(
-                "tajweed reports require subtype "
-                "wrong_rule|missing_rule|should_be_silent|should_not_be_silent"
-            )
+            raise ValueError("tajweed reports require subtype wrong_rule|missing_rule")
         if onset is not None or offset is not None:
             raise ValueError("onset/offset are timing-only")
     elif category == "silence":
@@ -200,8 +190,6 @@ class TsReportTarget(BaseModel):
             raise ValueError("target kind 'cell' requires cell_index or source_letter_index")
         if k == "phoneme" and self.phoneme_flat_index is None:
             raise ValueError("target kind 'phoneme' requires phoneme_flat_index")
-        if k == "column" and self.source_letter_index is None:
-            raise ValueError("target kind 'column' requires source_letter_index")
         if k == "cell_group" and self.share_group is None:
             raise ValueError("target kind 'cell_group' requires share_group")
         return self
@@ -213,7 +201,7 @@ class TsReportSnapshot(BaseModel):
     Informational + the drift fingerprint used to detect staleness on a
     re-stamp. ``rule_tags`` collapses the cell ``tag`` + ``secondary_tags``;
     ``phoneme_rule_tags`` parallels the cell's phoneme indices; ``phones`` is the
-    mapped phone list (column binding).
+    mapped phone list.
     """
 
     model_config = ConfigDict(extra="forbid")

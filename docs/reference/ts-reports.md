@@ -8,9 +8,6 @@ and everyone sees persisted flags in the analysis grid. Two surfaces:
   `tajweed` → `phonemes` → `silence` → `audio` → `other`. `audio` / `other` open an
   inline comment composer (verse-level); `timing` / `tajweed` / `phonemes` /
   `silence` enter report mode (`tajweed` + `silence` expand to subtype rows first).
-  `mapping` is a valid backend category but not surfaced — kept as
-  `MAPPING_CATEGORY` in `domain/report-categories.ts` for if the letter↔sound flow
-  is revisited.
 - **Report mode** — an in-grid mode that replaces the waveform with a control
   strip and turns the analysis grid into the click surface, so a contributor
   annotates specific cells without a modal blocking them.
@@ -30,14 +27,14 @@ one). Re-filing the same category+target updates in place (upsert). Key columns:
 
 | Column | Meaning |
 |---|---|
-| `category` | `audio` · `timing` · `mapping` · `tajweed` · `phonemes` · `silence` · `other` |
-| `subtype` | tajweed: `wrong_rule\|missing_rule\|should_be_silent\|should_not_be_silent`; silence: `pause_boundary\|pause_wasl\|pause_missed`; else NULL |
+| `category` | `audio` · `timing` · `tajweed` · `phonemes` · `silence` · `other` |
+| `subtype` | tajweed: `wrong_rule\|missing_rule`; silence: `pause_boundary\|pause_wasl\|pause_missed`; else NULL |
 | `timing_onset` / `timing_offset` | timing (and silence `pause_boundary`): each `early\|late\|NULL` (NULL = that boundary is fine), ≥1 set. The human label (too short/long, shifted, starts/finishes early/late) is derived via `qua_shared...ts_reports.timing_label()` — never stored |
-| `target_kind` + `word_index` / `source_letter_index` / `cell_index` / `phoneme_flat_index` / `share_group` | the flexible target descriptor (`verse\|word\|cell\|phoneme\|column\|cell_group\|gap`). `phonemes` reports only target `phoneme`. **`silence` reports target a `gap`** — the word-boundary between `word_index` and `word_index+1`, keyed on the preceding word (only `word_index` is set). A cross-word merger/bridge phoneme has `phoneme_flat_index = -1` (see Bridge phonemes) |
+| `target_kind` + `word_index` / `source_letter_index` / `cell_index` / `phoneme_flat_index` / `share_group` | the flexible target descriptor (`verse\|word\|cell\|phoneme\|cell_group\|gap`). `phonemes` reports only target `phoneme`. **`silence` reports target a `gap`** — the word-boundary between `word_index` and `word_index+1`, keyed on the preceding word (only `word_index` is set). A cross-word merger/bridge phoneme has `phoneme_flat_index = -1` (see Bridge phonemes) |
 | `target_key` | canonical descriptor string (`kind:wi:sli:ci:pi:sg`, **plus `:subtype` for tajweed only**) the per-identity unique index keys on — built in `repo_ts_reports.target_key()`. Timing/phonemes/**silence** are subtype-free in the key → one report per target+identity (so a gap holds **one** silence stance per user — last write wins) |
 | `snap_*` | denormalized snapshot of the targeted shard content at create time — the drift fingerprint (no per-cell hash). Includes `snap_onset_ms`/`snap_offset_ms`, the target's boundary ms for timing + silence-gap staleness |
 | `selected_rule_tags` | JSON: the internal tajweed tag id(s) the reporter marked wrong (`wrong_rule` only) |
-| `comment` | mandatory for `audio`/`mapping`/`other` + every tajweed; optional for timing; never for phonemes or silence |
+| `comment` | mandatory for `audio`/`other` + every tajweed; optional for timing; never for phonemes or silence |
 | `status` / `resolved_*` | single terminal `resolved` outcome + optional owner note |
 | `stale` / `stale_at` | set when a shard regen changed the targeted content (see Staleness below) |
 | `hidden_at` | soft-delete stamp — NULL = visible. Every read filters `hidden_at IS NULL`; re-filing un-hides |
@@ -101,7 +98,7 @@ all inside the regen transaction (`durable_transaction` is nesting-safe).
 
 ## Visibility
 
-`timing` grid flags + the verse-level `audio`/`other`/`mapping` reports are
+`timing` grid flags + the verse-level `audio`/`other` reports are
 **public** — returned to every viewer. `silence` gap flags are **public** too. `tajweed` + `phonemes` flags are
 **non-public**: the repo (`_visibility_filter`, applied in `verse_counts` +
 `list_for_verse`) returns them only to the reporter (matched by `hf_user_id` or
@@ -115,7 +112,7 @@ The read endpoints pass an **existing** anon token (never minting one — see
 
 | File | What |
 |---|---|
-| `inspector/services/db/repo_ts_reports.py` | `create` (upsert), `create_many` (batch, one identity/verse/txn), `resolve` (per id), `resolve_group` (timing/phoneme word-group, all identities), `resolve_auto` (system-resolve a silence report on regen), `delete` (soft), `verse_counts` + `list_for_verse` (both take the viewer ctx + `_visibility_filter`), `my_reports`, `list_open_for_recheck`, `word_group_key` |
+| `inspector/services/db/repo_ts_reports.py` | `create` (upsert), `create_many` (batch, one identity/verse/txn), `resolve` (per id), `resolve_group` (timing/phoneme word-group, all identities), `resolve_auto` (system-resolve a silence report on regen), `delete` (soft), `verse_counts` + `list_for_verse` (both take the viewer ctx + `_visibility_filter`), `list_open_for_recheck`, `word_group_key` |
 | `inspector/routes/timestamps/reports.py` | thin blueprint over the repo + snapshot + notify (see endpoints below) |
 | `inspector/services/ts_reports/ts_target_snapshot.py` | `build_snapshot` (resolve a target → snapshot dict, incl. the `gap` kind), `_silence_action` (silence resolve/stale decision), `recheck_reports_staleness` (post-regen: re-resolve open reports — `mark_stale` the changed, auto-resolve + notify the agreed silence ones; `audio` never stales) |
 | `inspector/services/notifications/emit.py` | `notify_owners_ts_report` (optional `source_key` for word-group coalescing), `notify_reporter_ts_report_resolved`, `notify_ts_report_auto_resolved` (reporter + owners, regen auto-resolve) |
@@ -130,7 +127,6 @@ collide with the `services.timestamps` attribute bound in `services/__init__.py`
 |---|---|---|
 | `GET /reports` | → `TsReciterReports` (per-verse open/resolved counts; non-public counts filtered by viewer) | public |
 | `GET /reports/<verse_key>` | → `TsVerseReports` (`?stale=1` owner-only; author redacted; non-public rows filtered by viewer) | public |
-| `GET /reports/mine` | caller's own (cookie, or `?anon_token=`) | public |
 | `POST /reports` | `TsReportCreateRequest` → `TsReport` | `timestamps.report` (anon) |
 | `POST /reports/batch` | `TsReportBatchCreateRequest` → `TsReportBatchResult` | `timestamps.report` |
 | `POST /reports/<id>/resolve` | `TsReportResolveRequest` → `TsReport` | `timestamps.resolve_report` |

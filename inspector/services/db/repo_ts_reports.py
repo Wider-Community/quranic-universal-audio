@@ -69,7 +69,7 @@ def word_group_key(slug: str, verse_key: str, word_index: int, category: str) ->
 
 #: Report categories that are NOT publicly visible — only the reporter and a
 #: ``view_nonpublic_reports`` holder see these grid flags (timing + the
-#: verse-level audio/other/mapping reports stay public).
+#: verse-level audio/other reports stay public).
 _NONPUBLIC_CATEGORIES = ("tajweed", "phonemes")
 
 
@@ -203,26 +203,6 @@ def list_for_verse(
             + vis_sql
             + " ORDER BY created_at, id",
             (slug, verse_key, *vis_params),
-        )
-        .fetchall()
-    )
-    return [_row_to_dict(r) for r in rows]
-
-
-def my_reports(
-    slug: str, *, hf_user_id: str | None, anon_token: str | None
-) -> list[dict[str, Any]]:
-    """The caller's own reports for a reciter, newest first."""
-    if (hf_user_id is None) == (anon_token is None):
-        raise ValueError("exactly one of hf_user_id / anon_token must be set")
-    col = "hf_user_id" if hf_user_id is not None else "anon_token"
-    val = hf_user_id if hf_user_id is not None else anon_token
-    rows = (
-        get_conn()
-        .execute(
-            f"SELECT * FROM ts_reports WHERE slug = ? AND {col} = ? AND hidden_at IS NULL "
-            "ORDER BY created_at DESC, id DESC",
-            (slug, val),
         )
         .fetchall()
     )

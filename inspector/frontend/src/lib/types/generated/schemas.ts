@@ -2004,18 +2004,8 @@ export interface TsReportVerseCount {
 export interface TsReport {
   id: number;
   verse_key: string;
-  category: "audio" | "timing" | "mapping" | "tajweed" | "phonemes" | "silence" | "other";
-  subtype?:
-    | (
-        | "wrong_rule"
-        | "missing_rule"
-        | "should_be_silent"
-        | "should_not_be_silent"
-        | "pause_boundary"
-        | "pause_wasl"
-        | "pause_missed"
-      )
-    | null;
+  category: "audio" | "timing" | "tajweed" | "phonemes" | "silence" | "other";
+  subtype?: ("wrong_rule" | "missing_rule" | "pause_boundary" | "pause_wasl" | "pause_missed") | null;
   onset?: ("early" | "late") | null;
   offset?: ("early" | "late") | null;
   target: TsReportTarget;
@@ -2043,7 +2033,7 @@ export interface TsReport {
  * ``verse`` target leaves them all unset.
  */
 export interface TsReportTarget {
-  kind: "verse" | "word" | "cell" | "phoneme" | "column" | "cell_group" | "gap";
+  kind: "verse" | "word" | "cell" | "phoneme" | "cell_group" | "gap";
   word_index?: number | null;
   source_letter_index?: number | null;
   cell_index?: number | null;
@@ -2056,7 +2046,7 @@ export interface TsReportTarget {
  * Informational + the drift fingerprint used to detect staleness on a
  * re-stamp. ``rule_tags`` collapses the cell ``tag`` + ``secondary_tags``;
  * ``phoneme_rule_tags`` parallels the cell's phoneme indices; ``phones`` is the
- * mapped phone list (column binding).
+ * mapped phone list.
  */
 export interface TsReportSnapshot {
   chars?: string | null;
@@ -2098,18 +2088,8 @@ export interface TsReportBatchCreateRequest {
  * a single create (shared ``_validate_report_item``).
  */
 export interface TsReportBatchItem {
-  category: "audio" | "timing" | "mapping" | "tajweed" | "phonemes" | "silence" | "other";
-  subtype?:
-    | (
-        | "wrong_rule"
-        | "missing_rule"
-        | "should_be_silent"
-        | "should_not_be_silent"
-        | "pause_boundary"
-        | "pause_wasl"
-        | "pause_missed"
-      )
-    | null;
+  category: "audio" | "timing" | "tajweed" | "phonemes" | "silence" | "other";
+  subtype?: ("wrong_rule" | "missing_rule" | "pause_boundary" | "pause_wasl" | "pause_missed") | null;
   onset?: ("early" | "late") | null;
   offset?: ("early" | "late") | null;
   target: TsReportTarget;
@@ -2131,18 +2111,8 @@ export interface TsReportBatchResult {
  */
 export interface TsReportCreateRequest {
   verse_key: string;
-  category: "audio" | "timing" | "mapping" | "tajweed" | "phonemes" | "silence" | "other";
-  subtype?:
-    | (
-        | "wrong_rule"
-        | "missing_rule"
-        | "should_be_silent"
-        | "should_not_be_silent"
-        | "pause_boundary"
-        | "pause_wasl"
-        | "pause_missed"
-      )
-    | null;
+  category: "audio" | "timing" | "tajweed" | "phonemes" | "silence" | "other";
+  subtype?: ("wrong_rule" | "missing_rule" | "pause_boundary" | "pause_wasl" | "pause_missed") | null;
   onset?: ("early" | "late") | null;
   offset?: ("early" | "late") | null;
   target: TsReportTarget;

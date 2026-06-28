@@ -20,9 +20,6 @@
     {:else if name === 'timing'}
         <circle cx="12" cy="12" r="8.5" />
         <path d="M12 7.5V12l3 2" />
-    {:else if name === 'mapping'}
-        <path d="M6 7h12M6 17h12" />
-        <path d="M12 9.5v5M9.5 12L12 9.5l2.5 2.5M9.5 14.5L12 17l2.5-2.5" />
     {:else if name === 'tajweed'}
         <path d="M4 13.5h16" />
         <path d="M6 17h5M14 17h4" />
@@ -35,26 +32,12 @@
         <circle cx="6" cy="12" r="1.2" fill="currentColor" stroke="none" />
         <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" />
         <circle cx="18" cy="12" r="1.2" fill="currentColor" stroke="none" />
-    {:else if name === 'too_long'}
-        <path d="M3 12h18" />
-        <path d="M6 8.5L2.5 12 6 15.5M18 8.5L21.5 12 18 15.5" />
-    {:else if name === 'too_short'}
-        <path d="M4 12h7M13 12h7" />
-        <path d="M8 8.5L11.5 12 8 15.5M16 8.5L12.5 12 16 15.5" />
-    {:else if name === 'timing_other'}
-        <path d="M5 19l1-3.5 9.5-9.5 2.5 2.5L8.5 18 5 19z" />
     {:else if name === 'wrong_rule'}
         <circle cx="12" cy="12" r="8.5" />
         <path d="M9.5 9.5l5 5M14.5 9.5l-5 5" />
     {:else if name === 'missing_rule'}
         <circle cx="12" cy="12" r="8.5" />
         <path d="M12 8.5v7M8.5 12h7" />
-    {:else if name === 'should_be_silent'}
-        <path d="M4 9.5v5h3L11 18V6L7 9.5H4z" />
-        <path d="M15 9.5l5 5M20 9.5l-5 5" />
-    {:else if name === 'should_not_be_silent'}
-        <path d="M4 9.5v5h3L11 18V6L7 9.5H4z" />
-        <path d="M15 9.5a4 4 0 010 5" />
     {:else if name === 'chevron'}
         <path d="M9 6l6 6-6 6" />
     {:else if name === 'back'}
