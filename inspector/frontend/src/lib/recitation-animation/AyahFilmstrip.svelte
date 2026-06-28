@@ -182,11 +182,11 @@
          *  always 1; dynamic pairs animate. Drives `gapAfter` + the merge-corner
          *  toggle. */
         waslMerge: number;
-        /** Right corners squared + seam border dropped (outgoing boundary visually
-         *  merged: static, or dynamic past the half-merge point). */
+        /** Outgoing boundary is merged (gapless) → this cell starts/continues a
+         *  waṣl rail group: static, or dynamic past the half-merge point. */
         mergeRight: boolean;
-        /** Left corners squared + seam border dropped (the previous verse bridges
-         *  into this one and is visually merged). */
+        /** Incoming boundary is merged → the previous verse bridges into this one
+         *  (continues a rail group). */
         mergeLeft: boolean;
     }
 
@@ -259,30 +259,29 @@
     interface WaslGroup {
         leftPx: number; // group's left edge (track px, pre-pad)
         rightPx: number; // group's right edge
-        first: number; // first ayah in the capsule
-        last: number; // last ayah in the capsule
-        seams: number[]; // inner verse-boundary x-positions (track px, pre-pad)
+        merge: number; // least-merged seam (1 = static/gapless; a dynamic bridge ramps)
     }
-    /** Contiguous waṣl capsules — each a maximal run of merged cells, rendered as
-     *  ONE cell carrying an `N–N+k` range label + subtle inner verse-boundary ticks
-     *  (in place of per-verse numbers and a seam connector). A group runs from its
-     *  `mergeRight`-only start through its `mergeLeft`-only end. Empty for the
-     *  all-solo common case → the overlay renders nothing. */
+    /** Contiguous waṣl groups — each a maximal run of merged (gapless) cells, tied
+     *  together by a thin accent rail under the row. The sub-cells keep their own
+     *  full borders + verse numbers; the rail is the only "one continuous-recitation
+     *  span" cue (no capsule weld, no range label). A group runs from its
+     *  `mergeRight`-only start through its `mergeLeft`-only end; `merge` ramps the
+     *  rail in for a dynamic bridge. Empty for the all-solo common case → the overlay
+     *  renders nothing. */
     const waslGroups = $derived.by((): WaslGroup[] => {
         const groups: WaslGroup[] = [];
         let i = 0;
         while (i < cells.length) {
             if (cells[i]!.mergeRight && !cells[i]!.mergeLeft) {
                 let j = i;
-                while (j < cells.length - 1 && cells[j]!.mergeRight) j++;
+                let merge = 1;
+                while (j < cells.length - 1 && cells[j]!.mergeRight) {
+                    merge = Math.min(merge, cells[j]!.waslMerge);
+                    j++;
+                }
                 const start = cells[i]!;
                 const end = cells[j]!;
-                const seams: number[] = [];
-                for (let k = i; k < j; k++) seams.push(cells[k]!.cumBefore + cells[k]!.w);
-                groups.push({
-                    leftPx: start.cumBefore, rightPx: end.cumBefore + end.w,
-                    first: start.ayah, last: end.ayah, seams,
-                });
+                groups.push({ leftPx: start.cumBefore, rightPx: end.cumBefore + end.w, merge });
                 i = j + 1;
             } else {
                 i++;
@@ -877,8 +876,6 @@
                     class:cursor={i === cursorIdx}
                     class:missing-words={c.missing === 'words'}
                     class:missing-full={c.missing === 'full'}
-                    class:merge-r={c.mergeRight}
-                    class:merge-l={c.mergeLeft}
                     title={missingTitle(c)}
                     style:width="{c.w}px"
                     style:margin-right="{c.gapAfter}px"
@@ -886,28 +883,22 @@
                     {#if c.missing !== 'full'}
                         <div class="cell-fill" class:glide={jumping && i === fillIdx}></div>
                     {/if}
-                    {#if !c.mergeRight && !c.mergeLeft}
-                        <span class="cell-num">{c.ayah}</span>
-                    {/if}
+                    <span class="cell-num">{c.ayah}</span>
                 </div>
             {/each}
             <div class="pad" style:width="{pad}px"></div>
-            <!-- Waṣl capsules — an overlay layer (the cells clip overflow), riding
-                 the track transform. Each merged group renders as ONE labelled cell:
-                 a centred `N–N+k` range + subtle inner verse-boundary ticks (the
-                 merged seam border is dropped, so the ticks are the only divider). -->
-            {#each waslGroups as g (g.first)}
+            <!-- Waṣl rails — an overlay layer (the cells clip overflow) riding the
+                 track transform: a thin accent rail under each gapless cross-verse
+                 group, tying its fully-bordered sub-cells into one continuous span.
+                 A dynamic bridge ramps the rail in (opacity) as its gap eases shut. -->
+            {#each waslGroups as g (g.leftPx)}
                 <div
-                    class="wasl-group"
+                    class="wasl-rail"
                     style:left="{pad + g.leftPx}px"
                     style:width="{g.rightPx - g.leftPx}px"
+                    style:opacity={(g.merge - 0.5) * 2}
                     aria-hidden="true"
-                >
-                    <span class="wasl-range">{g.first}–{g.last}</span>
-                </div>
-                {#each g.seams as sx (sx)}
-                    <div class="wasl-seam" style:left="{pad + sx}px" aria-hidden="true"></div>
-                {/each}
+                ></div>
             {/each}
         </div>
         {#if config.filmstripMotion !== 'snap' && (!silent || crossingGap)}
@@ -1019,59 +1010,21 @@
         color: var(--state-missing-fg);
     }
     /* ---- Cross-verse waṣl merge -------------------------------------------
-     * A merged pair reads as one rounded "mega-cell": the touching inner corners
-     * square and the seam border drops, so the two cells form a single capsule (one
-     * range label + subtle inner ticks ride the overlay layer below). The rules sit
-     * AFTER the state rules so the transparent seam wins over active/reached/frozen
-     * border-color. Dynamic pairs animate the GAP in JS (keeps the needle in sync);
-     * the corner/border state toggles past the half-merge point. */
-    .cell.merge-r {
-        border-top-right-radius: 0;
-        border-bottom-right-radius: 0;
-        border-right-color: transparent;
-    }
-    .cell.merge-l {
-        border-top-left-radius: 0;
-        border-bottom-left-radius: 0;
-        border-left-color: transparent;
-    }
-    /* A waṣl capsule's single range label — overlay sibling of the cells (so their
-     * `overflow:hidden` doesn't clip it), centred over the whole group span and
-     * standing in for the per-verse numbers the merged members drop. */
-    .wasl-group {
+     * A continuous-recitation run renders as gapless, fully-bordered sub-cells —
+     * each keeps its own number and border (the touching borders mark the verse
+     * boundaries) — tied together by a thin accent rail under the row: the
+     * "mega-cell" read without collapsing any cell's identity. The rail is an
+     * overlay sibling of the cells (so their `overflow:hidden` doesn't clip it),
+     * spans the whole group, and rides the track transform. A dynamic bridge eases
+     * its gap shut in JS (geometry in `cells`) and the rail's opacity ramps in over
+     * the same close, so nothing pops. */
+    .wasl-rail {
         position: absolute;
-        top: 50%;
-        transform: translateY(-50%);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        pointer-events: none;
-    }
-    .wasl-range {
-        font-family: var(--font-mono);
-        font-size: 11px;
-        font-variant-numeric: tabular-nums;
-        letter-spacing: 0.01em;
-        color: var(--text-secondary);
-        white-space: nowrap;
-    }
-    /* Subtle inner verse-boundary tick — a hairline at each seam, fading out top
-     * and bottom, the only divider once the merged border is dropped. Faint enough
-     * that the capsule still reads as one cell, but enough to mark where each verse
-     * begins. */
-    .wasl-seam {
-        position: absolute;
-        top: 7px;
-        bottom: 7px;
-        width: 1px;
-        transform: translateX(-50%);
-        background: linear-gradient(
-            to bottom,
-            transparent,
-            color-mix(in oklch, var(--border-strong) 90%, transparent) 30%,
-            color-mix(in oklch, var(--border-strong) 90%, transparent) 70%,
-            transparent
-        );
+        bottom: -2px;
+        height: 2px;
+        border-radius: 1px;
+        background: var(--accent);
+        box-shadow: 0 0 6px var(--accent-tint);
         pointer-events: none;
     }
     .cell-fill {
@@ -1113,43 +1066,20 @@
     }
     .needle {
         position: absolute;
-        /* Aligned to the cell band (cells are 12px shorter than the strip, centred)
-           so the cursor sits INSIDE the capsule instead of overhanging it. */
-        top: 6px;
-        bottom: 6px;
+        top: 4px;
+        bottom: 4px;
         left: 50%;
         width: 2px;
         transform: translateX(-50%);
-        /* A neutral core reads cleanly over BOTH the dark inter-cell gaps and the
-           accent-tinted active capsule (an accent needle would melt into the
-           active cell's tint); the soft accent bloom keeps it on-brand. */
-        background: var(--text-primary);
+        background: var(--accent);
         border-radius: 1px;
         pointer-events: none;
-        box-shadow: 0 0 5px var(--accent);
+        box-shadow: 0 0 8px var(--accent-tint);
         transition: background var(--t-fast), box-shadow var(--t-fast);
     }
-    /* A small "now" cap at the top edge — a deliberate playhead marker so the line
-       reads as a cursor, not a stray rule, especially across a merged capsule. */
-    .needle::before {
-        content: '';
-        position: absolute;
-        top: -2px;
-        left: 50%;
-        width: 5px;
-        height: 5px;
-        transform: translateX(-50%);
-        background: var(--text-primary);
-        border-radius: 50%;
-        box-shadow: 0 0 4px var(--accent);
-    }
-    /* Silence: the needle keeps traveling (across the gap) but greys + drops its
-       glow so the pause reads as "not reciting" without losing the position cursor. */
+    /* Silence: the needle keeps traveling (across the gap) but greys out so the
+       pause reads as "not reciting" without losing the position cursor. */
     .needle.silent {
-        background: var(--text-muted);
-        box-shadow: none;
-    }
-    .needle.silent::before {
         background: var(--text-muted);
         box-shadow: none;
     }

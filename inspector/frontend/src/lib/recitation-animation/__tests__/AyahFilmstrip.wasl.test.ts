@@ -58,7 +58,7 @@ describe('AyahFilmstrip — waṣl merge', () => {
         }
     }
 
-    it('renders a STATIC bridge gapless with a link connector + capsule corners', async () => {
+    it('renders a STATIC bridge gapless with full-bordered sub-cells + an accent rail', async () => {
         // 1:1 (waṣl»1:2), then 1:2. Contiguous, never stops → static merge.
         const units = [
             unitW('1:1:1', [[0, 1]]),
@@ -77,17 +77,20 @@ describe('AyahFilmstrip — waṣl merge', () => {
         const cells = container.querySelectorAll('.cell');
         // The left member of a static bridge is gapless (margin collapsed to 0).
         expect(marginRight(cells[0]!)).toBe(0);
-        // Capsule: left member squares its right corners, right member its left.
-        expect(cells[0]!.classList.contains('merge-r')).toBe(true);
-        expect(cells[1]!.classList.contains('merge-l')).toBe(true);
-        // No seam connector; the capsule shows ONE range label, and the merged
-        // members drop their per-verse numbers (the range stands in).
-        expect(container.querySelector('.wasl-link'), 'connector removed').toBeNull();
-        const range = container.querySelector<HTMLElement>('.wasl-range');
-        expect(range?.textContent).toMatch(/^\s*1\s*\D\s*2\s*$/);
+        // Sub-cells keep their own full borders + verse numbers — the rail carries
+        // the "merged" read, not a corner-squaring weld or a range label.
+        expect(cells[0]!.classList.contains('merge-r')).toBe(false);
+        expect(cells[1]!.classList.contains('merge-l')).toBe(false);
         const nums = [...container.querySelectorAll('.cell .cell-num')].map((e) => e.textContent);
-        expect(nums).not.toContain('1');
-        expect(nums).not.toContain('2');
+        expect(nums).toContain('1');
+        expect(nums).toContain('2');
+        // One accent rail spans the gapless group; the old connector/range are gone.
+        expect(container.querySelector('.wasl-link')).toBeNull();
+        expect(container.querySelector('.wasl-range')).toBeNull();
+        const rails = container.querySelectorAll<HTMLElement>('.wasl-rail');
+        expect(rails.length).toBe(1);
+        // Static merge → rail fully opaque.
+        expect(parseFloat(rails[0]!.style.opacity || '1')).toBeCloseTo(1);
     });
 
     it('lays a merged short verse time-true (no min-width floor) so the capsule keeps constant velocity', async () => {
@@ -119,7 +122,7 @@ describe('AyahFilmstrip — waṣl merge', () => {
         expect(width(cells[2]!)).toBe(minPx); // solo short verse — still floored
     });
 
-    it('animates a DYNAMIC bridge closed as the bridging take plays + lights the connector', async () => {
+    it('animates a DYNAMIC bridge closed as the bridging take plays + ramps the rail in', async () => {
         // 1:1 (waṣl»1:2, DYNAMIC), gap of 2s to 1:2 so the closing gap is visible.
         const units = [
             unitW('1:1:1', [[0, 1]]),
@@ -135,17 +138,20 @@ describe('AyahFilmstrip — waṣl merge', () => {
         await tick();
 
         const leftCell = (): Element => container.querySelectorAll('.cell')[0]!;
-        // Before the bridging take plays, the dynamic pair sits separated (gap > 0).
+        // Before the bridging take plays, the dynamic pair sits separated (gap > 0)
+        // and is not yet a group → no rail.
         await step(100); // inside 1:1:1, not yet the bridging word
         const gapSeparated = marginRight(leftCell());
         expect(gapSeparated).toBeGreaterThan(8);
+        expect(container.querySelector('.wasl-rail')).toBeNull();
 
         // Play the bridging last word (1:1:2 spans 1–2s) over several frames; the
-        // merge eases closed and the pair reads as one capsule with a range label.
+        // gap eases closed and the rail appears + strengthens (opacity ramps up).
         for (const ms of [1200, 1400, 1600, 1800]) await step(ms);
         expect(marginRight(leftCell())).toBeLessThan(gapSeparated * 0.6);
-        const range = container.querySelector<HTMLElement>('.wasl-range');
-        expect(range?.textContent).toMatch(/^\s*1\s*\D\s*2\s*$/);
-        expect(container.querySelector('.wasl-link')).toBeNull();
+        const rail = container.querySelector<HTMLElement>('.wasl-rail');
+        expect(rail).not.toBeNull();
+        expect(parseFloat(rail!.style.opacity || '0')).toBeGreaterThan(0);
+        expect(container.querySelector('.wasl-range')).toBeNull();
     });
 });
