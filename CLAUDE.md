@@ -36,7 +36,7 @@ Can access from `HF_TOKEN` in `.env`
 |---|---|
 | First-time setup (FE + BE deps) | `scripts/devenv/setup.sh` (`frontend` / `backend` to scope) |
 | Build frontend | `cd frontend && npm install && npm run build` |
-| **Run the app (any mode/worktree, conflict-free)** | `python scripts/devenv/launch.py` (the `/launch` skill) — fully local (your branch's backend + Vite, no Space proxy). Defaults to **dev** (DEV bucket, read-write, audio + analysis, works on Windows via hffs); `--mode prod` for a read-only look at PROD data (write-back disarmed); `--mode fixtures` for fully offline. Free ports, isolated DB, readiness wait, `list`/`down`/`doctor`, `--smoke`. Prefer this over hand-running the two below. |
+| **Run the app (any mode/worktree, conflict-free)** | `python scripts/devenv/launch.py` (the `/launch` skill) — fully local (your branch's backend + Vite, no Space proxy). Defaults to **dev** (DEV bucket, read-write, audio + analysis, works on Windows via hffs); `--mode prod` for a read-only look at PROD data (write-back disarmed); `--mode fixtures` for fully offline. Free ports, isolated DB, readiness wait, `list`/`down`/`doctor`. Prefer this over hand-running the two below. |
 | Run server (dev) | `python3 inspector/app.py` → http://localhost:5000 |
 | Frontend HMR | `cd frontend && npm run dev` → http://localhost:5173 (proxies `/api`) |
 | Frontend test / typecheck / lint | `npm run test` / `npm run check` / `npm run lint` |

@@ -1,6 +1,6 @@
 ---
 name: inspector-playwright
-description: Screenshot the real Timestamps analysis view (UnifiedDisplay) for any reciter:surah:verse straight from shards — fast, drift-free, no SPA/audio/OAuth. Use to visually verify cell/tajweed rendering after a phonemizer/SDK change + re-stamp, instead of driving the live app or fighting a flaky local server.
+description: Screenshot the real Timestamps analysis view (UnifiedDisplay) for any reciter:surah:verse straight from shards — fast, drift-free, no SPA/audio/OAuth.
 ---
 
 # inspector-playwright
