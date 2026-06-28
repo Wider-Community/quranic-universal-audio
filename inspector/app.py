@@ -384,6 +384,13 @@ def _boot_substrate() -> None:
     from services import db as _db
     from services.db import sync as _sync
 
+    # Read-only escape hatch: INSPECTOR_DB_SYNC=0 disarms the per-commit bucket
+    # upload so a local process can read a bucket (e.g. prod) without any write
+    # ever syncing back. Boot still pulls the DB; nothing is ever pushed.
+    if os.environ.get("INSPECTOR_DB_SYNC") == "0":
+        _sync.set_sync_enabled(False)
+        logger.info("db substrate: bucket write-back DISABLED (read-only mode)")
+
     deployed = bool(os.environ.get("INSPECTOR_BUCKET_MOUNT"))
     try:
         _sync.pull()  # bucket DB → local path (fresh init if the bucket has none)

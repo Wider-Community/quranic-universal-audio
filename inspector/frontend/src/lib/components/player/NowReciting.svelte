@@ -9,9 +9,10 @@
      * timings come from the shared recitation-data loader (kept off `tabs/*`).
      *
      * The display CONTROLS live in this component's handle row — flanking the
-     * collapse chip, 3 on each side (upcoming-eye · word/letter · motion |
-     * droplet · size− · size+). Config + collapse state are shared via the
-     * recitation store; below the handle sit the line + the filmstrip.
+     * collapse chip (upcoming-eye · word/letter | size− · size+). The filmstrip
+     * motion (glide) toggle sits on the filmstrip itself, right of the bookmark
+     * buttons. Config + collapse state are shared via the recitation store; below
+     * the handle sit the line + the filmstrip.
      */
     import { tick } from 'svelte';
 
@@ -42,7 +43,6 @@
         recitationConfigStore,
         recitationFocus,
         recitationOpen,
-        setHighlight,
         SIZE_MAX,
         SIZE_MIN,
         sizeDown,
@@ -79,7 +79,6 @@
 
     let section = $state<{ refresh: () => void } | undefined>(undefined);
     let filmstrip = $state<{ refresh: () => void; showFirstAyah: () => void } | undefined>(undefined);
-    let colorInput = $state<HTMLInputElement | undefined>(undefined);
 
     const config = $derived($recitationConfigStore);
     // Recitation-correct cell geometry + per-verse word fractions, rebuilt once
@@ -237,12 +236,11 @@
 
 {#if shown}
     <div class="now-reciting" bind:clientHeight={rootH} style={accentVarText(config.highlightColor)}>
-        <!-- Handle row: the recitation display controls flank the collapse chip,
-             3 on each side. Left = upcoming-eye · word/letter · filmstrip motion;
-             right = highlight droplet · size− · size+. Collapsing hides the
-             recitation LINE *and* this settings row (only the chip stays); the
-             filmstrip stays. Chevron points up when collapsed (expand), down
-             when expanded (collapse). -->
+        <!-- Handle row: the recitation display controls flank the collapse chip.
+             Left = upcoming-eye · word/letter; right = size− · size+. Collapsing
+             hides the recitation LINE *and* this settings row (only the chip
+             stays); the filmstrip stays. Chevron points up when collapsed
+             (expand), down when expanded (collapse). -->
         <div class="nr-handle">
             {#if activeMissingWords}
                 <span
@@ -266,12 +264,6 @@
                         title={config.granularity === 'char' ? 'Letter-by-letter' : 'Word-by-word'}
                         onclick={toggleGranularity}
                     ><ControlIcon name={granIconName(config)} /></button>
-                    <button
-                        type="button" class="nr-btn"
-                        aria-label="Toggle filmstrip motion"
-                        title={config.filmstripMotion === 'snap' ? 'Snap to ayah' : 'Continuous glide'}
-                        onclick={cycleMotion}
-                    ><ControlIcon name={motionIconName(config)} /></button>
                 </div>
             {/if}
 
@@ -291,25 +283,7 @@
             </button>
 
             {#if $recitationOpen}
-                <div class="nr-ctrls" role="group" aria-label="Text size & color">
-                    <div class="nr-swatch-wrap">
-                        <button
-                            type="button" class="nr-btn swatch"
-                            aria-label="Highlight color"
-                            title="Highlight color"
-                            style:color={config.highlightColor}
-                            onclick={() => colorInput?.click()}
-                        ><ControlIcon name="droplet" /></button>
-                        <input
-                            bind:this={colorInput}
-                            type="color"
-                            class="nr-color-input"
-                            value={config.highlightColor}
-                            oninput={(e) => setHighlight(e.currentTarget.value)}
-                            tabindex="-1"
-                            aria-hidden="true"
-                        />
-                    </div>
+                <div class="nr-ctrls" role="group" aria-label="Text size">
                     <button
                         type="button" class="nr-btn"
                         aria-label="Decrease text size"
@@ -343,8 +317,8 @@
 
         {#if config.filmstripShow && filmstripModel.cells.length}
             <div class="strip-wrap">
-                {#if isTimestamps}
-                    <div class="strip-bm" role="group" aria-label="Bookmarks">
+                <div class="strip-bm" role="group" aria-label="Filmstrip controls">
+                    {#if isTimestamps}
                         <button
                             type="button" class="strip-bm-btn" class:on={focusBookmarked}
                             disabled={!focusKey} aria-pressed={focusBookmarked}
@@ -356,8 +330,14 @@
                             title="Open bookmarks panel" aria-label="Open bookmarks panel"
                             onclick={toggleBookmarksPanel}
                         ><ControlIcon name="bookmarks-panel" size={16} /></button>
-                    </div>
-                {/if}
+                    {/if}
+                    <button
+                        type="button" class="strip-bm-btn"
+                        aria-label="Toggle filmstrip motion"
+                        title={config.filmstripMotion === 'snap' ? 'Snap to ayah' : 'Continuous glide'}
+                        onclick={cycleMotion}
+                    ><ControlIcon name={motionIconName(config)} size={16} /></button>
+                </div>
                 <div class="strip-flex">
                     <AyahFilmstrip
                         bind:this={filmstrip}
@@ -421,11 +401,6 @@
         white-space: nowrap;
         cursor: default;
     }
-    .nr-swatch-wrap {
-        position: relative;
-        display: inline-flex;
-        flex: 0 0 auto;
-    }
     .nr-ctrls {
         display: inline-flex;
         align-items: center;
@@ -446,19 +421,6 @@
     }
     .nr-btn:hover:not(:disabled) { color: var(--text-primary); background: var(--panel-2); }
     .nr-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-    .nr-btn.swatch:hover:not(:disabled) { background: var(--panel-2); filter: brightness(1.12); }
-    .nr-color-input {
-        position: absolute;
-        inset: 0;
-        width: 100%;
-        height: 100%;
-        margin: 0;
-        padding: 0;
-        border: 0;
-        opacity: 0;
-        cursor: pointer;
-        pointer-events: none;
-    }
     .strip-wrap {
         display: flex;
         align-items: center;

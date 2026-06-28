@@ -1,10 +1,9 @@
 /**
  * Cell-highlight constants for the Timestamps analysis view (letter / haraka /
  * phoneme cells). The single home for the highlight's motion + surface values
- * that `timestamps.css` reads. The dev motion-lab
- * (`tabs/timestamps/highlight-motion-lab.svelte.ts`) writes the same custom
- * properties onto <html> at runtime to override these shipped defaults; with no
- * lab mounted (production) these values are what ships.
+ * that `timestamps.css` reads. The per-tier fill / ink / ghost colours are NOT
+ * here — those derive live from the user's accent in `color-derive.ts` and ride
+ * in as `--ts-*-color` / `--ts-*-ink` / `--ts-*-muted`.
  */
 :root {
     /* Active-highlight motion. attack = a cell lighting up, release = fading
@@ -15,10 +14,6 @@
     --hl-release-dur: 110ms;
     --hl-attack-ease: linear;
     --hl-release-ease: cubic-bezier(0.22, 1, 0.36, 1);
-
-    /* Karaoke wipe (continuous mode): tint of the highlight colour shown across
-       the whole active cell before the per-frame bright fill reaches it. */
-    --hl-track-base: 20%;
 
     /* Cell surfaces */
     --hl-cell-rest: #0f0f23; /* a resting cell */

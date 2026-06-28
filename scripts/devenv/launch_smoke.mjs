@@ -66,7 +66,10 @@ try {
         }
     });
 
-    await page.goto(baseUrl, { waitUntil: 'networkidle', timeout: 45_000 });
+    // Don't wait for `networkidle` — the SPA polls/prefetches, so the network
+    // never goes idle and goto would time out spuriously. `domcontentloaded` +
+    // the tab selector below is the real "app mounted" signal.
+    await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 45_000 });
     await page.waitForSelector('.tab-btn[data-tab="dashboard"]', { timeout: 20_000 });
 
     const bodyText = await page.evaluate(() => document.body.innerText);
