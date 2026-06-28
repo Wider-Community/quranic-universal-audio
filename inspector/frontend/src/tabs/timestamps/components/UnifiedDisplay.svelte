@@ -249,7 +249,7 @@
     // from the imperative active-cell path, so the two never clobber.
     let _reportClickBound = false;
     $: $reportMode, $staged, $focusedCellKey, $currentVerseReports, rendered,
-        untrack(() => void tick().then(applyReportPasses));
+        untrack(() => void tick().then(() => { applyReportPasses(); reconcileSeededTajweedOptions(); }));
 
     function _publicByKey(): Map<string, TsReport[]> {
         const m = new Map<string, TsReport[]>();
@@ -329,17 +329,46 @@
             const silenceDim = silenceInert && (el.classList.contains('mega-block') || isPauseBridge || isMissedSlot);
             el.classList.toggle('report-dim', noTj || silenceDim);
             el.classList.toggle('report-inert', noTj || noTiming || noPhoneme || silenceInert);
-            el.classList.toggle('report-flag-staged', active && !!key && stagedMap.has(key));
-            el.classList.toggle('report-focused', active && !!key && key === focused);
+            // For .mega-block: flag ring + reportTip go on the .mega-word child so the
+            // outline sits on the hover target (onWordEnter fires on .mega-word) and the
+            // tooltip is reachable. dim/inert stay on the block itself.
+            const flagEl = el.classList.contains('mega-block')
+                ? (el.querySelector<HTMLElement>('.mega-word') ?? el)
+                : el;
+            flagEl.classList.toggle('report-flag-staged', active && !!key && stagedMap.has(key));
+            flagEl.classList.toggle('report-focused', active && !!key && key === focused);
             const reps = key ? pub.get(key) : undefined;
-            el.classList.toggle('report-flag-public', !!reps?.length);
-            if (reps?.length) el.dataset.reportTip = _composeReportTip(reps);
-            else if (el.dataset.reportTip) delete el.dataset.reportTip;
+            flagEl.classList.toggle('report-flag-public', !!reps?.length);
+            if (reps?.length) flagEl.dataset.reportTip = _composeReportTip(reps);
+            else if (flagEl.dataset.reportTip) delete flagEl.dataset.reportTip;
             // A missed-slot has no hover/duration plumbing, so surface its public
             // flag via a native title instead of the custom cell tooltip.
             if (isMissedSlot) {
                 if (reps?.length) el.title = 'Reported missing pause';
                 else el.removeAttribute('title');
+            }
+        });
+    }
+
+    /** Reconcile seeded tajweed entries against the live DOM so re-entering a
+     *  session shows the cell's full rule set, not just the previously-picked tags. */
+    function reconcileSeededTajweedOptions(): void {
+        if (!rootEl) return;
+        if (get(reportMode).kind !== 'tajweed') return;
+        const stagedMap = get(staged);
+        const els = rootEl.querySelectorAll<HTMLElement>('[data-cell-index], .mega-phoneme');
+        stagedMap.forEach((a, cellKey) => {
+            if (a.kind !== 'tajweed' || !a.originalId) return;
+            for (const el of Array.from(els)) {
+                if (elCellKey(el) !== cellKey) continue;
+                const tags = (el.getAttribute('data-tj-tags') || '')
+                    .split(',')
+                    .filter(Boolean)
+                    .filter(ruleHasLabel);
+                if (tags.length > a.ruleOptions.length) {
+                    upsertStaged({ ...a, ruleOptions: tags });
+                }
+                break;
             }
         });
     }
