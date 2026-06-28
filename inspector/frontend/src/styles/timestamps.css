@@ -686,6 +686,16 @@
     opacity: 0.7;
 }
 
+/* Cross-verse waṣl context: a neighbouring verse's words shown as read-only
+   context around the focused verse (junction tajweed renders across the
+   boundary). Dimmed + non-loopable; click still seeks (focus follows). */
+.unified-display .mega-block.context {
+    opacity: 0.5;
+}
+.unified-display .mega-block.context:hover {
+    opacity: 0.72;
+}
+
 /* --- Per-cell duration tooltip ------------------------------------------ */
 /* Fixed-position chip showing a cell's recited duration (ms). Raised on hover
    with a warmup/cooldown delay by UnifiedDisplay; never eats the pointer. */

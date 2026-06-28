@@ -8,11 +8,13 @@
  * bridge shows the neutral pause icon.
  */
 import { cleanup, render } from '@testing-library/svelte';
+import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { dashPort } from '../../../../lib/playback/dash-port';
 import { makeAudioStub as makePortAudioStub } from '../../../../lib/playback/__tests__/raf-harness';
 import type { Letter, TsVerseData, TsWord } from '../../../../lib/types/ts-client';
+import { tsWaveformHoverTime } from '../../stores/display';
 import { loadedVerse } from '../../stores/verse';
 
 import UnifiedDisplay from '../UnifiedDisplay.svelte';
@@ -58,6 +60,7 @@ describe('UnifiedDisplay — pause bridges', () => {
     afterEach(() => {
         cleanup();
         loadedVerse.set(null);
+        tsWaveformHoverTime.set(null);
         dashPort.attachElement(null);
     });
 
@@ -96,5 +99,21 @@ describe('UnifiedDisplay — pause bridges', () => {
         expect(container.querySelector('.pause-bridge')).toBeNull();
         // With no surfacing pause, the mark stays in the word box.
         expect(container.querySelectorAll('.mega-word')[0]!.textContent).toBe(`فمن${SALA}`);
+    });
+
+    it('dims the row (.in-pause) during the trailing end-of-verse silence', async () => {
+        const { container } = mount([
+            word(1, 'فمن', 0, 1),
+            word(2, 'بعد', 1, 2.5), // contiguous — no inter-word pause-bridge
+        ]);
+        const root = container.querySelector('.unified-display')!;
+        // Paused hover past the last recited word → the verse-end waqf silence.
+        tsWaveformHoverTime.set(3.0);
+        await tick();
+        expect(root.classList.contains('in-pause')).toBe(true);
+        // Hover within a recited word → no dim.
+        tsWaveformHoverTime.set(0.5);
+        await tick();
+        expect(root.classList.contains('in-pause')).toBe(false);
     });
 });

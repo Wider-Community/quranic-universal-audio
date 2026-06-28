@@ -58,7 +58,9 @@ Tests: `occasions`/`wasl.ts` (`bridgesOutTo` back-stamp on a `14:1↔14:2` fixtu
 
 Tests/visual: `AyahFilmstrip.wasl.test.ts` (gapless geometry; one accent rail; merged short verse time-true). Playwright: `abdulwadood` ch20 (4-chain capsule), ch26 chain-with-retake.
 
-## C. Teleprompter chaining + marker coloring (`LineAnimation.svelte`)
+## C. Teleprompter chaining + marker coloring (`LineAnimation.svelte`) — ✅ shipped
+
+> Implemented static-only: a precomputed `wasl-chains.ts` (`buildWaslChains(units)` → `chainStartOf` / `chainEndIdxOf` / `bridgesNext`) drives the paging instead of a live `hit.waslTo` (the live locator no longer carries `waslTo`). `ayahEndIdx` extends to the chain end and the verse-end clear fires only on a chain change; a `sweepMarker` lights `.marker-pause` on a non-bridging verse-end pause. Tests: `wasl-chains.test.ts` + `LineAnimation.wasl.test.ts`.
 
 - **Chain across a live waṣl boundary:** add `pageEndAyahKey` so `ayahEndIdx` can extend to the next verse; in `tick()`, when `hit.waslTo` is set, extend `pageEndAyahKey` + force a re-measure (`pageCount = null`) so verse N+1's words flow onto the same line (overflow then re-pages as today). Suppress the `clearOnAyahEnd` re-page when the crossing equals the waṣl we just chained (track `lastWaslTo`); advance `pageAyahKey` so 3+ chains keep extending. Reading order already places N's words before N+1's.
 - **Marker stays static + un-highlighted:** the `۝`+numeral is a `.ra-ayah-marker` span (not `.ra-word`/`.ra-char`), so the sweep flows past it untouched (confirm with a test). When the page spans N and N+1, the marker renders inline between them automatically.
@@ -66,7 +68,9 @@ Tests/visual: `AyahFilmstrip.wasl.test.ts` (gapless geometry; one accent rail; m
 
 Tests: `LineAnimation.wasl.test.ts` (no clear at a waṣl boundary; marker rendered + un-highlighted; `marker-pause` lights on a waqf pause; 3-chain keeps extending).
 
-## D. Analysis context-merge + waveform auto-span (`UnifiedDisplay.svelte`, `TimestampsWaveform.svelte`, `tabs/timestamps/stores/verse.ts`, `TimestampsTab.svelte`)
+## D. Analysis context-merge + waveform auto-span (`UnifiedDisplay.svelte`, `TimestampsWaveform.svelte`, `tabs/timestamps/stores/verse.ts`, `TimestampsTab.svelte`) — ✅ shipped
+
+> Implemented. `assembleWaslGroup` (factored a shared `assembleMembers` core in `ts-source.ts`) merges the chain into one `TsVerseData` **0-anchored to the group start**. `TimestampsTab.attachWaslGroups` precomputes a parallel `focusWaslGroup` store (by_surah only). `UnifiedDisplay` renders from `focusWaslGroup.data ?? loadedVerse.data` with `.context` dim + loop-gate on non-focus blocks, and a single `displayOffsetSec()` drives highlights / click / loop (the loop seek-back uses the group offset via `loopAnchor.waslGroup`). `TimestampsWaveform.dispWindow()` spans the group + fetches peaks over the span; the shuffle prewarmer warms the group span; the end-of-verse waqf reuses `.in-pause`. Tests in `ts_client.test.ts`, `UnifiedDisplay.wasl.test.ts`, `UnifiedDisplay.pause.test.ts`.
 
 - **`assembleWaslGroup` (`ts-source.ts`):** a multi-occasion generalization of `assembleOccasion` over the focus occasion's `bridgesOutTo` chain — one running `share_group` base, concatenated `intervals[]`, words with `phoneme_indices` into the flat list, single span rebased by one `offsetSec`. Each `TsWord.location` keeps its true `"surah:ayah:word"`, so every cell knows its owning verse.
 - **Display-only context merge:** keep `loadedVerse` = focus occasion (editing model untouched). Add a parallel `focusWaslGroup: Writable<TsVerseData|null>` (set in the focus-load path when the occasion is part of a chain). `UnifiedDisplay` renders from `focusWaslGroup ?? loadedVerse.data`, tagging blocks whose verse ≠ focus with a dimmed `context` class (click still seeks; loop/validation/cell-edit gated to focus-verse blocks). The merged `words` feed the *existing* idgham bridge lift, so junction tajweed renders across the boundary for free.

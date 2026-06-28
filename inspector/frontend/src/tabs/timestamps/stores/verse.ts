@@ -51,6 +51,25 @@ export const selectedVerse = writable<string>('');
 /** Currently-loaded verse data (null before first load). */
 export const loadedVerse = writable<TsLoadedVerse | null>(null);
 
+/** The cross-verse waṣl GROUP the focused verse belongs to, or null when the
+ *  focus is a standalone verse (the common case). When set, the analysis view
+ *  renders the merged group's cells as read-only context (junction tajweed
+ *  across the boundary) and the waveform spans the whole group; editing / loop /
+ *  validation stay scoped to `focusRef`. `loadedVerse` is unchanged — this is a
+ *  parallel display-only overlay. by_surah only. */
+export interface TsFocusWaslGroup {
+    /** Merged `TsVerseData` over the chain (`assembleWaslGroup`). */
+    data: TsVerseData;
+    /** Chapter-absolute group span [startMs, endMs]. */
+    span: [number, number];
+    /** Member verse refs in recitation order. */
+    refs: string[];
+    /** The focused verse ref within the group (interactive verse). */
+    focusRef: string;
+}
+
+export const focusWaslGroup = writable<TsFocusWaslGroup | null>(null);
+
 // ---------------------------------------------------------------------------
 // Derived dropdown options
 // ---------------------------------------------------------------------------

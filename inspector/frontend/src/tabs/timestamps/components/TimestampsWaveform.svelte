@@ -31,6 +31,7 @@
     import { ensureDashCovering } from '../../../lib/playback/dash-covering';
     import { recitationConfigStore } from '../../../lib/recitation-animation/recitation-settings';
     import type { AudioPeaks, PeakBucket, SegmentPeaks } from '../../../lib/types/peaks-transport';
+    import type { TsVerseData } from '../../../lib/types/ts-client';
     import { analogousTriad } from '../../../lib/utils/color-derive';
     import {
         PREVIEW_PLAYHEAD_COLOR,
@@ -49,7 +50,7 @@
         viewMode,
     } from '../stores/display';
     import { loopTarget } from '../stores/playback';
-    import { loadedVerse } from '../stores/verse';
+    import { focusWaslGroup, loadedVerse } from '../stores/verse';
     import { tsZoom, tsZoomAnimating } from '../stores/zoom';
     import { TS_PAN_HALF_CANVAS_VIEWS_PER_SEC } from '../utils/constants';
     import { findWordAt } from '../utils/loop-target';
@@ -157,6 +158,13 @@
     let _zoom: { viewStart: number; viewEnd: number } | null = null;
     $: _zoom = $tsZoom;
 
+    // The displayed window: the whole cross-verse waṣl span when the focus verse
+    // is in a group (so the waveform shows the continuous recitation as one), else
+    // the focus verse. Drives the peaks fetch + the coordinate base; the merged
+    // group's cells 0-anchor to the group start, matching `_dispOffsetSec`.
+    $: _dispOffsetSec = $focusWaslGroup ? $focusWaslGroup.span[0] / 1000 : ($loadedVerse?.tsSegOffset ?? 0);
+    $: _dispEndSec = $focusWaslGroup ? $focusWaslGroup.span[1] / 1000 : ($loadedVerse?.tsSegEnd ?? 0);
+
     // Sub-range props forwarded to WaveformCanvas, resolved via `_drawRange` so
     // the bucket-snapped baked slice and the verse-exact ffmpeg slice both map
     // to the exact-window-relative overlay coords. For the verse-exact path
@@ -166,7 +174,7 @@
     // when the slice metadata flips (baked ↔ ffmpeg fallback).
     $: _wcRange = _drawRange(
         _zoom,
-        $loadedVerse ? ($loadedVerse.tsSegEnd - $loadedVerse.tsSegOffset) * 1000 : 0,
+        ($loadedVerse || $focusWaslGroup) ? (_dispEndSec - _dispOffsetSec) * 1000 : 0,
         _peaksSpanMs,
         _peaksOriginMs,
     );
@@ -224,8 +232,8 @@
         $loadedVerse?.data.audio_url ?? null,
         $loadedVerse?.data.reciter ?? '',
         $loadedVerse?.data.chapter ?? 0,
-        $loadedVerse?.tsSegOffset ?? 0,
-        $loadedVerse?.tsSegEnd ?? 0,
+        _dispOffsetSec,
+        _dispEndSec,
     );
 
     function _clearPeaks(): void {
@@ -413,8 +421,8 @@
         // stale playhead into every subsequent `putImageData` call
         // (user-visible as a fixed ghost cursor inside the loop word).
         if (peaks) {
-            const lv = get(loadedVerse);
-            const exactMs = lv ? (lv.tsSegEnd - lv.tsSegOffset) * 1000 : 0;
+            const win = dispWindow();
+            const exactMs = win ? (win.end - win.offset) * 1000 : 0;
             const range = _drawRange(_zoom, exactMs, _peaksSpanMs, _peaksOriginMs);
             drawWaveformPeaks(ctx, peaks, {
                 width: canvas.width,
@@ -430,6 +438,17 @@
 
     // ---- Overlays ----
 
+    /** Imperative read of the displayed window (the whole waṣl group when the
+     *  focus is in one, else the focus verse). Matches the reactive
+     *  `_dispOffsetSec`/`_dispEndSec` + the merged cells, so peaks / playhead /
+     *  bands / click all share one group-anchored coordinate base. */
+    function dispWindow(): { offset: number; end: number; data: TsVerseData } | null {
+        const fg = get(focusWaslGroup);
+        if (fg) return { offset: fg.span[0] / 1000, end: fg.span[1] / 1000, data: fg.data };
+        const lv = get(loadedVerse);
+        return lv ? { offset: lv.tsSegOffset, end: lv.tsSegEnd, data: lv.data } : null;
+    }
+
     /**
      * Draw overlays. Called per-frame from the parent animation loop and on
      * reactive store changes. Restores the immutable peaks base, then paints
@@ -444,14 +463,14 @@
 
         const width = canvas.width;
         const height = canvas.height;
-        const lv = get(loadedVerse);
-        if (!lv) return;
+        const win = dispWindow();
+        if (!win) return;
 
-        const segOffset = lv.tsSegOffset;
-        const segEnd = lv.tsSegEnd;
+        const segOffset = win.offset;
+        const segEnd = win.end;
         const duration = segEnd - segOffset || 1;
-        const words = lv.data.words;
-        const intervals = lv.data.intervals;
+        const words = win.data.words;
+        const intervals = win.data.intervals;
 
         // 1. Restore pristine base.
         //    Fast path: use the cached ImageData snapshot when it matches the
@@ -723,14 +742,14 @@
         if (!waveformRef) return null;
         const canvas = waveformRef.getCanvas();
         if (!canvas) return null;
-        const lv = get(loadedVerse);
-        if (!lv) return null;
+        const win = dispWindow();
+        if (!win) return null;
         const rect = canvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const progress = x / Math.max(1, rect.width);
         // Zoom-aware: when zoomed, pixel x maps back to view window, not full slice.
         if (_zoom) return _zoom.viewStart + progress * (_zoom.viewEnd - _zoom.viewStart);
-        return progress * (lv.tsSegEnd - lv.tsSegOffset);
+        return progress * (win.end - win.offset);
     }
 
     function onCanvasMove(e: MouseEvent): void {
@@ -750,12 +769,12 @@
 
     function onCanvasClick(e: MouseEvent): void {
         if (!dashPort.element || !dashPort.element.duration) return;
-        const lv = get(loadedVerse);
-        if (!lv) return;
+        const win = dispWindow();
+        if (!win) return;
         const t = _pointerTime(e);
         if (t == null) return;
 
-        const words = lv.data.words;
+        const words = win.data.words;
         // Strict lookup — clicks in inter-word silence (or leading/trailing
         // margin) are no-ops rather than snapping to an unrelated token.
         const w = findWordAt(t, words, false);
@@ -769,7 +788,7 @@
             const wi = words.indexOf(w);
             if (cur.kind === 'word' && cur.wordIndex === wi) return;
             loopTarget.set({ kind: 'word', startSec: w.start, endSec: w.end, wordIndex: wi });
-            const targetMs = (w.start + lv.tsSegOffset) * 1000;
+            const targetMs = (w.start + win.offset) * 1000;
             ensureDashCovering(targetMs);
             dashPort.seek(targetMs);
             signalDashSeekIntent();
@@ -779,7 +798,7 @@
         }
 
         // Snap to enclosing word's start.
-        const targetMs = (w.start + lv.tsSegOffset) * 1000;
+        const targetMs = (w.start + win.offset) * 1000;
         ensureDashCovering(targetMs);
         dashPort.seek(targetMs);
         signalDashSeekIntent();
