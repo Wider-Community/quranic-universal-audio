@@ -17,19 +17,18 @@ wrong branch" failures come from. This script owns all of it:
     ``down`` / ``doctor`` can see and clean them - including the foreign
     double-bind that silently serves stale code.
 
-Modes (``--mode``, default ``dev-remote``):
-  dev-remote   (default) Vite only, /api proxied to the live DEV Space — real
-               data with a mounted bucket, so audio + analysis work, fast, and
-               works on Windows (no hf-mount needed). The everyday "run the app /
-               test the FE" mode. Hits the DEV environment, never production.
-  prod-remote  Vite only, /api proxied to the live PROD Space. A quick read-only
-               look at production data. The Space is SINGLE-WORKER — never smoke
-               or hammer it (``--smoke`` is refused here); use dev-remote instead.
-  dev          local Flask against the DEV bucket (read-write) + Vite. The only
-               mode that runs your branch's BACKEND. On Windows the no-mount hffs
-               path can't serve audio/shards, so audio + analysis won't load —
-               use it for backend/catalog work, not for playback.
-  fixtures     fully offline (filesystem backend, seeded fixtures) + Vite.
+Every mode runs FULLY LOCAL — your branch's Flask backend + Vite, no HF Space
+proxy, no hf-mount. Bucket reads go through the hffs fallback (sub-second on
+Windows); audio CDN-falls-back via the proxy. The only thing that changes
+between modes is which data the backend reads.
+
+Modes (``--mode``, default ``dev``):
+  dev    (default) local Flask + Vite reading the DEV bucket (read-write). The
+         everyday mode: runs your branch end-to-end, audio + analysis included.
+  prod   local Flask + Vite reading the PROD bucket, READ-ONLY (bucket
+         write-back disarmed via INSPECTOR_DB_SYNC=0, so a stray edit can never
+         clobber production). A safe local look at real production data.
+  fixtures  fully offline (filesystem backend, seeded fixtures) + Vite.
 
 Commands:
   up      (default) start a stack; prints human URLs + a machine block
@@ -39,9 +38,10 @@ Commands:
   smoke   drive Dashboard + Timestamps in headless chromium against a stack
 
 Examples:
-  python scripts/devenv/launch.py                     # dev-remote, this worktree
-  python scripts/devenv/launch.py up --smoke             # dev-remote + verify tabs
-  python scripts/devenv/launch.py up --mode dev --no-vite # local backend only
+  python scripts/devenv/launch.py                     # dev, this worktree
+  python scripts/devenv/launch.py up --smoke             # dev + verify tabs
+  python scripts/devenv/launch.py up --mode prod         # read-only prod data
+  python scripts/devenv/launch.py up --no-vite           # local backend only
   python scripts/devenv/launch.py list
   python scripts/devenv/launch.py down --all
   python scripts/devenv/launch.py doctor --fix
@@ -72,21 +72,15 @@ IS_WIN = os.name == "nt"
 # node/python) would otherwise flash on Windows. No-op off Windows.
 NO_WINDOW = subprocess.CREATE_NO_WINDOW if IS_WIN else 0
 
-# Space hostnames for the remote modes (overridable via env).
-DEV_SPACE_URL = os.environ.get(
-    "INSPECTOR_DEV_SPACE_URL", "https://hetchyy-quranic-inspector-dev.hf.space"
-)
-PROD_SPACE_URL = os.environ.get(
-    "INSPECTOR_PROD_SPACE_URL", "https://hetchyy-quranic-universal-audio.hf.space"
-)
-
 # Preferred port windows - the allocator walks these, skipping anything in use
 # (OS-listening or reserved by another registered stack).
 VITE_PORT_RANGE = range(5173, 5274)
 BACKEND_PORT_RANGE = range(5000, 5100)
 
-MODES = ("dev", "fixtures", "dev-remote", "prod-remote")
-REMOTE_MODES = {"dev-remote", "prod-remote"}
+# Prod bucket repo id — `prod` mode points the local backend here, read-only.
+PROD_BUCKET_REPO = "hetchyy/quranic-inspector-bucket"
+
+MODES = ("dev", "prod", "fixtures")
 
 
 # ---------------------------------------------------------------------------
@@ -240,9 +234,12 @@ def spawn_detached(cmd: list[str], cwd: Path, env: dict[str, str], log_path: Pat
         cwd=str(cwd), env=env, stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL
     )
     if IS_WIN:
-        kwargs["creationflags"] = (
-            subprocess.CREATE_NEW_PROCESS_GROUP | 0x00000008
-        )  # DETACHED_PROCESS
+        # CREATE_NO_WINDOW (not DETACHED_PROCESS): the child gets a HIDDEN
+        # console that its own children (node→esbuild, etc.) inherit, so they
+        # never pop a new console window. DETACHED_PROCESS gives no console at
+        # all, which makes every console-app grandchild flash its own window.
+        # NEW_PROCESS_GROUP keeps it detached enough to survive our exit.
+        kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | NO_WINDOW
     else:
         kwargs["start_new_session"] = True
     proc = subprocess.Popen(cmd, **kwargs)  # noqa: S603
@@ -458,26 +455,33 @@ def backend_env(root: Path, mode: str) -> dict[str, str]:
         env["INSPECTOR_BACKEND"] = "filesystem"
         env["INSPECTOR_FILESYSTEM_ROOT"] = str(fx)
         env["INSPECTOR_AUTO_MOUNT"] = "0"
-    else:
-        # mode == "dev": read the DEV bucket (the documented contract). Force it
-        # explicitly — a worktree `.env` with INSPECTOR_BACKEND=filesystem would
-        # otherwise leak through (app.py's dotenv load only fills UNSET keys), so
-        # "dev" would silently read empty fixtures and 404 every audio/shard read.
-        env["INSPECTOR_BACKEND"] = "bucket"
-        env.pop("INSPECTOR_FILESYSTEM_ROOT", None)
+        return env
+    # dev / prod: read a bucket. Force the backend explicitly — a worktree `.env`
+    # with INSPECTOR_BACKEND=filesystem would otherwise leak through (app.py's
+    # dotenv load only fills UNSET keys), so the mode would silently read empty
+    # fixtures and 404 every audio/shard read.
+    env["INSPECTOR_BACKEND"] = "bucket"
+    env.pop("INSPECTOR_FILESYSTEM_ROOT", None)
+    if mode == "prod":
+        # Point the local backend at the PROD bucket, READ-ONLY: acknowledge the
+        # prod guard, and disarm bucket write-back so no edit can ever sync the
+        # full-file DB back over production state.
+        env["INSPECTOR_BUCKET_REPO"] = PROD_BUCKET_REPO
+        env["INSPECTOR_ALLOW_PROD_BUCKET"] = "1"
+        env["INSPECTOR_DB_SYNC"] = "0"
+    # dev: leave INSPECTOR_BUCKET_REPO to the child — a contributor's `.env` may
+    # name their own dev bucket; otherwise resolve_bucket_repo defaults to dev.
     return env
 
 
-def vite_env(vite_port: int, backend_port: int | None, mode: str) -> dict[str, str]:
+def vite_env(vite_port: int, backend_port: int) -> dict[str, str]:
     env = os.environ.copy()
     env["INSPECTOR_VITE_PORT"] = str(vite_port)
-    if mode == "dev-remote":
-        env["INSPECTOR_API_TARGET"] = DEV_SPACE_URL
-    elif mode == "prod-remote":
-        env["INSPECTOR_API_TARGET"] = PROD_SPACE_URL
-    else:
-        env["INSPECTOR_BACKEND_PORT"] = str(backend_port)
-        env["INSPECTOR_BACKEND_HOST"] = "127.0.0.1"
+    env["INSPECTOR_BACKEND_PORT"] = str(backend_port)
+    env["INSPECTOR_BACKEND_HOST"] = "127.0.0.1"
+    # Never let a stray INSPECTOR_API_TARGET (render harness) redirect /api to a
+    # remote Space — every launch mode talks to its own local backend.
+    env.pop("INSPECTOR_API_TARGET", None)
     return env
 
 
@@ -489,34 +493,31 @@ def vite_env(vite_port: int, backend_port: int | None, mode: str) -> dict[str, s
 def cmd_up(args: argparse.Namespace) -> int:
     root = resolve_worktree(args.worktree)
     mode = args.mode
-    want_backend = mode not in REMOTE_MODES and not args.no_backend
+    want_backend = not args.no_backend
     want_vite = not args.no_vite
     logs = root / ".local" / "launch" / "logs"
     short = root.name
 
-    # prod-remote proxies /api to the LIVE production Space (single-worker). It's
-    # for a quick read-only look, never for load: never auto-smoke it, and warn so
-    # nobody points heavy dev/agent traffic at production. dev-remote (the default)
-    # hits the dev Space and is the right mode for real-data testing.
-    if mode == "prod-remote":
-        if args.smoke:
-            raise SystemExit(
-                "launch: refusing --smoke against prod-remote (it would load the live PROD "
-                "Space). Use --mode dev-remote for smoke/automated testing."
-            )
+    if want_vite and not want_backend:
+        raise SystemExit(
+            "launch: --no-backend needs --no-vite too (Vite proxies /api to the "
+            "local backend; there's no remote target any more)."
+        )
+
+    if mode == "prod":
         print(
-            "launch: NOTE — prod-remote proxies to the LIVE production Space (single-worker). "
-            "Keep it light; use dev-remote for anything heavy.",
+            "launch: NOTE - reading the PROD bucket READ-ONLY (write-back disarmed). "
+            "Edits won't persist; use --mode dev to actually change data.",
             flush=True,
         )
 
     if (
-        mode == "dev"
+        mode in ("dev", "prod")
         and want_backend
         and not (os.environ.get("HF_TOKEN") or _env_file_has(root, "HF_TOKEN"))
     ):
         print(
-            "launch: WARNING - no HF_TOKEN in env or .env; dev-bucket reads will fail. "
+            "launch: WARNING - no HF_TOKEN in env or .env; bucket reads will fail. "
             "Use --mode fixtures for offline, or add HF_TOKEN.",
             flush=True,
         )
@@ -578,21 +579,22 @@ def cmd_up(args: argparse.Namespace) -> int:
 
         if want_vite:
             assert vite_port is not None  # want_vite => allocated above
+            assert backend_port is not None  # want_vite always pairs with a backend
             print(
-                f"launch: starting Vite on :{vite_port} (proxy -> {_proxy_label(mode, backend_port)})...",
+                f"launch: starting Vite on :{vite_port} (proxy -> local :{backend_port})...",
                 flush=True,
             )
             pid = spawn_detached(
                 vite_cmd(root),
                 cwd=frontend_dir(root),
-                env=vite_env(vite_port, backend_port, mode),
+                env=vite_env(vite_port, backend_port),
                 log_path=logs / f"vite-{vite_port}.log",
             )
             stack.vite_pid = pid
             stack.url = f"http://localhost:{vite_port}"
             _update_stack(stack)
             # Cold first run pre-bundles deps (slow on Windows) — give it room.
-            wait_vite(vite_port, timeout=150, check_api=(want_backend or mode in REMOTE_MODES))
+            wait_vite(vite_port, timeout=150, check_api=want_backend)
             print("launch: Vite ready", flush=True)
         elif want_backend:
             stack.url = f"http://localhost:{backend_port}"
@@ -610,14 +612,6 @@ def cmd_up(args: argparse.Namespace) -> int:
     if args.open and stack.url:
         _open_browser(stack.url)
     return 0
-
-
-def _proxy_label(mode: str, backend_port: int | None) -> str:
-    if mode == "dev-remote":
-        return f"DEV Space {DEV_SPACE_URL}"
-    if mode == "prod-remote":
-        return f"PROD Space {PROD_SPACE_URL}"
-    return f"local :{backend_port}"
 
 
 def _url(s: Stack) -> str:
@@ -907,10 +901,10 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="cmd")
 
     up = sub.add_parser("up", help="start a stack (default command)")
-    up.add_argument("--mode", choices=MODES, default="dev-remote")
+    up.add_argument("--mode", choices=MODES, default="dev")
     up.add_argument("--worktree", help="worktree name or path (default: current)")
     up.add_argument("--no-vite", action="store_true", help="backend only")
-    up.add_argument("--no-backend", action="store_true", help="Vite only (implied for *-remote)")
+    up.add_argument("--no-backend", action="store_true", help="(requires --no-vite)")
     up.add_argument(
         "--smoke", action="store_true", help="run the Dashboard+Timestamps smoke after ready"
     )
