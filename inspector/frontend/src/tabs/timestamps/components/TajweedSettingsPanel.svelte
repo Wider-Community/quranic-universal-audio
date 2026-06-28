@@ -1,28 +1,63 @@
 <script lang="ts">
     /**
-     * Tajweed legend + per-rule settings drop-up for the Timestamps footer. Three
-     * equal columns — Noon / Meem, Madd, Other rules — each row a colour chip
-     * (click → native colour picker, live recolour, hover reveals a dropper) with a
-     * mini enable toggle, label and ḥarakāt duration. Qalqala is two coupled rows
-     * (ṣughrā / kubrā) sharing the `qalqala` key, the kubrā chip previewing the
-     * side-wrap. The Other column closes with two non-interactive keys explaining
-     * the dashed (sounded-but-unwritten) and greyed (written-but-silent) cells. All
-     * state lives in the `tajweed-settings` store; colours apply via `--tj-*`
-     * overrides, toggles drive the per-cell underline.
+     * Tajweed legend + per-rule settings drop-up for the Timestamps footer. A 2×2
+     * grid centred under the player's play button — Noon/Meem and Madd on top,
+     * Other rules and the Waqf stop-sign key on the bottom. Each rule row is a
+     * colour chip (click → native colour picker, live recolour, hover reveals a
+     * dropper) with a mini enable toggle, label and ḥarakāt duration. Each group
+     * header (Noon / Meem / Madd / Other) carries a switch that quick-disables the
+     * whole group and restores the previously-enabled set on re-enable; it reads as
+     * on whenever any member rule is on. Ghunnah heads both Noon and Meem (it governs
+     * a sākin noon and a sākin mīm) — the two rows couple colour + toggle via the
+     * shared `ghunnah` key. Qalqala is two coupled rows (ṣughrā / kubrā) sharing the
+     * `qalqala` key, the kubrā chip previewing the side-wrap. The Other quadrant closes with two non-interactive
+     * keys explaining the dashed (sounded-but-unwritten) and greyed (written-but-
+     * silent) cells; the Waqf quadrant lists the five mushaf pause marks, each in a
+     * real analysis cell with the shared per-glyph calibration. All state lives in
+     * the `tajweed-settings` store; colours apply via `--tj-*` overrides, toggles
+     * drive the per-cell underline.
      */
     import { harakaRenderStyle } from '../utils/haraka-render';
     import { LEGEND, type LegendRow } from '../utils/tajweed-rules';
     import {
+        isGroupEnabled,
         resetAllTajweed,
+        setGroupEnabled,
         setRuleColor,
         setRuleEnabled,
         tajweedSettings,
     } from '../stores/tajweed-settings';
+    import { waqfRenderStyle } from '../utils/waqf-render';
+
+    /** Distinct legendKeys of a row list, in order — the set a group toggle drives
+     *  (qalqala's two rows collapse to one key). */
+    const keysOf = (rows: LegendRow[]): string[] => [...new Set(rows.map((r) => r.legendKey))];
 
     // The two dashed-haraka exemplars in the Other-rules key, positioned with the
     // real per-glyph calibration (damma U+064F pinned above, kasra U+0650 below).
     const DAMMA = 'ُ';
     const KASRA = 'ِ';
+
+    // Waqf stop-sign key — the mushaf pause marks, each shown in a real analysis
+    // cell via the shared per-glyph calibration (`waqfRenderStyle`). Ordered from
+    // the most permissive (stop or continue) to the prohibition, closing with the
+    // muʿānaqah pair (`pair` → two marks in one cell) where exactly one of the two
+    // is a stop.
+    const WAQF_KEYS: { mark: string; label: string; pair?: boolean }[] = [
+        { mark: 'ۚ', label: 'Stop or Continue' }, // ۚ jīm (jāʾiz)
+        { mark: 'ۗ', label: 'Better to Stop' }, // ۗ qila (al-waqf awlā)
+        { mark: 'ۖ', label: 'Better to Continue' }, // ۖ ṣala (al-waṣl awlā)
+        { mark: 'ۘ', label: 'Must Stop' }, // ۘ mīm (lāzim)
+        { mark: 'ۙ', label: 'Should Not Stop' }, // ۙ lā
+        { mark: 'ۛ', label: 'Stop at one only', pair: true }, // ۛ muʿānaqah
+    ];
+
+    // 2×2 placement: Noon/Meem + Other rules on top, Madd + Waqf on the bottom.
+    // Madd and Waqf both carry six rows, so the bottom row aligns row-for-row.
+    const COL_ORDER: Record<string, number> = { noon_meem: 0, other: 1, madd: 2 };
+    const orderedGroups = [...LEGEND].sort(
+        (a, b) => (COL_ORDER[a.category] ?? 99) - (COL_ORDER[b.category] ?? 99),
+    );
 
     // Hidden native colour inputs, one per row, opened by clicking its chip.
     let inputs: Record<string, HTMLInputElement | undefined> = $state({});
@@ -122,15 +157,32 @@
         </div>
     {/snippet}
 
+    {#snippet groupHead(title: string, keys: string[])}
+        {@const on = isGroupEnabled($tajweedSettings, keys)}
+        <h4 class="tjs-h4">
+            <span>{title}</span>
+            <button
+                type="button"
+                class="tjs-toggle tjs-grp-toggle"
+                class:on
+                role="switch"
+                aria-checked={on}
+                aria-label={`Turn all ${title} rules ${on ? 'off' : 'on'}`}
+                title={on ? 'Disable all in group' : 'Enable all in group'}
+                onclick={() => setGroupEnabled(title, keys, !on)}
+            ><span class="knob"></span></button>
+        </h4>
+    {/snippet}
+
     <div class="tjs-cols">
-        {#each LEGEND as group (group.title)}
-            <section class="tjs-group" class:fill={group.category !== 'other'}>
+        {#each orderedGroups as group (group.title)}
+            <section class="tjs-group fill">
                 {#if group.subgroups}
                     <!-- Noon / Meem: two sub-sections, each its own header, distributed to fill height. -->
                     <div class="tjs-body">
                         {#each group.subgroups as sg (sg.title)}
                             <div class="tjs-subsec">
-                                <h4>{sg.title}</h4>
+                                {@render groupHead(sg.title, keysOf(sg.rows))}
                                 {#each sg.rows as row (row.label)}
                                     {@render ruleRow(row)}
                                 {/each}
@@ -138,13 +190,18 @@
                         {/each}
                     </div>
                 {:else if group.category === 'other'}
-                    <h4>{group.title}</h4>
-                    {#each group.rows ?? [] as row (row.label)}
-                        {@render ruleRow(row)}
-                    {/each}
-                {:else}
-                    <h4>{group.title}</h4>
+                    {@render groupHead(group.title, keysOf(group.rows ?? []))}
                     <div class="tjs-body">
+                        {#each group.rows ?? [] as row (row.label)}
+                            {@render ruleRow(row)}
+                        {/each}
+                    </div>
+                {:else}
+                    {@render groupHead(group.title, keysOf(group.rows ?? []))}
+                    <div
+                        class="tjs-body"
+                        class:rows-6={(group.rows?.length ?? 0) === WAQF_KEYS.length}
+                    >
                         {#each group.rows ?? [] as row (row.label)}
                             {@render ruleRow(row)}
                         {/each}
@@ -177,6 +234,23 @@
                 {/if}
             </section>
         {/each}
+
+        <section class="tjs-group tjs-waqf fill">
+            <h4>Waqf · stop signs</h4>
+            <div class="waqf-body rows-6">
+                {#each WAQF_KEYS as wk (wk.label)}
+                    <div class="waqf-row">
+                        <span class="waqf-cell" class:pair={wk.pair}>
+                            <span class="waqf-mark" style={waqfRenderStyle(wk.mark)}>{wk.mark}</span>
+                            {#if wk.pair}
+                                <span class="waqf-mark" style={waqfRenderStyle(wk.mark)}>{wk.mark}</span>
+                            {/if}
+                        </span>
+                        <span class="waqf-cap">{wk.label}</span>
+                    </div>
+                {/each}
+            </div>
+        </section>
     </div>
 </div>
 
@@ -220,9 +294,14 @@
         color: var(--text-primary);
         border-color: var(--border-default);
     }
+    /* 2×2: Noon/Meem + Other rules on top, Madd + Waqf key on the bottom (Madd and
+       Waqf both carry six rows so the bottom row aligns). Rows size to content —
+       the top row runs taller than the bottom, which keeps every quadrant roomy
+       rather than forcing one to stretch. The column gap lands under the player's
+       play button (see `centerOnPlay`). */
     .tjs-cols {
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: var(--s-3);
         align-items: stretch;
     }
@@ -239,9 +318,19 @@
         color: var(--text-primary);
         border-bottom: 1px solid var(--border-quiet);
     }
-    /* Noon/Meem + Madd columns fill the shared (tallest-column) height: the body
-       grows and distributes its rows + sub-headers with even vertical spacing.
-       The Other column keeps its natural top-packed flow (its key block fills it). */
+    /* Group header carrying the quick-disable switch — title left, toggle right. */
+    .tjs-h4 {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--s-2);
+    }
+    .tjs-grp-toggle {
+        flex: 0 0 auto;
+    }
+    /* Every column fills the shared (tallest-column) height: the body grows and
+       distributes its rows + sub-headers with even vertical spacing. In the Other
+       column the body grows to pin its dashed/silent key block to the bottom. */
     .tjs-group.fill {
         display: flex;
         flex-direction: column;
@@ -256,6 +345,19 @@
         /* Baseline gap so the tallest fill column (which has no slack to
            distribute) still breathes; shorter columns spread beyond it. */
         gap: 5px;
+    }
+    /* Madd + Waqf share a row and both carry six entries: render each body as six
+       equal tracks so the columns align entry-for-entry despite Madd's short rule
+       rows and Waqf's taller glyph cells (each entry centres in its track). */
+    .tjs-group.fill .tjs-body.rows-6,
+    .tjs-group.fill .waqf-body.rows-6 {
+        display: grid;
+        /* Full-width single column so each row stretches edge-to-edge (the rule
+           duration stays snapped to the right edge); six equal tracks for the
+           Madd↔Waqf row alignment. */
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: repeat(6, 1fr);
+        gap: 0;
     }
     .tjs-group.fill .tjs-row {
         margin-bottom: 0;
@@ -488,5 +590,56 @@
         color: var(--text-muted);
         line-height: 1.35;
         white-space: normal;
+    }
+
+    /* Waqf key: each pause mark in a real analysis pause-cell (dark resting tile),
+       the lone combining glyph scaled + nudged by the shared `--waqf-*` calibration
+       projected by `waqfRenderStyle` — same data the live `.pause-waqf` cell reads. */
+    .waqf-body {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+    .waqf-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: var(--fs-meta);
+        color: var(--text-secondary);
+        white-space: nowrap;
+    }
+    .waqf-cell {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 3px;
+        flex: 0 0 auto;
+        width: 28px;
+        height: 24px;
+        background: var(--hl-cell-rest);
+        border: 1px solid var(--border-default);
+        border-radius: 3px;
+        overflow: hidden;
+    }
+    /* muʿānaqah: the two marks of the "stop at one only" pair share one cell. The
+       glyphs are zero-advance combining marks, so the flex gap sets the distance
+       between their ink centres — kept wide (and the marks scaled down) so the two
+       three-dot clusters read as a clear either/or pair inside the fixed cell. */
+    .waqf-cell.pair {
+        gap: 7px;
+    }
+    .waqf-cell.pair .waqf-mark {
+        font-size: calc(var(--analysis-word-font-size, 1.3rem) * var(--waqf-scale, 1) * 0.55);
+    }
+    .waqf-mark {
+        display: inline-block;
+        line-height: 1;
+        color: #cfd3e6;
+        font-family: 'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
+        font-size: calc(var(--analysis-word-font-size, 1.3rem) * var(--waqf-scale, 1));
+        transform: translate(var(--waqf-shift, 0), var(--waqf-raise, 0));
+    }
+    .waqf-cap {
+        flex: 1 1 auto;
     }
 </style>

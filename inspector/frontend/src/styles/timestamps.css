@@ -48,7 +48,7 @@
     column-gap: var(--mega-row-gap, 16px);
     row-gap: var(--mega-line-gap, 16px);
     padding: 20px;
-    background: #16213e;
+    background: var(--hl-frame-bg, #16213e);
     border-radius: 10px;
 }
 
@@ -165,7 +165,7 @@
     border-radius: 5px 5px 0 0;
     font-family: 'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
     font-size: var(--analysis-word-font-size, 1.3rem);
-    color: var(--anim-highlight-color);
+    color: var(--hl-word-idle, var(--anim-highlight-color));
     text-align: center;
     line-height: 1.4;
     border: 1px solid transparent;
@@ -260,7 +260,7 @@
        Arabic' unchanged. See the SilenceMark @font-face in base.css. */
     font-family: 'SilenceMark', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
     font-size: var(--analysis-letter-font-size, 1.05rem);
-    color: #aaa;
+    color: var(--hl-letter-idle, #aaa);
     text-align: center;
     line-height: 1.3;
     transition: background var(--hl-release-dur) var(--hl-release-ease),
@@ -291,8 +291,8 @@
 }
 
 .mega-letter.active {
-    background: var(--ts-letter-color, var(--hl-letter-color));
-    color: var(--ts-letter-ink, #fff);
+    background: var(--ts-letter-deep, var(--hl-letter-color));
+    color: var(--hl-letter-ink, #fff);
     border-color: var(--ts-letter-color, var(--hl-letter-color));
 }
 
@@ -379,7 +379,7 @@
 .haraka-cell .g {
     font-family: 'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
     line-height: 1;
-    color: #aaa;
+    color: var(--hl-letter-idle, #aaa);
     display: inline-block;
     /* per-glyph scale relative to the analysis letter font. */
     font-size: calc(var(--analysis-letter-font-size, 1.05rem) * var(--haraka-scale, 1.4));
@@ -388,10 +388,11 @@
 /* Active highlight uses the SAME hue as a letter cell — one highlight colour
    across the whole letter row, never a separate diacritic colour. */
 .haraka-cell.active {
-    background: var(--ts-letter-color, var(--hl-letter-color));
+    background: var(--ts-letter-deep, var(--hl-letter-color));
+    border-color: var(--ts-letter-color, var(--hl-letter-color));
 }
 .haraka-cell.active .g {
-    color: #fff;
+    color: var(--hl-letter-ink, #fff);
 }
 .haraka-cell.hover-preview {
     background: color-mix(in srgb, var(--ts-letter-color, var(--hl-letter-color)) 30%, transparent);
@@ -421,7 +422,7 @@
 .mega-letter.implicit {
     border-style: dashed;
     border-color: #6a6f8c;
-    color: #aaa;
+    color: var(--hl-letter-idle, #aaa);
 }
 /* A WRITTEN-but-"added" full cell (the madd-ʿiwaḍ alef substituted for the
    fatḥatan at waqf) — same muted dashed border as the implicit madd, but it
@@ -437,8 +438,8 @@
     opacity: 0.5;
 }
 .mega-letter.implicit.active {
-    background: var(--ts-letter-color, var(--hl-letter-color));
-    color: #fff;
+    background: var(--ts-letter-deep, var(--hl-letter-color));
+    color: var(--hl-letter-ink, #fff);
 }
 
 /* --- Seekable diacritic / implicit-madd cells --------------------------- */
@@ -472,7 +473,7 @@
     border-radius: 3px;
     font-family: 'Consolas', 'Monaco', monospace;
     font-size: 0.85rem;
-    color: #aaa;
+    color: var(--hl-phoneme-idle, #aaa);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -583,16 +584,16 @@
 .bridge-letter .g {
     font-family: 'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
     line-height: 1;
-    color: #aaa;
+    color: var(--hl-letter-idle, #aaa);
     display: inline-block;
     font-size: calc(var(--analysis-letter-font-size, 1.05rem) * var(--haraka-scale, 1.4));
     transform: translate(var(--haraka-shift, 0em), var(--haraka-raise, 0em));
 }
 .bridge-letter.active .bg {
-    background: var(--ts-letter-color, var(--hl-letter-color));
+    background: var(--ts-letter-deep, var(--hl-letter-color));
 }
 .bridge-letter.active .g {
-    color: #fff;
+    color: var(--hl-letter-ink, #fff);
 }
 .bridge-letter:hover .bg {
     background: color-mix(in srgb, var(--ts-letter-color, var(--hl-letter-color)) 30%, transparent);
@@ -636,9 +637,9 @@
 /* The CELL lights (background fill), mirroring .mega-word/.mega-phoneme active —
    the glyph just rides the contrast, it is never recolored on its own. */
 .pause-bridge.active {
-    background: var(--anim-highlight-color);
+    background: var(--ts-word-deep, var(--anim-highlight-color));
     border-color: var(--anim-highlight-color);
-    color: var(--ts-word-ink, #1a1a2e);
+    color: var(--hl-word-ink, #fff);
 }
 .pause-bridge.hover-preview {
     background: color-mix(in srgb, var(--anim-highlight-color) 30%, var(--hl-cell-rest));
@@ -762,46 +763,51 @@
         border-color var(--hl-attack-dur) var(--hl-attack-ease);
 }
 
-/* Continuous karaoke wipe (dev motion-lab `track` mode). `--fill` (0..1) is set
-   per frame on the active cell by `UnifiedDisplay.updateHighlights`; the fill
-   tracks the voice across the cell instead of a discrete cross-fade. Letters +
-   harakas wipe right→left with the recitation flow; phonemes (LTR) wipe L→R. */
+/* Continuous karaoke wipe. `--fill` (0..1) is set per frame on the active cell
+   by `UnifiedDisplay.updateHighlights`; the fill tracks the voice across the cell
+   instead of a discrete cross-fade. Letters + harakas wipe right→left with the
+   recitation flow; phonemes (LTR) wipe L→R.
+
+   The sweep fills the tier's `--ts-*-deep` (a dark, saturated accent) in from a
+   darker accent-tinted base, so the cell reads as a dark accent block colouring
+   in — its end-state matches the discrete deep fill exactly, and the white glyph
+   stays legible across the whole sweep (both ends are dark). */
 .hl-track .mega-letter.active,
 .hl-track .haraka-cell.active,
 .hl-track .mega-block.active .mega-letter.active,
 .hl-track .mega-block.active .haraka-cell.active {
     background: linear-gradient(
         to left,
-        var(--ts-letter-color, var(--hl-letter-color)) calc(var(--fill, 0) * 100%),
-        color-mix(in srgb, var(--ts-letter-color, var(--hl-letter-color)) var(--hl-track-base), var(--hl-cell-rest)) 0
+        var(--ts-letter-deep, var(--hl-letter-color)) calc(var(--fill, 0) * 100%),
+        var(--hl-letter-track, color-mix(in srgb, var(--ts-letter-deep, var(--hl-letter-color)) 30%, var(--hl-cell-rest))) 0
     );
-    /* The wipe background sweeps from dark track-tint to full colour, so the
-       solid-fill auto-contrast ink doesn't read over it — keep the glyph a fixed
-       light so it stays visible across the whole sweep. */
-    color: #fff;
+    color: var(--hl-letter-ink, #fff);
     transition: none;
+}
+.hl-track .haraka-cell.active .g {
+    color: var(--hl-letter-ink, #fff);
 }
 .hl-track .mega-phoneme.active,
 .hl-track .mega-block.active .mega-phoneme.active {
     background: linear-gradient(
         to left,
-        var(--ts-phoneme-color, var(--hl-phoneme-color)) calc(var(--fill, 0) * 100%),
-        color-mix(in srgb, var(--ts-phoneme-color, var(--hl-phoneme-color)) var(--hl-track-base), var(--hl-cell-rest)) 0
+        var(--ts-phoneme-deep, var(--hl-phoneme-color)) calc(var(--fill, 0) * 100%),
+        var(--hl-phoneme-track, color-mix(in srgb, var(--ts-phoneme-deep, var(--hl-phoneme-color)) 30%, var(--hl-cell-rest))) 0
     );
-    color: #fff;
+    color: var(--hl-phoneme-ink, #fff);
     transition: none;
 }
 
 /* Active states */
 .mega-phoneme.active {
-    background: var(--ts-phoneme-color, var(--hl-phoneme-color));
-    color: var(--ts-phoneme-ink, #fff);
+    background: var(--ts-phoneme-deep, var(--hl-phoneme-color));
+    color: var(--hl-phoneme-ink, #fff);
     border-color: var(--ts-phoneme-color, var(--hl-phoneme-color));
 }
 
 .mega-block.active .mega-word {
-    background: var(--anim-highlight-color);
-    color: var(--ts-word-ink, #1a1a2e);
+    background: var(--ts-word-deep, var(--anim-highlight-color));
+    color: var(--hl-word-ink, #fff);
     font-weight: bold;
     border-color: var(--anim-highlight-color);
 }
@@ -817,8 +823,8 @@
 }
 
 .mega-block.active .mega-phoneme.active {
-    background: var(--ts-phoneme-color, var(--hl-phoneme-color));
-    color: var(--ts-phoneme-ink, #fff);
+    background: var(--ts-phoneme-deep, var(--hl-phoneme-color));
+    color: var(--hl-phoneme-ink, #fff);
     border-color: var(--ts-phoneme-color, var(--hl-phoneme-color));
 }
 
@@ -836,8 +842,8 @@
 }
 
 .mega-block.active .mega-letter.active {
-    background: var(--ts-letter-color, var(--hl-letter-color));
-    color: var(--ts-letter-ink, #fff);
+    background: var(--ts-letter-deep, var(--hl-letter-color));
+    color: var(--hl-letter-ink, #fff);
     border-color: var(--ts-letter-color, var(--hl-letter-color));
 }
 
@@ -857,9 +863,9 @@
    never light. */
 .mega-letter.silent.active,
 .mega-block.active .mega-letter.silent.active {
-    color: white;
+    color: var(--hl-letter-ink, #fff);
     opacity: 1;
-    background: var(--ts-letter-color, var(--hl-letter-color));
+    background: var(--ts-letter-deep, var(--hl-letter-color));
     border-color: var(--ts-letter-color, var(--hl-letter-color));
 }
 
@@ -880,7 +886,8 @@
     background: var(--hl-cell-rest);
 }
 .mega-block.active .haraka-cell.active {
-    background: var(--ts-letter-color, var(--hl-letter-color));
+    background: var(--ts-letter-deep, var(--hl-letter-color));
+    border-color: var(--ts-letter-color, var(--hl-letter-color));
 }
 
 /* Show/hide a whole band via the toggle classes on the grid (row 1 = graphemes,
@@ -909,7 +916,9 @@
 
 /* ============ Loop perma-highlight ============ */
 /* Outline — not background — so `.active`/`.past` styles remain readable
-   when the looped element is also the currently-playing one. */
+   when the looped element is also the currently-playing one. Only the word
+   (block) tier carries the outline; looped letter/phoneme/diacritic cells stay
+   borderless (the thick offset ring crowded the small cells). */
 /* position:relative + z-index lifts the looped element above its flex
    siblings so the offset outline isn't clipped by the next box's background
    (painting order otherwise covers the outline on the leading/trailing edge). */
@@ -917,25 +926,6 @@
     outline: 2px solid var(--anim-highlight-color, #f0a500);
     outline-offset: 2px;
     position: relative;
-    z-index: 1;
-}
-.mega-letter.loop {
-    outline: 2px solid var(--ts-letter-color, var(--hl-letter-color));
-    outline-offset: 2px;
-    position: relative;
-    z-index: 1;
-}
-.mega-phoneme.loop {
-    outline: 2px solid var(--ts-phoneme-color, var(--hl-phoneme-color));
-    outline-offset: 2px;
-    position: relative;
-    z-index: 1;
-}
-/* A looped diacritic (haraka / tanwīn) small-cell — outlined in the letter hue,
-   matching its sibling letter cells (one highlight colour across the row). */
-.haraka-cell.loop {
-    outline: 2px solid var(--ts-letter-color, var(--hl-letter-color));
-    outline-offset: 1px;
     z-index: 1;
 }
 #animation-display .anim-word.loop {
@@ -968,7 +958,7 @@
     font-size: 0.85rem;
     text-align: center;
 }
-.ts-view-btn.active, .ts-mode-btn.active { background: var(--anim-highlight-color); color: var(--ts-word-ink, #1a1a2e); font-weight: bold; }
+.ts-view-btn.active, .ts-mode-btn.active { background: var(--anim-highlight-color); color: #1a1a2e; font-weight: bold; }
 /* Translations toggle + language picker span the full group width (its own
    row under the Analysis/Animation + Letters/Phonemes rows). */
 .ts-translations-toggle {

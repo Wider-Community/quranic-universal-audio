@@ -24,8 +24,17 @@
  *     teleprompter's active-word outline (a light halo lifts a dark accent off
  *     the dark page; a dark halo crisps a light one).
  *
- * Changing the accent live-recolours all three layers, their inks, the waveform
- * overlay and the teleprompter as one reactive family.
+ *  3. One ink across the karaoke wipe. The continuous "wipe" highlight reveals
+ *     the fill across a cell over time, so the glyph spans both filled and
+ *     not-yet-filled regions at once. The active analysis cell uses a DEEP fill
+ *     in both highlight modes: `deepFor()` darkens the layer colour to the
+ *     deepest-but-as-vivid-as-possible shade that still clears white text, so the
+ *     cell reads as a dark accent block with white glyphs (on-theme), and the
+ *     karaoke wipe just animates that same deep fill in from a dark base — same
+ *     look as the discrete fill, white text throughout.
+ *
+ * Changing the accent live-recolours all three layers, their deep fills, the
+ * waveform overlay and the teleprompter as one reactive family.
  */
 
 const LETTER_HUE_SHIFT = 40; // OKLCh degrees
@@ -39,6 +48,11 @@ const MAX_L = 0.84;
 // Chroma floor for the derived siblings so a near-grey accent still yields
 // distinguishable layers (the word keeps the accent's own chroma).
 const MIN_C = 0.085;
+// Deep-fill ceiling: the active cell fill must stay dark enough that white text
+// clears WCAG AA (≈4.5:1). White-on-fill hits 4.5:1 at a fill relative-luminance
+// of ~0.179; we target a touch below for margin, then take the lightest L that
+// still respects it (keeping the accent as vivid as the dark band allows).
+const DEEP_MAX_LUM = 0.15;
 
 // Ink endpoints. A near-black navy (matches the panel family) and pure white;
 // `inkFor` picks whichever clears WCAG contrast on the given fill.
@@ -55,7 +69,41 @@ export interface ColorTriad {
     phoneme: string;
 }
 
-interface Oklch {
+/** Decompose a hex into OKLCh (L 0..1, C ≥0, h degrees), or null if unparseable.
+ *  Lets a constrained picker work in the perceptual space the tokens use. */
+export function parseOklch(hex: string): Oklch | null {
+    const rgb = parseHex(hex);
+    return rgb ? hexToOklch(rgb) : null;
+}
+
+/** Compose an OKLCh into a gamut-mapped sRGB hex (chroma-reduced if out of
+ *  gamut, holding L + hue). The inverse of `parseOklch` for picker round-trips. */
+export function oklchHex(L: number, C: number, h: number): string {
+    return oklchToHex({ L, C, h });
+}
+
+/** Tunable knobs for the analogous-triad derivation. The shipped values mirror
+ *  the module constants; the highlight lab feeds overrides so the mapping (hue
+ *  spread, chroma floor, legible band) can be explored live. */
+export interface TriadCfg {
+    letterShift: number;
+    phonemeShift: number;
+    chromaFloor: number;
+    minL: number;
+    maxL: number;
+}
+
+export const DEFAULT_TRIAD_CFG: TriadCfg = {
+    letterShift: LETTER_HUE_SHIFT,
+    phonemeShift: PHONEME_HUE_SHIFT,
+    chromaFloor: MIN_C,
+    minL: MIN_L,
+    maxL: MAX_L,
+};
+
+export const DEFAULT_DEEP_MAX_LUM = DEEP_MAX_LUM;
+
+export interface Oklch {
     L: number; // 0..1 perceptual lightness
     C: number; // ≥0 chroma
     h: number; // hue degrees
@@ -177,10 +225,16 @@ export function inkFor(fillHex: string): string {
  *  the footer/filmstrip chrome that paints the colour directly on the dark bg.
  *  Returns the input verbatim when already in band, or on an unparseable colour. */
 export function legibleAccent(hex: string): string {
+    return legibleAccentCfg(hex, MIN_L, MAX_L);
+}
+
+/** `legibleAccent` with an explicit lightness band — the highlight lab feeds a
+ *  tunable band so the clamp can be explored live. */
+export function legibleAccentCfg(hex: string, minL: number, maxL: number): string {
     const rgb = parseHex(hex);
     if (!rgb) return hex;
     const base = hexToOklch(rgb);
-    const L = clamp(base.L, MIN_L, MAX_L);
+    const L = clamp(base.L, minL, maxL);
     return L === base.L ? toHex(rgb.r, rgb.g, rgb.b) : oklchToHex({ L, C: base.C, h: base.h });
 }
 
@@ -192,19 +246,59 @@ export function legibleAccent(hex: string): string {
  * historical teal / blue if the accent can't be parsed.
  */
 export function analogousTriad(accentHex: string): ColorTriad {
+    return analogousTriadCfg(accentHex, DEFAULT_TRIAD_CFG);
+}
+
+/** `analogousTriad` with explicit mapping knobs (hue spread, chroma floor,
+ *  legible band) — the highlight lab feeds overrides so the derivation can be
+ *  explored live without re-implementing the OKLCh maths. */
+export function analogousTriadCfg(accentHex: string, cfg: TriadCfg): ColorTriad {
     const rgb = parseHex(accentHex);
     if (!rgb) {
         return { word: accentHex || '#4abad9', letter: '#2ec4b6', phoneme: '#4361ee' };
     }
     const base = hexToOklch(rgb);
-    const L = clamp(base.L, MIN_L, MAX_L);
-    const sibC = Math.max(base.C, MIN_C);
+    const L = clamp(base.L, cfg.minL, cfg.maxL);
+    const sibC = Math.max(base.C, cfg.chromaFloor);
     const word = L === base.L
         ? toHex(rgb.r, rgb.g, rgb.b)
         : oklchToHex({ L, C: base.C, h: base.h });
     return {
         word,
-        letter: oklchToHex({ L, C: sibC, h: base.h + LETTER_HUE_SHIFT }),
-        phoneme: oklchToHex({ L, C: sibC, h: base.h + PHONEME_HUE_SHIFT }),
+        letter: oklchToHex({ L, C: sibC, h: base.h + cfg.letterShift }),
+        phoneme: oklchToHex({ L, C: sibC, h: base.h + cfg.phonemeShift }),
     };
+}
+
+/**
+ * The DEEP fill for an active analysis cell: the layer colour darkened — same
+ * hue and chroma — to the lightest shade whose luminance still lets white text
+ * clear WCAG AA. The active cell then reads as a dark, saturated accent block
+ * with white glyphs (on the dark theme) in both highlight modes, and the karaoke
+ * wipe animates this same fill in from a darker base. Returns the input verbatim
+ * for an unparseable colour.
+ */
+export function deepFor(fillHex: string): string {
+    return deepForCfg(fillHex, DEEP_MAX_LUM);
+}
+
+/** `deepFor` with a tunable luminance ceiling — the highlight lab feeds the
+ *  ceiling so the deep-fill darkness can be explored live. */
+export function deepForCfg(fillHex: string, maxLum: number): string {
+    const rgb = parseHex(fillHex);
+    if (!rgb) return fillHex;
+    const base = hexToOklch(rgb);
+    // Binary-search the highest L (≤ the colour's own) at this hue+chroma whose
+    // sRGB luminance stays under the white-text ceiling — gamut-mapped to a real
+    // colour. Vivid where the dark band allows; never too light for white text.
+    let lo = 0;
+    let hi = base.L;
+    for (let i = 0; i < 14; i++) {
+        const mid = (lo + hi) / 2;
+        const c = parseHex(oklchToHex({ L: mid, C: base.C, h: base.h }));
+        const lum = c ? relLuminance(c.r, c.g, c.b) : 1;
+        if (lum <= maxLum) lo = mid;
+        else hi = mid;
+    }
+    return oklchToHex({ L: lo, C: base.C, h: base.h });
 }

@@ -96,6 +96,37 @@ export function setRuleEnabled(legendKey: string, enabled: boolean): void {
     });
 }
 
+/** In-session memory of the enabled rules a group had right before it was
+ *  group-disabled, keyed by the group's stable id — so re-enabling restores exactly
+ *  that set rather than blindly switching every rule on. Not persisted: a quick
+ *  convenience that resets with the tab. */
+const groupMemory: Record<string, string[]> = {};
+
+/** Whether a group (its set of rule legendKeys) has at least one rule enabled — the
+ *  group toggle's on-state, so manually enabling any single rule flips it back on. */
+export function isGroupEnabled(s: TajweedSettings, keys: string[]): boolean {
+    return keys.some((k) => isRuleEnabled(s, k));
+}
+
+/** Quick-toggle a whole group of rules. Disabling snapshots the currently-enabled
+ *  members into `groupMemory` then clears them all; enabling restores that snapshot
+ *  (or, with no snapshot, switches every member on). */
+export function setGroupEnabled(groupId: string, keys: string[], enabled: boolean): void {
+    tajweedSettings.update((s) => {
+        const next = { ...s };
+        if (enabled) {
+            const remembered = groupMemory[groupId];
+            const restore = remembered && remembered.length ? remembered : keys;
+            for (const k of keys) next[k] = { ...s[k]!, enabled: restore.includes(k) };
+        } else {
+            groupMemory[groupId] = keys.filter((k) => isRuleEnabled(s, k));
+            for (const k of keys) next[k] = { ...s[k]!, enabled: false };
+        }
+        persist(next);
+        return next;
+    });
+}
+
 export function setRuleColor(legendKey: string, color: string | null): void {
     tajweedSettings.update((s) => {
         const next = { ...s, [legendKey]: { ...s[legendKey]!, color } };

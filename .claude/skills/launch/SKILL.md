@@ -1,6 +1,6 @@
 ---
 name: launch
-description: Run the Inspector app locally — any mode (dev bucket / offline fixtures / live dev or prod Space), any worktree, conflict-free. Picks free ports, isolates each worktree's SQLite, waits for real readiness, and can smoke-test the Dashboard + Timestamps tabs. Use whenever you need the app running — for a human to click around or for an agent to drive with Playwright/Chrome MCP. Also: list / stop / doctor running stacks. Trigger: /launch
+description: Run the Inspector app locally — any mode (dev bucket / offline fixtures / live dev or prod Space), any worktree, conflict-free.
 ---
 
 # launch
@@ -17,9 +17,8 @@ The script (`scripts/devenv/launch.py`) owns everything that used to go wrong by
 
 | Goal | Command |
 |---|---|
-| **Run the app (real data, default)** | `python scripts/devenv/launch.py` |
-| Quick read-only look at PROD (keep light) | `python scripts/devenv/launch.py up --mode prod-remote` |
-| Run your branch's local backend | `python scripts/devenv/launch.py up --mode dev` |
+| **Run the app (real DEV data, default)** | `python scripts/devenv/launch.py` |
+| Read-only look at PROD data (local) | `python scripts/devenv/launch.py up --mode prod` |
 | Fully offline (no token/network) | `python scripts/devenv/launch.py up --mode fixtures` |
 | Run a different worktree | `… up --worktree <name|path>` |
 | Start + verify Dashboard & Timestamps | `… up --smoke` |
@@ -32,22 +31,29 @@ The script (`scripts/devenv/launch.py`) owns everything that used to go wrong by
 
 ## Modes
 
-- **dev-remote** *(default)* — Vite only, `/api` proxied to the live DEV Space. Real data on a mounted bucket, so **audio + analysis work**; fast, no local backend, works on Windows (no `hf-mount`). Hits the DEV environment, never production. The everyday "run the app / test the FE" mode.
-- **prod-remote** — Vite only, `/api` proxied to the live PROD Space. A quick **read-only peek at production**. The Space is single-worker, so this is for a human glance, not load: `--smoke` is refused here and you shouldn't point automated/agent traffic at it. Use `dev-remote` for testing.
-- **dev** — local Flask against the DEV bucket (read-write) + Vite HMR. The only mode that runs your branch's **backend**. Needs `HF_TOKEN`. On Windows the no-mount hffs path can't serve the audio-manifest sidecar or timestamps shards, so **audio + analysis won't load** — use it for backend/catalog work, not playback.
+**Every mode is fully local** — your branch's Flask backend + Vite, no HF Space proxy, no `hf-mount`. Bucket reads use the `hffs` fallback (sub-second on the dev bucket; the bigger prod bucket is slower, multi-second cold); audio CDN-falls-back via the proxy. The only thing that changes between modes is **which data the backend reads**. Needs `HF_TOKEN` (in `.env`) for the bucket modes.
+
+- **dev** *(default)* — backend reads the **DEV bucket**, read-write. The everyday mode: runs your branch end-to-end (audio + analysis included), HMR for FE changes.
+- **prod** — backend reads the **PROD bucket**, **read-only** (two guards: `INSPECTOR_READ_ONLY=1` makes the storage backend refuse *every* write — segment saves, manifests, job records — and `INSPECTOR_DB_SYNC=0` keeps DB commits local). Nothing local can mutate production by any path; an edit attempt fails loud rather than corrupting prod. A safe look at real production data. First reads are slow (big uncached prod bucket over hffs).
 - **fixtures** — fully offline: filesystem backend on seeded fixtures (auto-seeds on first run) + Vite. No token, no network.
 
 ## For agents (Playwright / Chrome MCP)
 
-Run `up` (optionally `--no-vite` for backend-only), read the `LAUNCH_JSON` line for the `url`, then drive that URL. Use **dev-remote** (the default) for agent driving — never `prod-remote`, which is single-worker production. `--smoke` runs a bundled headless-chromium check of the Dashboard (catalog fetches succeed) and Timestamps (a real reciter renders the waveform); screenshots + `result.json` land in `<worktree>/.local/launch/smoke/`. A normal browse is light load; smoke + tight request loops are not — keep those off prod (the launcher refuses `--smoke` on `prod-remote`).
+Run `up` (it starts both backend + Vite), read the `LAUNCH_JSON` line for the `url`, then drive that URL. Use **dev** (the default). `--smoke` runs a bundled headless-chromium check of the Dashboard (catalog fetches succeed) and Timestamps (the first TS reciter renders a non-empty waveform); screenshots + `result.json` land in `<worktree>/.local/launch/smoke/`.
 
 ## Parallel & conflict-safety
 
-Two worktrees (or two stacks) can run at once: ports are allocated free + reserved in the registry, and each worktree gets its own `INSPECTOR_DB_PATH` so SQLite never clobbers. `doctor` detects the failure modes we actually hit — two processes bound to one port (serving stale code), a foreign/orphan Flask or Vite, dead registry entries — and `--fix` cleans them.
+Two worktrees (or two stacks) can run at once: ports are allocated free + reserved in the registry, and each worktree gets its own `INSPECTOR_DB_PATH` so the **local** SQLite never clobbers. `doctor` detects the failure modes we actually hit — two processes bound to one port (serving stale code), a foreign/orphan Flask or Vite, dead registry entries — and `--fix` cleans them.
+
+**The bucket is NOT isolated, though.** All `dev` stacks (and the live dev Space) share one dev bucket: the DB syncs full-file with a CAS guard (no row merge) and per-reciter content is last-write-wins, so **two concurrent dev *writers* can clobber each other** — the single-writer invariant. Launch **warns** when you start a 2nd `dev` stack while another is up. For a safe parallel stack use `prod` (read-only) or `fixtures` (local disk, fully isolated); only ever *edit* in one `dev` stack at a time.
+
+## Env ownership (`.env` vs launch)
+
+The launcher **owns every run-mode knob** — `INSPECTOR_BACKEND`, `INSPECTOR_FILESYSTEM_ROOT`, `INSPECTOR_ALLOW_PROD_BUCKET`, `INSPECTOR_READ_ONLY`, `INSPECTOR_DB_SYNC`, `INSPECTOR_AUTO_MOUNT`, `INSPECTOR_DB_PATH` — and sets them per mode, so a stale `.env` can't perturb the profile. `dev` forces `ALLOW_PROD_BUCKET=0` (can never touch prod; fails closed if `.env` names the prod repo). `.env` only supplies **secrets + identity** (HF/GitHub/QF tokens, session secret, dev-owner id) and the one per-machine choice the launcher reads in `dev`: your own `INSPECTOR_BUCKET_REPO` dev bucket. Those knobs in `.env` matter only when hand-running `python inspector/app.py`.
 
 ## Notes
 
 - First run in a fresh worktree needs deps: `scripts/devenv/setup.sh` (or `npm ci` in `inspector/frontend`). The `wt` skill's setup does this.
-- **Windows + audio/analysis → use `dev-remote` (the default).** There's no `hf-mount` on Windows, so local `dev` reads go through the hffs fallback, which doesn't serve the audio-manifest sidecar or timestamps shards — audio won't play and the analysis frame stays empty in `dev`. `dev-remote` proxies to the dev Space (mounted bucket), so both work. FE changes (your branch's `inspector/frontend`) are always live in any mode via local Vite.
+- **The full app runs locally on Windows** — audio + analysis included, no `hf-mount` needed. Bucket reads go through the `hffs` fallback (dev bucket sub-second; prod bucket multi-second cold) and audio CDN-falls-back via the proxy. A shard 404 in `dev` is the released-gate (the reciter isn't `released` in this worktree's isolated DB) or missing bucket data, **not** a platform limit. FE changes are always live via local Vite.
 - Logs: `<worktree>/.local/launch/logs/`. Registry: `<main-worktree>/.local/launch/registry.json` (gitignored).
 - Python changes need a `down` + `up` (Flask reloader is off by design — single-worker invariant). Vite changes hot-reload.
