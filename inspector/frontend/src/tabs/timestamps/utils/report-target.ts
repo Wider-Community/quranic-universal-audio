@@ -15,6 +15,26 @@ import type { TsReportTarget } from '../../../lib/types/generated/schemas';
 
 export type CellKey = string;
 
+/** A timing boundary's error direction. A timing report flags the onset (start)
+ *  and/or offset (end); `null` on an axis means that boundary is fine. */
+export type TimingDir = 'early' | 'late';
+
+/** Human label for a timing report's onset/offset axes — the report matrix.
+ *  Mirrors `qua_shared/schemas/wire/ts_reports.py::timing_label`. */
+export function timingLabel(onset: TimingDir | null, offset: TimingDir | null): string {
+    const key = `${onset ?? ''}|${offset ?? ''}`;
+    const both: Record<string, string> = {
+        'early|late': 'Too long',
+        'late|early': 'Too short',
+        'early|early': 'Shifted earlier',
+        'late|late': 'Shifted later',
+    };
+    if (key in both) return both[key];
+    if (onset && !offset) return onset === 'early' ? 'Starts early' : 'Starts late';
+    if (offset && !onset) return offset === 'early' ? 'Finishes early' : 'Finishes late';
+    return 'Timing';
+}
+
 function intAttr(el: Element, name: string): number | null {
     const v = el.getAttribute(name);
     if (v == null || v === '') return null;
@@ -42,10 +62,18 @@ export function phonemeKey(wordIndex: number, phonemeFlatIndex: number): CellKey
     return `w${wordIndex}:p${phonemeFlatIndex}`;
 }
 
+/** Key for a co-highlight group — every cell sharing the group collapses to this
+ *  one key, so a shared rule (idgham, madd carrier + vowel, …) stages as ONE
+ *  report and all its cells flag/select together. */
+export function groupKey(shareGroup: number): CellKey {
+    return `g${shareGroup}`;
+}
+
 /** The key a stored report maps to (must agree with the DOM keys above). */
 export function targetCellKey(t: TsReportTarget): CellKey {
     if (t.kind === 'verse') return 'verse';
     if (t.kind === 'word') return wordKey(t.word_index ?? -1);
+    if (t.kind === 'cell_group' && t.share_group != null) return groupKey(t.share_group);
     if (t.kind === 'phoneme') return phonemeKey(t.word_index ?? -1, t.phoneme_flat_index ?? -1);
     return cellKey(t.word_index ?? -1, t.cell_index ?? null, t.source_letter_index ?? null);
 }
@@ -54,6 +82,10 @@ export function targetCellKey(t: TsReportTarget): CellKey {
 export function elCellKey(el: Element): CellKey | null {
     const wi = intAttr(el, 'data-word-index');
     if (wi == null) return null;
+    // A cell in a co-highlight group collapses to the group key, so all its cells
+    // share one staged report + flag together.
+    const sg = intAttr(el, 'data-share-group');
+    if (sg != null && el.hasAttribute('data-cell-index')) return groupKey(sg);
     const ci = intAttr(el, 'data-cell-index');
     const sli = intAttr(el, 'data-source-letter-index');
     const pfi = intAttr(el, 'data-phoneme-flat-index');
@@ -85,7 +117,8 @@ export function cellTargetFromEl(el: Element): TsReportTarget | null {
     }
     const sg = intAttr(el, 'data-share-group');
     return {
-        kind: 'cell',
+        // A grouped cell targets the whole co-highlight group; a lone cell targets itself.
+        kind: sg != null ? 'cell_group' : 'cell',
         word_index: wi,
         source_letter_index: sli,
         cell_index: ci != null && ci >= 0 ? ci : null,

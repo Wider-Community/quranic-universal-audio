@@ -1070,8 +1070,9 @@
 }
 /* A silent cell that carries a tajweed rule (hamza-waṣl, lām shamsiyyah, …) is a
    valid wrong_rule target: un-grey it and make it selectable so it stands with
-   the other spotlighted cells instead of reading as dimmed. */
-.report-mode .mega-letter.silent[data-has-tj='1'] {
+   the other spotlighted cells. TAJWEED-ONLY — in a timing session a silent letter
+   keeps its native greyed style (it's never a timing target). */
+.report-tajweed .mega-letter.silent[data-has-tj='1'] {
     color: inherit;
     opacity: 1;
     pointer-events: auto;

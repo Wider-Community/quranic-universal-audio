@@ -51,7 +51,7 @@
     } from '../stores/report-mode';
     import { currentVerseReports } from '../stores/ts-reports';
     import type { TsReport } from '../../../lib/types/generated/schemas';
-    import { cellTargetFromEl, elCellKey, targetCellKey } from '../utils/report-target';
+    import { cellTargetFromEl, elCellKey, targetCellKey, timingLabel } from '../utils/report-target';
     import { loadedVerse } from '../stores/verse';
     import { TS_CLICK_DELAY_MS } from '../utils/constants';
     import WordTranslation from './WordTranslation.svelte';
@@ -264,7 +264,12 @@
     function _composeReportTip(reps: TsReport[]): string {
         return reps
             .map((r) => {
-                const sub = r.subtype ? ` · ${r.subtype.replace(/_/g, ' ')}` : '';
+                const sub =
+                    r.category === 'timing'
+                        ? ` · ${timingLabel(r.onset ?? null, r.offset ?? null)}`
+                        : r.subtype
+                          ? ` · ${r.subtype.replace(/_/g, ' ')}`
+                          : '';
                 const rule = r.selected_rule_tags?.length ? ` (${r.selected_rule_tags.join(', ')})` : '';
                 const c = r.comment ? `: ${r.comment}` : '';
                 return `⚑ ${r.category}${sub}${rule}${c}`;
@@ -276,6 +281,10 @@
         const mode = get(reportMode);
         const active = mode.kind !== 'inactive';
         rootEl.classList.toggle('report-mode', active);
+        // Mode-scoped so CSS (e.g. the un-grey of rule-bearing silent cells) applies
+        // only where it should — never to silent letters in a timing session.
+        rootEl.classList.toggle('report-timing', mode.kind === 'timing');
+        rootEl.classList.toggle('report-tajweed', mode.kind === 'tajweed');
         const stagedMap = get(staged);
         const focused = get(focusedCellKey);
         const pub = _publicByKey();
@@ -284,16 +293,16 @@
         const els = rootEl.querySelectorAll<HTMLElement>('[data-cell-index], .mega-phoneme, .mega-block');
         els.forEach((el) => {
             const key = elCellKey(el);
-            // wrong_rule spotlights tajweed-bearing cells: dim + make inert every
-            // cell/phoneme that carries no rule (letters + phonemes both expose
-            // data-has-tj; blocks have none). Inert kills click AND hover tooltip.
+            // wrong_rule spotlights rule-bearing cells: dim + inert every cell/phoneme
+            // that carries no rule (letters + phonemes expose data-has-tj; blocks
+            // have none). Dimming is tajweed-only — in timing the silent letters keep
+            // their native greyed style and are merely made inert (no opacity change).
             const noTj = dimWrong && el.hasAttribute('data-has-tj') && el.getAttribute('data-has-tj') !== '1';
-            // timing spotlights letters that own playback time: a silent letter has
-            // no duration to call too-long/short, so dim + inert it (words keep on).
+            // A silent letter has no duration to call too-long/short, so it can't be a
+            // timing target — inert it (keep its look) so only timed letters are live.
             const noTiming = timing && el.hasAttribute('data-cell-index') && el.dataset.cellTimed !== '1';
-            const off = noTj || noTiming;
-            el.classList.toggle('report-dim', off);
-            el.classList.toggle('report-inert', off);
+            el.classList.toggle('report-dim', noTj);
+            el.classList.toggle('report-inert', noTj || noTiming);
             el.classList.toggle('report-flag-staged', active && !!key && stagedMap.has(key));
             el.classList.toggle('report-focused', active && !!key && key === focused);
             const reps = key ? pub.get(key) : undefined;
@@ -350,7 +359,7 @@
         if (!key || !target) return;
         if (!get(staged).has(key)) {
             if (mode.kind === 'timing') {
-                upsertStaged({ kind: 'timing', cellKey: key, target, wordIndex: target.word_index ?? -1, subtype: null, comment: '' });
+                upsertStaged({ kind: 'timing', cellKey: key, target, wordIndex: target.word_index ?? -1, onset: null, offset: null, comment: '' });
             } else if (mode.kind === 'tajweed') {
                 // Only real, labelable rules are pickable — drop sentinels like
                 // `silent_unclassified` so the picker never shows a raw tag id.
@@ -413,7 +422,8 @@
                 cellKey: key,
                 target: { kind: 'word', word_index: wi, source_letter_index: null, cell_index: null, phoneme_flat_index: null, share_group: null },
                 wordIndex: wi,
-                subtype: null,
+                onset: null,
+                offset: null,
                 comment: '',
             });
         }
