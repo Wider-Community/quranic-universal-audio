@@ -7,11 +7,11 @@
  * - `comment` — verse-level, no target needed; the drop-up opens a comment
  *   composer inline (audio, other). Wired end-to-end.
  * - `target`  — the issue points at a specific spot (word / cell / phoneme /
- *   column) the user picks on the analysis grid (timing, tajweed).
+ *   column) the user picks on the analysis grid (timing, tajweed, phonemes).
  *
- * Drop-up order is timing → tajweed → audio → other. `mapping` is a valid
- * backend category but intentionally not surfaced — kept as `MAPPING_CATEGORY`
- * for if we revisit the letter↔sound flow.
+ * Drop-up order is timing → tajweed → phonemes → audio → other. `mapping` is a
+ * valid backend category but intentionally not surfaced — kept as
+ * `MAPPING_CATEGORY` for if we revisit the letter↔sound flow.
  */
 
 import type { TsReport } from '../../../lib/types/generated/schemas';
@@ -39,8 +39,9 @@ export interface ReportCategoryDef {
     /** What to point at on the grid (target flow). */
     targetHint?: string;
     /** Target-flow categories that enter the in-grid report mode (others stay
-     *  deferred). `timing` enters directly; `tajweed` enters per subtype. */
-    entersMode?: 'timing' | 'tajweed';
+     *  deferred). `timing` / `phonemes` enter directly; `tajweed` enters per
+     *  subtype. */
+    entersMode?: 'timing' | 'tajweed' | 'phonemes';
 }
 
 export const REPORT_CATEGORIES: ReportCategoryDef[] = [
@@ -68,6 +69,15 @@ export const REPORT_CATEGORIES: ReportCategoryDef[] = [
             { id: 'should_be_silent', label: 'Should be silent' },
             { id: 'should_not_be_silent', label: 'Should not be silent' },
         ],
+    },
+    {
+        id: 'phonemes',
+        label: 'Phonemes',
+        blurb: 'A phoneme is wrong or mislabeled',
+        flow: 'target',
+        entersMode: 'phonemes',
+        targetHint: 'Pick the phonemes on the grid',
+        subtypes: [],
     },
     {
         id: 'audio',

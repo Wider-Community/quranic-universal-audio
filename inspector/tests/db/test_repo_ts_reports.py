@@ -333,6 +333,90 @@ def test_resolve_group_spans_two_identities(fresh_db):
     assert {r["anon_token"] for r in rows} == {"anon-1", "anon-2"}
 
 
+def _phoneme_item(pfi: int, *, word_index: int = 0) -> dict:
+    return {
+        "category": "phonemes",
+        "target": _target("phoneme", word_index=word_index, phoneme_flat_index=pfi),
+        "snapshot": None,
+        "comment": None,
+        "selected_rule_tags": None,
+    }
+
+
+def test_phonemes_group_resolves_as_word_unit(fresh_db):
+    _batch([_phoneme_item(0), _phoneme_item(1), _phoneme_item(0, word_index=1)])
+    with db.transaction():
+        rows = repo.resolve_group(
+            slug="reciter-a",
+            verse_key="2:45",
+            word_index=0,
+            category="phonemes",
+            resolver_hf_user_id="owner-1",
+            resolver_login="owner",
+            resolver_comment=None,
+        )
+    assert len(rows) == 2  # both word-0 phonemes resolve as a unit
+    assert all(r["status"] == "resolved" for r in rows)
+    assert repo.verse_counts("reciter-a") == [
+        {"verse_key": "2:45", "open_count": 1, "resolved_count": 2}
+    ]
+
+
+def test_bridge_phoneme_is_a_distinct_target(fresh_db):
+    # A normal phoneme and a bridge (phoneme_flat_index=-1) in the same word are
+    # separate rows; bridges before different words are separate too.
+    _batch([_phoneme_item(0), _phoneme_item(-1), _phoneme_item(-1, word_index=2)])
+    rows = repo.list_for_verse("reciter-a", "2:45")
+    assert len(rows) == 3
+    assert len({repo.target_key(r["target"]) for r in rows}) == 3
+
+
+def _seed_public_and_nonpublic(token: str = "anon-1") -> None:
+    """A timing (public) + tajweed + phonemes (both non-public) report, one identity."""
+    _batch(
+        [
+            _timing_item(0),
+            {
+                "category": "tajweed",
+                "subtype": "wrong_rule",
+                "target": _target("cell", word_index=0, cell_index=5),
+                "snapshot": None,
+                "comment": "x",
+                "selected_rule_tags": None,
+            },
+            _phoneme_item(3),
+        ],
+        anon_token=token,
+    )
+
+
+def test_list_for_verse_hides_nonpublic_from_other_viewer(fresh_db):
+    _seed_public_and_nonpublic("anon-1")
+    # A different anonymous viewer without the capability sees only the public timing report.
+    other = repo.list_for_verse(
+        "reciter-a", "2:45", anon_token="anon-2", can_view_nonpublic=False
+    )
+    assert {r["category"] for r in other} == {"timing"}
+    # The reporter (same token) sees their own tajweed + phonemes too.
+    mine = repo.list_for_verse(
+        "reciter-a", "2:45", anon_token="anon-1", can_view_nonpublic=False
+    )
+    assert {r["category"] for r in mine} == {"timing", "tajweed", "phonemes"}
+    # A capability holder sees everything regardless of identity.
+    cap = repo.list_for_verse(
+        "reciter-a", "2:45", anon_token="anon-2", can_view_nonpublic=True
+    )
+    assert {r["category"] for r in cap} == {"timing", "tajweed", "phonemes"}
+
+
+def test_verse_counts_hides_nonpublic_from_other_viewer(fresh_db):
+    _seed_public_and_nonpublic("anon-1")
+    other = repo.verse_counts("reciter-a", anon_token="anon-2", can_view_nonpublic=False)
+    assert other == [{"verse_key": "2:45", "open_count": 1, "resolved_count": 0}]
+    reporter = repo.verse_counts("reciter-a", anon_token="anon-1", can_view_nonpublic=False)
+    assert reporter == [{"verse_key": "2:45", "open_count": 3, "resolved_count": 0}]
+
+
 def test_resolve_group_ignores_other_word_and_tajweed(fresh_db):
     _batch(
         [

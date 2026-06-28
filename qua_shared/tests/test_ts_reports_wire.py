@@ -106,6 +106,31 @@ def test_tajweed_subtype_and_target():
         )
 
 
+def test_phonemes_target_phoneme_no_subtype_axes_or_comment():
+    ph = {"kind": "phoneme", "word_index": 0, "phoneme_flat_index": 2}
+    # a phoneme target, no comment, no subtype/axes — valid
+    TsReportCreateRequest.model_validate(_req(category="phonemes", comment=None, target=ph))
+    # a bridge phoneme (phoneme_flat_index = -1) is a valid target
+    bridge = {"kind": "phoneme", "word_index": 1, "phoneme_flat_index": -1}
+    TsReportCreateRequest.model_validate(_req(category="phonemes", comment=None, target=bridge))
+    with pytest.raises(ValidationError):  # phonemes can't carry a subtype
+        TsReportCreateRequest.model_validate(
+            _req(category="phonemes", comment=None, subtype="wrong_rule", target=ph)
+        )
+    with pytest.raises(ValidationError):  # phonemes can't carry timing axes
+        TsReportCreateRequest.model_validate(
+            _req(category="phonemes", comment=None, onset="early", target=ph)
+        )
+    with pytest.raises(ValidationError):  # phonemes can only target a phoneme
+        TsReportCreateRequest.model_validate(
+            _req(category="phonemes", comment=None, target={"kind": "cell", "word_index": 0, "cell_index": 1})
+        )
+    with pytest.raises(ValidationError):  # selected_rule_tags is tajweed-only
+        TsReportCreateRequest.model_validate(
+            _req(category="phonemes", comment=None, target=ph, selected_rule_tags=["qalqala"])
+        )
+
+
 def test_subtype_and_axes_rejected_for_non_timing():
     with pytest.raises(ValidationError):  # audio takes no subtype
         TsReportCreateRequest.model_validate(

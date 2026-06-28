@@ -5,10 +5,15 @@
  * reports.py`). Public reads need no auth; writes go through a same-origin
  * `fetch` with the cookie. Anonymous callers pass an `anonToken` (from
  * `lib/utils/anon-token`) so the backend can key their report and let them
- * edit/delete it later.
+ * edit/delete it later. Reads also pass an EXISTING anon token (never minting
+ * one) so an anonymous reporter sees their own non-public (tajweed/phoneme)
+ * flags + counts, which the backend hides from other visitors.
  */
 
+import { get } from 'svelte/store';
+
 import { fetchJson } from '../../../lib/api';
+import { currentUser } from '../../../lib/stores/current-user';
 import type {
     TsReciterReports,
     TsReport,
@@ -17,18 +22,27 @@ import type {
     TsReportCreateRequest,
     TsVerseReports,
 } from '../../../lib/types/generated/schemas';
+import { peekAnonToken } from '../../../lib/utils/anon-token';
+
+/** `?anon_token=…` for an anonymous browser that already has a token, else ''. */
+function anonQuery(): string {
+    if (get(currentUser).hf_user_id !== null) return '';
+    const t = peekAnonToken();
+    return t ? `?anon_token=${encodeURIComponent(t)}` : '';
+}
 
 /** Reported-verse counts for the whole reciter (drives the button highlight). */
 export async function getReciterReports(slug: string): Promise<TsReciterReports> {
-    return fetchJson<TsReciterReports>(`/api/ts/${encodeURIComponent(slug)}/reports`, {
-        credentials: 'same-origin',
-    });
+    return fetchJson<TsReciterReports>(
+        `/api/ts/${encodeURIComponent(slug)}/reports${anonQuery()}`,
+        { credentials: 'same-origin' },
+    );
 }
 
 /** Every report on one verse (drives the per-category highlight + composer). */
 export async function getVerseReports(slug: string, verseKey: string): Promise<TsVerseReports> {
     return fetchJson<TsVerseReports>(
-        `/api/ts/${encodeURIComponent(slug)}/reports/${encodeURIComponent(verseKey)}`,
+        `/api/ts/${encodeURIComponent(slug)}/reports/${encodeURIComponent(verseKey)}${anonQuery()}`,
         { credentials: 'same-origin' },
     );
 }

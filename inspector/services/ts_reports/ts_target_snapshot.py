@@ -10,6 +10,10 @@ is re-resolved against the new shard and the report is flagged ``stale`` iff its
 What "changed" means per category (the report stays valid otherwise — e.g. a
 regen that only shifts timing ms does NOT stale a timing report):
 - ``tajweed`` — rule tags / silence (role/status) / cell chars changed.
+- ``phonemes`` — the targeted phone's identity (chars / role / rule) changed.
+  A bridge (cross-word merger) phoneme targets ``phoneme_flat_index = -1`` and is
+  resolved by walking the words for the merger phone rendered before the target
+  word (see ``_bridge_phone_for_target``).
 - ``mapping`` — the column binding (grapheme chars ↔ mapped phones) changed.
 - ``timing`` — the reported cell's identity (chars/role) changed or vanished, OR
   a boundary the report flagged (onset/offset) moved past
@@ -139,6 +143,49 @@ def _cell_for_letter(cells: list[CellRow], source_letter_index: int) -> CellRow 
     return None
 
 
+def _bridge_phone_for_target(seg: dict[str, Any], target_word: int) -> dict[str, Any] | None:
+    """Resolve a cross-word merger (bridge) phoneme rendered before ``target_word``.
+
+    A merger phone carries a bridge rule in its phone row's 6th slot (``row[5]``);
+    it renders before its own block when it is the word's first phone (``k == 0``)
+    and before the NEXT block otherwise (cross-word idgham), mirroring the FE
+    ``rendered-blocks`` lift. The iltiqaa-kasra connector is a bridge with no rule
+    slot — found via its cell tag on the preceding word. Returns
+    ``{chars, tag, onset_ms, offset_ms}`` or ``None``."""
+    words = seg.get("words") or []
+    for wi, word in enumerate(words):
+        try:
+            phones = word[4] or []
+        except (IndexError, TypeError):
+            continue
+        for k, row in enumerate(phones):
+            try:
+                rule = row[5] if len(row) > 5 else None
+            except (IndexError, TypeError):
+                rule = None
+            if not rule:
+                continue
+            if (wi if k == 0 else wi + 1) != target_word:
+                continue
+            start, end = _row_bounds(phones, k)
+            return {"chars": str(row[0]), "tag": str(rule), "onset_ms": start, "offset_ms": end}
+    src = _word_at(seg, target_word - 1)
+    if src is not None:
+        rows = _indexable_phone_rows(src)
+        for c in word_cells(src):
+            if c.tag == "iltiqaa_kasra" and c.phoneme_indices:
+                pidx = c.phoneme_indices[0]
+                if 0 <= pidx < len(rows):
+                    start, end = _row_bounds(rows, pidx)
+                    return {
+                        "chars": str(rows[pidx][0]),
+                        "tag": "iltiqaa_kasra",
+                        "onset_ms": start,
+                        "offset_ms": end,
+                    }
+    return None
+
+
 def _cell_snapshot(c: CellRow) -> dict[str, Any]:
     return {
         "chars": c.chars,
@@ -211,6 +258,14 @@ def resolve_target(
 
     if kind == "phoneme":
         pi = target.get("phoneme_flat_index")
+        if isinstance(pi, int) and pi < 0 and isinstance(wi, int):
+            # A bridge (cross-word merger) phoneme: ``word_index`` is the rendered
+            # target word; the merger phone lives in the source word.
+            bridge = _bridge_phone_for_target(seg, wi)
+            if bridge is None:
+                return None
+            snap.update(bridge)
+            return snap
         rows = _indexable_phone_rows(word)
         if not isinstance(pi, int) or not (0 <= pi < len(rows)):
             return None
@@ -308,6 +363,8 @@ def is_stale_after_restamp(report: dict[str, Any], doc: dict[str, Any]) -> bool:
         return False
     if category == "tajweed":
         return differs("chars", "role", "status", "tag", "secondary_tags", "phoneme_rule_tags")
+    if category == "phonemes":
+        return differs("chars", "role", "tag")
     if category == "mapping":
         return differs("chars", "phones")
     # other / verse-level

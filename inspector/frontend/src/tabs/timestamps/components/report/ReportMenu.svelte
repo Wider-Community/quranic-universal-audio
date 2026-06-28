@@ -2,11 +2,12 @@
     /**
      * Category picker for the Report drop-up.
      *
-     * Lists the surfaced report taxonomy (timing · tajweed · audio · other).
-     * Comment-flow categories (audio, other) expand a comment composer INLINE in
-     * the row's accordion (the menu stays visible). `timing` enters the in-grid
-     * report mode directly; `tajweed` expands to its wrong/missing subtype, each
-     * entering report mode via `onenterMode`. A deferred target category (no
+     * Lists the surfaced report taxonomy (timing · tajweed · phonemes · audio ·
+     * other). Comment-flow categories (audio, other) expand a comment composer
+     * INLINE in the row's accordion (the menu stays visible). `timing` + `phonemes`
+     * enter the in-grid report mode directly; `tajweed` expands to its wrong/missing
+     * subtype, each entering report mode via `onenterMode`. A deferred target
+     * category (no
      * `entersMode`, e.g. `mapping` if re-added) renders a `soon` hint row.
      * A category that already carries an open report on this verse gets the amber
      * "reported" highlight + a count.
@@ -31,7 +32,7 @@
         verseKey: string;
         verseReports: TsReport[];
         onchanged: () => void;
-        onenterMode: (mode: 'timing' | 'tajweed', subtype?: TajweedSubtype) => void;
+        onenterMode: (mode: 'timing' | 'tajweed' | 'phonemes', subtype?: TajweedSubtype) => void;
     } = $props();
 
     const TAJWEED_ENTRIES: { subtype: TajweedSubtype; icon: string; label: string; blurb: string }[] = [
@@ -52,8 +53,8 @@
     let expandedId = $state<string | null>(null);
 
     function onRow(cat: ReportCategoryDef): void {
-        if (cat.entersMode === 'timing') {
-            onenterMode('timing');
+        if (cat.entersMode === 'timing' || cat.entersMode === 'phonemes') {
+            onenterMode(cat.entersMode);
             return;
         }
         // comment (audio/other inline composer), tajweed (subtypes), mapping (hint)

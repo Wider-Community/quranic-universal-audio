@@ -39,7 +39,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-ReportCategory = Literal["audio", "timing", "mapping", "tajweed", "other"]
+ReportCategory = Literal["audio", "timing", "mapping", "tajweed", "phonemes", "other"]
 TargetKind = Literal["verse", "word", "cell", "phoneme", "column", "cell_group"]
 
 #: Per-category subtype — tajweed only. The owning category constrains which
@@ -64,6 +64,7 @@ _ALLOWED_KINDS: dict[str, frozenset[str]] = {
     "audio": frozenset({"verse", "word"}),
     "timing": frozenset({"word", "cell", "phoneme", "column", "cell_group"}),
     "tajweed": frozenset({"cell", "phoneme", "cell_group"}),
+    "phonemes": frozenset({"phoneme"}),
     "mapping": frozenset({"column"}),
     "other": frozenset({"verse", "word", "cell", "phoneme", "column", "cell_group"}),
 }

@@ -61,9 +61,39 @@ def target_key(target: dict[str, Any], category: str = "", subtype: str | None =
 
 
 def word_group_key(slug: str, verse_key: str, word_index: int, category: str) -> str:
-    """Stable identity for a timing word-group — the notification ``source_key``
-    that coalesces every cell flagged in one word into a single owner alert."""
+    """Stable identity for a word-group (``timing`` + ``phonemes``) — the
+    notification ``source_key`` that coalesces every cell/phoneme flagged in one
+    word into a single owner alert."""
     return f"tsreport:{slug}:{verse_key}:{word_index}:{category}"
+
+
+#: Report categories that are NOT publicly visible — only the reporter and a
+#: ``view_nonpublic_reports`` holder see these grid flags (timing + the
+#: verse-level audio/other/mapping reports stay public).
+_NONPUBLIC_CATEGORIES = ("tajweed", "phonemes")
+
+
+def _visibility_filter(
+    hf_user_id: str | None, anon_token: str | None, can_view_nonpublic: bool
+) -> tuple[str, list[Any]]:
+    """SQL fragment restricting non-public reports to the reporter.
+
+    ``tajweed`` + ``phonemes`` flags are visible only to the reporter (matched by
+    ``hf_user_id`` or ``anon_token``) or to a caller holding the view-nonpublic
+    capability; every other category stays public. Returns ``("", [])`` when no
+    gating applies (``can_view_nonpublic`` or an internal all-rows read)."""
+    if can_view_nonpublic:
+        return "", []
+    mine = ""
+    params: list[Any] = []
+    if hf_user_id is not None:
+        mine = " OR hf_user_id = ?"
+        params.append(hf_user_id)
+    elif anon_token is not None:
+        mine = " OR anon_token = ?"
+        params.append(anon_token)
+    placeholders = ",".join(f"'{c}'" for c in _NONPUBLIC_CATEGORIES)
+    return f" AND (category NOT IN ({placeholders}){mine})", params
 
 
 def _row_to_dict(row) -> dict[str, Any]:
@@ -120,18 +150,27 @@ def _row_to_dict(row) -> dict[str, Any]:
 # --- reads -----------------------------------------------------------------
 
 
-def verse_counts(slug: str) -> list[dict[str, Any]]:
+def verse_counts(
+    slug: str,
+    *,
+    hf_user_id: str | None = None,
+    anon_token: str | None = None,
+    can_view_nonpublic: bool = True,
+) -> list[dict[str, Any]]:
     """Per-verse open/resolved counts for a reciter, ordered by verse. Feeds the
-    reported-verses accordion (verse pills + count badges)."""
+    reported-verses accordion (verse pills + count badges). The viewer context
+    (defaulting to an all-rows internal read) hides non-public tajweed/phoneme
+    counts from non-reporters — see ``_visibility_filter``."""
+    vis_sql, vis_params = _visibility_filter(hf_user_id, anon_token, can_view_nonpublic)
     rows = (
         get_conn()
         .execute(
             "SELECT verse_key, "
             "SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) AS open_count, "
             "SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) AS resolved_count "
-            "FROM ts_reports WHERE slug = ? AND hidden_at IS NULL "
+            "FROM ts_reports WHERE slug = ? AND hidden_at IS NULL" + vis_sql + " "
             "GROUP BY verse_key ORDER BY verse_key",
-            (slug,),
+            (slug, *vis_params),
         )
         .fetchall()
     )
@@ -145,14 +184,25 @@ def verse_counts(slug: str) -> list[dict[str, Any]]:
     ]
 
 
-def list_for_verse(slug: str, verse_key: str) -> list[dict[str, Any]]:
-    """Every visible report on a verse (all identities + statuses), oldest first."""
+def list_for_verse(
+    slug: str,
+    verse_key: str,
+    *,
+    hf_user_id: str | None = None,
+    anon_token: str | None = None,
+    can_view_nonpublic: bool = True,
+) -> list[dict[str, Any]]:
+    """Every visible report on a verse (all identities + statuses), oldest first.
+    The viewer context (defaulting to an all-rows internal read) hides non-public
+    tajweed/phoneme reports from non-reporters — see ``_visibility_filter``."""
+    vis_sql, vis_params = _visibility_filter(hf_user_id, anon_token, can_view_nonpublic)
     rows = (
         get_conn()
         .execute(
-            "SELECT * FROM ts_reports WHERE slug = ? AND verse_key = ? AND hidden_at IS NULL "
-            "ORDER BY created_at, id",
-            (slug, verse_key),
+            "SELECT * FROM ts_reports WHERE slug = ? AND verse_key = ? AND hidden_at IS NULL"
+            + vis_sql
+            + " ORDER BY created_at, id",
+            (slug, verse_key, *vis_params),
         )
         .fetchall()
     )

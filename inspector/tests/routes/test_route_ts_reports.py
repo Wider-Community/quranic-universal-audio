@@ -228,6 +228,59 @@ def test_batch_tajweed_selected_rule_tags_roundtrip(flask_client):
     assert rep["selected_rule_tags"] == ["qalqala"]
 
 
+def _phoneme_item(pfi: int, *, word_index: int = 0) -> dict:
+    return {
+        "category": "phonemes",
+        "target": {"kind": "phoneme", "word_index": word_index, "phoneme_flat_index": pfi},
+    }
+
+
+def test_batch_phoneme_word_fires_one_owner_notification(flask_client, seed_role):
+    seed_role("owner-1", login="owner", role="owner")
+    items = [_phoneme_item(i) for i in range(4)]  # 4 phonemes, same word
+    assert _post_batch(flask_client, items).status_code == 201
+    notes = [n for n in repo_notifications.list_active("owner-1") if n["event"] == "ts_report.created"]
+    assert len(notes) == 1
+
+
+def test_resolve_word_group_accepts_phonemes(signed_in_client):
+    reporter, _ = signed_in_client(role="contributor")
+    assert _post_batch(reporter, [_phoneme_item(0), _phoneme_item(1)]).status_code == 201
+    owner, _ = signed_in_client(hf_user_id="owner-1", login="owner", role="owner")
+    resp = owner.post(
+        f"/api/ts/{_SLUG}/reports/2:45/word/0/phonemes/resolve", headers=_ORIGIN, json={}
+    )
+    assert resp.status_code == 200
+    rows = resp.get_json()["reports"]
+    assert len(rows) == 2 and all(r["status"] == "resolved" for r in rows)
+
+
+def test_nonpublic_reports_hidden_from_other_anon_viewer(flask_client):
+    items = [_timing_item(0), _tajweed_item(1), _phoneme_item(2)]
+    assert _post_batch(flask_client, items).status_code == 201
+    # A different anonymous viewer gets only the public timing report + count.
+    other = flask_client.get(f"/api/ts/{_SLUG}/reports/2:45?anon_token=anon-2").get_json()["reports"]
+    assert {r["category"] for r in other} == {"timing"}
+    counts = flask_client.get(f"/api/ts/{_SLUG}/reports?anon_token=anon-2").get_json()["reports"]
+    assert counts == [{"verse_key": "2:45", "open_count": 1, "resolved_count": 0}]
+    # The reporter (their own token) gets all three.
+    own = flask_client.get(f"/api/ts/{_SLUG}/reports/2:45?anon_token=anon-1").get_json()["reports"]
+    assert {r["category"] for r in own} == {"timing", "tajweed", "phonemes"}
+
+
+def test_nonpublic_reports_visible_to_capable_owner_only(signed_in_client):
+    reporter, _ = signed_in_client(role="contributor")
+    assert _post_batch(reporter, [_timing_item(0), _tajweed_item(1), _phoneme_item(2)]).status_code == 201
+    # Owner holds timestamps.view_nonpublic_reports → sees every category.
+    owner, _ = signed_in_client(hf_user_id="owner-1", login="owner", role="owner")
+    seen = owner.get(f"/api/ts/{_SLUG}/reports/2:45").get_json()["reports"]
+    assert {r["category"] for r in seen} == {"timing", "tajweed", "phonemes"}
+    # A different contributor (no capability, not the reporter) sees only timing.
+    other, _ = signed_in_client(hf_user_id="other-1", login="other", role="contributor")
+    seen2 = other.get(f"/api/ts/{_SLUG}/reports/2:45").get_json()["reports"]
+    assert {r["category"] for r in seen2} == {"timing"}
+
+
 def test_resolve_word_group_rejects_non_timing(signed_in_client):
     owner, _ = signed_in_client(hf_user_id="owner-1", login="owner", role="owner")
     resp = owner.post(

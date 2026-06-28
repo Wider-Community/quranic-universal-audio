@@ -4,9 +4,10 @@
  *
  * Staged cells become `TsReportBatchItem`s (timing cells carry their onset/offset
  * axes + optional comment; tajweed cells carry subtype + selected rule tags +
- * mandatory comment). Seeded own-reports the user removed (originalId no longer staged)
- * are soft-deleted. Anonymous callers pass their localStorage token so the
- * backend keys + lets them edit later.
+ * mandatory comment; phoneme cells carry just the target — no subtype/comment).
+ * Seeded own-reports the user removed (originalId no longer staged) are
+ * soft-deleted. Anonymous callers pass their localStorage token so the backend
+ * keys + lets them edit later.
  */
 import { currentUser } from '../../../lib/stores/current-user';
 import { get } from 'svelte/store';
@@ -34,6 +35,9 @@ function toItem(a: StagedAnnotation): TsReportBatchItem {
             comment: a.comment.trim() || null,
             selected_rule_tags: [],
         };
+    }
+    if (a.kind === 'phonemes') {
+        return { category: 'phonemes', target, comment: null, selected_rule_tags: [] };
     }
     return {
         category: 'tajweed',

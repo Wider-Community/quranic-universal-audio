@@ -1,11 +1,14 @@
 <script lang="ts">
     /**
-     * Report-mode control strip — replaces the waveform while a timing/tajweed
-     * report session is active. The subtype is fixed at entry (shown as a static
-     * header label, not a toggle). Each staged cell is ONE inline row
-     * (label · subtype/rule control · comment · remove); the focused row mirrors
-     * the grid selection. Cancel discards, Submit persists the batch. The grid
-     * below stays the click surface; this strip never blocks it.
+     * Report-mode control strip — replaces the waveform while a
+     * timing/tajweed/phonemes report session is active. The subtype is fixed at
+     * entry (shown as a static header label, not a toggle). Each staged cell is ONE
+     * inline row (label · subtype/rule control · comment · remove). Phonemes are
+     * the exception: they collapse to ONE row per word with each flagged phoneme a
+     * compact removable chip (a verse-worth of tiny phonemes would otherwise clobber
+     * the strip), no control, no comment. The focused row mirrors the grid
+     * selection. Cancel discards, Submit persists the batch. The grid below stays
+     * the click surface; this strip never blocks it.
      */
     import {
         exitReportMode,
@@ -17,6 +20,7 @@
         reportMode,
         staged,
         type StagedAnnotation,
+        type StagedPhoneme,
         upsertStaged,
     } from '../../stores/report-mode';
     import { currentVerseReports, loadReciterReports, loadVerseReports } from '../../stores/ts-reports';
@@ -36,14 +40,34 @@
     }
 
     function cellLabel(a: StagedAnnotation): string {
-        if (a.target.kind === 'word') return `Word ${(a.target.word_index ?? 0) + 1}`;
-        return `W${(a.target.word_index ?? 0) + 1}·cell ${a.target.cell_index ?? a.target.source_letter_index ?? '?'}`;
+        const w = (a.target.word_index ?? 0) + 1;
+        if (a.target.kind === 'word') return `Word ${w}`;
+        return `W${w}·cell ${a.target.cell_index ?? a.target.source_letter_index ?? '?'}`;
+    }
+
+    /** Phonemes group by word: one strip row per word, each flagged phoneme a chip
+     *  (so a verse-worth of tiny phonemes stays compact, not one row each). */
+    const phonemeGroups = $derived.by(() => {
+        const byWord = new Map<number, StagedPhoneme[]>();
+        for (const a of stagedList) {
+            if (a.kind !== 'phonemes') continue;
+            const arr = byWord.get(a.wordIndex);
+            if (arr) arr.push(a);
+            else byWord.set(a.wordIndex, [a]);
+        }
+        return [...byWord.entries()]
+            .sort((x, y) => x[0] - y[0])
+            .map(([wordIndex, items]) => ({ wordIndex, items }));
+    });
+    function chipLabel(a: StagedPhoneme): string {
+        if (a.glyph) return a.glyph;
+        return (a.target.phoneme_flat_index ?? -1) < 0 ? 'merger' : '•';
     }
 
     const allValid = $derived(stagedList.length > 0 && stagedList.every(isStagedComplete));
 
     const removedIds = $derived.by(() => {
-        const cat = mode.kind === 'timing' ? 'timing' : 'tajweed';
+        const cat = mode.kind === 'inactive' ? '' : mode.kind;
         const keys = new Set($staged.keys());
         return $currentVerseReports
             .filter((r) => r.mine && r.status === 'open' && r.category === cat && !keys.has(targetCellKey(r.target)))
@@ -66,6 +90,7 @@
         upsertStaged({ ...a, selectedRuleTags: sel });
     }
     function editComment(a: StagedAnnotation, val: string): void {
+        if (a.kind === 'phonemes') return; // phonemes carry no comment
         upsertStaged({ ...a, comment: val });
     }
     function removeRow(a: StagedAnnotation, e: MouseEvent): void {
@@ -93,13 +118,21 @@
     const subtypeLabel = $derived(
         mode.kind === 'tajweed' ? (mode.subtype === 'wrong_rule' ? 'Wrong rule' : 'Missing rule') : '',
     );
-    const headTitle = $derived(mode.kind === 'tajweed' ? 'Report a tajweed issue' : 'Report a timing issue');
+    const headTitle = $derived(
+        mode.kind === 'tajweed'
+            ? 'Report a tajweed issue'
+            : mode.kind === 'phonemes'
+              ? 'Report a phoneme issue'
+              : 'Report a timing issue',
+    );
     const instruction = $derived(
         mode.kind === 'timing'
             ? 'Click a letter or word, then mark how its start and/or end is off.'
-            : mode.kind === 'tajweed' && mode.subtype === 'wrong_rule'
-              ? 'Highlighted cells carry a rule — click one to flag the wrong rule.'
-              : 'Click any cell where a rule should apply but is missing.',
+            : mode.kind === 'phonemes'
+              ? 'Click any phonemes that are wrong or mislabeled. Click again to remove.'
+              : mode.kind === 'tajweed' && mode.subtype === 'wrong_rule'
+                ? 'Highlighted cells carry a rule — click one to flag the wrong rule.'
+                : 'Click any cell where a rule should apply but is missing.',
     );
     const submitCount = $derived(stagedList.length + removedIds.length);
 </script>
@@ -123,7 +156,30 @@
 
     <div class="body">
         {#if stagedList.length === 0}
-            <p class="empty">No cells flagged yet.</p>
+            <p class="empty">No phonemes flagged yet.</p>
+        {:else if mode.kind === 'phonemes'}
+            <!-- One row per word; each flagged phoneme is a compact removable chip. -->
+            <div class="rows" role="list">
+                {#each phonemeGroups as g (g.wordIndex)}
+                    <div class="prow" role="listitem">
+                        <span class="cell-lbl">Word {g.wordIndex + 1}</span>
+                        <div class="chips">
+                            {#each g.items as a (a.cellKey)}
+                                <button
+                                    type="button"
+                                    class="ph-chip"
+                                    title="Remove phoneme"
+                                    aria-label="Remove phoneme {chipLabel(a)}"
+                                    onclick={(e) => removeRow(a, e)}
+                                >
+                                    <span class="ph-g">{chipLabel(a)}</span>
+                                    <ReportIcon name="trash" size={11} />
+                                </button>
+                            {/each}
+                        </div>
+                    </div>
+                {/each}
+            </div>
         {:else}
             <div class="rows" role="list">
                 {#each stagedList as a (a.cellKey)}
@@ -133,47 +189,49 @@
                         onfocusin={() => focusCell(a.cellKey)}
                     >
                         <span class="cell-lbl">{cellLabel(a)}</span>
-                        <div class="ctl">
-                            {#if a.kind === 'timing'}
-                                <span class="axis-cap">Start</span>
-                                <div class="seg" role="group" aria-label="Start boundary">
-                                    <button type="button" class="opt" class:on={a.onset === 'early'}
-                                        aria-pressed={a.onset === 'early'} onclick={() => setAxis(a, 'onset', 'early')}>early</button>
-                                    <button type="button" class="opt" class:on={a.onset === 'late'}
-                                        aria-pressed={a.onset === 'late'} onclick={() => setAxis(a, 'onset', 'late')}>late</button>
-                                </div>
-                                <span class="axis-cap">End</span>
-                                <div class="seg" role="group" aria-label="End boundary">
-                                    <button type="button" class="opt" class:on={a.offset === 'early'}
-                                        aria-pressed={a.offset === 'early'} onclick={() => setAxis(a, 'offset', 'early')}>early</button>
-                                    <button type="button" class="opt" class:on={a.offset === 'late'}
-                                        aria-pressed={a.offset === 'late'} onclick={() => setAxis(a, 'offset', 'late')}>late</button>
-                                </div>
-                                {#if a.onset || a.offset}
-                                    <span class="derived">{timingLabel(a.onset, a.offset)}</span>
+                        {#if a.kind !== 'phonemes'}
+                            <div class="ctl">
+                                {#if a.kind === 'timing'}
+                                    <span class="axis-cap">Start</span>
+                                    <div class="seg" role="group" aria-label="Start boundary">
+                                        <button type="button" class="opt" class:on={a.onset === 'early'}
+                                            aria-pressed={a.onset === 'early'} onclick={() => setAxis(a, 'onset', 'early')}>early</button>
+                                        <button type="button" class="opt" class:on={a.onset === 'late'}
+                                            aria-pressed={a.onset === 'late'} onclick={() => setAxis(a, 'onset', 'late')}>late</button>
+                                    </div>
+                                    <span class="axis-cap">End</span>
+                                    <div class="seg" role="group" aria-label="End boundary">
+                                        <button type="button" class="opt" class:on={a.offset === 'early'}
+                                            aria-pressed={a.offset === 'early'} onclick={() => setAxis(a, 'offset', 'early')}>early</button>
+                                        <button type="button" class="opt" class:on={a.offset === 'late'}
+                                            aria-pressed={a.offset === 'late'} onclick={() => setAxis(a, 'offset', 'late')}>late</button>
+                                    </div>
+                                    {#if a.onset || a.offset}
+                                        <span class="derived">{timingLabel(a.onset, a.offset)}</span>
+                                    {/if}
+                                {:else if a.subtype === 'wrong_rule' && a.ruleOptions.length > 0}
+                                    {#each a.ruleOptions as tag (tag)}
+                                        <button
+                                            type="button" class="rule" class:on={a.selectedRuleTags.includes(tag)}
+                                            aria-pressed={a.selectedRuleTags.includes(tag)}
+                                            onclick={() => pickRule(a, tag)}
+                                        >{ruleLabel(tag)}</button>
+                                    {/each}
+                                {:else if a.subtype === 'missing_rule' && a.ruleOptions.length > 0}
+                                    <!-- Read-only context: the rules already on the cell. -->
+                                    <span class="existing-lbl">Existing:</span>
+                                    {#each a.ruleOptions as tag (tag)}
+                                        <span class="rule-chip">{ruleLabel(tag)}</span>
+                                    {/each}
                                 {/if}
-                            {:else if a.subtype === 'wrong_rule' && a.ruleOptions.length > 0}
-                                {#each a.ruleOptions as tag (tag)}
-                                    <button
-                                        type="button" class="rule" class:on={a.selectedRuleTags.includes(tag)}
-                                        aria-pressed={a.selectedRuleTags.includes(tag)}
-                                        onclick={() => pickRule(a, tag)}
-                                    >{ruleLabel(tag)}</button>
-                                {/each}
-                            {:else if a.subtype === 'missing_rule' && a.ruleOptions.length > 0}
-                                <!-- Read-only context: the rules already on the cell. -->
-                                <span class="existing-lbl">Existing:</span>
-                                {#each a.ruleOptions as tag (tag)}
-                                    <span class="rule-chip">{ruleLabel(tag)}</span>
-                                {/each}
-                            {/if}
-                        </div>
-                        <input
-                            class="cmt" type="text"
-                            placeholder={a.kind === 'tajweed' ? 'Comment (required)…' : 'Note (optional)…'}
-                            value={a.comment}
-                            oninput={(e) => editComment(a, e.currentTarget.value)}
-                        />
+                            </div>
+                            <input
+                                class="cmt" type="text"
+                                placeholder={a.kind === 'tajweed' ? 'Comment (required)…' : 'Note (optional)…'}
+                                value={a.comment}
+                                oninput={(e) => editComment(a, e.currentTarget.value)}
+                            />
+                        {/if}
                         <button type="button" class="row-x" aria-label="Remove" onclick={(e) => removeRow(a, e)}>
                             <ReportIcon name="trash" size={13} />
                         </button>
@@ -232,6 +290,22 @@
     .row.focused { border-color: var(--accent); border-left-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-tint); }
     .row.invalid { border-left-color: var(--state-missing-fg); }
     .cell-lbl { font-size: var(--fs-meta); font-weight: 600; color: var(--text-primary); white-space: nowrap; }
+
+    /* Phonemes: a compact word row of removable chips (not one row per phoneme). */
+    .prow {
+        display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-2);
+        padding: var(--s-2); border: 1px solid var(--border-default);
+        border-radius: var(--r-2); background: var(--panel-2);
+    }
+    .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+    .ph-chip {
+        display: inline-flex; align-items: center; gap: 5px; padding: 2px 5px 2px var(--s-2);
+        font: inherit; font-size: var(--fs-meta); color: var(--accent);
+        background: var(--accent-tint); border: 1px solid var(--accent);
+        border-radius: var(--r-2); cursor: pointer; transition: background var(--t-fast);
+    }
+    .ph-chip:hover { background: color-mix(in oklab, var(--accent-tint), var(--state-error) 22%); color: var(--state-error); border-color: var(--state-error); }
+    .ph-g { font-family: var(--font-mono); line-height: 1.2; }
     .ctl { display: inline-flex; flex-wrap: wrap; gap: 5px; align-items: center; }
     .opt, .rule {
         display: inline-flex; align-items: center; gap: 5px; padding: 3px var(--s-2); font: inherit; font-size: var(--fs-meta);

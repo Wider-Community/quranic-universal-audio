@@ -2004,7 +2004,7 @@ export interface TsReportVerseCount {
 export interface TsReport {
   id: number;
   verse_key: string;
-  category: "audio" | "timing" | "mapping" | "tajweed" | "other";
+  category: "audio" | "timing" | "mapping" | "tajweed" | "phonemes" | "other";
   subtype?: ("wrong_rule" | "missing_rule" | "should_be_silent" | "should_not_be_silent") | null;
   onset?: ("early" | "late") | null;
   offset?: ("early" | "late") | null;
@@ -2086,7 +2086,7 @@ export interface TsReportBatchCreateRequest {
  * a single create (shared ``_validate_report_item``).
  */
 export interface TsReportBatchItem {
-  category: "audio" | "timing" | "mapping" | "tajweed" | "other";
+  category: "audio" | "timing" | "mapping" | "tajweed" | "phonemes" | "other";
   subtype?: ("wrong_rule" | "missing_rule" | "should_be_silent" | "should_not_be_silent") | null;
   onset?: ("early" | "late") | null;
   offset?: ("early" | "late") | null;
@@ -2109,7 +2109,7 @@ export interface TsReportBatchResult {
  */
 export interface TsReportCreateRequest {
   verse_key: string;
-  category: "audio" | "timing" | "mapping" | "tajweed" | "other";
+  category: "audio" | "timing" | "mapping" | "tajweed" | "phonemes" | "other";
   subtype?: ("wrong_rule" | "missing_rule" | "should_be_silent" | "should_not_be_silent") | null;
   onset?: ("early" | "late") | null;
   offset?: ("early" | "late") | null;

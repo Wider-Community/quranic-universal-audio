@@ -1,22 +1,25 @@
 /**
  * Timestamps "report mode" — the in-grid contribution state machine.
  *
- * Entered from the footer Report drop-up for `timing` / `tajweed`: the waveform
- * is replaced by a control strip and the analysis grid becomes the click
- * surface. Annotations STAGE here (keyed by cell) and persist as a batch on
+ * Entered from the footer Report drop-up for `timing` / `tajweed` / `phonemes`:
+ * the waveform is replaced by a control strip and the analysis grid becomes the
+ * click surface. Annotations STAGE here (keyed by cell) and persist as a batch on
  * Submit; Cancel discards. The caller's own open reports of the active category
  * are seeded on entry so they show as editable flags.
  *
- * Both modes force letters-only (phonemes are never a targetable rule/timing
- * surface) and snapshot + restore the display toggles on exit.
- *
  * - `timing` loops the selected cell (the loop is driven by `loopTarget`, set by
  *   the grid click). Each flagged cell is its own row; rows group by word at submit.
+ *   Forces letters-only (snapshot + restore).
  * - `tajweed` additionally forces every legend colour on (snapshot + restore) so
  *   all rules are visible to target, and does NOT loop the cell — playback keeps
  *   its play/pause state and the whole-verse loop. The subtype (`wrong_rule` /
  *   `missing_rule`) is fixed at entry. Each flagged cell is its own report, unique
  *   per cell PER subtype; wrong_rule carries the picked internal rule tag(s).
+ *   Forces letters-only.
+ * - `phonemes` forces the phoneme row ON while leaving the letters row at the
+ *   user's current setting (the inverse of timing/tajweed). Any number of phoneme
+ *   cells are flagged, no comment, no per-cell control; rows group by word at
+ *   submit. Cross-word merger (bridge) phonemes carry `phoneme_flat_index = -1`.
  *
  * Switching focus to a new cell auto-discards the previously focused annotation
  * when it is still incomplete (missing a required subtype / rule pick / comment),
@@ -41,7 +44,8 @@ export type TajweedSubtype = 'wrong_rule' | 'missing_rule';
 export type ReportMode =
     | { kind: 'inactive' }
     | { kind: 'timing' }
-    | { kind: 'tajweed'; subtype: TajweedSubtype };
+    | { kind: 'tajweed'; subtype: TajweedSubtype }
+    | { kind: 'phonemes' };
 
 export const reportMode = writable<ReportMode>({ kind: 'inactive' });
 export const reportModeActive = derived(reportMode, (m) => m.kind !== 'inactive');
@@ -70,7 +74,17 @@ export interface StagedTajweed {
     comment: string;
     originalId?: number;
 }
-export type StagedAnnotation = StagedTiming | StagedTajweed;
+export interface StagedPhoneme {
+    kind: 'phonemes';
+    cellKey: CellKey;
+    target: TsReportTarget;
+    wordIndex: number;
+    /** The phone glyph, for the compact chip label (may be '' if unknown). */
+    glyph: string;
+    /** Set when seeded from the caller's own existing report (→ delete on remove). */
+    originalId?: number;
+}
+export type StagedAnnotation = StagedTiming | StagedTajweed | StagedPhoneme;
 
 export const staged = writable<Map<CellKey, StagedAnnotation>>(new Map());
 export const focusedCellKey = writable<CellKey | null>(null);
@@ -103,6 +117,9 @@ export function isStagedComplete(a: StagedAnnotation): boolean {
     if (a.kind === 'timing') {
         return a.onset !== null || a.offset !== null; // ≥1 boundary flagged; comment optional
     }
+    if (a.kind === 'phonemes') {
+        return true; // a flagged phoneme has no required fields — selection is the report
+    }
     const needsRule = a.subtype === 'wrong_rule' && a.ruleOptions.length > 0;
     if (needsRule && a.selectedRuleTags.length === 0) return false;
     return a.comment.trim().length > 0; // every tajweed report needs a comment
@@ -122,7 +139,10 @@ export function focusCell(key: CellKey | null): void {
 let displaySnapshot: { letters: boolean; phonemes: boolean } | null = null;
 let tajweedSnapshot: TajweedSettings | null = null;
 
-function seedOwnFlags(category: 'timing' | 'tajweed', subtype?: TajweedSubtype): void {
+function seedOwnFlags(
+    category: 'timing' | 'tajweed' | 'phonemes',
+    subtype?: TajweedSubtype,
+): void {
     const m = new Map<CellKey, StagedAnnotation>();
     for (const r of get(currentVerseReports)) {
         if (!r.mine || r.status !== 'open' || r.category !== category) continue;
@@ -138,6 +158,15 @@ function seedOwnFlags(category: 'timing' | 'tajweed', subtype?: TajweedSubtype):
                 onset: (r.onset as TimingDir | null) ?? null,
                 offset: (r.offset as TimingDir | null) ?? null,
                 comment: r.comment ?? '',
+                originalId: r.id,
+            });
+        } else if (category === 'phonemes') {
+            m.set(key, {
+                kind: 'phonemes',
+                cellKey: key,
+                target: r.target,
+                wordIndex: r.target.word_index ?? -1,
+                glyph: r.snapshot?.chars ?? '',
                 originalId: r.id,
             });
         } else {
@@ -181,6 +210,18 @@ export function enterTajweed(slug: string, verseKey: string, subtype: TajweedSub
     focusedCellKey.set(null);
     seedOwnFlags('tajweed', subtype);
     reportMode.set({ kind: 'tajweed', subtype });
+}
+
+export function enterPhonemes(slug: string, verseKey: string): void {
+    dashPort.pause();
+    // Force the phoneme row ON (the click surface) but leave letters at the user's
+    // current setting — the inverse of timing/tajweed. Restored on exit.
+    displaySnapshot = { letters: get(showLetters), phonemes: get(showPhonemes) };
+    showPhonemes.set(true);
+    reportContext.set({ slug, verseKey });
+    focusedCellKey.set(null);
+    seedOwnFlags('phonemes');
+    reportMode.set({ kind: 'phonemes' });
 }
 
 export function exitReportMode(): void {

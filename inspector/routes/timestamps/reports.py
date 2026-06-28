@@ -2,11 +2,18 @@
 
 The categorized, cell-addressable rework of the verse-flag routes. Any visitor —
 including anonymous — files a typed report (audio / timing / mapping / tajweed /
-other) against a flexible target on the verse currently shown, optionally with a
-comment. A report's targeted shard content is snapshotted server-side at create
-time (the drift fingerprint). A new report fans a notification out to
-review-alert recipients (owners by default). Owners resolve a report (single
-terminal ``resolved`` outcome + optional comment), which notifies the reporter.
+phonemes / other) against a flexible target on the verse currently shown,
+optionally with a comment. A report's targeted shard content is snapshotted
+server-side at create time (the drift fingerprint). A new report fans a
+notification out to review-alert recipients (owners by default). Owners resolve a
+report (single terminal ``resolved`` outcome + optional comment), which notifies
+the reporter.
+
+Visibility: ``tajweed`` + ``phonemes`` flags are restricted to the reporter and
+to holders of ``timestamps.view_nonpublic_reports`` (maintainer-default) —
+non-holders never receive those rows or their counts (the repo filters in SQL).
+Every other category (``timing`` grid flags + the verse-level audio/other/mapping
+reports) stays public.
 
 Gated by ``timestamps.report`` (anon-eligible, open by default). Resolve is gated
 by ``timestamps.resolve_report`` (owner-default). Report-author identity in GET
@@ -58,6 +65,10 @@ _REPORT_CAP = "timestamps.report"
 _RESOLVE_CAP = "timestamps.resolve_report"
 _IDENTITY_CAP = "timestamps.see_reporter_identity"
 _VIEW_STALE_CAP = "timestamps.view_stale_reports"
+_VIEW_NONPUBLIC_CAP = "timestamps.view_nonpublic_reports"
+
+#: Categories whose reports/notifications coalesce per word (vs one per cell).
+_WORD_GROUPED = frozenset({"timing", "phonemes"})
 
 
 def _snapshot_view(snap: dict) -> TsReportSnapshot | None:
@@ -129,9 +140,19 @@ def _is_mine(row: dict, *, hf_user_id: str | None, anon_token: str | None) -> bo
 
 @ts_reports_bp.route("/<slug>/reports", methods=["GET"])
 def get_reciter_reports(slug: str):
-    """Reported-verse pills + open/resolved counts for the accordion. Public read."""
+    """Reported-verse pills + open/resolved counts for the accordion. Public read,
+    but non-public tajweed/phoneme counts are visible only to the reporter or a
+    ``view_nonpublic_reports`` holder."""
     try:
-        counts = repo_ts_reports.verse_counts(slug)
+        user = auth_service.current_user()
+        hf_user_id = user.hf_user_id if user is not None else None
+        anon_token = request.args.get("anon_token") if user is None else None
+        counts = repo_ts_reports.verse_counts(
+            slug,
+            hf_user_id=hf_user_id,
+            anon_token=anon_token,
+            can_view_nonpublic=cap_service.can(user, _VIEW_NONPUBLIC_CAP),
+        )
         resp = TsReciterReports(reports=[TsReportVerseCount(**c) for c in counts])
         return jsonify(resp.model_dump(mode="json"))
     except Exception:  # noqa: BLE001
@@ -164,13 +185,21 @@ def get_my_reports(slug: str):
 @ts_reports_bp.route("/<slug>/reports/<verse_key>", methods=["GET"])
 def get_verse_reports(slug: str, verse_key: str):
     """All reports on a verse. Public read; author shown only to identity-capable
-    callers. ``?stale=1`` filters to stale reports (owner-gated)."""
+    callers. Non-public tajweed/phoneme reports are returned only to the reporter
+    or a ``view_nonpublic_reports`` holder. ``?stale=1`` filters to stale reports
+    (owner-gated)."""
     try:
         user = auth_service.current_user()
         show_author = cap_service.can(user, _IDENTITY_CAP)
         hf_user_id = user.hf_user_id if user is not None else None
         anon_token = request.args.get("anon_token") if user is None else None
-        rows = repo_ts_reports.list_for_verse(slug, verse_key)
+        rows = repo_ts_reports.list_for_verse(
+            slug,
+            verse_key,
+            hf_user_id=hf_user_id,
+            anon_token=anon_token,
+            can_view_nonpublic=cap_service.can(user, _VIEW_NONPUBLIC_CAP),
+        )
         if request.args.get("stale") == "1":
             if not cap_service.can(user, _VIEW_STALE_CAP):
                 return jsonify({"error": "not available"}), 403
@@ -264,10 +293,11 @@ def _fan_batch_notifications(
     author_id: str | None,
     author_login: str | None,
 ) -> None:
-    """Owner notifications for a batch submit: one per NEW timing word-group,
-    one per NEW tajweed cell. Re-submitted (``created=False``) rows never
-    notify; multiple timing cells in one word coalesce on the word-group key."""
-    seen_timing_words: set[int] = set()
+    """Owner notifications for a batch submit: one per NEW word-group
+    (timing / phonemes), one per NEW tajweed cell. Re-submitted (``created=False``)
+    rows never notify; multiple cells/phonemes in one word coalesce on the
+    word-group key."""
+    seen_word_groups: set[tuple[str, int]] = set()
     for row, created in results:
         if not created:
             continue
@@ -275,20 +305,21 @@ def _fan_batch_notifications(
         if at_utc is None:
             continue
         category = row["category"]
-        if category == "timing":
+        if category in _WORD_GROUPED:
             wi = row["target"]["word_index"]
-            if wi in seen_timing_words:
+            group = (category, wi)
+            if group in seen_word_groups:
                 continue
-            seen_timing_words.add(wi)
+            seen_word_groups.add(group)
             _notify.notify_owners_ts_report(
                 slug=slug,
                 verse_key=verse_key,
-                category="timing",
+                category=category,
                 author_id=author_id,
                 author_login=author_login,
                 report_id=row["id"],
                 at_utc=at_utc,
-                source_key=repo_ts_reports.word_group_key(slug, verse_key, wi, "timing"),
+                source_key=repo_ts_reports.word_group_key(slug, verse_key, wi, category),
             )
         else:
             _notify.notify_owners_ts_report(
@@ -306,7 +337,7 @@ def _fan_batch_notifications(
 @require_same_origin
 def create_reports_batch(slug: str):
     """Submit many staged cell-annotations on one verse in a single transaction.
-    Notifications fire grouped: one per timing word, one per tajweed cell."""
+    Notifications fire grouped: one per timing/phoneme word, one per tajweed cell."""
     user = auth_service.current_user()
     if not cap_service.can(user, _REPORT_CAP):
         return jsonify({"error": "not available"}), 403
@@ -422,13 +453,13 @@ def resolve_report(slug: str, report_id: int):
 )
 @require_same_origin
 def resolve_word_group(slug: str, verse_key: str, word_index: int, category: str):
-    """Resolve a timing word-group as a unit (owner-gated). Notifies each
+    """Resolve a timing/phoneme word-group as a unit (owner-gated). Notifies each
     distinct signed-in reporter in the group once."""
     user = auth_service.current_user()
     if not cap_service.can(user, _RESOLVE_CAP):
         return jsonify({"error": "not available"}), 403
-    if category != "timing":
-        return jsonify({"error": "group resolve is only for timing word-groups"}), 400
+    if category not in _WORD_GROUPED:
+        return jsonify({"error": "group resolve is only for timing/phoneme word-groups"}), 400
     try:
         req = TsReportResolveRequest.model_validate(request.get_json(silent=True) or {})
     except ValidationError as e:

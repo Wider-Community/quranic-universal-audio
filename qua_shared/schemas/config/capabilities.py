@@ -473,6 +473,17 @@ CAPABILITIES: tuple[Capability, ...] = (
         maintainer=False,
     ),
     _c(
+        "timestamps.view_nonpublic_reports",
+        G_ADMIN,
+        "View non-public timestamps reports",
+        "See tajweed and phoneme report flags on the Timestamps tab. Timing "
+        "reports are public to everyone; tajweed and phoneme reports are visible "
+        "only to the reporter and to holders of this capability. Maintainers and "
+        "owners by default.",
+        contributor=False,
+        maintainer=True,
+    ),
+    _c(
         "announcements.send",
         G_ADMIN,
         "Send announcements",

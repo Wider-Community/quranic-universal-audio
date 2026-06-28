@@ -18,7 +18,7 @@
     import { LS_KEYS } from '../../../lib/utils/constants';
     import { highlightWipe, showLetters, showPhonemes } from '../stores/display';
     import { loopTarget } from '../stores/playback';
-    import { reportModeActive } from '../stores/report-mode';
+    import { reportMode, reportModeActive } from '../stores/report-mode';
     import { loadedVerse } from '../stores/verse';
     import { findWordAt } from '../utils/loop-target';
     import TajweedSettingsPanel from './TajweedSettingsPanel.svelte';
@@ -137,14 +137,21 @@
     ><img class="img-icon" src="/icons/loop.svg" alt="" aria-hidden="true" /></button>
     <button
         type="button" class="icon-btn" class:on={$showLetters}
-        aria-pressed={$showLetters} disabled={$reportModeActive}
-        title={$reportModeActive ? 'Letters locked while reporting' : 'Toggle letters'}
+        aria-pressed={$showLetters}
+        disabled={$reportModeActive && $reportMode.kind !== 'phonemes'}
+        title={$reportModeActive && $reportMode.kind !== 'phonemes'
+            ? 'Letters locked while reporting'
+            : 'Toggle letters'}
         onclick={toggleLetters}
     ><ControlIcon name="letters" /></button>
     <button
         type="button" class="icon-btn" class:on={$showPhonemes}
         aria-pressed={$showPhonemes} disabled={$reportModeActive}
-        title={$reportModeActive ? 'Phonemes off while reporting' : 'Toggle phonemes'}
+        title={$reportMode.kind === 'phonemes'
+            ? 'Phonemes locked on while reporting'
+            : $reportModeActive
+              ? 'Phonemes off while reporting'
+              : 'Toggle phonemes'}
         onclick={togglePhonemes}
     ><ControlIcon name="phonemes" /></button>
     <button

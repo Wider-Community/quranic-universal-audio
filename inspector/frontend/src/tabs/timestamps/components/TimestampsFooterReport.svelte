@@ -17,7 +17,12 @@
     import { playerContext } from '../../../lib/stores/player-context';
     import type { TsReport } from '../../../lib/types/generated/schemas';
     import { getVerseReports } from '../services/reports-client';
-    import { enterTajweed, enterTiming, type TajweedSubtype } from '../stores/report-mode';
+    import {
+        enterPhonemes,
+        enterTajweed,
+        enterTiming,
+        type TajweedSubtype,
+    } from '../stores/report-mode';
     import { loadReciterReports, openReportedVerseKeys } from '../stores/ts-reports';
     import { selectedVerse } from '../stores/verse';
     import ReportIcon from './report/ReportIcon.svelte';
@@ -74,10 +79,14 @@
         void loadReciterReports(snapSlug);
     }
 
-    function onEnterMode(mode: 'timing' | 'tajweed', subtype?: TajweedSubtype): void {
+    function onEnterMode(
+        mode: 'timing' | 'tajweed' | 'phonemes',
+        subtype?: TajweedSubtype,
+    ): void {
         open = false;
         if (!snapSlug || !snapVerse) return;
         if (mode === 'timing') enterTiming(snapSlug, snapVerse);
+        else if (mode === 'phonemes') enterPhonemes(snapSlug, snapVerse);
         else enterTajweed(snapSlug, snapVerse, subtype ?? 'wrong_rule');
     }
 

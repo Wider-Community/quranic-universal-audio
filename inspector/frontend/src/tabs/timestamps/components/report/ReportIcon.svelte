@@ -27,6 +27,8 @@
         <path d="M4 13.5h16" />
         <path d="M6 17h5M14 17h4" />
         <path d="M8 8.5h8" />
+    {:else if name === 'phonemes'}
+        <path d="M5 10v4M9 7.5v9M13 6v12M17 9v6M21 11v2" />
     {:else if name === 'other'}
         <circle cx="6" cy="12" r="1.2" fill="currentColor" stroke="none" />
         <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" />

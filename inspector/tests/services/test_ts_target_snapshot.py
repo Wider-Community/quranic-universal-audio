@@ -121,6 +121,57 @@ def test_timing_offset_only_report_ignores_onset_shift():
     assert snap.is_stale_after_restamp(report, onset_only) is False
 
 
+def test_phonemes_stale_when_phone_identity_changes():
+    doc = _doc()
+    target = {"kind": "phoneme", "word_index": 0, "phoneme_flat_index": 1}
+    report = _report("phonemes", target, doc)
+    assert snap.is_stale_after_restamp(report, doc) is False
+    changed = copy.deepcopy(doc)
+    changed["segments"][0]["words"][0][4][1][0] = "i"  # phone a -> i
+    assert snap.is_stale_after_restamp(report, changed) is True
+
+
+def _bridge_doc() -> dict:
+    # word 0 "نْ" whose tail phone merges (idgham) into word 1 — the merger phone
+    # carries a bridge rule (row slot 5) and renders before word 1 (k>0 → target=1).
+    w0 = [
+        0, 0, 10,
+        [["ن", 0, 5]],
+        [["n", 0, 5], ["m̃", 5, 10, False, False, "idgham_ghunnah"]],
+        [["ن", "base", "present", [0], 0, None, None]],
+    ]
+    w1 = [
+        1, 10, 20,
+        [["م", 10, 20]],
+        [["m", 10, 20]],
+        [["م", "base", "present", [0], 0, None, None]],
+    ]
+    return {
+        "_meta": {"schema_version": 9, "chapter": 2, "audio_category": "by_ayah_audio"},
+        "segments": [{"ref": "2:45", "t": [0, 20], "words": [w0, w1]}],
+    }
+
+
+def test_resolve_bridge_phoneme_targets_following_word():
+    doc = _bridge_doc()
+    target = {"kind": "phoneme", "word_index": 1, "phoneme_flat_index": -1}
+    s = snap.resolve_target(doc, "2:45", target)
+    assert s is not None and s["chars"] == "m̃" and s["tag"] == "idgham_ghunnah"
+
+
+def test_phonemes_bridge_stale_when_merger_rule_changes_or_vanishes():
+    doc = _bridge_doc()
+    target = {"kind": "phoneme", "word_index": 1, "phoneme_flat_index": -1}
+    report = _report("phonemes", target, doc)
+    assert snap.is_stale_after_restamp(report, doc) is False
+    rule_changed = copy.deepcopy(doc)
+    rule_changed["segments"][0]["words"][0][4][1][5] = "idgham_no_ghunnah"
+    assert snap.is_stale_after_restamp(report, rule_changed) is True
+    vanished = copy.deepcopy(doc)
+    vanished["segments"][0]["words"][0][4] = [["n", 0, 5]]  # merger phone gone
+    assert snap.is_stale_after_restamp(report, vanished) is True
+
+
 def test_mapping_stale_when_binding_changes():
     doc = _doc()
     target = {"kind": "column", "word_index": 0, "source_letter_index": 0}

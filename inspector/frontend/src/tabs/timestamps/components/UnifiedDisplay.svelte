@@ -44,6 +44,7 @@
     import {
         focusCell,
         focusedCellKey,
+        removeStaged,
         reportMode,
         type ReportMode,
         staged,
@@ -285,11 +286,13 @@
         // only where it should — never to silent letters in a timing session.
         rootEl.classList.toggle('report-timing', mode.kind === 'timing');
         rootEl.classList.toggle('report-tajweed', mode.kind === 'tajweed');
+        rootEl.classList.toggle('report-phonemes', mode.kind === 'phonemes');
         const stagedMap = get(staged);
         const focused = get(focusedCellKey);
         const pub = _publicByKey();
         const dimWrong = mode.kind === 'tajweed' && mode.subtype === 'wrong_rule';
         const timing = mode.kind === 'timing';
+        const phonemes = mode.kind === 'phonemes';
         const els = rootEl.querySelectorAll<HTMLElement>('[data-cell-index], .mega-phoneme, .mega-block');
         els.forEach((el) => {
             const key = elCellKey(el);
@@ -301,8 +304,11 @@
             // A silent letter has no duration to call too-long/short, so it can't be a
             // timing target — inert it (keep its look) so only timed letters are live.
             const noTiming = timing && el.hasAttribute('data-cell-index') && el.dataset.cellTimed !== '1';
+            // Phonemes mode targets phoneme spans only — inert the letter/diacritic
+            // cells (NOT the block, which contains the phoneme spans).
+            const noPhoneme = phonemes && el.hasAttribute('data-cell-index');
             el.classList.toggle('report-dim', noTj);
-            el.classList.toggle('report-inert', noTj || noTiming);
+            el.classList.toggle('report-inert', noTj || noTiming || noPhoneme);
             el.classList.toggle('report-flag-staged', active && !!key && stagedMap.has(key));
             el.classList.toggle('report-focused', active && !!key && key === focused);
             const reps = key ? pub.get(key) : undefined;
@@ -326,7 +332,8 @@
             _reportSelectCell(cellEl, mode);
             return;
         }
-        // A phoneme span (no cell index) is also a selectable cell in both modes.
+        // A phoneme span (no cell index) is also a selectable target (timing,
+        // tajweed, and the dedicated phonemes mode).
         const phEl = tgt.closest<HTMLElement>('.mega-phoneme');
         if (phEl && rootEl.contains(phEl) && !phEl.classList.contains('report-inert')) {
             e.stopPropagation();
@@ -343,8 +350,8 @@
             }
             return;
         }
-        // tajweed: cells only — swallow any other in-grid click so it can't fall
-        // through to the normal seek/select-word handler.
+        // tajweed/phonemes: targets only — swallow any other in-grid click so it
+        // can't fall through to the normal seek/select-word handler.
         e.stopPropagation();
         e.preventDefault();
     }
@@ -357,6 +364,24 @@
         const key = elCellKey(el);
         const target = cellTargetFromEl(el);
         if (!key || !target) return;
+        if (mode.kind === 'phonemes') {
+            // Multi-select toggle: re-clicking a flagged phoneme removes it. No loop.
+            if (get(staged).has(key)) {
+                removeStaged(key);
+                return;
+            }
+            if (target.kind !== 'phoneme') return; // letters/diacritics aren't phoneme targets
+            const glyph = (el.querySelector('.ph-base')?.textContent ?? '').trim();
+            upsertStaged({
+                kind: 'phonemes',
+                cellKey: key,
+                target,
+                wordIndex: target.word_index ?? -1,
+                glyph,
+            });
+            focusCell(key);
+            return;
+        }
         if (!get(staged).has(key)) {
             if (mode.kind === 'timing') {
                 upsertStaged({ kind: 'timing', cellKey: key, target, wordIndex: target.word_index ?? -1, onset: null, offset: null, comment: '' });
