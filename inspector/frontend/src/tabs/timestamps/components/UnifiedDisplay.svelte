@@ -53,21 +53,56 @@
     import { currentVerseReports } from '../stores/ts-reports';
     import type { TsReport } from '../../../lib/types/generated/schemas';
     import { cellTargetFromEl, elCellKey, gapKey, targetCellKey, timingLabel } from '../utils/report-target';
-    import { loadedVerse } from '../stores/verse';
+    import { focusWaslGroup, loadedVerse } from '../stores/verse';
     import { TS_CLICK_DELAY_MS } from '../utils/constants';
     import WordTranslation from './WordTranslation.svelte';
 
     // Container ref used for imperative highlight updates.
     let rootEl: HTMLDivElement;
 
-    // Reactive: rebuild rendered structure whenever loadedVerse changes. Bridges
-    // are baked into the shard (each merger phone carries a ``bridge`` rule), so
-    // there's nothing async to wait for — buildRendered just lifts the tagged
-    // phones into gold bridge tiles.
+    // When the focus verse is part of a cross-verse waṣl group, render the whole
+    // merged group (junction tajweed renders across the boundary for free, since
+    // the boundary words are now adjacent in the words array). The merged data is
+    // anchored to the FOCUS verse start, so highlights / loop / seek use the same
+    // `loadedVerse.tsSegOffset` unchanged; the other members render as read-only
+    // context. Standalone focus → just the focus verse (the common case).
+    $: displayData = $focusWaslGroup?.data ?? $loadedVerse?.data;
+    /** The interactive verse ref within the merged group (loop/edit are scoped to
+     *  it; other members render dimmed + non-loopable). */
+    $: focusVerseRef = $focusWaslGroup?.focusRef ?? $loadedVerse?.data.verse_ref ?? '';
+
+    // Reactive: rebuild rendered structure whenever the display data changes.
+    // Bridges are baked into the shard (each merger phone carries a ``bridge``
+    // rule), so there's nothing async to wait for — buildRendered just lifts the
+    // tagged phones into gold bridge tiles (incl. the cross-verse junction).
     $: rendered = buildRendered(
-        $loadedVerse?.data.words ?? [],
-        $loadedVerse?.data.intervals ?? [],
+        displayData?.words ?? [],
+        displayData?.intervals ?? [],
     );
+
+    /** "surah:ayah" of a word location ("surah:ayah:word"). */
+    function verseOfLocation(location: string): string {
+        const p = location.split(':');
+        return `${p[0]}:${p[1]}`;
+    }
+
+    /** Seconds to add to a display-relative time to get chapter-absolute (and to
+     *  subtract for the reverse). The displayed cells 0-anchor to the waṣl group
+     *  start when in a group, else to the focus verse start. One offset drives
+     *  highlights, click-seek, and loop bounds so they all share the render's
+     *  coordinate base. */
+    function displayOffsetSec(): number {
+        const fg = get(focusWaslGroup);
+        if (fg) return fg.span[0] / 1000;
+        return get(loadedVerse)?.tsSegOffset ?? 0;
+    }
+
+    /** The currently-rendered verse data — the merged waṣl group when in one,
+     *  else the focus verse. Read imperatively (matches the `{#each}` source) so
+     *  the per-frame highlight loop indexes the SAME words/intervals the DOM has. */
+    function displayDataNow() {
+        return get(focusWaslGroup)?.data ?? get(loadedVerse)?.data ?? null;
+    }
 
     // Group blocks into unbreakable `.word-unit`s (a bridge OR pause connector
     // pairs its two words into one unit). Centered rows share ONE uniform gap —
@@ -621,10 +656,12 @@
         if (!rootEl) return;
         const lv = get(loadedVerse);
         if (!lv) return;
-        const time = getSegRelTime(lv.tsSegOffset);
+        const dd = displayDataNow();
+        if (!dd) return;
+        const time = getSegRelTime(displayOffsetSec());
 
-        const intervals = lv.data.intervals;
-        const words = lv.data.words;
+        const intervals = dd.intervals;
+        const words = dd.words;
         const portReady = !!dashPort.element;
         const portPaused = dashPort.paused;
         const hoverTime = get(tsWaveformHoverTime);
@@ -812,6 +849,14 @@
                 hoverTime != null && hoverTime >= s && hoverTime < e,
             );
         });
+        // End-of-verse waqf: the trailing silence after the last recited word (a
+        // real stop at the verse / waṣl-group end) dims the row exactly like an
+        // inter-word pause. A bridged inner boundary has no trailing silence, so
+        // this only fires at the group's final stop.
+        if (!inPauseGap && words.length) {
+            const lastEnd = words[words.length - 1]!.end;
+            if (time >= lastEnd) inPauseGap = true;
+        }
         rootEl.classList.toggle('in-pause', inPauseGap);
     }
 
@@ -911,7 +956,7 @@
             if (!lv) return;
             _swapLoopOrSeek(
                 { kind: 'word', startSec: word.start, endSec: word.end, wordIndex },
-                word.start + lv.tsSegOffset,
+                word.start + displayOffsetSec(),
             );
         });
     }
@@ -934,7 +979,7 @@
                     wordIndex,
                     childIndex: phonemeIndex,
                 },
-                iv.start + lv.tsSegOffset,
+                iv.start + displayOffsetSec(),
             );
         });
     }
@@ -958,7 +1003,7 @@
             return;
         }
         loopTarget.set(target);
-        seekToTime(target.startSec + lv.tsSegOffset);
+        seekToTime(target.startSec + displayOffsetSec());
         // Zoom/pan is handled by the centralized `loopTarget` subscription in
         // `utils/zoom.ts::setupZoomLifecycle` — no per-callsite hook needed.
     }
@@ -1010,7 +1055,7 @@
             if (!lv) return;
             _swapLoopOrSeek(
                 { kind: 'letter', startSec, endSec, wordIndex, childIndex: letterIndex },
-                startSec + lv.tsSegOffset,
+                startSec + displayOffsetSec(),
             );
         });
     }
@@ -1057,7 +1102,7 @@
         if (startSec == null) return;
         const lv = get(loadedVerse);
         if (!lv) return;
-        seekToTime(startSec + lv.tsSegOffset);
+        seekToTime(startSec + displayOffsetSec());
     }
 
     /** A diacritic (haraka / tanwīn) loop target spanning the cell's [cellStart,
@@ -1091,8 +1136,8 @@
             if (!lv) return;
             // A co-lit dropped haraka has no phone of its own (no loop identity) but
             // is timed on the carrier's interval — seek there rather than no-op.
-            if (target) _swapLoopOrSeek(target, target.startSec + lv.tsSegOffset);
-            else if (startSec != null) seekToTime(startSec + lv.tsSegOffset);
+            if (target) _swapLoopOrSeek(target, target.startSec + displayOffsetSec());
+            else if (startSec != null) seekToTime(startSec + displayOffsetSec());
         });
     }
 
@@ -1329,11 +1374,13 @@
             </div>
         {:else}
             {@const block = part.block}
+            {@const isContext = verseOfLocation(block.word.location) !== focusVerseRef}
         <div
             class="mega-block"
+            class:context={isContext}
             data-word-index={block.wordIndex}
             on:click={() => onWordClick(block.word, block.wordIndex)}
-            on:dblclick={() => onWordDblClick(block.word, block.wordIndex)}
+            on:dblclick={() => { if (!isContext) onWordDblClick(block.word, block.wordIndex); }}
             on:keydown={() => {}}
             role="button"
             tabindex="-1"

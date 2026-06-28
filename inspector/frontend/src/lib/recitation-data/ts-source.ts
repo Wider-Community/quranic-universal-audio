@@ -444,9 +444,10 @@ export function shardOccasions(shard: TsShardResponse): ChapterOccasion[] {
 
 /**
  * Build the `TsVerseData` for one OCCASION — a contiguous recitation of a verse
- * (`occasions.ts`). Every recited word across the occasion's segments is kept, in
- * audio order: no dedup, so leading/trailing repeats and mid-verse lookbacks all
- * render and stay seekable. Words carry QPC / DK text; `by_surah_audio` words are
+ * (`occasions.ts`). Thin wrapper over {@link assembleMembers} with a single
+ * member. Every recited word across the occasion's segments is kept, in audio
+ * order: no dedup, so leading/trailing repeats and mid-verse lookbacks all render
+ * and stay seekable. Words carry QPC / DK text; `by_surah_audio` words are
  * 0-anchored by subtracting the occasion's start so the audio element starts at
  * zero. The clip span (`[time_start_ms, time_end_ms]`) covers every segment /
  * word / letter time — the segmenter's natural lead-in + trailing silence
@@ -467,29 +468,76 @@ export function assembleOccasion(
     reciterAudio: TsReciterAudio,
     chapterAudioUrl: string,
 ): TsVerseData {
-    const verseRef = occasion.ref;
+    return assembleMembers(reciter, [occasion], occasion.ref, qpc, dk, reciterAudio, chapterAudioUrl);
+}
+
+/**
+ * Build one `TsVerseData` for a cross-verse waṣl GROUP — a chain of occasions
+ * recited into each other without a stop (`wasl.ts::waslGroupOf`). Display-only
+ * context merge: every member verse's words/cells are concatenated in recitation
+ * order so the analysis view shows the whole continuous span and junction tajweed
+ * renders across each boundary; each word keeps its true `surah:ayah:word`
+ * location so consumers can still scope editing/loop/validation to the focus
+ * verse. `verseRef` labels the result (the focused verse). by_surah only — the
+ * group span lives in one chapter file (the caller gates by_ayah out).
+ */
+export function assembleWaslGroup(
+    reciter: string,
+    members: ChapterOccasion[],
+    verseRef: string,
+    qpc: Record<string, { text?: string }>,
+    dk: Record<string, { text?: string }>,
+    reciterAudio: TsReciterAudio,
+    chapterAudioUrl: string,
+): TsVerseData {
+    return assembleMembers(reciter, members, verseRef, qpc, dk, reciterAudio, chapterAudioUrl);
+}
+
+/**
+ * Core assembler shared by {@link assembleOccasion} (one member) and
+ * {@link assembleWaslGroup} (a chain). Flattens every word across all member
+ * occasions' segments in audio order; each word's `location` uses ITS OWN
+ * member's ref, and the `share_group` base runs across the WHOLE list so co-light
+ * ids stay unique across segments and verses. `verseRef` labels the result
+ * (`verse_ref` + chapter); the by_surah 0-anchor + clip span cover all members,
+ * so the merged times are relative to the group start (consumers in group mode
+ * key off the group offset, not the focus verse's).
+ */
+function assembleMembers(
+    reciter: string,
+    members: ChapterOccasion[],
+    verseRef: string,
+    qpc: Record<string, { text?: string }>,
+    dk: Record<string, { text?: string }>,
+    reciterAudio: TsReciterAudio,
+    chapterAudioUrl: string,
+): TsVerseData {
     const chapter = parseInt(verseRef.split(':')[0] ?? '0', 10);
 
-    // Every recited word across the occasion's segments, in audio order (no
-    // dedup — repeats/lookbacks stay seekable). `cells[].share_group` ids are
-    // numbered per source SEGMENT (each restarts at 0), so offset each segment's
-    // ids by a running base to keep them verse-unique across a multi-segment
-    // occasion — else a consumer keying co-light by id would merge unrelated
-    // groups. `sgOffsets[i]` is the base added to word `wordsRaw[i]`'s share_groups.
+    // Every recited word across all members' segments, in audio order (no dedup
+    // — repeats/lookbacks stay seekable). `cells[].share_group` ids are numbered
+    // per source SEGMENT (each restarts at 0), so offset each segment's ids by a
+    // running base to keep them unique across every segment AND member verse —
+    // else a consumer keying co-light by id would merge unrelated groups.
+    // `wordRefs[i]` is the owning verse ref of word `wordsRaw[i]` (its location).
     const wordsRaw: SegmentEntry['words'] = [];
+    const wordRefs: string[] = [];
     const sgOffsets: number[] = [];
     let sgBase = 0;
-    for (const seg of occasion.segments) {
-        let maxSg = -1;
-        for (const w of seg.words) {
-            wordsRaw.push(w);
-            sgOffsets.push(sgBase);
-            for (const c of w[5] ?? []) {
-                const sg = c[6];
-                if (sg != null && sg > maxSg) maxSg = sg;
+    for (const member of members) {
+        for (const seg of member.segments) {
+            let maxSg = -1;
+            for (const w of seg.words) {
+                wordsRaw.push(w);
+                wordRefs.push(member.ref);
+                sgOffsets.push(sgBase);
+                for (const c of w[5] ?? []) {
+                    const sg = c[6];
+                    if (sg != null && sg > maxSg) maxSg = sg;
+                }
             }
+            sgBase += maxSg + 1;
         }
-        sgBase += maxSg + 1;
     }
 
     const intervals: PhonemeInterval[] = [];
@@ -497,16 +545,16 @@ export function assembleOccasion(
 
     for (let wi = 0; wi < wordsRaw.length; wi++) {
         const w = wordsRaw[wi]!;
-        // Per-segment base so cross-segment share_group ids don't collide within
-        // a multi-segment occasion (ids restart at 0 per segment).
+        // Per-segment base so cross-segment share_group ids don't collide.
         const sgOffset = sgOffsets[wi] ?? 0;
+        const memberRef = wordRefs[wi] ?? verseRef;
         const wordIdx = w[0];
         const wStart = w[1] / 1000;
         const wEnd = w[2] / 1000;
         const lettersRaw = (w[3] ?? []) as Array<[string, number | null, number | null, boolean?]>;
         const phonesRaw = (w[4] ?? []) as Array<(string | number | boolean)[]>;
 
-        const location = `${verseRef}:${wordIdx}`;
+        const location = `${memberRef}:${wordIdx}`;
         const text = qpc[location]?.text ?? '';
         const displayText = dk[location]?.text ?? text;
 
@@ -582,19 +630,22 @@ export function assembleOccasion(
     const audioCategory: 'by_ayah_audio' | 'by_surah_audio' =
         reciterAudio.audio_category === 'by_surah' ? 'by_surah_audio' : 'by_ayah_audio';
 
-    // Occasion span: the contiguous `[start, end]` covering every segment, word
-    // and letter time (a word/letter can bleed a few ms past its segment `t`).
-    let spanStart = occasion.segments[0]?.t[0] ?? 0;
-    let spanEnd = occasion.segments[0]?.t[1] ?? 0;
-    for (const seg of occasion.segments) {
-        if (seg.t[0] < spanStart) spanStart = seg.t[0];
-        if (seg.t[1] > spanEnd) spanEnd = seg.t[1];
-        for (const w of seg.words) {
-            if (w[1] < spanStart) spanStart = w[1];
-            if (w[2] > spanEnd) spanEnd = w[2];
-            for (const lt of w[3] ?? []) {
-                if (lt[1] != null && lt[1] < spanStart) spanStart = lt[1];
-                if (lt[2] != null && lt[2] > spanEnd) spanEnd = lt[2];
+    // Span: the contiguous `[start, end]` covering every member's segments,
+    // words and letters (a word/letter can bleed a few ms past its segment `t`).
+    const firstSeg = members[0]?.segments[0];
+    let spanStart = firstSeg?.t[0] ?? 0;
+    let spanEnd = firstSeg?.t[1] ?? 0;
+    for (const member of members) {
+        for (const seg of member.segments) {
+            if (seg.t[0] < spanStart) spanStart = seg.t[0];
+            if (seg.t[1] > spanEnd) spanEnd = seg.t[1];
+            for (const w of seg.words) {
+                if (w[1] < spanStart) spanStart = w[1];
+                if (w[2] > spanEnd) spanEnd = w[2];
+                for (const lt of w[3] ?? []) {
+                    if (lt[1] != null && lt[1] < spanStart) spanStart = lt[1];
+                    if (lt[2] != null && lt[2] > spanEnd) spanEnd = lt[2];
+                }
             }
         }
     }

@@ -158,6 +158,36 @@ export function buildRendered(
     // synthesized iẓhar + the propagated idgham (group) tag, resolved to the ≤2-bar
     // stack; a muqattaat cell colours each phoneme by its own per-phoneme rule; a
     // tanwīn rule underlines only its nasal (the last phone).
+    // Cross-verse waṣl junctions (merged group only). The offline tagger
+    // phonemizes each verse-segment alone, so at a verse boundary the merger
+    // phone — realized on the NEXT verse's head — carries no `bridge` tag even
+    // though the SOURCE cell (the last word's trailing tanwīn / noon / meem)
+    // does. In a merged waṣl group the two verses share one `words` list, so
+    // synthesize the junction bridge from that source tag, mirroring the
+    // within-verse path. A standalone single-verse render has no verse change,
+    // so this never fires.
+    const _verseOf = (loc: string): string => {
+        const p = loc.split(':');
+        return `${p[0]}:${p[1]}`;
+    };
+    interface WaslJunction { target: number; headPi: number; tag: string; source: TsCell }
+    const waslJunctions: WaslJunction[] = [];
+    for (let wi = 0; wi < words.length - 1; wi++) {
+        const cur = words[wi];
+        const next = words[wi + 1];
+        if (!cur || !next || _verseOf(cur.location) === _verseOf(next.location)) continue;
+        // The merger source is the verse-final tanwīn (last cell, or 2nd-last
+        // behind a silent fatḥatan alif) — not a deeper within-word idgham.
+        const source = (cur.cells ?? []).slice(-2).reverse().find((c) => isBridgeTag(c.tag));
+        const headPi = next.phoneme_indices?.[0];
+        if (source?.tag && headPi != null && intervals[headPi]) {
+            waslJunctions.push({ target: wi + 1, headPi, tag: source.tag, source });
+        }
+    }
+    // The junction source cell is suppressed like any bridge source: its leftover
+    // vowel renders inline without a badge (the merger shows in the tile).
+    const waslJunctionSources = new Set(waslJunctions.map((j) => j.source));
+
     // Idgham rules whose merger is realized as a separate bridge phone (every
     // cross-word merger). A source carrying one of these has its merger shown in the
     // bridge tile, so its OWN inline phonemes (a leftover tanwīn vowel, or the lifted
@@ -195,6 +225,7 @@ export function buildRendered(
         // badge: either it's dropped (no phoneme) or its merger is a separate bridge
         // phone. A within-word source (mutajānisayn nāqiṣ ط) has no bridge phone, so
         // it falls through and badges its own sounding phoneme (idgham + its tafkheem).
+        if (waslJunctionSources.has(c)) continue;
         if (isBridgeTag(c.tag) && (!c.phonemeIndices.length || bridgeRules.has(c.tag!))) continue;
         const groupTag = c.shareGroup != null ? idghamGroupTags.get(c.shareGroup) : undefined;
         // Qalqala underlines the render-only echo `Q` (the bounce), NOT the
@@ -279,6 +310,21 @@ export function buildRendered(
             excluded.add(kpi);
             liftedIltiqaa.add(wi);
         }
+    }
+
+    // Lift each cross-verse waṣl junction into a bridge tile before the receiving
+    // word: the merger phone (the next verse's nasalized head) carries the source
+    // idgham badge. Skipped if a real shard bridge already claimed the boundary.
+    for (const j of waslJunctions) {
+        if (bridgeBeforeBlock.has(j.target)) continue;
+        bridgeBeforeBlock.set(j.target, {
+            phonemes: [{
+                interval: intervals[j.headPi]!, index: j.headPi, wordLocalIndex: -1,
+                tjBadges: phonemeBadges.get(j.headPi) ?? badgesForTags([j.tag]),
+            }],
+            letter: null,
+        });
+        excluded.add(j.headPi);
     }
 
     const blocks: RenderedBlock[] = [];

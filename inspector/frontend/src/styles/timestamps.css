@@ -549,6 +549,14 @@
 .crossword-bridge.borderless .mega-phoneme {
     border-color: transparent;
 }
+/* Honour the phonemes toggle directly (mirrors `.mega-phonemes.hidden` — there
+   is no global `.hidden` rule, only `[hidden]`). Without this the iltiqaa
+   bridge's phoneme tile stays in the flex column and keeps the connecting kasra
+   pinned at its phonemes-shown height while the neighbouring words' letter rows
+   collapse, so the kasra reads as floating up instead of bottom-aligned. */
+.crossword-bridge.borderless .mega-phoneme.hidden {
+    display: none;
+}
 
 /* The connecting kasra reads as a normal kasra small-cell, NOT a full letter:
    the bridge-letter is a full letter-band-height transparent track that
@@ -719,6 +727,16 @@
 .missed-slot.report-flag-staged {
     display: flex;
     color: var(--state-missing-fg);
+}
+
+/* Cross-verse waṣl context: a neighbouring verse's words shown as read-only
+   context around the focused verse (junction tajweed renders across the
+   boundary). Dimmed + non-loopable; click still seeks (focus follows). */
+.unified-display .mega-block.context {
+    opacity: 0.5;
+}
+.unified-display .mega-block.context:hover {
+    opacity: 0.72;
 }
 
 /* --- Per-cell duration tooltip ------------------------------------------ */

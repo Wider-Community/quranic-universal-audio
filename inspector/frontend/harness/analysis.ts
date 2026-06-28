@@ -18,13 +18,16 @@ import '../src/styles/timestamps.css';
 import { mount } from 'svelte';
 
 import {
-    assembleVerseFromShard,
+    assembleOccasion,
+    assembleWaslGroup,
     loadChapterShard,
     loadDk,
     loadManifest,
     loadQpc,
     reciterAudioFromManifest,
+    shardOccasions,
 } from '../src/lib/recitation-data/ts-source';
+import { waslGroupOf } from '../src/lib/recitation-data/wasl';
 import UnifiedDisplay from '../src/tabs/timestamps/components/UnifiedDisplay.svelte';
 import { showLetters, showPhonemes } from '../src/tabs/timestamps/stores/display';
 import { setRuleEnabled } from '../src/tabs/timestamps/stores/tajweed-settings';
@@ -48,9 +51,21 @@ async function render(): Promise<void> {
         loadDk(),
     ]);
 
-    // Exactly the app's call (load-chapter.ts) — chapterAudioUrl is unused for render.
-    const data = assembleVerseFromShard(reciter, shard, ref, qpc, dk, reciterAudio, '');
-    if (!data) throw new Error(`no verse ${ref} in ${reciter} chapter ${chapter}`);
+    // Find the occasion for `ref` (first occurrence). `&wasl=1` renders the
+    // cross-verse waṣl GROUP it belongs to (context-merge) instead of the lone
+    // verse — the exact merged data `assembleWaslGroup` feeds `UnifiedDisplay`,
+    // so the junction-idgham synthesis is screenshotted on real shard data.
+    const occasions = shardOccasions(shard);
+    const focusIdx = occasions.findIndex((o) => o.ref === ref);
+    if (focusIdx < 0) throw new Error(`no verse ${ref} in ${reciter} chapter ${chapter}`);
+    let data;
+    if (p.get('wasl') === '1') {
+        const g = waslGroupOf(occasions, focusIdx);
+        const members = occasions.slice(g.fromIdx, g.toIdx + 1);
+        data = assembleWaslGroup(reciter, members, ref, qpc, dk, reciterAudio, '');
+    } else {
+        data = assembleOccasion(reciter, occasions[focusIdx]!, qpc, dk, reciterAudio, '');
+    }
 
     // Optional narrow word range (1-based, inclusive): `&words=1-3` or `&words=2`.
     const range = p.get('words');
