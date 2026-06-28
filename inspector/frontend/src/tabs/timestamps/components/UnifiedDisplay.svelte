@@ -1208,11 +1208,12 @@
          not a .mega-letter, never highlighted or queried as a cell. -->
     <span class="letter-metrics" aria-hidden="true">ب</span>
     {#each units as unit (unit.key)}
-        <div class="word-unit">
         {#if unit.gapWordIndex != null}
-            <!-- Missing-pause slot: a between-words tile at a contiguous boundary.
-                 Hidden at rest; revealed (spotlit) in the missed-pause report mode,
-                 or shown with a red ring + tooltip when publicly flagged. -->
+            <!-- Missing-pause slot: a between-words tile at a contiguous boundary. A
+                 direct row child so the row column-gap applies symmetrically on both
+                 sides (matching normal word spacing). Hidden at rest; revealed
+                 (spotlit) in the missed-pause report mode, or shown with a red ring +
+                 tooltip when publicly flagged. -->
             <div class="missed-slot" data-gap-word-index={unit.gapWordIndex} role="group">
                 {#if unit.missedMark}
                     <span class="pause-waqf" style={waqfRenderStyle(unit.missedMark)}>{unit.missedMark}</span>
@@ -1221,6 +1222,7 @@
                 {/if}
             </div>
         {/if}
+        <div class="word-unit">
         {#each unit.parts as part}
         {#if part.kind === 'bridge'}
             {@const br = part.bridge}

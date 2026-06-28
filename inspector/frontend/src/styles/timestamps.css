@@ -699,7 +699,6 @@
     justify-content: center;
     width: calc(var(--analysis-word-font-size, 1.3rem) * 0.81);
     height: calc(var(--analysis-word-font-size, 1.3rem) * 0.7);
-    margin-inline: -3px;
     border: 1px dashed var(--border-strong);
     border-radius: 3px;
     color: var(--text-faint);
