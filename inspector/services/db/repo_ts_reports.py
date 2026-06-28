@@ -477,6 +477,27 @@ def resolve_group(
     return [_row_to_dict(r) for r in rows]
 
 
+def resolve_auto(*, report_id: int, reason: str, at: datetime | None = None) -> dict[str, Any] | None:
+    """System-resolve an open report on regen (no human resolver).
+
+    Used by the silence auto-resolve path when a re-stamp introduced/removed the
+    gap a ``pause_missed``/``pause_wasl``/``pause_boundary`` report was about —
+    the data itself confirms the issue, so it closes without owner action.
+    ``resolved_by_*`` stay NULL; ``reason`` rides in ``resolver_comment``. Returns
+    the updated row (for notifying both reporter + owners), or ``None`` if the
+    report is missing / already resolved."""
+    ts = _serde.to_iso(at or _serde.now())
+    cur = get_conn().execute(
+        "UPDATE ts_reports SET status = 'resolved', resolved_by_hf_user_id = NULL,"
+        " resolved_by_login = NULL, resolver_comment = ?, resolved_at = ?, updated_at = ?"
+        " WHERE id = ? AND status = 'open' AND hidden_at IS NULL",
+        (reason, ts, ts, report_id),
+    )
+    if cur.rowcount == 0:
+        return None
+    return get(report_id)
+
+
 def mark_stale(report_ids: list[int], *, at: datetime | None = None) -> int:
     """Flag the given reports stale (idempotent). Returns rows changed."""
     if not report_ids:

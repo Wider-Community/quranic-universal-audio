@@ -41,6 +41,7 @@
 
     function cellLabel(a: StagedAnnotation): string {
         const w = (a.target.word_index ?? 0) + 1;
+        if (a.target.kind === 'gap') return `Pause after word ${w}`;
         if (a.target.kind === 'word') return `Word ${w}`;
         return `W${w}·cell ${a.target.cell_index ?? a.target.source_letter_index ?? '?'}`;
     }
@@ -68,16 +69,28 @@
 
     const removedIds = $derived.by(() => {
         const cat = mode.kind === 'inactive' ? '' : mode.kind;
+        // A silence session is single-subtype (target_key is subtype-free → one
+        // stance per gap), so only reconcile removals within the active subtype —
+        // never delete the user's other-subtype pause report on submit.
+        const sub = mode.kind === 'silence' ? mode.subtype : null;
         const keys = new Set($staged.keys());
         return $currentVerseReports
-            .filter((r) => r.mine && r.status === 'open' && r.category === cat && !keys.has(targetCellKey(r.target)))
+            .filter(
+                (r) =>
+                    r.mine &&
+                    r.status === 'open' &&
+                    r.category === cat &&
+                    (sub == null || r.subtype === sub) &&
+                    !keys.has(targetCellKey(r.target)),
+            )
             .map((r) => r.id);
     });
 
     /** Toggle a boundary axis: click the active direction again to clear it (the
-     *  boundary is fine), or switch to the other direction. */
+     *  boundary is fine), or switch to the other direction. Used by timing rows and
+     *  the silence pause_boundary row (both carry onset/offset). */
     function setAxis(a: StagedAnnotation, axis: 'onset' | 'offset', dir: TimingDir): void {
-        if (a.kind !== 'timing') return;
+        if (a.kind !== 'timing' && !(a.kind === 'silence' && a.subtype === 'pause_boundary')) return;
         focusCell(a.cellKey);
         upsertStaged({ ...a, [axis]: a[axis] === dir ? null : dir });
     }
@@ -90,7 +103,7 @@
         upsertStaged({ ...a, selectedRuleTags: sel });
     }
     function editComment(a: StagedAnnotation, val: string): void {
-        if (a.kind === 'phonemes') return; // phonemes carry no comment
+        if (a.kind === 'phonemes' || a.kind === 'silence') return; // these carry no comment
         upsertStaged({ ...a, comment: val });
     }
     function removeRow(a: StagedAnnotation, e: MouseEvent): void {
@@ -115,24 +128,51 @@
         }
     }
 
+    const SILENCE_LABELS: Record<string, string> = {
+        pause_boundary: 'Pause timing off',
+        pause_wasl: "Shouldn't be here",
+        pause_missed: 'Missing pause',
+    };
     const subtypeLabel = $derived(
-        mode.kind === 'tajweed' ? (mode.subtype === 'wrong_rule' ? 'Wrong rule' : 'Missing rule') : '',
+        mode.kind === 'tajweed'
+            ? mode.subtype === 'wrong_rule'
+                ? 'Wrong rule'
+                : 'Missing rule'
+            : mode.kind === 'silence'
+              ? SILENCE_LABELS[mode.subtype]
+              : '',
     );
     const headTitle = $derived(
         mode.kind === 'tajweed'
             ? 'Report a tajweed issue'
             : mode.kind === 'phonemes'
               ? 'Report a phoneme issue'
-              : 'Report a timing issue',
+              : mode.kind === 'silence'
+                ? 'Report a pause issue'
+                : 'Report a timing issue',
     );
+    const SILENCE_INSTRUCTIONS: Record<string, string> = {
+        pause_boundary: 'Click a highlighted pause, then mark how its start and/or end is off.',
+        pause_wasl: "Click any pause that shouldn't be there (the words should connect).",
+        pause_missed: 'Click where a pause is missing — a slot between words where the reciter stops.',
+    };
     const instruction = $derived(
         mode.kind === 'timing'
             ? 'Click a letter or word, then mark how its start and/or end is off.'
             : mode.kind === 'phonemes'
               ? 'Click any phonemes that are wrong or mislabeled. Click again to remove.'
-              : mode.kind === 'tajweed' && mode.subtype === 'wrong_rule'
-                ? 'Highlighted cells carry a rule — click one to flag the wrong rule.'
-                : 'Click any cell where a rule should apply but is missing.',
+              : mode.kind === 'silence'
+                ? SILENCE_INSTRUCTIONS[mode.subtype]
+                : mode.kind === 'tajweed' && mode.subtype === 'wrong_rule'
+                  ? 'Highlighted cells carry a rule — click one to flag the wrong rule.'
+                  : 'Click any cell where a rule should apply but is missing.',
+    );
+    const emptyText = $derived(
+        mode.kind === 'phonemes'
+            ? 'No phonemes flagged yet.'
+            : mode.kind === 'silence'
+              ? 'No pauses flagged yet.'
+              : 'Nothing flagged yet.',
     );
     const submitCount = $derived(stagedList.length + removedIds.length);
 </script>
@@ -156,7 +196,7 @@
 
     <div class="body">
         {#if stagedList.length === 0}
-            <p class="empty">No phonemes flagged yet.</p>
+            <p class="empty">{emptyText}</p>
         {:else if mode.kind === 'phonemes'}
             <!-- One row per word; each flagged phoneme is a compact removable chip. -->
             <div class="rows" role="list">
@@ -191,7 +231,7 @@
                         <span class="cell-lbl">{cellLabel(a)}</span>
                         {#if a.kind !== 'phonemes'}
                             <div class="ctl">
-                                {#if a.kind === 'timing'}
+                                {#if a.kind === 'timing' || (a.kind === 'silence' && a.subtype === 'pause_boundary')}
                                     <span class="axis-cap">Start</span>
                                     <div class="seg" role="group" aria-label="Start boundary">
                                         <button type="button" class="opt" class:on={a.onset === 'early'}
@@ -209,6 +249,9 @@
                                     {#if a.onset || a.offset}
                                         <span class="derived">{timingLabel(a.onset, a.offset)}</span>
                                     {/if}
+                                {:else if a.kind === 'silence'}
+                                    <!-- Binary subtypes (waṣl / missed) — no control, just the stance. -->
+                                    <span class="derived">{SILENCE_LABELS[a.subtype]}</span>
                                 {:else if a.subtype === 'wrong_rule' && a.ruleOptions.length > 0}
                                     {#each a.ruleOptions as tag (tag)}
                                         <button
@@ -225,12 +268,15 @@
                                     {/each}
                                 {/if}
                             </div>
-                            <input
-                                class="cmt" type="text"
-                                placeholder={a.kind === 'tajweed' ? 'Comment (required)…' : 'Note (optional)…'}
-                                value={a.comment}
-                                oninput={(e) => editComment(a, e.currentTarget.value)}
-                            />
+                            {#if a.kind !== 'silence'}
+                                <!-- Silence reports carry no comment (selection-only). -->
+                                <input
+                                    class="cmt" type="text"
+                                    placeholder={a.kind === 'tajweed' ? 'Comment (required)…' : 'Note (optional)…'}
+                                    value={a.comment}
+                                    oninput={(e) => editComment(a, e.currentTarget.value)}
+                                />
+                            {/if}
                         {/if}
                         <button type="button" class="row-x" aria-label="Remove" onclick={(e) => removeRow(a, e)}>
                             <ReportIcon name="trash" size={13} />

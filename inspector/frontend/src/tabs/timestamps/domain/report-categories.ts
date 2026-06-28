@@ -9,8 +9,8 @@
  * - `target`  — the issue points at a specific spot (word / cell / phoneme /
  *   column) the user picks on the analysis grid (timing, tajweed, phonemes).
  *
- * Drop-up order is timing → tajweed → phonemes → audio → other. `mapping` is a
- * valid backend category but intentionally not surfaced — kept as
+ * Drop-up order is timing → tajweed → phonemes → silence → audio → other.
+ * `mapping` is a valid backend category but intentionally not surfaced — kept as
  * `MAPPING_CATEGORY` for if we revisit the letter↔sound flow.
  */
 
@@ -39,9 +39,9 @@ export interface ReportCategoryDef {
     /** What to point at on the grid (target flow). */
     targetHint?: string;
     /** Target-flow categories that enter the in-grid report mode (others stay
-     *  deferred). `timing` / `phonemes` enter directly; `tajweed` enters per
-     *  subtype. */
-    entersMode?: 'timing' | 'tajweed' | 'phonemes';
+     *  deferred). `timing` / `phonemes` enter directly; `tajweed` + `silence`
+     *  enter per subtype. */
+    entersMode?: 'timing' | 'tajweed' | 'phonemes' | 'silence';
 }
 
 export const REPORT_CATEGORIES: ReportCategoryDef[] = [
@@ -78,6 +78,19 @@ export const REPORT_CATEGORIES: ReportCategoryDef[] = [
         entersMode: 'phonemes',
         targetHint: 'Pick the phonemes on the grid',
         subtypes: [],
+    },
+    {
+        id: 'silence',
+        label: 'Silence',
+        blurb: 'A pause is wrong, unwanted, or missing',
+        flow: 'target',
+        entersMode: 'silence',
+        targetHint: 'Pick a pause on the grid',
+        subtypes: [
+            { id: 'pause_boundary', label: 'Pause timing off' },
+            { id: 'pause_wasl', label: "Pause shouldn't be here" },
+            { id: 'pause_missed', label: 'Missing pause' },
+        ],
     },
     {
         id: 'audio',

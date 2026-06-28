@@ -13,7 +13,7 @@
      * "reported" highlight + a count.
      */
     import type { TsReport } from '../../../../lib/types/generated/schemas';
-    import type { TajweedSubtype } from '../../stores/report-mode';
+    import type { SilenceSubtype, TajweedSubtype } from '../../stores/report-mode';
     import {
         REPORT_CATEGORIES,
         type ReportCategoryDef,
@@ -32,12 +32,21 @@
         verseKey: string;
         verseReports: TsReport[];
         onchanged: () => void;
-        onenterMode: (mode: 'timing' | 'tajweed' | 'phonemes', subtype?: TajweedSubtype) => void;
+        onenterMode: (
+            mode: 'timing' | 'tajweed' | 'phonemes' | 'silence',
+            subtype?: TajweedSubtype | SilenceSubtype,
+        ) => void;
     } = $props();
 
     const TAJWEED_ENTRIES: { subtype: TajweedSubtype; icon: string; label: string; blurb: string }[] = [
         { subtype: 'wrong_rule', icon: 'wrong_rule', label: 'Wrong rule', blurb: 'A rule shown is incorrect' },
         { subtype: 'missing_rule', icon: 'missing_rule', label: 'Missing rule', blurb: 'A rule should apply but is absent' },
+    ];
+
+    const SILENCE_ENTRIES: { subtype: SilenceSubtype; icon: string; label: string; blurb: string }[] = [
+        { subtype: 'pause_boundary', icon: 'timing', label: 'Pause timing off', blurb: 'A pause starts or ends off' },
+        { subtype: 'pause_wasl', icon: 'wrong_rule', label: "Pause shouldn't be here", blurb: 'A detected pause should be connected (waṣl)' },
+        { subtype: 'pause_missed', icon: 'missing_rule', label: 'Missing pause', blurb: 'A pause is absent where the reciter stops' },
     ];
 
     /** Open-report count per category on this verse → drives the highlight. */
@@ -71,7 +80,7 @@
     <div class="rows">
         {#each REPORT_CATEGORIES as cat (cat.id)}
             {@const count = openByCategory.get(cat.id) ?? 0}
-            {@const expandable = cat.flow === 'comment' || cat.id === 'tajweed' || (!cat.entersMode && cat.flow === 'target')}
+            {@const expandable = cat.flow === 'comment' || cat.id === 'tajweed' || cat.id === 'silence' || (!cat.entersMode && cat.flow === 'target')}
             {@const deferred = cat.flow === 'target' && !cat.entersMode}
             {@const open = expandedId === cat.id}
             <div class="group" class:open>
@@ -108,6 +117,17 @@
                         {:else if cat.entersMode === 'tajweed'}
                             {#each TAJWEED_ENTRIES as e (e.subtype)}
                                 <button type="button" class="sub-row act" onclick={() => onenterMode('tajweed', e.subtype)}>
+                                    <span class="sub-ic"><ReportIcon name={e.icon} size={14} /></span>
+                                    <span class="sub-text">
+                                        <span class="sub-label">{e.label}</span>
+                                        <span class="sub-blurb">{e.blurb}</span>
+                                    </span>
+                                    <span class="chev"><ReportIcon name="chevron" size={13} /></span>
+                                </button>
+                            {/each}
+                        {:else if cat.entersMode === 'silence'}
+                            {#each SILENCE_ENTRIES as e (e.subtype)}
+                                <button type="button" class="sub-row act" onclick={() => onenterMode('silence', e.subtype)}>
                                     <span class="sub-ic"><ReportIcon name={e.icon} size={14} /></span>
                                     <span class="sub-text">
                                         <span class="sub-label">{e.label}</span>

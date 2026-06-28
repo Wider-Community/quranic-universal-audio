@@ -74,6 +74,44 @@ def test_target_key_distinguishes_word_indices(fresh_db):
     )
 
 
+def test_silence_gap_is_one_stance_per_gap_subtype_free(fresh_db):
+    """A gap's target_key is subtype-free, so re-filing the same gap with a different
+    silence subtype upserts (one pause stance per gap per identity, last wins)."""
+    g = _target("gap", word_index=0)
+    _create(category="silence", subtype="pause_missed", target=g, comment=None)
+    row, created = _create(category="silence", subtype="pause_wasl", target=g, comment=None)
+    assert created is False
+    assert row["subtype"] == "pause_wasl"
+    assert len(repo.list_for_verse("reciter-a", "2:45")) == 1
+
+
+def test_silence_report_is_public_to_other_viewers(fresh_db):
+    """Silence flags are public — a different viewer without the nonpublic cap sees them
+    (unlike tajweed/phonemes)."""
+    _create(category="silence", subtype="pause_missed", target=_target("gap", word_index=0), comment=None)
+    rows = repo.list_for_verse("reciter-a", "2:45", anon_token="anon-2", can_view_nonpublic=False)
+    assert len(rows) == 1 and rows[0]["category"] == "silence"
+
+
+def test_resolve_auto_closes_with_reason_and_no_human_resolver(fresh_db):
+    row, _ = _create(
+        category="silence",
+        subtype="pause_missed",
+        target=_target("gap", word_index=0),
+        comment=None,
+        hf_user_id="u-reporter",
+        anon_token=None,
+        login_at_time="reporter",
+    )
+    with db.transaction():
+        resolved = repo.resolve_auto(report_id=row["id"], reason="A pause now appears here.")
+    assert resolved is not None
+    assert resolved["status"] == "resolved"
+    assert resolved["resolver_comment"] == "A pause now appears here."
+    assert resolved["resolved_by_hf_user_id"] is None
+    assert resolved["hf_user_id"] == "u-reporter"  # reporter preserved → notifiable
+
+
 def test_resolve_marks_resolved_and_returns_reporter(fresh_db):
     row, _ = _create(hf_user_id="u-reporter", anon_token=None, login_at_time="reporter")
     with db.transaction():

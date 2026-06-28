@@ -40,12 +40,17 @@ import {
 import { currentVerseReports } from './ts-reports';
 
 export type TajweedSubtype = 'wrong_rule' | 'missing_rule';
+/** Silence subtypes — a wrong-boundary pause (dual-axis, like timing), a pause
+ *  that shouldn't exist (should be waṣl), and a missing pause. The latter two are
+ *  binary (select-to-flag, no controls). */
+export type SilenceSubtype = 'pause_boundary' | 'pause_wasl' | 'pause_missed';
 
 export type ReportMode =
     | { kind: 'inactive' }
     | { kind: 'timing' }
     | { kind: 'tajweed'; subtype: TajweedSubtype }
-    | { kind: 'phonemes' };
+    | { kind: 'phonemes' }
+    | { kind: 'silence'; subtype: SilenceSubtype };
 
 export const reportMode = writable<ReportMode>({ kind: 'inactive' });
 export const reportModeActive = derived(reportMode, (m) => m.kind !== 'inactive');
@@ -84,7 +89,21 @@ export interface StagedPhoneme {
     /** Set when seeded from the caller's own existing report (→ delete on remove). */
     originalId?: number;
 }
-export type StagedAnnotation = StagedTiming | StagedTajweed | StagedPhoneme;
+export interface StagedSilence {
+    kind: 'silence';
+    cellKey: CellKey;
+    target: TsReportTarget;
+    /** The word before the flagged boundary (= the gap target's `word_index`). */
+    gapWordIndex: number;
+    subtype: SilenceSubtype;
+    /** Boundary axes — `pause_boundary` only (≥1 set to be complete). The binary
+     *  subtypes (`pause_wasl` / `pause_missed`) leave both null. */
+    onset: TimingDir | null;
+    offset: TimingDir | null;
+    /** Set when seeded from the caller's own existing report (→ delete on remove). */
+    originalId?: number;
+}
+export type StagedAnnotation = StagedTiming | StagedTajweed | StagedPhoneme | StagedSilence;
 
 export const staged = writable<Map<CellKey, StagedAnnotation>>(new Map());
 export const focusedCellKey = writable<CellKey | null>(null);
@@ -120,6 +139,10 @@ export function isStagedComplete(a: StagedAnnotation): boolean {
     if (a.kind === 'phonemes') {
         return true; // a flagged phoneme has no required fields — selection is the report
     }
+    if (a.kind === 'silence') {
+        // pause_boundary needs ≥1 axis; the binary subtypes are complete on select.
+        return a.subtype === 'pause_boundary' ? a.onset !== null || a.offset !== null : true;
+    }
     const needsRule = a.subtype === 'wrong_rule' && a.ruleOptions.length > 0;
     if (needsRule && a.selectedRuleTags.length === 0) return false;
     return a.comment.trim().length > 0; // every tajweed report needs a comment
@@ -140,16 +163,29 @@ let displaySnapshot: { letters: boolean; phonemes: boolean } | null = null;
 let tajweedSnapshot: TajweedSettings | null = null;
 
 function seedOwnFlags(
-    category: 'timing' | 'tajweed' | 'phonemes',
-    subtype?: TajweedSubtype,
+    category: 'timing' | 'tajweed' | 'phonemes' | 'silence',
+    subtype?: TajweedSubtype | SilenceSubtype,
 ): void {
     const m = new Map<CellKey, StagedAnnotation>();
     for (const r of get(currentVerseReports)) {
         if (!r.mine || r.status !== 'open' || r.category !== category) continue;
-        // A tajweed session is single-subtype — only seed the matching subtype.
-        if (category === 'tajweed' && subtype && r.subtype !== subtype) continue;
+        // A tajweed/silence session is single-subtype — only seed the matching one.
+        if ((category === 'tajweed' || category === 'silence') && subtype && r.subtype !== subtype) {
+            continue;
+        }
         const key = targetCellKey(r.target);
-        if (category === 'timing') {
+        if (category === 'silence') {
+            m.set(key, {
+                kind: 'silence',
+                cellKey: key,
+                target: r.target,
+                gapWordIndex: r.target.word_index ?? -1,
+                subtype: (r.subtype as SilenceSubtype) ?? 'pause_missed',
+                onset: (r.onset as TimingDir | null) ?? null,
+                offset: (r.offset as TimingDir | null) ?? null,
+                originalId: r.id,
+            });
+        } else if (category === 'timing') {
             m.set(key, {
                 kind: 'timing',
                 cellKey: key,
@@ -222,6 +258,20 @@ export function enterPhonemes(slug: string, verseKey: string): void {
     focusedCellKey.set(null);
     seedOwnFlags('phonemes');
     reportMode.set({ kind: 'phonemes' });
+}
+
+export function enterSilence(slug: string, verseKey: string, subtype: SilenceSubtype): void {
+    dashPort.pause();
+    // Letters-only: the click surface is the inter-word pause tiles / missed slots,
+    // not phonemes. Force letters on + phonemes off (restored on exit) so the grid
+    // stays clean. The toggles are disabled in report mode (reportModeActive).
+    displaySnapshot = { letters: get(showLetters), phonemes: get(showPhonemes) };
+    showLetters.set(true);
+    showPhonemes.set(false);
+    reportContext.set({ slug, verseKey });
+    focusedCellKey.set(null);
+    seedOwnFlags('silence', subtype);
+    reportMode.set({ kind: 'silence', subtype });
 }
 
 export function exitReportMode(): void {

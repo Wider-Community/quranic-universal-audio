@@ -188,3 +188,76 @@ def test_other_stale_when_verse_text_changes():
     changed = copy.deepcopy(doc)
     changed["segments"][0]["words"][0][3][0][0] = "ت"  # letter changed
     assert snap.is_stale_after_restamp(report, changed) is True
+
+
+# --- silence (gap) reports: resolution + auto-resolve decision matrix --------
+
+_GAP_TARGET = {"kind": "gap", "word_index": 0}
+
+
+def _two_word_doc(*, gap: bool) -> dict:
+    """Two words "بَ" / "تَ"; the second starts at 30 (a gap after word 0) or at 20
+    (contiguous, no gap)."""
+    w0 = [0, 0, 20, [["ب", 0, 20]], [["b", 0, 20]], [["ب", "base", "present", [0], 0, None, None]]]
+    s1 = 30 if gap else 20
+    w1 = [1, s1, s1 + 20, [["ت", s1, s1 + 20]], [["t", s1, s1 + 20]], [["ت", "base", "present", [0], 0, None, None]]]
+    return {
+        "_meta": {"schema_version": 9, "chapter": 2, "audio_category": "by_ayah_audio"},
+        "segments": [{"ref": "2:45", "t": [0, s1 + 20], "words": [w0, w1]}],
+    }
+
+
+def _silence_report(subtype: str, create_doc: dict, *, onset=None, offset=None) -> dict:
+    return {
+        "category": "silence",
+        "verse_key": "2:45",
+        "subtype": subtype,
+        "target": _GAP_TARGET,
+        "onset": onset,
+        "offset": offset,
+        "snapshot": snap.resolve_target(create_doc, "2:45", _GAP_TARGET),
+    }
+
+
+def test_resolve_gap_bounds_and_presence():
+    g = snap.resolve_target(_two_word_doc(gap=True), "2:45", _GAP_TARGET)
+    assert g is not None and g["onset_ms"] == 20 and g["offset_ms"] == 30
+    assert snap._gap_present(g) is True
+    contiguous = snap.resolve_target(_two_word_doc(gap=False), "2:45", _GAP_TARGET)
+    assert contiguous is not None and snap._gap_present(contiguous) is False
+
+
+def test_silence_missed_auto_resolves_when_gap_appears():
+    r = _silence_report("pause_missed", _two_word_doc(gap=False))
+    assert snap._silence_action(r, _two_word_doc(gap=True)) == (
+        "resolve",
+        "A pause now appears here on the latest timestamps.",
+    )
+    assert snap._silence_action(r, _two_word_doc(gap=False)) == ("none", None)
+
+
+def test_silence_wasl_auto_resolves_when_gap_removed():
+    r = _silence_report("pause_wasl", _two_word_doc(gap=True))
+    assert snap._silence_action(r, _two_word_doc(gap=False)) == (
+        "resolve",
+        "This pause is gone on the latest timestamps.",
+    )
+    assert snap._silence_action(r, _two_word_doc(gap=True)) == ("none", None)
+
+
+def test_silence_boundary_stales_on_flagged_shift_and_resolves_when_gap_gone():
+    create = _two_word_doc(gap=True)
+    r = _silence_report("pause_boundary", create, offset="late")  # flags the gap END
+    shifted = copy.deepcopy(create)
+    shifted["segments"][0]["words"][1][1] = 200  # word1 start 30 -> 200 (gap end moves > thr)
+    shifted["segments"][0]["words"][1][2] = 220
+    assert snap._silence_action(r, shifted) == ("stale", None)
+    # gap removed entirely → the boundary correction is moot → auto-resolve
+    assert snap._silence_action(r, _two_word_doc(gap=False))[0] == "resolve"
+
+
+def test_silence_stale_when_boundary_vanishes():
+    r = _silence_report("pause_missed", _two_word_doc(gap=False))
+    one_word = _two_word_doc(gap=False)
+    one_word["segments"][0]["words"] = one_word["segments"][0]["words"][:1]
+    assert snap._silence_action(r, one_word) == ("stale", None)

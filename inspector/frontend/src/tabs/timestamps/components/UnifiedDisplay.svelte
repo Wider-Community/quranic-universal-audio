@@ -52,7 +52,7 @@
     } from '../stores/report-mode';
     import { currentVerseReports } from '../stores/ts-reports';
     import type { TsReport } from '../../../lib/types/generated/schemas';
-    import { cellTargetFromEl, elCellKey, targetCellKey, timingLabel } from '../utils/report-target';
+    import { cellTargetFromEl, elCellKey, gapKey, targetCellKey, timingLabel } from '../utils/report-target';
     import { loadedVerse } from '../stores/verse';
     import { TS_CLICK_DELAY_MS } from '../utils/constants';
     import WordTranslation from './WordTranslation.svelte';
@@ -287,13 +287,24 @@
         rootEl.classList.toggle('report-timing', mode.kind === 'timing');
         rootEl.classList.toggle('report-tajweed', mode.kind === 'tajweed');
         rootEl.classList.toggle('report-phonemes', mode.kind === 'phonemes');
+        // Silence targets the inter-word gaps: existing pause tiles (boundary / waṣl)
+        // or inserted missed-pause slots (missed). The root class reveals the slots.
+        const silenceMissed = mode.kind === 'silence' && mode.subtype === 'pause_missed';
+        const silenceExisting =
+            mode.kind === 'silence' && (mode.subtype === 'pause_boundary' || mode.subtype === 'pause_wasl');
+        rootEl.classList.toggle('report-silence', mode.kind === 'silence');
+        rootEl.classList.toggle('report-missed', silenceMissed);
+        rootEl.classList.toggle('report-existing', silenceExisting);
         const stagedMap = get(staged);
         const focused = get(focusedCellKey);
         const pub = _publicByKey();
         const dimWrong = mode.kind === 'tajweed' && mode.subtype === 'wrong_rule';
         const timing = mode.kind === 'timing';
         const phonemes = mode.kind === 'phonemes';
-        const els = rootEl.querySelectorAll<HTMLElement>('[data-cell-index], .mega-phoneme, .mega-block');
+        const silence = mode.kind === 'silence';
+        const els = rootEl.querySelectorAll<HTMLElement>(
+            '[data-cell-index], .mega-phoneme, .mega-block, .pause-bridge, .missed-slot',
+        );
         els.forEach((el) => {
             const key = elCellKey(el);
             // wrong_rule spotlights rule-bearing cells: dim + inert every cell/phoneme
@@ -307,14 +318,29 @@
             // Phonemes mode targets phoneme spans only — inert the letter/diacritic
             // cells (NOT the block, which contains the phoneme spans).
             const noPhoneme = phonemes && el.hasAttribute('data-cell-index');
-            el.classList.toggle('report-dim', noTj);
-            el.classList.toggle('report-inert', noTj || noTiming || noPhoneme);
+            // Silence: only the active gap type stays live; everything else is dimmed +
+            // inert. Dim the words (.mega-block) + off-type gap tiles, not nested cells
+            // (their word already dims — no compounded opacity).
+            const isPauseBridge = el.classList.contains('pause-bridge');
+            const isMissedSlot = el.classList.contains('missed-slot');
+            const isSilenceTarget =
+                (silenceExisting && isPauseBridge) || (silenceMissed && isMissedSlot);
+            const silenceInert = silence && !isSilenceTarget;
+            const silenceDim = silenceInert && (el.classList.contains('mega-block') || isPauseBridge || isMissedSlot);
+            el.classList.toggle('report-dim', noTj || silenceDim);
+            el.classList.toggle('report-inert', noTj || noTiming || noPhoneme || silenceInert);
             el.classList.toggle('report-flag-staged', active && !!key && stagedMap.has(key));
             el.classList.toggle('report-focused', active && !!key && key === focused);
             const reps = key ? pub.get(key) : undefined;
             el.classList.toggle('report-flag-public', !!reps?.length);
             if (reps?.length) el.dataset.reportTip = _composeReportTip(reps);
             else if (el.dataset.reportTip) delete el.dataset.reportTip;
+            // A missed-slot has no hover/duration plumbing, so surface its public
+            // flag via a native title instead of the custom cell tooltip.
+            if (isMissedSlot) {
+                if (reps?.length) el.title = 'Reported missing pause';
+                else el.removeAttribute('title');
+            }
         });
     }
 
@@ -325,6 +351,20 @@
         const mode = get(reportMode);
         if (mode.kind === 'inactive') return;
         const tgt = e.target as HTMLElement;
+        // Silence targets the inter-word gap tiles only — a pause bridge (existing)
+        // or a missed-pause slot (missed). Swallow every other in-grid click.
+        if (mode.kind === 'silence') {
+            const gapEl = tgt.closest<HTMLElement>('.pause-bridge, .missed-slot');
+            if (gapEl && rootEl.contains(gapEl) && !gapEl.classList.contains('report-inert')) {
+                e.stopPropagation();
+                e.preventDefault();
+                _reportSelectGap(gapEl, mode);
+            } else {
+                e.stopPropagation();
+                e.preventDefault();
+            }
+            return;
+        }
         const cellEl = tgt.closest<HTMLElement>('[data-cell-index]');
         if (cellEl && rootEl.contains(cellEl) && !cellEl.classList.contains('report-inert')) {
             e.stopPropagation();
@@ -464,6 +504,47 @@
             dashPort.seek(targetMs);
             if (dashPort.paused) dashPort.play();
         }
+    }
+    /** Loop the two words straddling a gap (audio reference for a pause report). */
+    function _loopGap(wi: number): void {
+        const lv = get(loadedVerse);
+        const prev = lv?.data.words[wi];
+        const next = lv?.data.words[wi + 1];
+        if (!lv || !prev || !next) return;
+        loopTarget.set({ kind: 'word', startSec: prev.start, endSec: next.end, wordIndex: wi });
+        if (dashPort.element) {
+            const targetMs = (prev.start + lv.tsSegOffset) * 1000;
+            ensureDashCovering(targetMs);
+            dashPort.seek(targetMs);
+            if (dashPort.paused) dashPort.play();
+        }
+    }
+    function _reportSelectGap(el: HTMLElement, mode: ReportMode): void {
+        if (mode.kind !== 'silence') return;
+        const wi = parseInt(el.dataset.gapWordIndex ?? '-1', 10);
+        if (wi < 0) return;
+        const key = gapKey(wi);
+        // The binary subtypes toggle (re-click removes); pause_boundary stays staged
+        // and is completed via the strip's Start/End axes.
+        if (mode.subtype !== 'pause_boundary' && get(staged).has(key)) {
+            removeStaged(key);
+            return;
+        }
+        if (!get(staged).has(key)) {
+            const target = cellTargetFromEl(el);
+            if (!target) return;
+            upsertStaged({
+                kind: 'silence',
+                cellKey: key,
+                target,
+                gapWordIndex: wi,
+                subtype: mode.subtype,
+                onset: null,
+                offset: null,
+            });
+        }
+        focusCell(key);
+        _loopGap(wi);
     }
     $: if (rootEl && !_reportClickBound) {
         rootEl.addEventListener('click', _onReportClickCapture, true);
@@ -1128,6 +1209,18 @@
     <span class="letter-metrics" aria-hidden="true">ب</span>
     {#each units as unit (unit.key)}
         <div class="word-unit">
+        {#if unit.gapWordIndex != null}
+            <!-- Missing-pause slot: a between-words tile at a contiguous boundary.
+                 Hidden at rest; revealed (spotlit) in the missed-pause report mode,
+                 or shown with a red ring + tooltip when publicly flagged. -->
+            <div class="missed-slot" data-gap-word-index={unit.gapWordIndex} role="group">
+                {#if unit.missedMark}
+                    <span class="pause-waqf" style={waqfRenderStyle(unit.missedMark)}>{unit.missedMark}</span>
+                {:else}
+                    <span class="pause-icon" aria-hidden="true"></span>
+                {/if}
+            </div>
+        {/if}
         {#each unit.parts as part}
         {#if part.kind === 'bridge'}
             {@const br = part.bridge}
@@ -1191,6 +1284,7 @@
                 class="pause-bridge"
                 data-pause-start={pb.startSec}
                 data-pause-end={pb.endSec}
+                data-gap-word-index={pb.fromWordIndex}
                 role="group"
                 on:mouseenter={(e) => onCellEnter(e, pb.startSec, pb.endSec)}
                 on:mouseleave={onCellLeave}

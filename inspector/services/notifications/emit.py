@@ -413,6 +413,65 @@ def notify_reporter_ts_report_resolved(
         )
 
 
+def notify_ts_report_auto_resolved(
+    *,
+    slug: str,
+    verse_key: str,
+    category: str,
+    reporter_id: str | None,
+    author_login: str | None,
+    report_id: int,
+    reason: str,
+) -> None:
+    """Tell BOTH the reporter and the review-alert owners that an open report
+    auto-resolved on a timestamp regeneration (a silence gap appeared/disappeared,
+    so the data itself confirmed the report). The reporter learns their flag was
+    vindicated; owners learn it closed without their action. Anonymous reporters
+    (``reporter_id`` ``None``) just skip the reporter card. Opens its own
+    ``durable_transaction`` (nesting-safe under the regen txn). Best-effort.
+    """
+    try:
+        from services.state import catalog
+
+        name = catalog.display_name(slug) or slug
+        from services.db import sync as _sync
+
+        with _sync.durable_transaction():
+            if reporter_id:
+                repo_notifications.create(
+                    hf_user_id=reporter_id,
+                    event="ts_report.resolved",
+                    slug=slug,
+                    title=copy.ts_report_resolved(name),
+                    body=f"Thanks for reporting — {reason}",
+                    payload={"verse_key": verse_key, "report_id": report_id},
+                    source_key=f"tsreportresolved:{slug}:{report_id}",
+                )
+            for uid in _review_alert_recipients():
+                if reporter_id and uid == reporter_id:
+                    continue
+                repo_notifications.create(
+                    hf_user_id=uid,
+                    event="ts_report.auto_resolved",
+                    slug=slug,
+                    title=copy.ts_report_auto_resolved(name),
+                    body=f"{verse_key} · {category} · {reason}",
+                    payload={
+                        "verse_key": verse_key,
+                        "category": category,
+                        "report_id": report_id,
+                        "author_login": author_login,
+                    },
+                    source_key=f"tsreportauto:{slug}:{report_id}",
+                )
+    except Exception:  # noqa: BLE001 — best-effort; never break the regen write
+        logger.exception(
+            "notifications.notify_ts_report_auto_resolved failed for slug=%s report=%s",
+            slug,
+            report_id,
+        )
+
+
 def notify_owners_flag_activity(
     *,
     actor: Actor,

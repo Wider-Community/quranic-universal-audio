@@ -19,8 +19,10 @@
     import { getVerseReports } from '../services/reports-client';
     import {
         enterPhonemes,
+        enterSilence,
         enterTajweed,
         enterTiming,
+        type SilenceSubtype,
         type TajweedSubtype,
     } from '../stores/report-mode';
     import { loadReciterReports, openReportedVerseKeys } from '../stores/ts-reports';
@@ -80,14 +82,16 @@
     }
 
     function onEnterMode(
-        mode: 'timing' | 'tajweed' | 'phonemes',
-        subtype?: TajweedSubtype,
+        mode: 'timing' | 'tajweed' | 'phonemes' | 'silence',
+        subtype?: TajweedSubtype | SilenceSubtype,
     ): void {
         open = false;
         if (!snapSlug || !snapVerse) return;
         if (mode === 'timing') enterTiming(snapSlug, snapVerse);
         else if (mode === 'phonemes') enterPhonemes(snapSlug, snapVerse);
-        else enterTajweed(snapSlug, snapVerse, subtype ?? 'wrong_rule');
+        else if (mode === 'silence')
+            enterSilence(snapSlug, snapVerse, (subtype as SilenceSubtype) ?? 'pause_missed');
+        else enterTajweed(snapSlug, snapVerse, (subtype as TajweedSubtype) ?? 'wrong_rule');
     }
 
     // Shift a left-anchored drop-up back on-screen if it overflows the right

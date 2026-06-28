@@ -2004,8 +2004,18 @@ export interface TsReportVerseCount {
 export interface TsReport {
   id: number;
   verse_key: string;
-  category: "audio" | "timing" | "mapping" | "tajweed" | "phonemes" | "other";
-  subtype?: ("wrong_rule" | "missing_rule" | "should_be_silent" | "should_not_be_silent") | null;
+  category: "audio" | "timing" | "mapping" | "tajweed" | "phonemes" | "silence" | "other";
+  subtype?:
+    | (
+        | "wrong_rule"
+        | "missing_rule"
+        | "should_be_silent"
+        | "should_not_be_silent"
+        | "pause_boundary"
+        | "pause_wasl"
+        | "pause_missed"
+      )
+    | null;
   onset?: ("early" | "late") | null;
   offset?: ("early" | "late") | null;
   target: TsReportTarget;
@@ -2027,11 +2037,13 @@ export interface TsReport {
  * Indices are word-scoped (``word_index`` 0-based in the verse;
  * ``source_letter_index`` the anchoring letter; ``cell_index`` into the word's
  * ``cells[]``; ``phoneme_flat_index`` a word-local indexable-phone index;
- * ``share_group`` a co-timed cell-group id). Required fields per ``kind`` are
- * enforced below — a ``verse`` target leaves them all unset.
+ * ``share_group`` a co-timed cell-group id). A ``gap`` target (silence reports)
+ * addresses the word-boundary between ``word_index`` and ``word_index + 1`` and
+ * needs only ``word_index``. Required fields per ``kind`` are enforced below — a
+ * ``verse`` target leaves them all unset.
  */
 export interface TsReportTarget {
-  kind: "verse" | "word" | "cell" | "phoneme" | "column" | "cell_group";
+  kind: "verse" | "word" | "cell" | "phoneme" | "column" | "cell_group" | "gap";
   word_index?: number | null;
   source_letter_index?: number | null;
   cell_index?: number | null;
@@ -2086,8 +2098,18 @@ export interface TsReportBatchCreateRequest {
  * a single create (shared ``_validate_report_item``).
  */
 export interface TsReportBatchItem {
-  category: "audio" | "timing" | "mapping" | "tajweed" | "phonemes" | "other";
-  subtype?: ("wrong_rule" | "missing_rule" | "should_be_silent" | "should_not_be_silent") | null;
+  category: "audio" | "timing" | "mapping" | "tajweed" | "phonemes" | "silence" | "other";
+  subtype?:
+    | (
+        | "wrong_rule"
+        | "missing_rule"
+        | "should_be_silent"
+        | "should_not_be_silent"
+        | "pause_boundary"
+        | "pause_wasl"
+        | "pause_missed"
+      )
+    | null;
   onset?: ("early" | "late") | null;
   offset?: ("early" | "late") | null;
   target: TsReportTarget;
@@ -2109,8 +2131,18 @@ export interface TsReportBatchResult {
  */
 export interface TsReportCreateRequest {
   verse_key: string;
-  category: "audio" | "timing" | "mapping" | "tajweed" | "phonemes" | "other";
-  subtype?: ("wrong_rule" | "missing_rule" | "should_be_silent" | "should_not_be_silent") | null;
+  category: "audio" | "timing" | "mapping" | "tajweed" | "phonemes" | "silence" | "other";
+  subtype?:
+    | (
+        | "wrong_rule"
+        | "missing_rule"
+        | "should_be_silent"
+        | "should_not_be_silent"
+        | "pause_boundary"
+        | "pause_wasl"
+        | "pause_missed"
+      )
+    | null;
   onset?: ("early" | "late") | null;
   offset?: ("early" | "late") | null;
   target: TsReportTarget;

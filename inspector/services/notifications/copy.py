@@ -68,3 +68,7 @@ def ts_report_reported(name: str) -> str:
 
 def ts_report_resolved(name: str) -> str:
     return f"Your timestamps report for {name} was resolved"
+
+
+def ts_report_auto_resolved(name: str) -> str:
+    return f"A timestamps report auto-resolved on regen · {name}"

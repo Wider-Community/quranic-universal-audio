@@ -19,6 +19,12 @@ regen that only shifts timing ms does NOT stale a timing report):
   a boundary the report flagged (onset/offset) moved past
   ``config.TS_REPORT_BOUNDARY_STALE_MS`` (a pure ms shift on an unflagged boundary
   does NOT stale).
+- ``silence`` — gap reports don't just stale, they **auto-resolve** when the data
+  confirms them: a ``pause_missed`` resolves once a gap appears at its boundary, a
+  ``pause_wasl`` (and a ``pause_boundary`` whose gap vanished) once the gap is gone.
+  A ``pause_boundary`` whose gap remains stales on a flagged-boundary shift (like
+  timing). Auto-resolve notifies BOTH owners and the reporter. See
+  ``_silence_action`` + ``recheck_reports_staleness``.
 - ``audio``  — never auto-staled (not bound to shard cells).
 - ``other`` / verse-level — the verse vanished or its text changed.
 
@@ -231,6 +237,17 @@ def resolve_target(
         snap["onset_ms"], snap["offset_ms"] = _word_bounds(word)
         return snap
 
+    if kind == "gap":
+        # A silence report's word-boundary gap: onset = this word's end, offset =
+        # the next word's start. Gap-present iff offset > onset (a positive
+        # inter-word silence). A missing next word means the structure changed.
+        nxt = _word_at(seg, wi + 1) if isinstance(wi, int) else None
+        if nxt is None:
+            return None
+        snap["onset_ms"] = _word_bounds(word)[1]
+        snap["offset_ms"] = _word_bounds(nxt)[0]
+        return snap
+
     cells = word_cells(word)
     if kind == "cell":
         ci = target.get("cell_index")
@@ -374,13 +391,52 @@ def is_stale_after_restamp(report: dict[str, Any], doc: dict[str, Any]) -> bool:
     return differs("verse_text")
 
 
+def _gap_present(snap: dict[str, Any] | None) -> bool:
+    """Is there a positive inter-word silence in this gap snapshot?"""
+    if not snap:
+        return False
+    onset, offset = snap.get("onset_ms"), snap.get("offset_ms")
+    return isinstance(onset, int) and isinstance(offset, int) and offset > onset
+
+
+def _silence_action(report: dict[str, Any], doc: dict[str, Any]) -> tuple[str, str | None]:
+    """Decide a silence report's fate against the regenerated shard ``doc``.
+
+    Returns ``("resolve", reason)`` to auto-resolve (the data now agrees with the
+    report), ``("stale", None)`` for owner re-check, or ``("none", None)`` to leave
+    it open. A vanished target (word structure changed) stales for re-check."""
+    new = resolve_target(doc, report["verse_key"], report.get("target") or {})
+    if new is None:
+        return "stale", None
+    subtype = report.get("subtype")
+    now_gap = _gap_present(new)
+    if subtype == "pause_missed":
+        return ("resolve", "A pause now appears here on the latest timestamps.") if now_gap else ("none", None)
+    if subtype == "pause_wasl":
+        return ("none", None) if now_gap else ("resolve", "This pause is gone on the latest timestamps.")
+    if subtype == "pause_boundary":
+        if not now_gap:
+            return "resolve", "This pause is gone on the latest timestamps."
+        old = report.get("snapshot") or {}
+        thr = TS_REPORT_BOUNDARY_STALE_MS
+        if report.get("onset") and _shifted(old.get("onset_ms"), new.get("onset_ms"), thr):
+            return "stale", None
+        if report.get("offset") and _shifted(old.get("offset_ms"), new.get("offset_ms"), thr):
+            return "stale", None
+        return "none", None
+    return "none", None
+
+
 def recheck_reports_staleness(slug: str, affected_chapters: list[int] | None) -> int:
-    """After a regeneration, flag open reports whose targeted content changed.
+    """After a regeneration, flag/resolve open reports whose targeted content changed.
 
     Scoped to ``affected_chapters`` (or all open reports when ``None`` —
-    full/unknown-scope regen). Reads each chapter's new shard once. Returns the
-    number of reports newly flagged stale. Caller owns the transaction (the repo
-    write assumes an active ``durable_transaction``)."""
+    full/unknown-scope regen). Reads each chapter's new shard once. Non-silence
+    reports stale via ``is_stale_after_restamp``; silence reports route through
+    ``_silence_action`` and may **auto-resolve** (notifying both owners and the
+    reporter) when a gap appeared/disappeared. Returns the number of reports newly
+    flagged stale. Caller owns the transaction (the repo writes + the notification
+    fan all assume an active ``durable_transaction``, which is nesting-safe)."""
     from services.db import repo_ts_reports
 
     open_reports = repo_ts_reports.list_open_for_recheck(slug, chapters=affected_chapters)
@@ -388,6 +444,7 @@ def recheck_reports_staleness(slug: str, affected_chapters: list[int] | None) ->
         return 0
     shard_cache: dict[int, dict[str, Any] | None] = {}
     stale_ids: list[int] = []
+    auto_resolve: list[tuple[dict[str, Any], str]] = []
     for report in open_reports:
         chapter = report["chapter"]
         if chapter not in shard_cache:
@@ -396,8 +453,40 @@ def recheck_reports_staleness(slug: str, affected_chapters: list[int] | None) ->
         if doc is None:
             continue
         try:
-            if is_stale_after_restamp(report, doc):
+            if report.get("category") == "silence":
+                action, reason = _silence_action(report, doc)
+                if action == "stale":
+                    stale_ids.append(report["id"])
+                elif action == "resolve" and reason is not None:
+                    auto_resolve.append((report, reason))
+            elif is_stale_after_restamp(report, doc):
                 stale_ids.append(report["id"])
         except Exception:  # noqa: BLE001 — one bad report must not abort the recheck
             logger.exception("staleness recheck failed for report %s", report.get("id"))
+    _auto_resolve_silence(slug, auto_resolve)
     return repo_ts_reports.mark_stale(stale_ids)
+
+
+def _auto_resolve_silence(slug: str, auto_resolve: list[tuple[dict[str, Any], str]]) -> None:
+    """Resolve each agreed silence report + notify both owners and the reporter."""
+    if not auto_resolve:
+        return
+    from services.db import repo_ts_reports
+    from services.notifications import emit as _notify
+
+    for report, reason in auto_resolve:
+        try:
+            row = repo_ts_reports.resolve_auto(report_id=report["id"], reason=reason)
+            if row is None:
+                continue
+            _notify.notify_ts_report_auto_resolved(
+                slug=slug,
+                verse_key=row["verse_key"],
+                category=row["category"],
+                reporter_id=row["hf_user_id"],
+                author_login=row["login_at_time"],
+                report_id=row["id"],
+                reason=reason,
+            )
+        except Exception:  # noqa: BLE001 — best-effort; one failure must not abort the rest
+            logger.exception("auto-resolve silence report %s failed", report.get("id"))

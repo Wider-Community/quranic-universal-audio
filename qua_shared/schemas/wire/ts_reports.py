@@ -28,6 +28,10 @@ Per-category rules (enforced by ``TsReportCreateRequest`` validators):
                 The human label is derived via ``timing_label``.
 - ``tajweed`` — subtype wrong_rule|missing_rule|should_be_silent|should_not_be_silent;
                 comment optional; target cell|phoneme|cell_group.
+- ``silence`` — pauses live BETWEEN words, so the target is a word-boundary ``gap``
+                (``word_index`` = the word before the gap). Subtype pause_boundary
+                |pause_wasl|pause_missed; selection-only (no comment); ``pause_boundary``
+                carries the ``onset``/``offset`` axes (the other two are binary). Public.
 - ``mapping`` — no subtype; comment mandatory; target column.
 - ``other``   — no subtype; comment mandatory; any target.
 """
@@ -39,10 +43,10 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-ReportCategory = Literal["audio", "timing", "mapping", "tajweed", "phonemes", "other"]
-TargetKind = Literal["verse", "word", "cell", "phoneme", "column", "cell_group"]
+ReportCategory = Literal["audio", "timing", "mapping", "tajweed", "phonemes", "silence", "other"]
+TargetKind = Literal["verse", "word", "cell", "phoneme", "column", "cell_group", "gap"]
 
-#: Per-category subtype — tajweed only. The owning category constrains which
+#: Per-category subtype — tajweed + silence. The owning category constrains which
 #: values are valid (see ``TsReportCreateRequest._check``). Timing does NOT use
 #: a subtype; it carries the ``onset``/``offset`` boundary axes instead.
 ReportSubtype = Literal[
@@ -50,21 +54,29 @@ ReportSubtype = Literal[
     "missing_rule",
     "should_be_silent",
     "should_not_be_silent",
+    "pause_boundary",
+    "pause_wasl",
+    "pause_missed",
 ]
 
-#: A timing boundary's error direction. A timing report sets ``onset`` and/or
-#: ``offset`` (≥1); ``None`` on an axis means that boundary is fine.
+#: A timing boundary's error direction. A timing (or silence ``pause_boundary``)
+#: report sets ``onset`` and/or ``offset`` (≥1); ``None`` on an axis = that boundary
+#: is fine.
 TimingDir = Literal["early", "late"]
 
 _TAJWEED_SUBTYPES = frozenset(
     {"wrong_rule", "missing_rule", "should_be_silent", "should_not_be_silent"}
 )
+#: silence subtypes — a wrong-boundary pause (dual-axis), a pause that shouldn't
+#: exist (should be waṣl), and a missing pause. All target a ``gap``.
+_SILENCE_SUBTYPES = frozenset({"pause_boundary", "pause_wasl", "pause_missed"})
 #: target_kind values allowed per category.
 _ALLOWED_KINDS: dict[str, frozenset[str]] = {
     "audio": frozenset({"verse", "word"}),
     "timing": frozenset({"word", "cell", "phoneme", "column", "cell_group"}),
     "tajweed": frozenset({"cell", "phoneme", "cell_group"}),
     "phonemes": frozenset({"phoneme"}),
+    "silence": frozenset({"gap"}),
     "mapping": frozenset({"column"}),
     "other": frozenset({"verse", "word", "cell", "phoneme", "column", "cell_group"}),
 }
@@ -91,8 +103,8 @@ def _validate_report_item(
     ``selected_rule_tags`` gate. Raises ``ValueError``.
 
     Timing carries the ``onset``/``offset`` boundary axes (≥1 set) and no
-    ``subtype``; tajweed carries a ``subtype`` and no axes; audio/mapping/other
-    carry neither.
+    ``subtype``; tajweed + silence carry a ``subtype``; silence ``pause_boundary``
+    also carries the axes; audio/mapping/other carry neither.
     """
     if category == "timing":
         if subtype is not None:
@@ -107,6 +119,16 @@ def _validate_report_item(
             )
         if onset is not None or offset is not None:
             raise ValueError("onset/offset are timing-only")
+    elif category == "silence":
+        if subtype not in _SILENCE_SUBTYPES:
+            raise ValueError(
+                "silence reports require subtype pause_boundary|pause_wasl|pause_missed"
+            )
+        if subtype == "pause_boundary":
+            if onset is None and offset is None:
+                raise ValueError("pause_boundary reports require at least one of onset/offset")
+        elif onset is not None or offset is not None:
+            raise ValueError("onset/offset are only for pause_boundary silence reports")
     else:
         if subtype is not None:
             raise ValueError(f"{category} reports take no subtype")
@@ -152,8 +174,10 @@ class TsReportTarget(BaseModel):
     Indices are word-scoped (``word_index`` 0-based in the verse;
     ``source_letter_index`` the anchoring letter; ``cell_index`` into the word's
     ``cells[]``; ``phoneme_flat_index`` a word-local indexable-phone index;
-    ``share_group`` a co-timed cell-group id). Required fields per ``kind`` are
-    enforced below — a ``verse`` target leaves them all unset.
+    ``share_group`` a co-timed cell-group id). A ``gap`` target (silence reports)
+    addresses the word-boundary between ``word_index`` and ``word_index + 1`` and
+    needs only ``word_index``. Required fields per ``kind`` are enforced below — a
+    ``verse`` target leaves them all unset.
     """
 
     model_config = ConfigDict(extra="forbid")

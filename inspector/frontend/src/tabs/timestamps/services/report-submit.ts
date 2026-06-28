@@ -39,6 +39,18 @@ function toItem(a: StagedAnnotation): TsReportBatchItem {
     if (a.kind === 'phonemes') {
         return { category: 'phonemes', target, comment: null, selected_rule_tags: [] };
     }
+    if (a.kind === 'silence') {
+        const boundary = a.subtype === 'pause_boundary';
+        return {
+            category: 'silence',
+            subtype: a.subtype,
+            onset: boundary ? a.onset : null,
+            offset: boundary ? a.offset : null,
+            target,
+            comment: null,
+            selected_rule_tags: [],
+        };
+    }
     return {
         category: 'tajweed',
         subtype: a.subtype,

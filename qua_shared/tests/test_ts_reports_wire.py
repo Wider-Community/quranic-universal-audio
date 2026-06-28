@@ -131,6 +131,39 @@ def test_phonemes_target_phoneme_no_subtype_axes_or_comment():
         )
 
 
+def test_silence_subtypes_target_gap():
+    gap = {"kind": "gap", "word_index": 1}
+    # binary subtypes: a gap target, no comment, no axes — valid
+    TsReportCreateRequest.model_validate(_req(category="silence", subtype="pause_wasl", comment=None, target=gap))
+    TsReportCreateRequest.model_validate(_req(category="silence", subtype="pause_missed", comment=None, target=gap))
+    # pause_boundary carries the onset/offset axes (≥1)
+    TsReportCreateRequest.model_validate(
+        _req(category="silence", subtype="pause_boundary", comment=None, onset="early", target=gap)
+    )
+    with pytest.raises(ValidationError):  # boundary with no axis
+        TsReportCreateRequest.model_validate(
+            _req(category="silence", subtype="pause_boundary", comment=None, target=gap)
+        )
+    with pytest.raises(ValidationError):  # axes only on pause_boundary
+        TsReportCreateRequest.model_validate(
+            _req(category="silence", subtype="pause_missed", comment=None, onset="early", target=gap)
+        )
+    with pytest.raises(ValidationError):  # silence requires a subtype
+        TsReportCreateRequest.model_validate(_req(category="silence", comment=None, target=gap))
+    with pytest.raises(ValidationError):  # a tajweed subtype is not a silence subtype
+        TsReportCreateRequest.model_validate(
+            _req(category="silence", subtype="wrong_rule", comment=None, target=gap)
+        )
+    with pytest.raises(ValidationError):  # silence can only target a gap
+        TsReportCreateRequest.model_validate(
+            _req(category="silence", subtype="pause_missed", comment=None, target={"kind": "verse"})
+        )
+    with pytest.raises(ValidationError):  # a gap target needs word_index
+        TsReportCreateRequest.model_validate(
+            _req(category="silence", subtype="pause_missed", comment=None, target={"kind": "gap"})
+        )
+
+
 def test_subtype_and_axes_rejected_for_non_timing():
     with pytest.raises(ValidationError):  # audio takes no subtype
         TsReportCreateRequest.model_validate(

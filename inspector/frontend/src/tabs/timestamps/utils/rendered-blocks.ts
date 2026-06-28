@@ -46,6 +46,8 @@ export interface RenderedPauseBridge {
     mark: string | null;
     startSec: number;
     endSec: number;
+    /** The word before this gap (= the silence report's `gap` target word_index). */
+    fromWordIndex: number;
 }
 
 export interface RenderedBlock {
@@ -79,6 +81,13 @@ export interface RenderedUnit {
     parts: RenderedUnitPart[];
     /** Array index of the unit's last block (for bridge-join adjacency). */
     lastBlockIndex: number;
+    /** A plain contiguous boundary (no existing pause / bridge) precedes this unit
+     *  — the word before it, where a "missed pause" could be flagged. `null` for
+     *  the first unit and for a unit that opens with a connector. */
+    gapWordIndex: number | null;
+    /** The preceding word's lifted-out waqf (stop) sign for that missed-pause slot,
+     *  or `null` → the neutral `||` pause symbol. */
+    missedMark: string | null;
 }
 
 /** Build the per-word `RenderedBlock[]` for the analysis view: cross-word
@@ -327,7 +336,7 @@ export function buildRendered(
         if (endSec <= startSec) continue;
         const { clean, mark } = splitWaqf(a.displayText);
         if (mark) a.displayText = clean;
-        b.pauseBridge = { mark, startSec, endSec };
+        b.pauseBridge = { mark, startSec, endSec, fromWordIndex: a.wordIndex };
     }
     return blocks;
 }
@@ -354,9 +363,18 @@ export function groupUnits(blocks: RenderedBlock[]): RenderedUnit[] {
             cur!.parts.push(connector!, { kind: 'block', block });
             cur!.lastBlockIndex = i;
         } else {
-            cur = { key: block.wordIndex, parts: [], lastBlockIndex: i };
-            // Defensive: a connector with no joinable predecessor still renders.
-            if (connector) cur.parts.push(connector);
+            cur = { key: block.wordIndex, parts: [], lastBlockIndex: i, gapWordIndex: null, missedMark: null };
+            if (connector) {
+                // Defensive: a connector with no joinable predecessor still renders.
+                cur.parts.push(connector);
+            } else if (i > 0) {
+                // A new unit with NO connector opens a plain contiguous boundary with
+                // the previous word — a candidate "missed pause" slot. Lift the
+                // previous word's stop sign (if any) into it, else fall back to `||`.
+                const prev = blocks[i - 1]!;
+                cur.gapWordIndex = prev.wordIndex;
+                cur.missedMark = splitWaqf(prev.displayText).mark;
+            }
             cur.parts.push({ kind: 'block', block });
             units.push(cur);
         }
