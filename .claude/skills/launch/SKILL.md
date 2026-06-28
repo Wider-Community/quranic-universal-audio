@@ -21,13 +21,11 @@ The script (`scripts/devenv/launch.py`) owns everything that used to go wrong by
 | Read-only look at PROD data (local) | `python scripts/devenv/launch.py up --mode prod` |
 | Fully offline (no token/network) | `python scripts/devenv/launch.py up --mode fixtures` |
 | Run a different worktree | `… up --worktree <name|path>` |
-| Start + verify Dashboard & Timestamps | `… up --smoke` |
 | Open in a browser too | `… up --open` |
 | What's running? | `python scripts/devenv/launch.py list` |
 | Stop this worktree's stack | `python scripts/devenv/launch.py down` |
 | Stop everything | `python scripts/devenv/launch.py down --all` |
 | Fix "wrong port / two Flasks / stale Vite" | `python scripts/devenv/launch.py doctor --fix` |
-| Smoke an already-running stack or any URL | `python scripts/devenv/launch.py smoke [--url …]` |
 
 ## Modes
 
@@ -46,9 +44,15 @@ The bucket isn't the fastest source for every content type locally. By default i
 
 Knobs: `INSPECTOR_AUDIO_FROM_BUCKET` / `INSPECTOR_PEAKS_FROM_BUCKET` (the launcher owns these per mode; the flags above override).
 
-## For agents (Playwright / Chrome MCP)
+## For agents (driving the running app)
 
-Run `up` (it starts both backend + Vite), read the `LAUNCH_JSON` line for the `url`, then drive that URL. Use **dev** (the default). `--smoke` runs a bundled headless-chromium check of the Dashboard (catalog fetches succeed) and Timestamps (the first TS reciter renders a non-empty waveform); screenshots + `result.json` land in `<worktree>/.local/launch/smoke/`.
+Run `up` (it starts both backend + Vite), read the `LAUNCH_JSON` line for the `url`, then drive that URL with a browser MCP. Use **dev** (the default).
+
+**Default driver: `chrome-devtools-mcp`.** Measured on this app's Dashboard, its a11y snapshot is ~2.6× smaller than playwright's (≈14 KB vs ≈38 KB for the same page), its actions return a one-line ack (snapshot is opt-in, not forced on every call), and it carries the DevTools tools we actually use here — network request bodies, console, `performance_start_trace`, `evaluate_script`, throttling/emulation. Net: fewer tokens per step and the right debugging surface.
+
+Reach for **`playwright`** instead only for pure interaction (multi-step forms, exploratory clicking) where its auto-snapshot-on-every-action is convenient and you don't need network/console/perf.
+
+Typical loop: `navigate_page` → `take_snapshot` (grab the `uid`s) → `click`/`fill` by `uid` → `take_screenshot`. There's no built-in liveness check — your first `navigate` + `take_snapshot` already tells you whether the stack is serving real data.
 
 ## Parallel & conflict-safety
 

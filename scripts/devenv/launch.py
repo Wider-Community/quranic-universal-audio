@@ -36,11 +36,9 @@ Commands:
   list    show every registered stack with live health
   down    stop a stack (--worktree / --id / --port / --all)
   doctor  find & optionally --fix port conflicts, double-binds, stale procs
-  smoke   drive Dashboard + Timestamps in headless chromium against a stack
 
 Examples:
   python scripts/devenv/launch.py                     # dev, this worktree
-  python scripts/devenv/launch.py up --smoke             # dev + verify tabs
   python scripts/devenv/launch.py up --mode prod         # read-only prod data
   python scripts/devenv/launch.py up --no-vite           # local backend only
   python scripts/devenv/launch.py list
@@ -662,10 +660,6 @@ def cmd_up(args: argparse.Namespace) -> int:
         raise
 
     _print_summary(stack)
-    if args.smoke:
-        rc = run_smoke(root, stack.url)
-        if rc != 0:
-            return rc
     if args.open and stack.url:
         _open_browser(stack.url)
     return 0
@@ -883,70 +877,6 @@ def _scan_orphans() -> list[tuple[int, str]]:
 
 
 # ---------------------------------------------------------------------------
-# smoke
-# ---------------------------------------------------------------------------
-
-
-def discover_ts_reciter(url: str) -> str:
-    """First TS-capable reciter slug from /api/ts/manifest (gzipped octet-stream,
-    so gunzip here rather than in the browser). Empty string if unavailable."""
-    import gzip
-
-    code, body = _http(url.rstrip("/") + "/api/ts/manifest", timeout=15.0)
-    if code != 200 or not body:
-        return ""
-    with contextlib.suppress(Exception):
-        try:
-            data = json.loads(body)
-        except Exception:  # noqa: BLE001
-            data = json.loads(gzip.decompress(body))
-        return next(iter(data.get("reciters") or {}), "")
-    return ""
-
-
-def run_smoke(root: Path, url: str) -> int:
-    """Drive Dashboard + Timestamps in headless chromium via the bundled
-    smoke. Seeds a real TS-capable reciter so the waveform actually renders."""
-    smoke = Path(__file__).resolve().parent / "launch_smoke.mjs"
-    out_dir = root / ".local" / "launch" / "smoke"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    reciter = discover_ts_reciter(url)
-    print(
-        f"launch: smoke-testing Dashboard + Timestamps at {url} (reciter={reciter or 'none'})...",
-        flush=True,
-    )
-    proc = subprocess.run(
-        ["node", str(smoke), url, str(out_dir), reciter],
-        cwd=str(frontend_dir(root)),
-        capture_output=True,
-        text=True,
-        creationflags=NO_WINDOW,
-    )
-    sys.stdout.write(proc.stdout)
-    if proc.returncode != 0:
-        sys.stderr.write(proc.stderr)
-        print(f"launch: smoke FAILED (screenshots in {out_dir})", flush=True)
-    else:
-        print(f"launch: smoke PASSED (screenshots in {out_dir})", flush=True)
-    return proc.returncode
-
-
-def cmd_smoke(args: argparse.Namespace) -> int:
-    if args.url:
-        url = args.url
-        root = worktree_root()
-    else:
-        stacks = prune_dead(load_stacks())
-        root = worktree_root()
-        match = [s for s in stacks if Path(s.worktree) == root] or stacks
-        if not match:
-            raise SystemExit("launch smoke: no running stack and no --url given")
-        url = _url(match[0])
-        root = Path(match[0].worktree)
-    return run_smoke(root, url)
-
-
-# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -971,9 +901,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--ffmpeg-peaks",
         action="store_true",
         help="skip bucket peaks; compute per-segment peaks via ffmpeg",
-    )
-    up.add_argument(
-        "--smoke", action="store_true", help="run the Dashboard+Timestamps smoke after ready"
     )
     up.add_argument("--open", action="store_true", help="open the URL in a browser")
     up.add_argument(
@@ -1005,17 +932,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="with --fix, also stop untracked Inspector processes (other worktrees / manual runs)",
     )
     dr.set_defaults(func=cmd_doctor)
-
-    sm = sub.add_parser("smoke", help="smoke-test a running stack or a --url")
-    sm.add_argument("--url", help="target URL (default: the current worktree's stack)")
-    sm.set_defaults(func=cmd_smoke)
     return p
 
 
 def main(argv: list[str]) -> int:
     parser = build_parser()
     # Bare `launch` and `launch --mode X` default to `up`.
-    if not argv or (argv[0] not in {"up", "list", "down", "doctor", "smoke", "-h", "--help"}):
+    if not argv or (argv[0] not in {"up", "list", "down", "doctor", "-h", "--help"}):
         argv = ["up", *argv]
     args = parser.parse_args(argv)
     if not getattr(args, "func", None):
