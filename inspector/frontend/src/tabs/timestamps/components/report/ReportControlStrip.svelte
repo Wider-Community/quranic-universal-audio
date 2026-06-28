@@ -27,6 +27,7 @@
     import { badgeForTag, silentTooltip } from '../../utils/tajweed-rules';
     import { targetCellKey, type TimingDir, timingLabel } from '../../utils/report-target';
     import { submitReportSession } from '../../services/report-submit';
+    import { pushToast } from '../../../../lib/stores/toast';
     import ReportIcon from './ReportIcon.svelte';
 
     let busy = $state(false);
@@ -65,7 +66,7 @@
         return (a.target.phoneme_flat_index ?? -1) < 0 ? 'merger' : '•';
     }
 
-    const allValid = $derived(stagedList.length > 0 && stagedList.every(isStagedComplete));
+    const canSubmit = $derived(stagedList.every(isStagedComplete) && (stagedList.length > 0 || removedIds.length > 0));
 
     const removedIds = $derived.by(() => {
         const cat = mode.kind === 'inactive' ? '' : mode.kind;
@@ -111,8 +112,13 @@
         removeStaged(a.cellKey);
     }
 
+    const SUBTEXT: Partial<Record<string, string>> = {
+        timing: 'This helps us improve our timing model',
+        silence: 'This helps us improve our pause detection pipeline',
+    };
+
     async function submit(): Promise<void> {
-        if (!allValid || busy) return;
+        if (!canSubmit || busy) return;
         const ctx = $reportContext;
         if (!ctx) return;
         busy = true;
@@ -122,6 +128,10 @@
         if (res.ok) {
             await loadVerseReports(ctx.slug, ctx.verseKey);
             await loadReciterReports(ctx.slug);
+            if (stagedList.length > 0) {
+                const sub = SUBTEXT[mode.kind] ?? '';
+                pushToast({ kind: 'success', text: `Thank you for the feedback!${sub ? ' ' + sub : ''}` });
+            }
             exitReportMode();
         } else {
             error = res.error ?? 'Failed to submit';
@@ -175,6 +185,13 @@
               : 'Nothing flagged yet.',
     );
     const submitCount = $derived(stagedList.length + removedIds.length);
+    const submitLabel = $derived(
+        busy
+            ? 'Saving…'
+            : stagedList.length === 0 && removedIds.length > 0
+              ? `Confirm delete${removedIds.length > 1 ? ` ${removedIds.length}` : ''}`
+              : `Submit${submitCount ? ` ${submitCount}` : ''}`,
+    );
 </script>
 
 <div class="strip" role="group" aria-label="Report controls">
@@ -186,8 +203,8 @@
         </div>
         <div class="actions">
             <button type="button" class="btn ghost" onclick={exitReportMode} disabled={busy}>Cancel</button>
-            <button type="button" class="btn primary" onclick={submit} disabled={!allValid || busy}>
-                {busy ? 'Saving…' : `Submit${submitCount ? ` ${submitCount}` : ''}`}
+            <button type="button" class="btn primary" onclick={submit} disabled={!canSubmit || busy}>
+                {submitLabel}
             </button>
         </div>
     </header>
