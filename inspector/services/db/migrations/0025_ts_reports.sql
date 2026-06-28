@@ -106,7 +106,6 @@ CREATE UNIQUE INDEX ux_tsreport_anon
     ON ts_reports(slug, verse_key, category, target_key, anon_token)
     WHERE anon_token IS NOT NULL;
 
-CREATE INDEX ix_tsreport_slug ON ts_reports(slug);
 CREATE INDEX ix_tsreport_slug_verse ON ts_reports(slug, verse_key);
 CREATE INDEX ix_tsreport_slug_status ON ts_reports(slug, status);
 -- Stale-recheck after a regen scans the slug's open reports by chapter.

@@ -27,7 +27,7 @@ Per-category rules (enforced by ``TsReportCreateRequest`` validators):
                 no subtype; comment optional; target word|cell|phoneme|column|cell_group.
                 The human label is derived via ``timing_label``.
 - ``tajweed`` — subtype wrong_rule|missing_rule|should_be_silent|should_not_be_silent;
-                comment optional; target cell|phoneme|cell_group.
+                comment mandatory; target cell|phoneme|cell_group.
 - ``silence`` — pauses live BETWEEN words, so the target is a word-boundary ``gap``
                 (``word_index`` = the word before the gap). Subtype pause_boundary
                 |pause_wasl|pause_missed; selection-only (no comment); ``pause_boundary``
@@ -81,7 +81,7 @@ _ALLOWED_KINDS: dict[str, frozenset[str]] = {
     "other": frozenset({"verse", "word", "cell", "phoneme", "column", "cell_group"}),
 }
 #: categories whose comment is always mandatory.
-_COMMENT_REQUIRED = frozenset({"audio", "mapping", "other"})
+_COMMENT_REQUIRED = frozenset({"audio", "mapping", "tajweed", "other"})
 
 
 def _verse_key_ok(verse_key: str) -> bool:

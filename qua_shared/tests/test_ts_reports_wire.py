@@ -83,26 +83,21 @@ def test_timing_label_matrix():
 
 
 def test_tajweed_subtype_and_target():
+    cell = {"kind": "cell", "word_index": 0, "cell_index": 2}
     TsReportCreateRequest.model_validate(
-        _req(
-            category="tajweed",
-            subtype="wrong_rule",
-            comment=None,
-            target={"kind": "cell", "word_index": 0, "cell_index": 2},
-        )
+        _req(category="tajweed", subtype="wrong_rule", comment="wrong tafkhīm", target=cell)
     )
+    with pytest.raises(ValidationError):  # comment is mandatory for tajweed
+        TsReportCreateRequest.model_validate(
+            _req(category="tajweed", subtype="wrong_rule", comment=None, target=cell)
+        )
     with pytest.raises(ValidationError):  # bad subtype
         TsReportCreateRequest.model_validate(
-            _req(
-                category="tajweed",
-                subtype="not_a_real_subtype",
-                comment=None,
-                target={"kind": "cell", "word_index": 0, "cell_index": 2},
-            )
+            _req(category="tajweed", subtype="not_a_real_subtype", comment="x", target=cell)
         )
     with pytest.raises(ValidationError):  # tajweed cannot target a whole verse
         TsReportCreateRequest.model_validate(
-            _req(category="tajweed", subtype="wrong_rule", comment=None, target={"kind": "verse"})
+            _req(category="tajweed", subtype="wrong_rule", comment="x", target={"kind": "verse"})
         )
 
 
@@ -213,7 +208,7 @@ def test_selected_rule_tags_only_on_tajweed_wrong_rule():
         _req(
             category="tajweed",
             subtype="wrong_rule",
-            comment=None,
+            comment="should be qalqala",
             target={"kind": "cell", "word_index": 0, "cell_index": 2},
             selected_rule_tags=["qalqala"],
         )

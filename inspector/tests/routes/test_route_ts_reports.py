@@ -76,7 +76,12 @@ def test_owner_notified_on_new_report(flask_client, seed_role):
     assert _post(flask_client, _anon_other()).status_code == 201
     notes = repo_notifications.list_active("owner-1")
     assert [n["event"] for n in notes] == ["ts_report.created"]
-    assert notes[0]["payload"]["verse_key"] == "2:45"
+    # The Dashboard rail deep-links to the verse from (slug, payload.verse_key) and
+    # badges by payload.category — assert the whole contract, not just verse_key.
+    note = notes[0]
+    assert note["slug"] == _SLUG
+    assert note["payload"]["verse_key"] == "2:45"
+    assert note["payload"]["category"] == "other"
 
 
 def test_non_owner_cannot_resolve(signed_in_client):
