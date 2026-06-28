@@ -494,6 +494,42 @@ export function assembleWaslGroup(
 }
 
 /**
+ * Reconstruct the per-letter `Letter[]` from a word's cell row when the shard
+ * omits the raw `letters` slot. Re-stamped shards consolidate per-letter facts
+ * into cells + phonemes (the analysis letter row renders straight from those),
+ * leaving the legacy `letters` slot empty — but the teleprompter / filmstrip
+ * still drive their reveal off `Letter[]`. Groups cells by `sourceLetterIndex`
+ * (one orthographic letter per group), takes the group's base glyph, and spans
+ * its phoneme intervals; a group with no audible phoneme is `silent` with null
+ * timing (the char-time stamper inherits a neighbour). `phonemeIndices` are
+ * already verse-flat, so they index `intervals` directly.
+ */
+function lettersFromCells(cells: TsCell[], intervals: PhonemeInterval[]): Letter[] {
+    const out: Letter[] = [];
+    let curLi = -1;
+    let cur: Letter | null = null;
+    for (const c of cells) {
+        const li = c.sourceLetterIndex;
+        if (li < 0) continue; // implicit cell — carries no orthographic letter
+        if (li !== curLi || !cur) {
+            cur = { char: c.chars, start: null, end: null, silent: true };
+            out.push(cur);
+            curLi = li;
+        } else if (!cur.char && c.chars) {
+            cur.char = c.chars;
+        }
+        for (const pi of c.phonemeIndices) {
+            const iv = intervals[pi];
+            if (!iv) continue;
+            cur.silent = false;
+            if (cur.start === null || iv.start < cur.start) cur.start = iv.start;
+            if (cur.end === null || iv.end > cur.end) cur.end = iv.end;
+        }
+    }
+    return out;
+}
+
+/**
  * Core assembler shared by {@link assembleOccasion} (one member) and
  * {@link assembleWaslGroup} (a chain). Flattens every word across all member
  * occasions' segments in audio order; each word's `location` uses ITS OWN
@@ -558,7 +594,7 @@ function assembleMembers(
         const text = qpc[location]?.text ?? '';
         const displayText = dk[location]?.text ?? text;
 
-        const letters: Letter[] = lettersRaw.map((lt) => ({
+        const rawLetters: Letter[] = lettersRaw.map((lt) => ({
             char: lt[0],
             start: lt[1] === null ? null : lt[1] / 1000,
             end: lt[2] === null ? null : lt[2] / 1000,
@@ -614,6 +650,12 @@ function assembleMembers(
                 shareGroup: c.shareGroup == null ? null : c.shareGroup + sgOffset,
             };
         });
+
+        // Prefer the shard's raw `letters`; fall back to cell-derived timing when
+        // a re-stamped shard left the slot empty (cells own the per-letter facts).
+        const letters = rawLetters.length > 0 || cells.length === 0
+            ? rawLetters
+            : lettersFromCells(cells, intervals);
 
         wordsOut.push({
             location, text, display_text: displayText,
