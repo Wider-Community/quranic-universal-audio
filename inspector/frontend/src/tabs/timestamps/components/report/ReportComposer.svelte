@@ -9,6 +9,7 @@
      * keyed by a localStorage token so they can edit/remove across refreshes.
      */
     import { currentUser } from '../../../../lib/stores/current-user';
+    import { pushToast } from '../../../../lib/stores/toast';
     import type { TsReport } from '../../../../lib/types/generated/schemas';
     import { getAnonToken } from '../../../../lib/utils/anon-token';
     import type { ReportCategoryDef } from '../../domain/report-categories';
@@ -79,6 +80,7 @@
             });
             if (!res?.error) {
                 editing = false;
+                pushToast({ kind: 'success', text: 'Thank you for the feedback!' });
                 onchanged();
             }
         } finally {

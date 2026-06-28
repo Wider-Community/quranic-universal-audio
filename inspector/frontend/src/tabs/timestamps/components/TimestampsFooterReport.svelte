@@ -25,7 +25,8 @@
         type SilenceSubtype,
         type TajweedSubtype,
     } from '../stores/report-mode';
-    import { loadReciterReports, openReportedVerseKeys } from '../stores/ts-reports';
+    import { currentVerseReports, loadReciterReports, openReportedVerseKeys } from '../stores/ts-reports';
+    import { get } from 'svelte/store';
     import { selectedVerse } from '../stores/verse';
     import ReportIcon from './report/ReportIcon.svelte';
     import ReportMenu from './report/ReportMenu.svelte';
@@ -36,6 +37,7 @@
     let snapSlug = $state('');
     let snapVerse = $state('');
     let verseReports = $state<TsReport[]>([]);
+    let warmedKey = $state('');
 
     const curSlug = $derived($playerContext.delivery?.slug ?? '');
     const curVerse = $derived($selectedVerse);
@@ -63,15 +65,33 @@
         }
     }
 
+    async function prewarm(): Promise<void> {
+        if (disabled || open) return;
+        const slug = curSlug, verse = curVerse;
+        const key = `${slug}:${verse}`;
+        if (key === warmedKey) return;
+        warmedKey = key;
+        snapSlug = slug;
+        snapVerse = verse;
+        const seed = get(currentVerseReports);
+        if (seed.length) verseReports = seed;
+        await loadVerse();
+    }
+
     function toggle(): void {
         if (open) {
             open = false;
             return;
         }
         if (disabled) return;
+        const key = `${curSlug}:${curVerse}`;
         snapSlug = curSlug;
         snapVerse = curVerse;
-        verseReports = [];
+        if (key !== warmedKey) {
+            const seed = get(currentVerseReports);
+            verseReports = seed.length ? seed : [];
+            warmedKey = key;
+        }
         open = true;
         void loadVerse();
     }
@@ -120,6 +140,7 @@
             class:on={open}
             {disabled}
             onclick={toggle}
+            onpointerenter={prewarm}
             aria-haspopup="menu"
             aria-expanded={open}
             aria-label={`Report a timestamps issue${curVerse ? ` on verse ${curVerse}` : ''}`}
