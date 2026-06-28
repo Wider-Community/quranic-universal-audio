@@ -333,6 +333,14 @@
             }
             occasions.sort((a, b) => a.startMs - b.startMs);
             chapterOccasions = occasions;
+            // New chapter's occasions just replaced the array — invalidate the
+            // focus cursor so the focus pass below ALWAYS re-points `loadedVerse`.
+            // Without this, `focusAt` no-ops when the new target lands on the same
+            // index as the previous chapter's focus (e.g. surah A:1 → surah B:1,
+            // both occasion 0), leaving the analysis view pinned to the old verse
+            // while audio + teleprompter (driven off playerContext) move on.
+            focusIdx = -1;
+            focusRef = '';
             // First-occasion start per distinct verse (ascending) feeds the
             // prev/next-ayah keyboard nav via `adjacentAyahStartMs` (which trusts
             // sorted input) — stepping verses, not occasions.

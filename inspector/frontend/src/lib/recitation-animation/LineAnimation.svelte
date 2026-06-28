@@ -16,7 +16,7 @@
     import { toArabicNumeral, ZWSP } from '../utils/arabic-text';
     import { ayahUnitRanges } from './chapter-words';
     import { cssVarText, type RecitationAnimConfig } from './config';
-    import { buildAnimStructure, type AnimSourceWord } from './engine/build-structure';
+    import { buildAnimStructure, stampCharTimes, type AnimSourceWord } from './engine/build-structure';
     import {
         clearHighlights,
         indexCache,
@@ -24,7 +24,7 @@
     } from './engine/index-cache';
     import { fittedPrefixLength } from './line-window';
     import { type ActiveHit, buildSortedIntervals, findActiveAt } from './recitation-active';
-    import type { AnimUnit } from './types';
+    import type { AnimUnit, TimeSpan } from './types';
 
     /** U+06DD ARABIC END OF AYAH — the same glyph segment cards use. */
     const AYAH_END = '۝';
@@ -80,8 +80,8 @@
         pageCount === null ? ayahEndIdx : Math.min(pageStart + pageCount, ayahEndIdx),
     );
     const pageUnits = $derived(units.slice(pageStart, pageEnd));
-    const structure = $derived(
-        buildAnimStructure(
+    const structure = $derived.by(() => {
+        const s = buildAnimStructure(
             pageUnits.map(
                 (u): AnimSourceWord => ({
                     text: u.text,
@@ -95,8 +95,27 @@
                     letters: u.letters,
                 }),
             ),
-        ),
-    );
+        );
+        // Attach each cluster's per-occurrence [start,end] from the take's OWN
+        // letters, so `sweepChar` reveals a repeat at its real pace rather than
+        // linearly stretching take 1 (the cause of "future letters lit on take 2").
+        for (let wi = 0; wi < s.length; wi++) {
+            const u = pageUnits[wi];
+            const occLetters = u?.occurrenceLetters;
+            const chars = s[wi]!.chars;
+            if (!u || !occLetters || u.intervals.length < 2) continue; // single take → canonical is enough
+            const perChar: (TimeSpan | undefined)[][] = chars.map(() => []);
+            u.intervals.forEach((span, oi) => {
+                const lts = occLetters[oi];
+                const times = lts && lts.length
+                    ? stampCharTimes(chars, lts, span.start, span.end)
+                    : null;
+                chars.forEach((_, di) => perChar[di]!.push(times ? times[di] : undefined));
+            });
+            chars.forEach((ch, di) => { ch.occIntervals = perChar[di]; });
+        }
+        return s;
+    });
 
     // Reset paging whenever the chapter (units identity) changes.
     $effect(() => {
@@ -274,8 +293,10 @@
      *  [start,end]; on a repeat / look-back the audio time is past every letter
      *  of the repeated word, so the whole word read `reached` and the active
      *  letter never travelled back. Instead we locate the active word's CURRENT
-     *  occurrence interval and remap `t` onto the word's canonical letter
-     *  timeline, so repeats re-reveal letter-by-letter.
+     *  occurrence and reveal letter-by-letter against THAT take's own letter
+     *  timings (`ch.occIntervals[occIdx]`, raw playback time) — so a re-recitation
+     *  tracks its own (often slower / melodic) pace. When a take carries no
+     *  per-letter data we fall back to remapping `t` onto the canonical timeline.
      *
      *  Walk order matches the DOM: `.ra-char` spans exist only for words with
      *  `hasChars`, in `structure` order, so the flat `charCache` index advances
@@ -290,11 +311,22 @@
         const occEnd = hit?.ivEnd ?? 0;
         if (active >= 0) lastActive = active;
 
-        // Remap playback time into the active word's canonical letter timeline.
-        // The letters are anchored to the FIRST occurrence (`intervals[0]`), so
-        // we map the CURRENT occurrence's progress onto that span. (Using the
-        // unit's start/end is wrong for repeats: they expand to cover every
-        // occurrence, overshooting all letters → nothing animates on a repeat.)
+        // Which take of the active word is being recited — its index in the unit's
+        // ascending `intervals`. Drives the per-occurrence letter timings, so a
+        // repeat reveals at ITS pace rather than a stretched take 1.
+        let occIdx = -1;
+        if (active >= 0 && hit) {
+            occIdx = pageUnits[active]!.intervals.findIndex(
+                (iv) => iv.start === occStart && iv.end === occEnd,
+            );
+        }
+
+        // Remap playback time into the active word's canonical letter timeline —
+        // the FALLBACK for a take with no per-letter data. The letters are anchored
+        // to the FIRST occurrence (`intervals[0]`), so we map the CURRENT
+        // occurrence's progress onto that span. (Using the unit's start/end is
+        // wrong for repeats: they expand to cover every occurrence, overshooting
+        // all letters → nothing animates on a repeat.)
         let localT = -1;
         if (active >= 0) {
             const canon = pageUnits[active]!.intervals[0] ?? { start: occStart, end: occEnd };
@@ -324,7 +356,14 @@
                 let isActive = false;
                 let isReached = wordReached;
                 const ch = chars[k]!;
-                if (wi === active && localT >= 0) {
+                // Prefer the active take's OWN letter timing (raw playback time);
+                // fall back to the canonical remap when that take lacks per-letter
+                // data (or the unit was built without `occurrenceLetters`).
+                const occIv = wi === active && occIdx >= 0 ? ch.occIntervals?.[occIdx] : undefined;
+                if (wi === active && occIv) {
+                    isActive = t >= occIv.start && t < occIv.end;
+                    isReached = !isActive && t >= occIv.end;
+                } else if (wi === active && localT >= 0) {
                     isActive = localT >= ch.start && localT < ch.end;
                     isReached = !isActive && localT >= ch.end;
                 } else if (active >= 0 && localT >= 0 && sw && (ch.start !== sw.start || ch.end !== sw.end)) {
