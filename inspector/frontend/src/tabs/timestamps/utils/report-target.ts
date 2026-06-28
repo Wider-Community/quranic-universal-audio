@@ -29,7 +29,8 @@ export function timingLabel(onset: TimingDir | null, offset: TimingDir | null): 
         'early|early': 'Shifted earlier',
         'late|late': 'Shifted later',
     };
-    if (key in both) return both[key];
+    const hit = both[key];
+    if (hit) return hit;
     if (onset && !offset) return onset === 'early' ? 'Starts early' : 'Starts late';
     if (offset && !onset) return offset === 'early' ? 'Finishes early' : 'Finishes late';
     return 'Timing';

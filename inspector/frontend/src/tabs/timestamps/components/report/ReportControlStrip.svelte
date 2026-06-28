@@ -17,20 +17,13 @@
         reportMode,
         staged,
         type StagedAnnotation,
-        type TimingSubtype,
         upsertStaged,
     } from '../../stores/report-mode';
     import { currentVerseReports, loadReciterReports, loadVerseReports } from '../../stores/ts-reports';
     import { badgeForTag, silentTooltip } from '../../utils/tajweed-rules';
-    import { targetCellKey } from '../../utils/report-target';
+    import { targetCellKey, type TimingDir, timingLabel } from '../../utils/report-target';
     import { submitReportSession } from '../../services/report-submit';
     import ReportIcon from './ReportIcon.svelte';
-
-    const TIMING_OPTS: { id: TimingSubtype; icon: string; label: string }[] = [
-        { id: 'too_long', icon: 'too_long', label: 'Too long' },
-        { id: 'too_short', icon: 'too_short', label: 'Too short' },
-        { id: 'other', icon: 'timing_other', label: 'Other' },
-    ];
 
     let busy = $state(false);
     let error = $state('');
@@ -57,10 +50,12 @@
             .map((r) => r.id);
     });
 
-    function pickTiming(a: StagedAnnotation, st: TimingSubtype): void {
+    /** Toggle a boundary axis: click the active direction again to clear it (the
+     *  boundary is fine), or switch to the other direction. */
+    function setAxis(a: StagedAnnotation, axis: 'onset' | 'offset', dir: TimingDir): void {
         if (a.kind !== 'timing') return;
         focusCell(a.cellKey);
-        upsertStaged({ ...a, subtype: st });
+        upsertStaged({ ...a, [axis]: a[axis] === dir ? null : dir });
     }
     function pickRule(a: StagedAnnotation, tag: string): void {
         if (a.kind !== 'tajweed') return;
@@ -101,7 +96,7 @@
     const headTitle = $derived(mode.kind === 'tajweed' ? 'Report a tajweed issue' : 'Report a timing issue');
     const instruction = $derived(
         mode.kind === 'timing'
-            ? 'Click a letter or word to flag it, then say how its timing is off.'
+            ? 'Click a letter or word, then mark how its start and/or end is off.'
             : mode.kind === 'tajweed' && mode.subtype === 'wrong_rule'
               ? 'Highlighted cells carry a rule — click one to flag the wrong rule.'
               : 'Click any cell where a rule should apply but is missing.',
@@ -140,13 +135,23 @@
                         <span class="cell-lbl">{cellLabel(a)}</span>
                         <div class="ctl">
                             {#if a.kind === 'timing'}
-                                {#each TIMING_OPTS as o (o.id)}
-                                    <button
-                                        type="button" class="opt" class:on={a.subtype === o.id}
-                                        aria-pressed={a.subtype === o.id} title={o.label}
-                                        onclick={() => pickTiming(a, o.id)}
-                                    ><ReportIcon name={o.icon} size={14} /> {o.label}</button>
-                                {/each}
+                                <span class="axis-cap">Start</span>
+                                <div class="seg" role="group" aria-label="Start boundary">
+                                    <button type="button" class="opt" class:on={a.onset === 'early'}
+                                        aria-pressed={a.onset === 'early'} onclick={() => setAxis(a, 'onset', 'early')}>early</button>
+                                    <button type="button" class="opt" class:on={a.onset === 'late'}
+                                        aria-pressed={a.onset === 'late'} onclick={() => setAxis(a, 'onset', 'late')}>late</button>
+                                </div>
+                                <span class="axis-cap">End</span>
+                                <div class="seg" role="group" aria-label="End boundary">
+                                    <button type="button" class="opt" class:on={a.offset === 'early'}
+                                        aria-pressed={a.offset === 'early'} onclick={() => setAxis(a, 'offset', 'early')}>early</button>
+                                    <button type="button" class="opt" class:on={a.offset === 'late'}
+                                        aria-pressed={a.offset === 'late'} onclick={() => setAxis(a, 'offset', 'late')}>late</button>
+                                </div>
+                                {#if a.onset || a.offset}
+                                    <span class="derived">{timingLabel(a.onset, a.offset)}</span>
+                                {/if}
                             {:else if a.subtype === 'wrong_rule' && a.ruleOptions.length > 0}
                                 {#each a.ruleOptions as tag (tag)}
                                     <button
@@ -165,7 +170,7 @@
                         </div>
                         <input
                             class="cmt" type="text"
-                            placeholder={a.kind === 'tajweed' || a.subtype === 'other' ? 'Comment (required)…' : 'Note (optional)…'}
+                            placeholder={a.kind === 'tajweed' ? 'Comment (required)…' : 'Note (optional)…'}
                             value={a.comment}
                             oninput={(e) => editComment(a, e.currentTarget.value)}
                         />
@@ -235,6 +240,13 @@
     }
     .opt:hover, .rule:hover { color: var(--text-primary); border-color: var(--border-strong); }
     .opt.on, .rule.on { color: var(--accent); background: var(--accent-tint); border-color: var(--accent); }
+
+    .axis-cap { font-size: var(--fs-meta); font-weight: 600; color: var(--text-muted); }
+    .seg { display: inline-flex; gap: 3px; }
+    .derived {
+        padding: 2px var(--s-2); font-size: var(--fs-meta); font-weight: 600;
+        color: var(--accent); background: var(--accent-tint); border-radius: var(--r-2);
+    }
 
     .existing-lbl { font-size: var(--fs-meta); color: var(--text-muted); }
     .rule-chip {

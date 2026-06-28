@@ -27,7 +27,7 @@ import { derived, get, writable } from 'svelte/store';
 import { dashPort } from '../../../lib/playback/dash-port';
 import { exitLoop } from '../../../lib/playback/loop';
 import type { TsReportTarget } from '../../../lib/types/generated/schemas';
-import { type CellKey, targetCellKey } from '../utils/report-target';
+import { type CellKey, targetCellKey, type TimingDir } from '../utils/report-target';
 import { showLetters, showPhonemes } from './display';
 import {
     forceAllTajweedEnabled,
@@ -36,7 +36,6 @@ import {
 } from './tajweed-settings';
 import { currentVerseReports } from './ts-reports';
 
-export type TimingSubtype = 'too_long' | 'too_short' | 'other';
 export type TajweedSubtype = 'wrong_rule' | 'missing_rule';
 
 export type ReportMode =
@@ -52,7 +51,10 @@ export interface StagedTiming {
     cellKey: CellKey;
     target: TsReportTarget;
     wordIndex: number;
-    subtype: TimingSubtype | null;
+    /** Boundary axes — at least one must be set for the report to be complete.
+     *  `null` on an axis = that boundary is fine. */
+    onset: TimingDir | null;
+    offset: TimingDir | null;
     comment: string;
     /** Set when seeded from the caller's own existing report (→ delete on remove). */
     originalId?: number;
@@ -99,8 +101,7 @@ export function clearStaged(): void {
  *  survive Submit (and not be auto-discarded when focus moves away). */
 export function isStagedComplete(a: StagedAnnotation): boolean {
     if (a.kind === 'timing') {
-        if (!a.subtype) return false;
-        return a.subtype !== 'other' || a.comment.trim().length > 0;
+        return a.onset !== null || a.offset !== null; // ≥1 boundary flagged; comment optional
     }
     const needsRule = a.subtype === 'wrong_rule' && a.ruleOptions.length > 0;
     if (needsRule && a.selectedRuleTags.length === 0) return false;
@@ -134,7 +135,8 @@ function seedOwnFlags(category: 'timing' | 'tajweed', subtype?: TajweedSubtype):
                 cellKey: key,
                 target: r.target,
                 wordIndex: r.target.word_index ?? -1,
-                subtype: (r.subtype as TimingSubtype | null) ?? null,
+                onset: (r.onset as TimingDir | null) ?? null,
+                offset: (r.offset as TimingDir | null) ?? null,
                 comment: r.comment ?? '',
                 originalId: r.id,
             });
