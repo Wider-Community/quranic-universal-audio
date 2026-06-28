@@ -89,7 +89,9 @@ export function findActiveAt(
         else hi = mid - 1;
     }
     const iv = sorted[lo]!;
-    if (t < iv.end) return { unitIdx: iv.unitIdx, ivStart: iv.start, ivEnd: iv.end };
+    if (t < iv.end) {
+        return { unitIdx: iv.unitIdx, ivStart: iv.start, ivEnd: iv.end };
+    }
     return null;
 }
 

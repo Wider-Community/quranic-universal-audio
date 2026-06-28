@@ -224,6 +224,10 @@ export interface SegmentEntry {
     ref: string;
     t: [number, number];
     words: TsShardWord[];
+    /** Schema v10: present (and `true`) ONLY when this take continues into the
+     *  next segment without a stop (cross-verse waṣl). Absent on v9- shards, so
+     *  every waṣl consumer treats `undefined` as "no bridge" and no-ops. */
+    wasl?: boolean;
 }
 
 /** Body of one chapter shard (decompressed): slim `_meta` + a flat

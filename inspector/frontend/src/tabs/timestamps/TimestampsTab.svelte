@@ -56,6 +56,7 @@
     import UnifiedDisplay from './components/UnifiedDisplay.svelte';
     import {
         assembleOccasion,
+        assembleWaslGroup,
         chapterVerseRefs,
         getRandomTarget,
         loadChapterShard,
@@ -68,7 +69,10 @@
         loadVerseTranslations,
         reciterAudioFromManifest,
         shardOccasions,
+        type TsReciterAudio,
     } from './services/ts_client';
+    import type { ChapterOccasion } from '../../lib/recitation-data/occasions';
+    import { isInWaslGroup, waslGroupOf } from '../../lib/recitation-data/wasl';
     import { findTsEntryBySlug, isTsCapable, resolveTsDeliveries } from './services/ts-published';
     import {
         showLetters,
@@ -85,10 +89,12 @@
     import { manualShuffleRequest, shuffleAyah, shuffleMode } from './stores/shuffle';
     import { tsValidation } from './stores/validation';
     import {
+        focusWaslGroup,
         loadedVerse,
         selectedChapter,
         selectedReciter,
         selectedVerse,
+        type TsFocusWaslGroup,
         type TsLoadedVerse,
     } from './stores/verse';
     import { occasionIndexAt, resolveShuffleTick, shouldFireShuffle } from './utils/shuffle-tick';
@@ -114,6 +120,11 @@
         startMs: number;
         endMs: number;
         lv: TsLoadedVerse;
+        /** The raw occasion (carries `bridgesOutTo` + segments) for waṣl grouping. */
+        occ: ChapterOccasion;
+        /** The cross-verse waṣl group this occasion belongs to (by_surah only),
+         *  precomputed at chapter load; null/undefined when standalone. */
+        waslGroup?: TsFocusWaslGroup;
     }
     /** Every occasion in the chapter, in audio order (a verse ref may repeat). */
     let chapterOccasions: ChapOccasion[] = [];
@@ -329,9 +340,11 @@
                     startMs: data.time_start_ms,
                     endMs: data.time_end_ms,
                     lv: { data, tsSegOffset: data.time_start_ms / 1000, tsSegEnd: data.time_end_ms / 1000 },
+                    occ,
                 });
             }
             occasions.sort((a, b) => a.startMs - b.startMs);
+            attachWaslGroups(occasions, slug, qpc, dk, reciterAudio, chapterUrl);
             chapterOccasions = occasions;
             // New chapter's occasions just replaced the array — invalidate the
             // focus cursor so the focus pass below ALWAYS re-points `loadedVerse`.
@@ -403,6 +416,37 @@
         }
     }
 
+    /** Precompute the cross-verse waṣl group for each member occasion (by_surah
+     *  only) so focusing any member shows the whole continuous span. The merged
+     *  `TsVerseData` is built once per group and shared across its members (only
+     *  the focus ref differs); a standalone occasion gets no `waslGroup`. Group
+     *  members stay adjacent after the start-ms sort (a waṣl is gapless), so the
+     *  walk over the sorted raw occasions matches `bridgesOutTo` adjacency. */
+    function attachWaslGroups(
+        occasions: ChapOccasion[],
+        reciter: string,
+        qpc: Record<string, { text?: string }>,
+        dk: Record<string, { text?: string }>,
+        reciterAudio: TsReciterAudio,
+        chapterUrl: string,
+    ): void {
+        if (reciterAudio.audio_category !== 'by_surah') return; // span needs one chapter file
+        const raw = occasions.map((o) => o.occ);
+        for (let i = 0; i < occasions.length; i++) {
+            if (!isInWaslGroup(raw, i)) continue;
+            const grp = waslGroupOf(raw, i);
+            // The merged cells are 0-anchored to the group start; the analysis +
+            // waveform key off `span[0]` as the display offset.
+            const data = assembleWaslGroup(
+                reciter, raw.slice(grp.fromIdx, grp.toIdx + 1),
+                occasions[i]!.ref, qpc, dk, reciterAudio, chapterUrl,
+            );
+            occasions[i]!.waslGroup = {
+                data, span: [grp.startMs, grp.endMs], refs: grp.refs, focusRef: occasions[i]!.ref,
+            };
+        }
+    }
+
     /** Focus the occasion at index `i` in `chapterOccasions`. */
     function setFocusByIndex(i: number): void {
         const v = chapterOccasions[i];
@@ -410,6 +454,9 @@
         focusIdx = i;
         focusRef = v.ref;
         loadedVerse.set(v.lv);
+        // The whole continuous waṣl span (read-only context) when the focus is a
+        // group member; null for a standalone verse.
+        focusWaslGroup.set(v.waslGroup ?? null);
         selectedVerse.set(v.ref);
         // Publish to the shell-level focus store so NowReciting's filmstrip
         // bookmark button can mirror the focus without running its own rAF.
@@ -476,7 +523,10 @@
         // focus stays PINNED to the loop verse (no focusAt advance).
         const loop = get(loopTarget);
         if (loop && loopAnchor) {
-            const offsetSec = loopAnchor.startMs / 1000;
+            // The loop target's start/end are relative to the DISPLAY base — the
+            // waṣl group start when the anchor is a group member, else its own
+            // occasion start (matches UnifiedDisplay's `displayOffsetSec`).
+            const offsetSec = (loopAnchor.waslGroup ? loopAnchor.waslGroup.span[0] : loopAnchor.startMs) / 1000;
             const startAbs = (loop.startSec + offsetSec) * 1000;
             const endAbs = (loop.endSec + offsetSec) * 1000;
             if (ms >= endAbs) {
@@ -672,22 +722,30 @@
                 loadQpc(), loadDk(), loadManifest(),
             ]);
             const ra = reciterAudioFromManifest(manifest, target.reciter);
-            const occ = ra
-                ? shardOccasions(shard).find((o) => o.ref === target.verseRef)
-                : undefined;
+            const occs = ra ? shardOccasions(shard) : [];
+            const idx = occs.findIndex((o) => o.ref === target.verseRef);
+            const occ = idx >= 0 ? occs[idx] : undefined;
             const data = ra && occ
                 ? assembleOccasion(target.reciter, occ, qpc, dk, ra, rawUrl)
                 : null;
-            if (data) {
+            if (data && ra) {
                 seekSec = data.time_start_ms / 1000;
-                // Warm the target verse's peaks (baked tier or ffmpeg/CDN
-                // fallback) + glosses so both render instantly on the jump.
+                // Warm the whole waṣl group span when the target is in one
+                // (by_surah) so the merged waveform + analysis land ready; else
+                // just the target verse. Baked tier or ffmpeg/CDN fallback.
+                let warmStartMs = Math.max(0, Math.round(data.time_start_ms));
+                let warmEndMs = Math.round(data.time_end_ms);
+                if (ra.audio_category === 'by_surah' && isInWaslGroup(occs, idx)) {
+                    const grp = waslGroupOf(occs, idx);
+                    warmStartMs = Math.max(0, Math.round(grp.startMs));
+                    warmEndMs = Math.round(grp.endMs);
+                }
                 void prewarmVersePeaks(
                     target.reciter,
                     target.chapter,
                     data.audio_url ?? rawUrl,
-                    Math.max(0, Math.round(data.time_start_ms)),
-                    Math.round(data.time_end_ms),
+                    warmStartMs,
+                    warmEndMs,
                 );
                 if (get(showTranslations) && data.words.length) {
                     void loadVerseTranslations(data.words, get(translationLanguage)).catch(() => {});

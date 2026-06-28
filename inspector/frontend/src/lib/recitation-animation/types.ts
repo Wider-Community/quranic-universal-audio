@@ -18,6 +18,12 @@ export interface AnimLetter {
 export interface TimeSpan {
     start: number;
     end: number;
+    /** Set on the occurrence that is the LAST word of a take that waṣl-bridges
+     *  into the next verse; value = the target ayahKey ("14:2"). Per-occurrence,
+     *  so a verse recited as both a stop take and a bridge take carries it on
+     *  only the bridging occurrence. A boundary that bridges in any take renders
+     *  permanently merged. Absent otherwise. */
+    waslTo?: string;
 }
 
 /** One animatable word with chapter-absolute timing (seconds). Each canonical
