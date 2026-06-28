@@ -20,17 +20,24 @@ export const reportedVerses = writable<TsReportVerseCount[]>([]);
  *  Loaded on verse change. */
 export const currentVerseReports = writable<TsReport[]>([]);
 
-/** Reload the loaded verse's reports. Silent on failure (flags are non-critical).
- *  Guard against a stale verse switch in the caller. */
+// Stale-load guard: tracks the most-recently requested verse token so a slow
+// fetch for a superseded verse can't overwrite the current verse's data.
+let _latestVerseKey = '';
+
+/** Reload the loaded verse's reports. Silent on failure (flags are non-critical). */
 export async function loadVerseReports(slug: string, verseKey: string): Promise<void> {
     if (!slug || !verseKey) {
         currentVerseReports.set([]);
         return;
     }
+    const token = `${slug}|${verseKey}`;
+    _latestVerseKey = token;
     try {
         const doc = await getVerseReports(slug, verseKey);
+        if (token !== _latestVerseKey) return;
         currentVerseReports.set(doc.reports ?? []);
     } catch {
+        if (token !== _latestVerseKey) return;
         currentVerseReports.set([]);
     }
 }

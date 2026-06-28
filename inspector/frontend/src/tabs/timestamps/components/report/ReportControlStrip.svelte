@@ -66,8 +66,6 @@
         return (a.target.phoneme_flat_index ?? -1) < 0 ? 'merger' : '•';
     }
 
-    const canSubmit = $derived(stagedList.every(isStagedComplete) && (stagedList.length > 0 || removedIds.length > 0));
-
     const removedIds = $derived.by(() => {
         const cat = mode.kind === 'inactive' ? '' : mode.kind;
         // A silence session is single-subtype (target_key is subtype-free → one
@@ -86,6 +84,13 @@
             )
             .map((r) => r.id);
     });
+
+    // Submittable when every staged item is complete AND there's at least one
+    // change to persist — a staged create or a pending removal (so a session that
+    // removes all its seeded reports can still commit the deletions).
+    const canSubmit = $derived(
+        stagedList.every(isStagedComplete) && (stagedList.length > 0 || removedIds.length > 0),
+    );
 
     /** Toggle a boundary axis: click the active direction again to clear it (the
      *  boundary is fine), or switch to the other direction. Used by timing rows and

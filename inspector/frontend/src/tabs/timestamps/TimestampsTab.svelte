@@ -489,6 +489,12 @@
     function tick(): void {
         const ms = dashPort.currentTimeMs();
 
+        // While a report session is active the focus verse must stay looped so
+        // playback can't advance out of the session. Re-arm the whole-verse loop
+        // whenever it's missing — covers an entry-time no-op (occasions not yet
+        // loaded) and any cleared narrowed cell/gap loop.
+        if (get(reportModeActive) && !get(loopTarget)) armVerseLock();
+
         // rAF seek-back loop (no kill-switch on the shared port; ≤1 frame
         // overshoot). The loop window is computed against the CAPTURED loop
         // anchor offset, never the live focus verse — a boundary-frame

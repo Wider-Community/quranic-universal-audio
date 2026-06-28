@@ -31,7 +31,7 @@
 
     const signedIn = $derived(isSignedIn($currentUser));
     const canEmail = can('notify.email_subscriptions');
-    const canSeeReporter = can('timestamps.see_flagger_identity');
+    const canSeeReporter = can('timestamps.see_reporter_identity');
     // The rail is the email-subscribe entry point for everyone (incl. anonymous),
     // so it shows whenever email is available — not only for signed-in users or
     // when an announcement is active.
@@ -126,7 +126,8 @@
                 };
             }
             case 'ts_report.created':
-            case 'ts_report.resolved': {
+            case 'ts_report.resolved':
+            case 'ts_report.auto_resolved': {
                 const verseKey =
                     typeof n.payload?.verse_key === 'string' ? n.payload.verse_key : '';
                 if (!slug || !verseKey) return null;
@@ -170,6 +171,7 @@
             case 'ts_report.created':
                 return 'Timestamps · report';
             case 'ts_report.resolved':
+            case 'ts_report.auto_resolved':
                 return 'Timestamps · resolved';
             default:
                 return null;
