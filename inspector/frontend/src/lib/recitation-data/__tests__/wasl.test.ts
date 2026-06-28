@@ -22,7 +22,7 @@ function seg(ref: string, t0: number, t1: number, lo: number, hi: number, wasl?:
 
 describe('chapterOccasions — waṣl annotation', () => {
     it('back-stamps bridgesOutTo on the bridging occasion only', () => {
-        // 14:1 (stop) | 14:2 | 14:1 (waṣl»14:2) | 14:2  — the showcase dynamic case.
+        // 14:1 (stop) | 14:2 | 14:1 (waṣl»14:2) | 14:2 — only the bridging take stamps.
         const occ = chapterOccasions([
             seg('14:1', 0, 1000, 1, 16),
             seg('14:2', 1000, 2000, 1, 9),
@@ -33,17 +33,7 @@ describe('chapterOccasions — waṣl annotation', () => {
         expect(occ.map((o) => o.bridgesOutTo)).toEqual([null, null, '14:2', null]);
     });
 
-    it('marks the boundary dynamic when the same pair also stops elsewhere', () => {
-        const occ = chapterOccasions([
-            seg('14:1', 0, 1000, 1, 16), // 14:1→14:2 crossed as a STOP here
-            seg('14:2', 1000, 2000, 1, 9),
-            seg('14:1', 2000, 3000, 13, 16, true), // …and as a WAṢL here
-            seg('14:2', 3000, 4000, 1, 9),
-        ]);
-        expect(occ[2]!.bridgesDynamic).toBe(true);
-    });
-
-    it('keeps a pure chain static (every crossing is waṣl, never a stop)', () => {
+    it('back-stamps every link of a pure waṣl chain', () => {
         const occ = chapterOccasions([
             seg('20:25', 0, 1000, 1, 4, true),
             seg('20:26', 1000, 2000, 1, 5, true),
@@ -51,7 +41,6 @@ describe('chapterOccasions — waṣl annotation', () => {
             seg('20:28', 3000, 4000, 1, 7),
         ]);
         expect(occ.map((o) => o.bridgesOutTo)).toEqual(['20:26', '20:27', '20:28', null]);
-        expect(occ.every((o) => !o.bridgesDynamic)).toBe(true);
     });
 
     it('no-ops on a v9 shard (no wasl flags)', () => {
@@ -59,7 +48,7 @@ describe('chapterOccasions — waṣl annotation', () => {
             seg('2:5', 0, 1000, 1, 3),
             seg('2:6', 1000, 2000, 1, 4),
         ]);
-        expect(occ.every((o) => o.bridgesOutTo === null && !o.bridgesDynamic)).toBe(true);
+        expect(occ.every((o) => o.bridgesOutTo === null)).toBe(true);
     });
 });
 
@@ -77,7 +66,6 @@ describe('chapterWaslJunctions', () => {
             toWords: [1, 5],
             leaveMs: 1000,
             enterMs: 1000,
-            dynamic: false,
         });
     });
 

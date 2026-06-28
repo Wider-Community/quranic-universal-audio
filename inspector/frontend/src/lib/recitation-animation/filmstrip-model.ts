@@ -79,13 +79,10 @@ export interface VerseCell {
      *  playback + navigation. Default `none` when no coverage is supplied. */
     missing: CellMissing;
     /** True when some take of this verse waṣl-bridges into the NEXT present verse
-     *  (cross-verse continuation). Drives the gapless mega-cell + link connector.
-     *  `false` on placeholders + the last cell. */
+     *  (cross-verse continuation). Drives the gapless mega-cell + accent rail —
+     *  any-take-bridges renders permanently merged. `false` on placeholders + the
+     *  last cell. */
     waslNext: boolean;
-    /** True when that boundary is take-dependent (bridges in one take, stops in
-     *  another) → the filmstrip animates the join/break; `false` → permanently
-     *  merged. Only meaningful when `waslNext`. */
-    waslDynamic: boolean;
 }
 
 export interface FilmstripModel {
@@ -127,7 +124,6 @@ function placeholderCell(surah: number, ayah: number): VerseCell {
         nextGapSec: 0,
         missing: 'full',
         waslNext: false,
-        waslDynamic: false,
     };
 }
 
@@ -189,7 +185,6 @@ export function buildFilmstripModel(
             nextGapSec: 0,
             missing: coverage?.status.get(head.ayah) === 'words' ? 'words' : 'none',
             waslNext: false, // refined in `_assemble` (needs the next present cell)
-            waslDynamic: false,
         });
     }
 
@@ -242,14 +237,12 @@ function _assemble(cells: VerseCell[], units: AnimUnit[]): FilmstripModel {
         const nextStart = cells[nextIdx]!.canonStartSec;
         // Cross-verse waṣl: does any take of this verse bridge into the next
         // present verse? The flag rides the bridging take's last-word occurrence
-        // (`waslTo` = target ayahKey); `waslDynamic` says whether that boundary is
-        // also crossed as a stop (animate) vs always merged.
+        // (`waslTo` = target ayahKey). Any-take-bridges → permanently merged.
         const nextKey = cells[nextIdx]!.ayahKey;
         for (let u = c.unitStart; u < c.unitEnd && !c.waslNext; u++) {
             for (const iv of units[u]!.intervals) {
                 if (iv.waslTo === nextKey) {
                     c.waslNext = true;
-                    c.waslDynamic = !!iv.waslDynamic;
                     break;
                 }
             }

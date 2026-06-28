@@ -20,9 +20,6 @@ export interface SortedInterval {
     start: number;
     end: number;
     unitIdx: number;
-    /** Target ayahKey when this occurrence's take waṣl-bridges into the next
-     *  verse (the last word of a bridging take); undefined otherwise. */
-    waslTo?: string;
 }
 
 /** A located active unit + the occurrence interval containing the query time.
@@ -31,10 +28,6 @@ export interface ActiveHit {
     unitIdx: number;
     ivStart: number;
     ivEnd: number;
-    /** Set when the located occurrence is the last word of a take that
-     *  waṣl-bridges into the next verse; value = target ayahKey. Lets the
-     *  filmstrip + teleprompter react to the LIVE take without re-matching. */
-    waslTo?: string;
 }
 
 /**
@@ -48,7 +41,7 @@ export function buildSortedIntervals(units: AnimUnit[]): SortedInterval[] {
     for (let i = 0; i < units.length; i++) {
         const u = units[i]!;
         for (const iv of u.intervals) {
-            out.push({ start: iv.start, end: iv.end, unitIdx: i, waslTo: iv.waslTo });
+            out.push({ start: iv.start, end: iv.end, unitIdx: i });
         }
     }
     out.sort((a, b) => a.start - b.start);
@@ -80,7 +73,7 @@ export function findActiveAt(
         const u = units[cand]!;
         for (const iv of u.intervals) {
             if (t >= iv.start && t < iv.end) {
-                return { unitIdx: cand, ivStart: iv.start, ivEnd: iv.end, waslTo: iv.waslTo };
+                return { unitIdx: cand, ivStart: iv.start, ivEnd: iv.end };
             }
         }
     }
@@ -97,7 +90,7 @@ export function findActiveAt(
     }
     const iv = sorted[lo]!;
     if (t < iv.end) {
-        return { unitIdx: iv.unitIdx, ivStart: iv.start, ivEnd: iv.end, waslTo: iv.waslTo };
+        return { unitIdx: iv.unitIdx, ivStart: iv.start, ivEnd: iv.end };
     }
     return null;
 }

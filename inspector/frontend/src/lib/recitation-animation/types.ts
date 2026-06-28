@@ -21,12 +21,9 @@ export interface TimeSpan {
     /** Set on the occurrence that is the LAST word of a take that waṣl-bridges
      *  into the next verse; value = the target ayahKey ("14:2"). Per-occurrence,
      *  so a verse recited as both a stop take and a bridge take carries it on
-     *  only the bridging occurrence. Absent otherwise. */
+     *  only the bridging occurrence. A boundary that bridges in any take renders
+     *  permanently merged. Absent otherwise. */
     waslTo?: string;
-    /** Rides with `waslTo`: true when that boundary is take-dependent (also
-     *  crossed as a stop elsewhere) → the filmstrip animates the merge; false →
-     *  permanently merged. (From `ChapterOccasion.bridgesDynamic`.) */
-    waslDynamic?: boolean;
 }
 
 /** One animatable word with chapter-absolute timing (seconds). Each canonical

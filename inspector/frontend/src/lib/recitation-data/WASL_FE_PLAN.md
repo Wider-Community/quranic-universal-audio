@@ -11,7 +11,7 @@ This plan wires the flag through the FE data layer and lands four user-facing wa
 **Design methodology:** built with the repo's `impeccable` skill (run `node .claude/skills/impeccable/scripts/context.mjs` once, then `impeccable craft`/`animate` for the filmstrip motion); in-browser verified with Playwright on real waṣl reciters.
 
 ### Decisions locked (from user)
-- **Filmstrip merge = dynamic geometry.** Cells animate apart/together **synced to the takes**, paced to the **continuous-glide cursor velocity** (riding the existing repeat-back "back in time" transport). A full **static-vs-dynamic edge-case table** (below) is the spec; statically-merged boundaries never animate apart, dynamic ones do.
+- **Filmstrip merge = static only.** A boundary that bridges in *any* take renders permanently merged (gapless mega-cell + accent rail, zero per-frame cost). With only **2 dynamic boundaries in the whole 22-reciter corpus**, the per-frame join/break animation wasn't worth the code — the 2 dynamic pairs are folded into the static treatment (they render merged even in the take where the reciter stops). The edge-case table below is kept as the corpus map; the "Dynamic" rows now render exactly like the static ones.
 - **Analysis cells = display-only context merge.** The bridged verse's cells render as read-only context (so junction tajweed shows across the boundary); editing/loop/validation stay scoped to the focused verse.
 - **Waveform = auto-span the whole bridge** — including **peak computation fetched directly over the group span**, and the **random-ayah prewarmer accounting for a cross-verse-group target**.
 - **Naming guard:** "bridge" is already taken for cross-word idgham (`PhonemeInterval.bridge`, `RenderedBridge`, `.pause-bridge`, …). All new identifiers use **`wasl` / `waslJunction`**, never `bridge`.
@@ -19,46 +19,44 @@ This plan wires the flag through the FE data layer and lands four user-facing wa
 
 ---
 
-## Edge-case spec — static vs dynamic (grounded in the 22-reciter v10 corpus)
+## Edge-case spec (grounded in the 22-reciter v10 corpus)
 
-Corpus reality: **601 static** boundaries vs **2 dynamic**. Static = the ordered pair (verse N adjacent to N+1) bridges in *every* take that crosses it ⇒ render permanently merged, no animation. Dynamic = the pair has *both* a bridging take and a stopping take ⇒ animate join/break, paced to glide.
+Corpus reality: **601 static** boundaries vs **2 dynamic**. A boundary that bridges in *any* take renders permanently merged. The "Dynamic" rows below (the 2 pairs that *also* stop in some take) are folded into the same static merge — they render merged even on the stop take. Kept in the table as the corpus map; there is no per-frame join/break animation.
 
 | # | Case | Class | Filmstrip behaviour | Real example(s) |
 |---|------|-------|---------------------|-----------------|
-| 1 | Single-take CV (verse recited once, bridges) | **Static** | Permanent gapless mega-cell + always-on connector | `ghraio_2025` 101:6»101:7; `husary_mujawwad` 56:66»56:67 |
+| 1 | Single-take CV (verse recited once, bridges) | **Static** | Permanent gapless mega-cell + accent rail | `ghraio_2025` 101:6»101:7; `husary_mujawwad` 56:66»56:67 |
 | 2 | Multi-verse chain 2+ (3–4 verses) | **Static** | Contiguous mega-group; every internal edge gapless | `abdulwadood` 20:25»26»27»28 (4); 26:46»47»48 (3) |
 | 3 | Trailing-partial bridge (leaving take starts mid-verse, `lo>1`) | **Static** | Merged; leading cell width is the partial take | `ghraio` 30:4[10-12]»30:5; `abdulwadood` 2:219[20-26]»2:220; `ghraio` 17:107[16-18]»17:108 |
 | 4 | Leading verse repeated, a full take bridges | **Static** | Boundary always bridges → merged; leading cell still holds its repeats (one cell) | `abdulwadood` 20:106»107 (2 takes); 30:4»30:5; 37:34»35 |
-| 5 | Lookback then bridge (reciter steps back, strip glides "back in time") | **Dynamic** | Merge re-forms as the bridging take replays; gap eased at glide velocity | `ayman_swed` ch14 (14:2 → back to 14:1[13-16]»14:2); `abdulwadood` ch30 (30:5 → 30:4»30:5) |
-| 6 | Same pair bridges in one take, **stops** in another (the showcase) | **Dynamic** | Cells animate together on the bridging take, apart on the stop take | `ayman_swed` ch14 14:1↔14:2; ch8 8:62↔8:63 — *the only 2 in the corpus* |
+| 5 | Lookback then bridge (reciter steps back, strip glides "back in time") | Folded → static | Boundary merged (any take bridges); the lookback replays inside the merged group | `ayman_swed` ch14 (14:2 → back to 14:1[13-16]»14:2); `abdulwadood` ch30 (30:5 → 30:4»30:5) |
+| 6 | Same pair bridges in one take, **stops** in another (the only dynamic) | Folded → static | Permanently merged — renders merged even on the stop take | `ayman_swed` ch14 14:1↔14:2; ch8 8:62↔8:63 — *the only 2 in the corpus* |
 | 7 | Overlapping consecutive (chain pivot is both `toRef` and `fromRef`) | **Static** | Pivot cell shares both inner edges → one continuous capsule | `abdulwadood` 20:26 & 20:27 (in 25»26»27»28); 26:47 — 118 pivots total |
-| 8 | Chain changing count across takes (3 → 2) | **Dynamic** (theoretical) | Per-take chain length is independent; merge reflects the active take's reach | none in corpus — mechanism must handle gracefully |
+| 8 | Chain changing count across takes (3 → 2) | Folded → static | Any-take-bridges merges each boundary independently | none in corpus — handled gracefully |
 | 9 | Chapter-edge / no next / unrecited neighbour | n/a | No merge (guarded: you cannot waṣl into an unrecited verse) | last verse of any chapter |
 | 10 | v9 shard (no `wasl`) | n/a | Feature no-ops; renders exactly as today | any non-migrated reciter |
 
-**Implementation rule:** the model precomputes, per cell-boundary, `waslNext` (bridges in ≥1 take) and `waslDynamic` (also stops in ≥1 take). Static (`waslNext && !waslDynamic`) ⇒ gap pinned to 0, mega-cell + connector always on, zero per-frame cost. Dynamic ⇒ gap is an animated value in `[0, G]` driven by the live take, eased with the scroll controller's Hermite glide so a join/break travels at the same px/sec as the strip.
+**Implementation rule:** the model precomputes one flag per cell-boundary, `waslNext` (bridges in ≥1 take). `waslNext` ⇒ gap pinned to 0, mega-cell + accent rail always on, zero per-frame cost. No dynamic path.
 
 ---
 
 ## A. Data foundation (shared; no UI) — enables all four features
 
 1. **`SegmentEntry.wasl`** — add `wasl?: boolean` to `lib/types/ts-client.ts` (~223). The shard is parsed as raw JSON objects (only `words` rows are positionally decoded), so this single type field is the *entire* decode; absent on v9 ⇒ `undefined` ⇒ no-op (case 10).
-2. **`occasions.ts` → `bridgesOutTo`** — add `bridgesOutTo: string | null` to `ChapterOccasion`; one-line back-stamp in the existing loop (a cross-verse waṣl is, by construction, an occasion's last segment continuing into the next occasion). Also compute `waslDynamic` per boundary (a stop-adjacency for the same ordered pair exists in the stream).
-3. **New `lib/recitation-data/wasl.ts`** — the reusable `isWaslBridge`/`groupItems` walk from `WASL_FE.md`, pure and shard-level: `chapterWaslJunctions(occasions)` → `WaslJunction[]` ({fromRef, toRef, fromWords, toWords, leaveMs, enterMs}), `isPartialTake(words, verseWordCount)`, and `waslGroupSpan(focusOcc)` → `[startMs, endMs, refs[]]` (the maximal `bridgesOutTo` run containing the focus). `verseWordCount` from the existing `quranRefs.verse_word_counts` store (do not add a third word-count source). Memoize per shard via a `_junctionsByShard` WeakMap (mirror `_occasionsByShard`).
-4. **`chapter-words.ts` → `TimeSpan.waslTo`** — thread `bridgesOutTo` through `AssembledVerse` into the LAST word's pushed occurrence as `waslTo?: string` (the target ayahKey); preserve it through the collapse-by-location merge so only the bridging *occurrence* carries it (per-take, case 6).
-5. **`recitation-active.ts`** — surface `waslTo` on `SortedInterval` + `ActiveHit` (both `findActiveAt` paths), so the filmstrip and teleprompter read the per-take flag with no per-frame matching.
+2. **`occasions.ts` → `bridgesOutTo`** — add `bridgesOutTo: string | null` to `ChapterOccasion`; one-line back-stamp in the existing loop (a cross-verse waṣl is, by construction, an occasion's last segment continuing into the next occasion).
+3. **New `lib/recitation-data/wasl.ts`** — the reusable pure, shard-level helpers: `chapterWaslJunctions(occasions)` → `WaslJunction[]` ({fromRef, toRef, fromWords, toWords, leaveMs, enterMs}), `isPartialTake(words, verseWordCount)`, and `waslGroupOf(occasions, focusIdx)` → group span/refs (the maximal `bridgesOutTo` run containing the focus). `verseWordCount` from the existing `quranRefs.verse_word_counts` store (do not add a third word-count source).
+4. **`chapter-words.ts` → `TimeSpan.waslTo`** — thread `bridgesOutTo` through `AssembledVerse` into the LAST word's pushed occurrence as `waslTo?: string` (the target ayahKey); preserve it through the collapse-by-location merge so only the bridging *occurrence* carries it. `filmstrip-model._assemble` reads it to set `VerseCell.waslNext` (any-take-bridges).
 
-Tests: `occasions` (`bridgesOutTo` + `waslDynamic` on a `14:1↔14:2` fixture and a v9 no-op fixture), `wasl.ts` (junction walk, partiality, group span), `chapter-words` (`waslTo` on the right occurrence after collapse), `recitation-active` (surfaced both paths).
+Tests: `occasions`/`wasl.ts` (`bridgesOutTo` back-stamp on a `14:1↔14:2` fixture + a v9 no-op fixture; junction walk, partiality, group span), `chapter-words` (`waslTo` on the right occurrence after collapse).
 
-## B. Filmstrip dynamic merge (`filmstrip-model.ts`, `AyahFilmstrip.svelte`, reuse `filmstrip-scroll.svelte.ts`)
+## B. Filmstrip merge (`filmstrip-model.ts`, `AyahFilmstrip.svelte`)
 
-- **Model:** add `waslNext`/`waslDynamic` to `VerseCell` (false on placeholders; target verse is always a present successor since you can't waṣl into an unrecited verse).
-- **Static path:** in the `cells` derived, `gapAfter = 0` for `waslNext && !waslDynamic`; render mega-cell capsule (square the touching inner corners, round the outer, drop the shared border, low-alpha wash via `::before` on the left member, kept under `.active`'s tint) + an always-on hairline connector glyph at the boundary. Each cell stays its own `(ayah)`-keyed entity ⇒ repeat-backs, click-seek, needle tracking, next/random-ayah, auto-center untouched.
-- **Dynamic path:** `gapAfter` is an animated `gapNow ∈ [0, G]`. Drive it from the live take: track `liveWaslIdx` from `ActiveHit.waslTo` (set in `recitationAt`/`drivePlayback`); when the active take across the boundary is bridging, ease `gapNow→0` (join); when on a stopping take (incl. lookback to it), ease `gapNow→G` (break). **Reuse the scroll Hermite easing** (`filmstrip-scroll.svelte.ts`) so the gap animation velocity matches the glide ruler (`filmstripPxPerSec`) — the merge/break visibly travels with the "back in time" scroll. Connector intensifies (`--border-default`→`--accent` + soft glow) only while the live take bridges.
-- **Freeze coexistence:** the waqf-freeze path is silence-driven (`drivePlayback` → `scrollThroughGap`); a waṣl take has no inter-verse silence ⇒ freeze never engages ⇒ continuous flow. A waqf take (incl. the stop take of a dynamic pair) keeps the existing freeze/grey-needle unchanged.
-- **Motion/a11y:** all eases honour `prefers-reduced-motion` (instant snap, no travel); the file already computes `reducedMotion`.
+- **Model:** add `waslNext` to `VerseCell` (false on placeholders; target verse is always a present successor since you can't waṣl into an unrecited verse). Set in `_assemble` when any take's occurrence carries `waslTo` to the next present cell.
+- **Merge:** in the `cells` derived, `gapAfter = 0` and the legibility floor dissolves (`w = aw`) for a `waslNext` member; the gapless run renders as full-bordered sub-cells (each keeps its own border + verse number) tied by a thin **accent rail** under the row (`waslGroups` overlay). No capsule weld, no range label, no per-frame cost. Each cell stays its own `(ayah)`-keyed entity ⇒ repeat-backs, click-seek, needle tracking, next/random-ayah, auto-center untouched.
+- **Freeze coexistence:** the waqf-freeze path is silence-driven (`drivePlayback` → `scrollThroughGap`); a waṣl take has no inter-verse silence ⇒ freeze never engages ⇒ continuous flow. A waqf take keeps the existing freeze/grey-needle unchanged.
+- **Motion/a11y:** the strip's scroll/glide already honours `prefers-reduced-motion`; the merge itself is static geometry (nothing to animate).
 
-Tests/visual: `AyahFilmstrip.wasl.test.ts` (static gapless geometry; connector present; dynamic gap animates; waqf take of a dynamic pair still freezes). Playwright: `abdulwadood` ch20 (4-chain static capsule), `ayman_swed` ch14 (dynamic join/break on lookback).
+Tests/visual: `AyahFilmstrip.wasl.test.ts` (gapless geometry; one accent rail; merged short verse time-true). Playwright: `abdulwadood` ch20 (4-chain capsule), ch26 chain-with-retake.
 
 ## C. Teleprompter chaining + marker coloring (`LineAnimation.svelte`)
 
@@ -82,15 +80,15 @@ Tests: `assembleWaslGroup` (concatenated intervals, share-group offset, rebased 
 
 Build in the order **A → B → C → D**, each independently testable and each a no-op on v9 shards (case 10 is the safety net — "lots of changes at once," so every layer degrades gracefully). After each layer: `npm run build` (`tsc --noEmit && vite build`) + `npm test` (vitest) + lint (`--max-warnings 0`) green.
 
-**In-browser (Playwright + impeccable):** drive both surfaces on `ayman_swed_muallim_tvquran` ch14 (`14:1»14:2`, the dynamic showcase + lookback) and `abdulwadood_haneef_mp3quran` ch20 (4-chain static capsule, ch26 chain-with-retake). Screenshot: the merged mega-cell capsule, the dynamic join/break across a lookback, the chained teleprompter line crossing `۝`, the junction tajweed tile, the auto-spanned waveform, and a waqf pair still freezing the strip + silence-coloring the marker.
+**In-browser (Playwright + impeccable):** drive both surfaces on `ayman_swed_muallim_tvquran` ch14 (`14:1»14:2`, the folded dynamic pair + lookback) and `abdulwadood_haneef_mp3quran` ch20 (4-chain static capsule, ch26 chain-with-retake). Screenshot: the merged mega-cell + accent rail, the chained teleprompter line crossing `۝`, the junction tajweed tile, the auto-spanned waveform, and a waqf pair still freezing the strip + silence-coloring the marker.
 
 **Closeout:** run `/pr` (audio-repo skill) to open the PR off the new worktree (branched from `origin/main`). Then spawn **2 Opus review agents** on the PR diff, each from a distinct angle — (1) data-layer correctness + edge-case/table coverage + graceful v9 degradation + naming-guard (no `bridge` collision); (2) UI/UX/animation craft + glide-pacing fidelity + a11y/reduced-motion + per-frame perf — posting `gh pr comment` reviews: concise for positive feedback, detailed for bugs/code improvements. (Do NOT merge — user reviews.)
 
 ---
 
 ## Critical files
-- **Data:** `lib/types/ts-client.ts` (`SegmentEntry.wasl`); `lib/recitation-data/occasions.ts` (`bridgesOutTo`/`waslDynamic`); new `lib/recitation-data/wasl.ts`; `lib/recitation-data/ts-source.ts` (`assembleWaslGroup`, junction memo); `lib/recitation-animation/chapter-words.ts` + `recitation-active.ts` (`waslTo` thread).
-- **Filmstrip:** `lib/recitation-animation/filmstrip-model.ts`, `AyahFilmstrip.svelte`, `filmstrip-scroll.svelte.ts` (reuse easing).
+- **Data:** `lib/types/ts-client.ts` (`SegmentEntry.wasl`); `lib/recitation-data/occasions.ts` (`bridgesOutTo`); new `lib/recitation-data/wasl.ts`; `lib/recitation-data/ts-source.ts` (`assembleWaslGroup`, junction memo); `lib/recitation-animation/chapter-words.ts` (`TimeSpan.waslTo` thread).
+- **Filmstrip:** `lib/recitation-animation/filmstrip-model.ts`, `AyahFilmstrip.svelte`.
 - **Teleprompter:** `lib/recitation-animation/LineAnimation.svelte`.
 - **Analysis/waveform:** `tabs/timestamps/components/UnifiedDisplay.svelte`, `TimestampsWaveform.svelte`, `tabs/timestamps/stores/verse.ts`, `tabs/timestamps/TimestampsTab.svelte`, `tabs/timestamps/components/TimestampsFooterLeft.svelte` (prewarmer).
 

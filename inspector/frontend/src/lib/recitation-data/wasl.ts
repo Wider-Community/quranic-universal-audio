@@ -2,9 +2,9 @@
  * Cross-verse waṣl reconstruction — pure, shard-level helpers shared by the
  * dashboard surfaces (filmstrip / teleprompter) and the timestamps tab (analysis
  * + waveform). The pipeline stores a per-occurrence `wasl` flag on each take
- * (schema v10); `occasions.ts` already lifts it onto `ChapterOccasion.bridgesOutTo`
- * / `bridgesDynamic`. This module turns that into junctions and group spans, per
- * the contract in `WASL_FE.md`.
+ * (schema v10); `occasions.ts` already lifts it onto `ChapterOccasion.bridgesOutTo`.
+ * This module turns that into junctions and group spans, per the contract in
+ * `WASL_FE.md`.
  *
  * Naming guard: "bridge" is reserved for cross-word idgham elsewhere in the FE
  * (`PhonemeInterval.bridge`, `RenderedBridge`, `.pause-bridge`, …). Everything
@@ -50,8 +50,6 @@ export interface WaslJunction {
      *  (≈equal for a true waṣl). */
     leaveMs: number;
     enterMs: number;
-    /** Boundary is take-dependent (also crossed as a stop elsewhere). */
-    dynamic: boolean;
 }
 
 /**
@@ -74,7 +72,6 @@ export function chapterWaslJunctions(occasions: ChapterOccasion[]): WaslJunction
             toWords: takeWordRange(firstSeg),
             leaveMs: lastSeg.t[1],
             enterMs: firstSeg.t[0],
-            dynamic: occ.bridgesDynamic,
         });
     }
     return out;

@@ -27,8 +27,6 @@ export interface AssembledVerse {
     /** Target ayahKey when this occasion's LAST word continues into the next
      *  verse without a stop (cross-verse waṣl); from `ChapterOccasion.bridgesOutTo`. */
     bridgesOutTo?: string | null;
-    /** Whether that boundary is take-dependent; from `ChapterOccasion.bridgesDynamic`. */
-    bridgesDynamic?: boolean;
 }
 
 function parseLocation(location: string): { surah: number; ayah: number; word: number } {
@@ -63,7 +61,7 @@ export function buildChapterRecitation(
     // Flatten every occasion's words to chapter-absolute units — one per recited
     // occurrence (repeats included).
     const flat: AnimUnit[] = [];
-    for (const { data, bridgesOutTo, bridgesDynamic } of occasions) {
+    for (const { data, bridgesOutTo } of occasions) {
         const offsetSec = data.time_start_ms / 1000;
         for (let wi = 0; wi < data.words.length; wi++) {
             const w = data.words[wi]!;
@@ -74,7 +72,7 @@ export function buildChapterRecitation(
             const isLastWord = wi === data.words.length - 1;
             const span: TimeSpan =
                 isLastWord && bridgesOutTo
-                    ? { start, end, waslTo: bridgesOutTo, waslDynamic: !!bridgesDynamic }
+                    ? { start, end, waslTo: bridgesOutTo }
                     : { start, end };
             flat.push({
                 location: w.location,
@@ -104,13 +102,12 @@ export function buildChapterRecitation(
         const existing = byLoc.get(u.location);
         if (existing) {
             // Carry the per-occurrence waṣl flag with its span so only the
-            // bridging take of a repeated word keeps it (case 6).
+            // bridging take of a repeated word keeps it.
             const iv = u.intervals[0]!;
             existing.intervals.push({
                 start: u.start,
                 end: u.end,
                 waslTo: iv.waslTo,
-                waslDynamic: iv.waslDynamic,
             });
             if (u.start < existing.start) existing.start = u.start;
             if (u.end > existing.end) existing.end = u.end;

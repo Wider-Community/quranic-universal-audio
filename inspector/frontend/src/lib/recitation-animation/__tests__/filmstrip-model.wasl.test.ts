@@ -8,16 +8,14 @@ import type { AnimUnit, TimeSpan } from '../types';
 function unitW(
     location: string,
     intervals: Array<[number, number]>,
-    wasl?: { to: string; dynamic?: boolean },
+    wasl?: { to: string },
 ): AnimUnit {
     const [surahRaw, ayahRaw, wordRaw] = location.split(':');
     const surah = Number(surahRaw);
     const ayah = Number(ayahRaw);
     const spans: TimeSpan[] = intervals.map(([start, end]) => ({ start, end }));
     if (wasl && spans.length) {
-        const last = spans[spans.length - 1]!;
-        last.waslTo = wasl.to;
-        last.waslDynamic = wasl.dynamic ?? false;
+        spans[spans.length - 1]!.waslTo = wasl.to;
     }
     return {
         location, ayahKey: `${surah}:${ayah}`, surah, ayah, word: Number(wordRaw),
@@ -27,7 +25,7 @@ function unitW(
 }
 
 describe('buildFilmstripModel — waṣl merge flags', () => {
-    it('marks a static chain: every internal boundary bridges, none dynamic', () => {
+    it('marks every internal boundary of a waṣl chain as bridging', () => {
         const cells = buildFilmstripModel([
             unitW('20:25:1', [[0, 1]]),
             unitW('20:25:4', [[1, 2]], { to: '20:26' }),
@@ -36,17 +34,15 @@ describe('buildFilmstripModel — waṣl merge flags', () => {
             unitW('20:27:1', [[4, 5]]),
         ], 'duration').cells;
         expect(cells.map((c) => c.waslNext)).toEqual([true, true, false]);
-        expect(cells.every((c) => !c.waslDynamic)).toBe(true);
     });
 
-    it('flags a dynamic boundary (the bridging take is dynamic)', () => {
+    it('merges a boundary that bridges on a single take', () => {
         const cells = buildFilmstripModel([
             unitW('14:1:1', [[0, 1]]),
-            unitW('14:1:16', [[1, 2]], { to: '14:2', dynamic: true }),
+            unitW('14:1:16', [[1, 2]], { to: '14:2' }),
             unitW('14:2:1', [[2, 3]]),
         ], 'duration').cells;
         expect(cells[0]!.waslNext).toBe(true);
-        expect(cells[0]!.waslDynamic).toBe(true);
         expect(cells[1]!.waslNext).toBe(false);
     });
 
@@ -55,7 +51,7 @@ describe('buildFilmstripModel — waṣl merge flags', () => {
             unitW('2:5:1', [[0, 1]]),
             unitW('2:6:1', [[1, 2]]),
         ], 'duration').cells;
-        expect(cells.every((c) => !c.waslNext && !c.waslDynamic)).toBe(true);
+        expect(cells.every((c) => !c.waslNext)).toBe(true);
     });
 
     it('only bridges into the IMMEDIATELY-next present verse (not a far waslTo)', () => {
