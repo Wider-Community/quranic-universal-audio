@@ -33,7 +33,7 @@ import tempfile
 import threading
 from collections.abc import Iterator
 from pathlib import Path, PurePosixPath
-from typing import Protocol, runtime_checkable
+from typing import Protocol, cast, runtime_checkable
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +96,12 @@ class StorageError(Exception):
 
 class StorageNotFound(StorageError):
     """The requested path does not exist."""
+
+
+class StorageReadOnly(StorageError):
+    """A mutating op was attempted while the backend is in read-only mode
+    (``INSPECTOR_READ_ONLY=1``). Reads pass through; any write/append/copy/
+    move/delete raises this so a read-only process can never touch the bucket."""
 
 
 # ----------------------------------------------------------------------
@@ -606,8 +612,46 @@ class BucketBackend:
 
 
 # ----------------------------------------------------------------------
-# Singleton factory
+# Read-only wrapper
 # ----------------------------------------------------------------------
+
+
+class ReadOnlyBackend:
+    """Delegates every READ to the wrapped backend and refuses every WRITE.
+
+    The single chokepoint that makes ``INSPECTOR_READ_ONLY=1`` airtight: all
+    bucket writes (segment save → ``detailed.json``/``edit_history.jsonl``,
+    intake manifests, job records, DB sync upload) go through one
+    ``StorageBackend`` instance, so wrapping it here covers every path at once —
+    not just the DB sync that ``INSPECTOR_DB_SYNC=0`` disarms. Mutations raise
+    ``StorageReadOnly`` (→ 5xx) rather than silently no-op, so a read-only
+    process fails loud instead of pretending an edit stuck. Reads (incl.
+    ``read_bytes_direct``, ``local_path``, ``exists``, ``list_dir``) forward
+    transparently via ``__getattr__``."""
+
+    _BLOCKED = (
+        "write_bytes_atomic",
+        "write_json_atomic",
+        "append_jsonl",
+        "write_bytes_direct",
+        "copy",
+        "move",
+        "delete",
+    )
+
+    def __init__(self, inner: StorageBackend) -> None:
+        self._inner = inner
+
+    def __getattr__(self, name: str):  # delegate reads; __getattr__ is invisible to pyright
+        if name in self._BLOCKED:
+
+            def _refuse(*_a, **_k):
+                raise StorageReadOnly(
+                    f"{name}() refused: backend is read-only (INSPECTOR_READ_ONLY=1)"
+                )
+
+            return _refuse
+        return getattr(self._inner, name)
 
 
 _backend_singleton: StorageBackend | None = None
@@ -670,6 +714,11 @@ def get_backend() -> StorageBackend:
             )
         else:
             raise RuntimeError(f"unknown INSPECTOR_BACKEND={kind!r}")
+
+        if os.environ.get("INSPECTOR_READ_ONLY") == "1":
+            # Runtime-valid backend; __getattr__ delegation is opaque to pyright.
+            backend = cast(StorageBackend, ReadOnlyBackend(backend))
+            logging.getLogger("inspector").info("storage backend: READ-ONLY (writes refused)")
 
         _backend_singleton = backend
         return backend

@@ -25,9 +25,10 @@ between modes is which data the backend reads.
 Modes (``--mode``, default ``dev``):
   dev    (default) local Flask + Vite reading the DEV bucket (read-write). The
          everyday mode: runs your branch end-to-end, audio + analysis included.
-  prod   local Flask + Vite reading the PROD bucket, READ-ONLY (bucket
-         write-back disarmed via INSPECTOR_DB_SYNC=0, so a stray edit can never
-         clobber production). A safe local look at real production data.
+  prod   local Flask + Vite reading the PROD bucket, READ-ONLY. Two guards:
+         INSPECTOR_READ_ONLY=1 makes the storage backend refuse every write
+         (segment saves, manifests, job records), and INSPECTOR_DB_SYNC=0 keeps
+         DB commits local — nothing local can mutate production by any path.
   fixtures  fully offline (filesystem backend, seeded fixtures) + Vite.
 
 Commands:
@@ -35,11 +36,9 @@ Commands:
   list    show every registered stack with live health
   down    stop a stack (--worktree / --id / --port / --all)
   doctor  find & optionally --fix port conflicts, double-binds, stale procs
-  smoke   drive Dashboard + Timestamps in headless chromium against a stack
 
 Examples:
   python scripts/devenv/launch.py                     # dev, this worktree
-  python scripts/devenv/launch.py up --smoke             # dev + verify tabs
   python scripts/devenv/launch.py up --mode prod         # read-only prod data
   python scripts/devenv/launch.py up --no-vite           # local backend only
   python scripts/devenv/launch.py list
@@ -443,34 +442,74 @@ def ensure_fixtures(root: Path) -> Path:
     return fx
 
 
-def backend_env(root: Path, mode: str) -> dict[str, str]:
-    """Per-worktree backend env. The DB path is the load-bearing isolation knob:
-    the default is a SHARED tempdir file, so two worktrees would clobber one
-    DB (and WinError-5 on the os.replace). Give each worktree its own."""
+# The full set of run-mode knobs the launcher OWNS. app.py loads `.env` only for
+# keys not already set, so by setting every one of these we guarantee `.env` can
+# only ever supply secrets + identity (HF/GH/QF tokens, session secret, dev-owner
+# id) and — for dev — the contributor's own dev-bucket id. No mode knob leaks in.
+_OWNED_KNOBS = (
+    "INSPECTOR_BACKEND",
+    "INSPECTOR_FILESYSTEM_ROOT",
+    "INSPECTOR_ALLOW_PROD_BUCKET",
+    "INSPECTOR_READ_ONLY",
+    "INSPECTOR_DB_SYNC",
+    "INSPECTOR_AUTO_MOUNT",
+    "INSPECTOR_AUDIO_FROM_BUCKET",
+    "INSPECTOR_PEAKS_FROM_BUCKET",
+)
+
+
+def backend_env(
+    root: Path, mode: str, *, bucket_audio: bool = False, ffmpeg_peaks: bool = False
+) -> dict[str, str]:
+    """Per-worktree backend env, authoritative for every run-mode knob.
+
+    The launcher determines the run profile — which backend, which bucket,
+    read-only, sync, mount — so it sets all of `_OWNED_KNOBS` explicitly and
+    `.env` can only fill the rest (secrets/identity). The DB path is the
+    load-bearing isolation knob: the default is a SHARED tempdir file, so two
+    worktrees would clobber one DB (and WinError-5 on os.replace). Each worktree
+    gets its own.
+    """
     env = os.environ.copy()
+    # Clear any inherited mode knobs so a stale shell/.env value can't perturb
+    # the profile; each branch below re-sets exactly what it needs.
+    for k in _OWNED_KNOBS:
+        env.pop(k, None)
     env["INSPECTOR_DB_PATH"] = str(root / ".local" / "launch" / "inspector.db")
     env.setdefault("INSPECTOR_RELEASE_POLL", "0")  # dev: no HF-Job polling loop
+
+    # Peaks honour --ffmpeg-peaks in every mode (ffmpeg works offline too).
+    env["INSPECTOR_PEAKS_FROM_BUCKET"] = "0" if ffmpeg_peaks else "1"
+
     if mode == "fixtures":
         fx = ensure_fixtures(root)
         env["INSPECTOR_BACKEND"] = "filesystem"
         env["INSPECTOR_FILESYSTEM_ROOT"] = str(fx)
         env["INSPECTOR_AUTO_MOUNT"] = "0"
+        # Offline: audio must come from the local fixtures, never the CDN.
+        env["INSPECTOR_AUDIO_FROM_BUCKET"] = "1"
         return env
-    # dev / prod: read a bucket. Force the backend explicitly — a worktree `.env`
-    # with INSPECTOR_BACKEND=filesystem would otherwise leak through (app.py's
-    # dotenv load only fills UNSET keys), so the mode would silently read empty
-    # fixtures and 404 every audio/shard read.
+
+    # dev / prod read a bucket.
     env["INSPECTOR_BACKEND"] = "bucket"
-    env.pop("INSPECTOR_FILESYSTEM_ROOT", None)
+    # Audio: default to the CDN (fast); the bucket's hffs full-MP3 read is slow
+    # locally. --bucket-audio forces the bucket (to verify re-encoded audio).
+    env["INSPECTOR_AUDIO_FROM_BUCKET"] = "1" if bucket_audio else "0"
     if mode == "prod":
-        # Point the local backend at the PROD bucket, READ-ONLY: acknowledge the
-        # prod guard, and disarm bucket write-back so no edit can ever sync the
-        # full-file DB back over production state.
+        # PROD bucket, READ-ONLY. Two guards so nothing local can mutate prod:
+        #   INSPECTOR_READ_ONLY=1 — the storage backend refuses EVERY write
+        #     (segment save, manifests, job records — not just the DB), and
+        #   INSPECTOR_DB_SYNC=0   — DB commits stay local, never upload.
+        # ALLOW_PROD_BUCKET=1 acknowledges the prod-bucket guard so it resolves.
         env["INSPECTOR_BUCKET_REPO"] = PROD_BUCKET_REPO
         env["INSPECTOR_ALLOW_PROD_BUCKET"] = "1"
+        env["INSPECTOR_READ_ONLY"] = "1"
         env["INSPECTOR_DB_SYNC"] = "0"
-    # dev: leave INSPECTOR_BUCKET_REPO to the child — a contributor's `.env` may
-    # name their own dev bucket; otherwise resolve_bucket_repo defaults to dev.
+    else:  # dev: DEV bucket, read-write. Forbid prod outright — even if `.env`
+        # opts into prod, dev mode can never reach it (resolve_bucket_repo
+        # refuses when ALLOW != "1"). INSPECTOR_BUCKET_REPO is the ONE knob left
+        # to `.env`: a contributor's own dev bucket, else the shared dev default.
+        env["INSPECTOR_ALLOW_PROD_BUCKET"] = "0"
     return env
 
 
@@ -524,6 +563,20 @@ def cmd_up(args: argparse.Namespace) -> int:
 
     with _registry_lock():
         stacks = prune_dead(load_stacks())
+        # Single-writer invariant: dev mode is read-WRITE on the shared dev
+        # bucket (full-file DB sync + last-write-wins content). A second dev
+        # writer — here or the live dev Space — can clobber the other's writes.
+        if mode == "dev" and want_backend:
+            others = [s for s in stacks if s.mode == "dev" and Path(s.worktree) != root]
+            if others:
+                names = ", ".join(s.id for s in others)
+                print(
+                    f"launch: WARNING - {len(others)} other dev stack(s) already writing the "
+                    f"shared dev bucket ({names}). Concurrent dev writers can clobber each "
+                    "other's DB/edits (single-writer invariant). Use --mode prod/fixtures for "
+                    "a safe parallel stack, or edit in only one at a time.",
+                    flush=True,
+                )
         existing = [s for s in stacks if Path(s.worktree) == root]
         if existing and not args.force:
             s = existing[0]
@@ -563,7 +616,9 @@ def cmd_up(args: argparse.Namespace) -> int:
             pid = spawn_detached(
                 [sys.executable, "inspector/app.py", "--port", str(backend_port)],
                 cwd=root,
-                env=backend_env(root, mode),
+                env=backend_env(
+                    root, mode, bucket_audio=args.bucket_audio, ffmpeg_peaks=args.ffmpeg_peaks
+                ),
                 log_path=logs / f"backend-{backend_port}.log",
             )
             stack.backend_pid = pid
@@ -605,10 +660,6 @@ def cmd_up(args: argparse.Namespace) -> int:
         raise
 
     _print_summary(stack)
-    if args.smoke:
-        rc = run_smoke(root, stack.url)
-        if rc != 0:
-            return rc
     if args.open and stack.url:
         _open_browser(stack.url)
     return 0
@@ -826,70 +877,6 @@ def _scan_orphans() -> list[tuple[int, str]]:
 
 
 # ---------------------------------------------------------------------------
-# smoke
-# ---------------------------------------------------------------------------
-
-
-def discover_ts_reciter(url: str) -> str:
-    """First TS-capable reciter slug from /api/ts/manifest (gzipped octet-stream,
-    so gunzip here rather than in the browser). Empty string if unavailable."""
-    import gzip
-
-    code, body = _http(url.rstrip("/") + "/api/ts/manifest", timeout=15.0)
-    if code != 200 or not body:
-        return ""
-    with contextlib.suppress(Exception):
-        try:
-            data = json.loads(body)
-        except Exception:  # noqa: BLE001
-            data = json.loads(gzip.decompress(body))
-        return next(iter(data.get("reciters") or {}), "")
-    return ""
-
-
-def run_smoke(root: Path, url: str) -> int:
-    """Drive Dashboard + Timestamps in headless chromium via the bundled
-    smoke. Seeds a real TS-capable reciter so the waveform actually renders."""
-    smoke = Path(__file__).resolve().parent / "launch_smoke.mjs"
-    out_dir = root / ".local" / "launch" / "smoke"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    reciter = discover_ts_reciter(url)
-    print(
-        f"launch: smoke-testing Dashboard + Timestamps at {url} (reciter={reciter or 'none'})...",
-        flush=True,
-    )
-    proc = subprocess.run(
-        ["node", str(smoke), url, str(out_dir), reciter],
-        cwd=str(frontend_dir(root)),
-        capture_output=True,
-        text=True,
-        creationflags=NO_WINDOW,
-    )
-    sys.stdout.write(proc.stdout)
-    if proc.returncode != 0:
-        sys.stderr.write(proc.stderr)
-        print(f"launch: smoke FAILED (screenshots in {out_dir})", flush=True)
-    else:
-        print(f"launch: smoke PASSED (screenshots in {out_dir})", flush=True)
-    return proc.returncode
-
-
-def cmd_smoke(args: argparse.Namespace) -> int:
-    if args.url:
-        url = args.url
-        root = worktree_root()
-    else:
-        stacks = prune_dead(load_stacks())
-        root = worktree_root()
-        match = [s for s in stacks if Path(s.worktree) == root] or stacks
-        if not match:
-            raise SystemExit("launch smoke: no running stack and no --url given")
-        url = _url(match[0])
-        root = Path(match[0].worktree)
-    return run_smoke(root, url)
-
-
-# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -906,7 +893,14 @@ def build_parser() -> argparse.ArgumentParser:
     up.add_argument("--no-vite", action="store_true", help="backend only")
     up.add_argument("--no-backend", action="store_true", help="(requires --no-vite)")
     up.add_argument(
-        "--smoke", action="store_true", help="run the Dashboard+Timestamps smoke after ready"
+        "--bucket-audio",
+        action="store_true",
+        help="read audio from the bucket instead of the CDN (slower; verifies re-encoded audio)",
+    )
+    up.add_argument(
+        "--ffmpeg-peaks",
+        action="store_true",
+        help="skip bucket peaks; compute per-segment peaks via ffmpeg",
     )
     up.add_argument("--open", action="store_true", help="open the URL in a browser")
     up.add_argument(
@@ -938,17 +932,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="with --fix, also stop untracked Inspector processes (other worktrees / manual runs)",
     )
     dr.set_defaults(func=cmd_doctor)
-
-    sm = sub.add_parser("smoke", help="smoke-test a running stack or a --url")
-    sm.add_argument("--url", help="target URL (default: the current worktree's stack)")
-    sm.set_defaults(func=cmd_smoke)
     return p
 
 
 def main(argv: list[str]) -> int:
     parser = build_parser()
     # Bare `launch` and `launch --mode X` default to `up`.
-    if not argv or (argv[0] not in {"up", "list", "down", "doctor", "smoke", "-h", "--help"}):
+    if not argv or (argv[0] not in {"up", "list", "down", "doctor", "-h", "--help"}):
         argv = ["up", *argv]
     args = parser.parse_args(argv)
     if not getattr(args, "func", None):

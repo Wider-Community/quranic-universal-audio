@@ -72,6 +72,9 @@ const CODE_COPY: Record<string, CopyEntry> = {
     // Admin / structural
     LAST_OWNER: "You can't remove the last owner — promote another owner first.",
     UNKNOWN_RECITER: "That reciter couldn't be found.",
+
+    // Storage
+    READ_ONLY: "This instance is read-only; changes aren't saved.",
 };
 
 const STATUS_FALLBACK: Record<number, string> = {

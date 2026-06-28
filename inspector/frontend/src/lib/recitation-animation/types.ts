@@ -45,7 +45,15 @@ export interface AnimUnit {
     end: number;
     /** Every occurrence's span, ascending — ≥1 entry; >1 when repeated. */
     intervals: TimeSpan[];
+    /** Canonical (first-occurrence) letter timings — geometry + structure anchor.
+     *  Mirrors `occurrenceLetters[0]`. */
     letters: AnimLetter[];
+    /** Per-occurrence letter timings, index-aligned to `intervals`. A repeated
+     *  word carries each take's OWN letter spans so the per-letter reveal tracks
+     *  the current take instead of linearly stretching take 1. Optional: units
+     *  built outside the chapter assembler (or hand-built test fixtures) omit it
+     *  and the reveal falls back to the canonical remap. */
+    occurrenceLetters?: AnimLetter[][];
 }
 
 /** Per-ayah boundary for the picker + timeline markers. */
