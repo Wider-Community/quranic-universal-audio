@@ -43,7 +43,13 @@ Run `up` (it starts both backend + Vite), read the `LAUNCH_JSON` line for the `u
 
 ## Parallel & conflict-safety
 
-Two worktrees (or two stacks) can run at once: ports are allocated free + reserved in the registry, and each worktree gets its own `INSPECTOR_DB_PATH` so SQLite never clobbers. `doctor` detects the failure modes we actually hit — two processes bound to one port (serving stale code), a foreign/orphan Flask or Vite, dead registry entries — and `--fix` cleans them.
+Two worktrees (or two stacks) can run at once: ports are allocated free + reserved in the registry, and each worktree gets its own `INSPECTOR_DB_PATH` so the **local** SQLite never clobbers. `doctor` detects the failure modes we actually hit — two processes bound to one port (serving stale code), a foreign/orphan Flask or Vite, dead registry entries — and `--fix` cleans them.
+
+**The bucket is NOT isolated, though.** All `dev` stacks (and the live dev Space) share one dev bucket: the DB syncs full-file with a CAS guard (no row merge) and per-reciter content is last-write-wins, so **two concurrent dev *writers* can clobber each other** — the single-writer invariant. Launch **warns** when you start a 2nd `dev` stack while another is up. For a safe parallel stack use `prod` (read-only) or `fixtures` (local disk, fully isolated); only ever *edit* in one `dev` stack at a time.
+
+## Env ownership (`.env` vs launch)
+
+The launcher **owns every run-mode knob** — `INSPECTOR_BACKEND`, `INSPECTOR_FILESYSTEM_ROOT`, `INSPECTOR_ALLOW_PROD_BUCKET`, `INSPECTOR_READ_ONLY`, `INSPECTOR_DB_SYNC`, `INSPECTOR_AUTO_MOUNT`, `INSPECTOR_DB_PATH` — and sets them per mode, so a stale `.env` can't perturb the profile. `dev` forces `ALLOW_PROD_BUCKET=0` (can never touch prod; fails closed if `.env` names the prod repo). `.env` only supplies **secrets + identity** (HF/GitHub/QF tokens, session secret, dev-owner id) and the one per-machine choice the launcher reads in `dev`: your own `INSPECTOR_BUCKET_REPO` dev bucket. Those knobs in `.env` matter only when hand-running `python inspector/app.py`.
 
 ## Notes
 
