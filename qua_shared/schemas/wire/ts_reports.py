@@ -129,15 +129,15 @@ def timing_label(onset: str | None, offset: str | None) -> str:
     valid timing report (the validator rejects it) and maps to ``"Timing"`` here
     defensively. Single source of truth for the derived label — BE notification
     copy and the FE both call this rather than hardcoding."""
-    pair = (onset, offset)
-    both = {
+    both: dict[tuple[str | None, str | None], str] = {
         ("early", "late"): "Too long",
         ("late", "early"): "Too short",
         ("early", "early"): "Shifted earlier",
         ("late", "late"): "Shifted later",
     }
-    if pair in both:
-        return both[pair]
+    pair_label = both.get((onset, offset))
+    if pair_label is not None:
+        return pair_label
     if onset and offset is None:
         return "Starts early" if onset == "early" else "Starts late"
     if offset and onset is None:
