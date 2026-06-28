@@ -126,6 +126,58 @@ describe('LineAnimation char mode', () => {
         expect(chars[1]?.classList.contains('active')).toBe(true);
     });
 
+    // Regression: a repeated verse reveals at the CURRENT take's own pace, not a
+    // linear stretch of take 1. Take 1 is even (a,b each 1s); take 2 elongates
+    // 'a' (melodic madd) so the letters are NOT proportional to take 1. With the
+    // old remap, t mid-take-2 mapped to take-1 proportions and lit the FUTURE
+    // letter 'b'; the per-occurrence timings keep 'a' active while it is sounding.
+    it('reveals a repeat at the take’s own letter pace, not a stretch of take 1', async () => {
+        const repeated: AnimUnit = {
+            location: '1:1:1',
+            ayahKey: '1:1',
+            surah: 1,
+            ayah: 1,
+            word: 1,
+            text: 'ab',
+            start: 0,
+            end: 20,
+            intervals: [
+                { start: 0, end: 2 }, // take 1 (even)
+                { start: 10, end: 20 }, // take 2 (a elongated)
+            ],
+            letters: [
+                { char: 'a', start: 0, end: 1 },
+                { char: 'b', start: 1, end: 2 },
+            ],
+            occurrenceLetters: [
+                [
+                    { char: 'a', start: 0, end: 1 },
+                    { char: 'b', start: 1, end: 2 },
+                ],
+                [
+                    { char: 'a', start: 10, end: 18 }, // front-heavy: 'a' holds to 18s
+                    { char: 'b', start: 18, end: 20 },
+                ],
+            ],
+        };
+
+        const { container } = render(LineAnimation, {
+            units: [repeated],
+            config: charConfig,
+            getTimeMs: () => 15000, // inside take 2; 'a' is still sounding [10,18]
+            playing: false,
+        });
+        await tick();
+
+        const chars = container.querySelectorAll<HTMLElement>('.ra-char');
+        expect(chars[0]?.textContent).toBe('a');
+        expect(chars[1]?.textContent).toBe('b');
+        // 'a' is the letter being recited at 15s on take 2 — NOT 'b' (which the
+        // old take-1-proportion remap would have lit).
+        expect(chars[0]?.classList.contains('active')).toBe(true);
+        expect(chars[1]?.classList.contains('active')).toBe(false);
+    });
+
     const WAQF = 'ۖ'; // ARABIC SMALL HIGH SAD-LAM-ALEF-MEEM (a surfaced stop)
     // A 3-letter stop word (letters a[0,1] b[1,2] c[2,3], the mark riding the
     // last, c) plus a trailing word so the stop word can become reached.

@@ -10,6 +10,7 @@
 
 import { charsMatch, isCombiningMark, splitIntoCharGroups, ZWSP } from '../../utils/arabic-text';
 import { type Decorator, splitDecorators } from '../decorators';
+import type { TimeSpan } from '../types';
 
 /** Non-recited symbols rendered in place but never highlighted (no MFA letter):
  *  rub-el-hizb (U+06DE) and the place-of-sajdah mark (U+06E9). */
@@ -32,6 +33,12 @@ export interface AnimChar {
     groupId: string;
     /** A non-recited symbol (rub-el-hizb, sajdah): rendered in place, never lit. */
     inert: boolean;
+    /** Per-occurrence [start,end] for this cell, index-aligned to the unit's
+     *  `intervals` (filled by the caller from `occurrenceLetters`). A repeat uses
+     *  the entry for the take being recited; an `undefined` entry (or absent
+     *  array) means that take had no per-letter data → fall back to the canonical
+     *  `start`/`end` remap. */
+    occIntervals?: (TimeSpan | undefined)[];
 }
 
 export interface AnimWord {
@@ -51,6 +58,59 @@ export interface AnimWord {
     chars: AnimChar[];
     /** Whether the word has any char groups (empty display_text → render text directly). */
     hasChars: boolean;
+}
+
+/** Walk display char-clusters + MFA letters in reading order and return each
+ *  cluster's [start,end], index-aligned to `chars`. A matched base cluster folds
+ *  in the timing of any following combining-mark letters (small hamza, mini-yaa,
+ *  dagger alef) so they ride their base grapheme. Untimed clusters inherit the
+ *  nearest stamped neighbour (the orphan safety net); if NOTHING is stamped, the
+ *  whole word keeps its word span (lit together — correct with no per-letter
+ *  data). Pure — no mutation of `chars`. Reused for both the canonical pass and
+ *  each repeat occurrence's own letter timings. */
+export function stampCharTimes(
+    chars: { text: string; inert: boolean }[],
+    letters: AnimSourceWord['letters'],
+    wordStart: number,
+    wordEnd: number,
+): TimeSpan[] {
+    const out: TimeSpan[] = chars.map(() => ({ start: wordStart, end: wordEnd }));
+    let mfaIdx = 0;
+    const timed = new Set<number>();
+    for (let di = 0; di < chars.length; di++) {
+        const span = chars[di];
+        if (!span || span.inert) continue;
+        while (mfaIdx < letters.length && !letters[mfaIdx]) mfaIdx++;
+        if (mfaIdx >= letters.length) break;
+        const lt = letters[mfaIdx]!;
+        if (!charsMatch(lt.char || '', span.text)) continue; // mismatch -> orphan pass
+        out[di]!.start = lt.start != null ? lt.start : wordStart;
+        let endSec = lt.end != null ? lt.end : wordEnd;
+        mfaIdx++;
+        while (mfaIdx < letters.length) {
+            const nxt = letters[mfaIdx];
+            const cp = nxt?.char ? nxt.char.codePointAt(0) : undefined;
+            // Stop at the dagger alef — it has its own cell to match it.
+            if (cp === undefined || !isCombiningMark(cp) || cp === 0x0670) break;
+            if (nxt!.end != null) endSec = nxt!.end;
+            mfaIdx++;
+        }
+        out[di]!.end = endSec;
+        timed.add(di);
+    }
+    if (timed.size > 0) {
+        for (let di = 0; di < chars.length; di++) {
+            if (timed.has(di)) continue;
+            let src: TimeSpan | null = null;
+            for (let p = di - 1; p >= 0 && !src; p--) if (timed.has(p)) src = out[p]!;
+            for (let n = di + 1; n < chars.length && !src; n++) if (timed.has(n)) src = out[n]!;
+            if (src) {
+                out[di]!.start = src.start;
+                out[di]!.end = src.end;
+            }
+        }
+    }
+    return out;
 }
 
 export function buildAnimStructure(words: AnimSourceWord[]): AnimWord[] {
@@ -84,55 +144,15 @@ export function buildAnimStructure(words: AnimSourceWord[]): AnimWord[] {
             };
         });
 
-        // Walk display clusters + MFA letters in order. A matched base cluster
-        // folds in the timing of any following combining-mark MFA letters (small
-        // hamza, mini-yaa, dagger alef): they ride this base grapheme and share
-        // its lit interval - a separate highlight span would detach the mark from
-        // its letter.
-        let mfaIdx = 0;
-        const timed = new Set<number>();
+        // Stamp each cluster's canonical [start,end] from the MFA letters (the
+        // first-occurrence timeline). The same routine drives each repeat
+        // occurrence's per-take timings (attached later by the surface).
+        const times = stampCharTimes(chars, letters, word.start, word.end);
         for (let di = 0; di < chars.length; di++) {
             const span = chars[di];
-            if (!span || span.inert) continue;
-            while (mfaIdx < letters.length && !letters[mfaIdx]) mfaIdx++;
-            if (mfaIdx >= letters.length) break;
-            const lt = letters[mfaIdx]!;
-            if (!charsMatch(lt.char || '', span.text)) continue; // mismatch -> orphan pass
-            span.start = lt.start != null ? lt.start : word.start;
-            let endSec = lt.end != null ? lt.end : word.end;
-            mfaIdx++;
-            while (mfaIdx < letters.length) {
-                const nxt = letters[mfaIdx];
-                const cp = nxt?.char ? nxt.char.codePointAt(0) : undefined;
-                // Stop at the dagger alef — it has its own cell to match it.
-                if (cp === undefined || !isCombiningMark(cp) || cp === 0x0670) break;
-                if (nxt!.end != null) endSec = nxt!.end;
-                mfaIdx++;
-            }
-            span.end = endSec;
-            timed.add(di);
-        }
-
-        // Orphan-timing safety net. A cell the matcher never stamped would keep
-        // whole-word timing and stay "active" for the ENTIRE word — lighting in
-        // lockstep with the real first letter (the first+last-together artifact).
-        // Inherit the nearest stamped neighbour's interval instead, so an orphan
-        // lights with the letter it visually rides, never the whole word. If
-        // NOTHING was stamped (no MFA letters at all), leave word timing — the
-        // whole word lights together, which is correct with no per-letter data.
-        if (timed.size > 0) {
-            for (let di = 0; di < chars.length; di++) {
-                if (timed.has(di)) continue;
-                const span = chars[di];
-                if (!span) continue;
-                let src: AnimChar | null = null;
-                for (let p = di - 1; p >= 0 && !src; p--) if (timed.has(p)) src = chars[p]!;
-                for (let n = di + 1; n < chars.length && !src; n++) if (timed.has(n)) src = chars[n]!;
-                if (src) {
-                    span.start = src.start;
-                    span.end = src.end;
-                }
-            }
+            if (!span) continue;
+            span.start = times[di]!.start;
+            span.end = times[di]!.end;
         }
 
         out.push({
