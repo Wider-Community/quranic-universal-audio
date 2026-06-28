@@ -507,17 +507,22 @@
      *  pxPerSec. `gapStart` is the actual end of the interval the silence follows
      *  (so a backward loopback's gap measures from the looped-FROM occurrence, not
      *  the frozen verse's forward end), `gapEnd` the upcoming occurrence's start. */
-    function scrollThroughGap(tSec: number, nextIv: { start: number }, nextIdx: number): void {
+    function scrollThroughGap(tSec: number, nextIv: { start: number; unitIdx: number }, nextIdx: number): void {
         const mcA = model.cells[frozenIdx];
+        const mcB = model.cells[nextIdx];
         const cellA = cells[frozenIdx];
         const cellB = cells[nextIdx];
-        if (!mcA || !cellA || !cellB || mcA.canonEndSec < 0) return;
+        if (!mcA || !mcB || !cellA || !cellB || mcA.canonEndSec < 0) return;
         const prevEnd = prevIntervalEnd(tSec);
         const gapStart = prevEnd > -Infinity ? prevEnd : mcA.canonEndSec;
         const gapEnd = nextIv.start;
         const p = gapEnd > gapStart ? clamp(0, 1, (tSec - gapStart) / (gapEnd - gapStart)) : 1;
+        // Land on the WORD the reciter actually resumes (`nextIv`'s unit), not verse
+        // B's start — a mid-verse loopback resumes mid-cell, so targeting frac 0
+        // would overshoot to the verse start then jerk forward to the live word.
+        const resumeFrac = mcB.words[nextIv.unitIdx - mcB.unitStart]?.frac0 ?? 0;
         const from = cellA.cumBefore + (cellA.w + cellA.aw) / 2; // end of A's active span
-        const to = cellB.cumBefore + (cellB.w - cellB.aw) / 2; //  start of B's active span
+        const to = cellB.cumBefore + (cellB.w - cellB.aw) / 2 + resumeFrac * cellB.aw; // B's resume word
         scroll.snap(lerp(from, to, p));
     }
 

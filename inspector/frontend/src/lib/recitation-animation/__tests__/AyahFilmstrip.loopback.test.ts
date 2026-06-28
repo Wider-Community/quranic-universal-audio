@@ -163,6 +163,48 @@ describe('AyahFilmstrip loopback (recitation-driven)', () => {
         // …advancing monotonically as the replayed word progresses (never frozen).
         expect(landed[landed.length - 1]!).toBeGreaterThan(landed[0]! + 20);
     });
+
+    // Verse 1 (4 words, 0-4s) · verse 2 (4-6s) · verse 3 (6-8s), then a backward
+    // loopback that resumes at verse 1's WORD 3 (8.5-10.5s) after a 0.5s gap.
+    const midUnits: AnimUnit[] = [
+        unit('1:1:1', [[0, 1]]),
+        unit('1:1:2', [[1, 2]]),
+        unit('1:1:3', [[2, 3], [8.5, 9.5]]),
+        unit('1:1:4', [[3, 4], [9.5, 10.5]]),
+        unit('1:2:1', [[4, 5]]),
+        unit('1:2:2', [[5, 6]]),
+        unit('1:3:1', [[6, 7]]),
+        unit('1:3:2', [[7, 8]]),
+    ];
+    const midModel = buildFilmstripModel(midUnits, 'duration');
+
+    it('scrolls the gap to the resumed mid-verse word, not the verse start', async () => {
+        const { container } = render(AyahFilmstrip, {
+            units: midUnits, model: midModel, durationMs: 11000, getTimeMs, playing: true,
+            config: { ...DEFAULT_RECITATION_CONFIG, filmstripMotion: 'hybrid', filmstripPxPerSec: 50 },
+            onSeek: () => {},
+        });
+        await tick();
+
+        const [v1Left, v1Right] = cellSpans(container)[0]!; // verse 1 region
+        const awV1 = v1Right - v1Left; // 4 words × 1s × 50px/s = 200px
+        // Word 3 (the resume word) sits at frac0 = 0.5 → mid of the verse cell.
+        const resumeOffset = v1Left + 0.5 * awV1;
+
+        // Forward play through verse 3.
+        for (const ms of [500, 1500, 2500, 3500, 4500, 5500, 6500, 7500]) await step(ms);
+        expect(activeCellAyah(container)).toBe(3);
+
+        // Inside the inter-take gap (8.0-8.5s), late enough to be near the landing.
+        await step(8450);
+        const off = scrollOffset(container);
+        // Lands on the resumed word's region — clearly past verse 1's start, and
+        // closer to the mid-verse resume than to the verse start (the bug parked it
+        // at the start, ~v1Left, then jerked forward once audio resumed).
+        expect(off).toBeGreaterThan(v1Left + 0.35 * awV1);
+        expect(off).toBeLessThanOrEqual(v1Right);
+        expect(Math.abs(off - resumeOffset)).toBeLessThan(Math.abs(off - v1Left));
+    });
 });
 
 describe('AyahFilmstrip gap scale is global (chapter-independent)', () => {
