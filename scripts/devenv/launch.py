@@ -444,39 +444,62 @@ def ensure_fixtures(root: Path) -> Path:
     return fx
 
 
+# The full set of run-mode knobs the launcher OWNS. app.py loads `.env` only for
+# keys not already set, so by setting every one of these we guarantee `.env` can
+# only ever supply secrets + identity (HF/GH/QF tokens, session secret, dev-owner
+# id) and — for dev — the contributor's own dev-bucket id. No mode knob leaks in.
+_OWNED_KNOBS = (
+    "INSPECTOR_BACKEND",
+    "INSPECTOR_FILESYSTEM_ROOT",
+    "INSPECTOR_ALLOW_PROD_BUCKET",
+    "INSPECTOR_READ_ONLY",
+    "INSPECTOR_DB_SYNC",
+    "INSPECTOR_AUTO_MOUNT",
+)
+
+
 def backend_env(root: Path, mode: str) -> dict[str, str]:
-    """Per-worktree backend env. The DB path is the load-bearing isolation knob:
-    the default is a SHARED tempdir file, so two worktrees would clobber one
-    DB (and WinError-5 on the os.replace). Give each worktree its own."""
+    """Per-worktree backend env, authoritative for every run-mode knob.
+
+    The launcher determines the run profile — which backend, which bucket,
+    read-only, sync, mount — so it sets all of `_OWNED_KNOBS` explicitly and
+    `.env` can only fill the rest (secrets/identity). The DB path is the
+    load-bearing isolation knob: the default is a SHARED tempdir file, so two
+    worktrees would clobber one DB (and WinError-5 on os.replace). Each worktree
+    gets its own.
+    """
     env = os.environ.copy()
+    # Clear any inherited mode knobs so a stale shell/.env value can't perturb
+    # the profile; each branch below re-sets exactly what it needs.
+    for k in _OWNED_KNOBS:
+        env.pop(k, None)
     env["INSPECTOR_DB_PATH"] = str(root / ".local" / "launch" / "inspector.db")
     env.setdefault("INSPECTOR_RELEASE_POLL", "0")  # dev: no HF-Job polling loop
+
     if mode == "fixtures":
         fx = ensure_fixtures(root)
         env["INSPECTOR_BACKEND"] = "filesystem"
         env["INSPECTOR_FILESYSTEM_ROOT"] = str(fx)
         env["INSPECTOR_AUTO_MOUNT"] = "0"
         return env
-    # dev / prod: read a bucket. Force the backend explicitly — a worktree `.env`
-    # with INSPECTOR_BACKEND=filesystem would otherwise leak through (app.py's
-    # dotenv load only fills UNSET keys), so the mode would silently read empty
-    # fixtures and 404 every audio/shard read.
+
+    # dev / prod read a bucket.
     env["INSPECTOR_BACKEND"] = "bucket"
-    env.pop("INSPECTOR_FILESYSTEM_ROOT", None)
     if mode == "prod":
-        # Point the local backend at the PROD bucket, READ-ONLY. Two guards,
-        # belt-and-suspenders, so nothing local can mutate production:
+        # PROD bucket, READ-ONLY. Two guards so nothing local can mutate prod:
         #   INSPECTOR_READ_ONLY=1 — the storage backend refuses EVERY write
         #     (segment save, manifests, job records — not just the DB), and
-        #   INSPECTOR_DB_SYNC=0   — DB commits stay local, never upload, so the
-        #     boot scan doesn't even attempt a bucket write.
-        # (ALLOW_PROD_BUCKET acknowledges the prod-bucket guard so it resolves.)
+        #   INSPECTOR_DB_SYNC=0   — DB commits stay local, never upload.
+        # ALLOW_PROD_BUCKET=1 acknowledges the prod-bucket guard so it resolves.
         env["INSPECTOR_BUCKET_REPO"] = PROD_BUCKET_REPO
         env["INSPECTOR_ALLOW_PROD_BUCKET"] = "1"
         env["INSPECTOR_READ_ONLY"] = "1"
         env["INSPECTOR_DB_SYNC"] = "0"
-    # dev: leave INSPECTOR_BUCKET_REPO to the child — a contributor's `.env` may
-    # name their own dev bucket; otherwise resolve_bucket_repo defaults to dev.
+    else:  # dev: DEV bucket, read-write. Forbid prod outright — even if `.env`
+        # opts into prod, dev mode can never reach it (resolve_bucket_repo
+        # refuses when ALLOW != "1"). INSPECTOR_BUCKET_REPO is the ONE knob left
+        # to `.env`: a contributor's own dev bucket, else the shared dev default.
+        env["INSPECTOR_ALLOW_PROD_BUCKET"] = "0"
     return env
 
 
@@ -530,6 +553,20 @@ def cmd_up(args: argparse.Namespace) -> int:
 
     with _registry_lock():
         stacks = prune_dead(load_stacks())
+        # Single-writer invariant: dev mode is read-WRITE on the shared dev
+        # bucket (full-file DB sync + last-write-wins content). A second dev
+        # writer — here or the live dev Space — can clobber the other's writes.
+        if mode == "dev" and want_backend:
+            others = [s for s in stacks if s.mode == "dev" and Path(s.worktree) != root]
+            if others:
+                names = ", ".join(s.id for s in others)
+                print(
+                    f"launch: WARNING - {len(others)} other dev stack(s) already writing the "
+                    f"shared dev bucket ({names}). Concurrent dev writers can clobber each "
+                    "other's DB/edits (single-writer invariant). Use --mode prod/fixtures for "
+                    "a safe parallel stack, or edit in only one at a time.",
+                    flush=True,
+                )
         existing = [s for s in stacks if Path(s.worktree) == root]
         if existing and not args.force:
             s = existing[0]
