@@ -198,6 +198,52 @@ def test_stamp_stale_ts_regen_not_downgraded_by_catalog_edit(fresh_db):
     assert hf_row["stale_reason"] == "ts_regen"
 
 
+def test_mark_ts_refreshed_advances_produced_at_and_stamps_stale(fresh_db):
+    """An out-of-band refresh advances the current ts ``produced_at``, stamps the
+    HF row stale, audits ``reciter.ts_refreshed``, and clears computed staleness."""
+    from services.db import repo_transitions
+
+    old = datetime(2020, 1, 1, tzinfo=UTC)
+    new = datetime(2026, 6, 29, tzinfo=UTC)
+    with db.transaction():
+        slug = _seed_minimal_delivery()
+        repo_releases.insert_per_recitation_release(
+            track="ts", slug=slug, version="job-1", produced_at=old, produced_by="a"
+        )
+        repo_releases.insert_per_recitation_release(
+            track="hf", slug=slug, version="abc123", produced_at=old, produced_by="a"
+        )
+        refreshed = repo_releases.mark_ts_refreshed(
+            slug, at=new, chapters=[1, 114], reason="backfill_cells"
+        )
+    assert refreshed is True
+    ts_row = repo_releases.current_release("ts", slug)
+    assert ts_row is not None
+    # produced_at advanced to the refresh watermark.
+    assert ts_row["produced_at"].startswith("2026-06-29")
+    # HF row stamped stale (the published dataset is now behind the refreshed shards).
+    hf_row = repo_releases.current_release("hf", slug)
+    assert hf_row is not None and hf_row["stale_reason"] == "ts_regen"
+    # The audit event was appended with the chapters/reason payload.
+    events = [t for t in repo_transitions.for_slug(slug) if t["event"] == "reciter.ts_refreshed"]
+    assert len(events) == 1
+    assert events[0]["payload"]["chapters"] == [1, 114]
+    assert events[0]["payload"]["reason"] == "backfill_cells"
+
+
+def test_mark_ts_refreshed_no_ts_row_returns_false(fresh_db):
+    """A refresh callback for a reciter with no current ts release is a clean
+    no-op (a backfill on a never-generated reciter), returning ``False``."""
+    from services.db import repo_transitions
+
+    now = _now()
+    with db.transaction():
+        slug = _seed_minimal_delivery()
+        refreshed = repo_releases.mark_ts_refreshed(slug, at=now)
+    assert refreshed is False
+    assert [t for t in repo_transitions.for_slug(slug) if t["event"] == "reciter.ts_refreshed"] == []
+
+
 def test_stamp_stale_no_hf_row_does_not_error(fresh_db):
     """Regen on a released reciter that has a TS row but was never published to
     HF: ``stamp_stale`` must no-op cleanly (no current hf row, no gh membership)

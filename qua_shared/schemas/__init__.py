@@ -222,6 +222,7 @@ from .wire.seg import (
     SegValStats,
     SegValStructuralErrorItem,
 )
+from .wire.ts_refreshed import TsRefreshedRequest
 from .wire.timestamps import (
     Letter,
     PhonemeInterval,
@@ -438,6 +439,7 @@ __all__ = [
     "TsVbrResponse",
     "TsReciter",
     "TsRecitersResponse",
+    "TsRefreshedRequest",
     "Letter",
     "PhonemeInterval",
     "TsWord",

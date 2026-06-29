@@ -149,13 +149,19 @@ def process_reciter(fs, bucket: str, slug: str, *, write: bool, restamp: bool, l
     # One Xet batch per reciter (paths, not bytes) — far faster than a commit/file.
     if to_write:
         bs.batch_write(bucket, to_write)
+    written_chapters = sorted(int(p.rsplit("/", 1)[-1].split(".")[0]) for p in to_write)
     log(
         f"{slug:44} shards={len(shards):3} cells={total_cells:6} skipped={skipped:3} "
         f"violations={len(violations)}"
         + ("" if not violations else f"  !! {violations[:3]}")
         + ("  [WROTE]" if write and not violations else "")
     )
-    return {"status": status, "tags": tags, "violations": violations}
+    return {
+        "status": status,
+        "tags": tags,
+        "violations": violations,
+        "written_chapters": written_chapters,
+    }
 
 
 # --- local-dir mode --------------------------------------------------------
@@ -222,6 +228,7 @@ def main() -> int:
     ap.add_argument("--write", action="store_true", help="write stamped shards (default: dry-run)")
     ap.add_argument("--restamp", action="store_true", help="re-derive cells even on v5 shards")
     bs.add_bucket_args(ap)
+    bs.add_notify_args(ap)
     args = ap.parse_args()
 
     def log(msg):
@@ -248,6 +255,12 @@ def main() -> int:
             if res:
                 grand_status.update(res["status"]); grand_tags.update(res["tags"])
                 grand_viol += len(res["violations"])
+                # Tell the Inspector the shards changed so staleness re-evaluates
+                # (otherwise this bucket-direct write is silent). Best-effort.
+                if args.write and res["written_chapters"]:
+                    bs.notify_ts_refreshed(
+                        args, slug, chapters=res["written_chapters"], reason="backfill_cells"
+                    )
 
     log("\n=== corpus cell status distribution ===")
     for st, c in grand_status.most_common():

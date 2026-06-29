@@ -130,10 +130,10 @@ def _stamp_shard(data: dict, *, restamp: bool = False) -> Counter:
 
 def process_reciter(
     fs, bucket: str, slug: str, *, write: bool, backup_dir: str | None, restamp: bool = False
-) -> tuple[Counter, str]:
+) -> tuple[Counter, str, list[int]]:
     shards = _shard_paths(fs, bucket, slug)
     if not shards:
-        return Counter(), ""
+        return Counter(), "", []
     cov = Counter()
     adds: list[tuple[str, str]] = []
     tmpdir = tempfile.mkdtemp(prefix="silentbf_") if write else None
@@ -151,29 +151,32 @@ def process_reciter(
             local = os.path.join(tmpdir, f"{ch}.json.gz")
             Path(local).write_bytes(gzip_shard(data))
             adds.append((local, f"reciters/{slug}/timestamps/{ch}.json.gz"))
+    written_chapters: list[int] = []
     if write and adds:
         from huggingface_hub import batch_bucket_files
 
         _rl(batch_bucket_files, bucket, add=adds)  # batched parallel Xet upload
+        written_chapters = sorted(ch for ch, _ in shards)
     line = (
         f"{slug:44} shards={cov['shards']:3} letters={cov['letters']:6} "
         f"stamped={cov['stamped']:6} silent={cov['silent']:6} marked={cov['marked']:5} "
         f"NO-SLOT={cov['noslot']:4}" + ("  [WROTE]" if write else "")
     )
-    return cov, line
+    return cov, line, written_chapters
 
 
-def _mp_worker(task: tuple) -> tuple[dict, str]:
+def _mp_worker(task: tuple) -> tuple[dict, str, str, list[int]]:
     """ProcessPool entrypoint — builds its own fs per process. The SDK annotator
-    owns the phonemizer (reached via the SDK domain layer)."""
+    owns the phonemizer (reached via the SDK domain layer). Returns the slug too
+    so the parent can fire the ts-refreshed callback after the pool drains."""
     slug, bucket, write, backup_dir, restamp = task
     from huggingface_hub import HfFileSystem
 
     fs = HfFileSystem(token=os.environ.get("HF_TOKEN"))
-    cov, line = process_reciter(
+    cov, line, written = process_reciter(
         fs, bucket, slug, write=write, backup_dir=backup_dir, restamp=restamp
     )
-    return dict(cov), line
+    return dict(cov), line, slug, written
 
 
 def main() -> int:
@@ -192,6 +195,7 @@ def main() -> int:
         help="reset already-stamped letters to bare and re-derive (after a silent-logic change)",
     )
     bs.add_bucket_args(ap)
+    bs.add_notify_args(ap)
     args = ap.parse_args()
     if args.write:
         bs.confirm_mutation(args, "backfill silent flags")
@@ -209,13 +213,18 @@ def main() -> int:
 
         tasks = [(s, bucket, args.write, args.backup_dir, args.restamp) for s in slugs]
         with ProcessPoolExecutor(max_workers=args.workers) as ex:
-            for cov, line in ex.map(_mp_worker, tasks):
+            for cov, line, slug, written in ex.map(_mp_worker, tasks):
                 if line:
                     log(line)
                 grand += Counter(cov)
+                # Record the bucket-direct write so staleness re-evaluates. Best-effort.
+                if args.write and written:
+                    bs.notify_ts_refreshed(
+                        args, slug, chapters=written, reason="backfill_silent_flags"
+                    )
     else:
         for slug in slugs:
-            cov, line = process_reciter(
+            cov, line, written = process_reciter(
                 fs,
                 bucket,
                 slug,
@@ -223,6 +232,8 @@ def main() -> int:
                 backup_dir=args.backup_dir,
                 restamp=args.restamp,
             )
+            if args.write and written:
+                bs.notify_ts_refreshed(args, slug, chapters=written, reason="backfill_silent_flags")
             if line:
                 log(line)
             grand += cov

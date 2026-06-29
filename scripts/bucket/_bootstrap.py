@@ -20,6 +20,8 @@ Public surface used by sibling scripts:
   ensure_utf8_stdout()              — Windows cp1252 → utf-8 patch
   rl(fn, *a, **kw)                  — run a bucket op with HF-429 backoff
   batch_write(bucket_id, files)     — upload many files in ONE Xet batch (fast bulk write)
+  add_notify_args(parser)           — adds --inspector-url for the ts-refreshed callback
+  notify_ts_refreshed(args, slug, …) — fire the post-upload TS-refresh callback (best-effort)
 """
 
 from __future__ import annotations
@@ -163,3 +165,36 @@ def batch_write(bucket_id: str, files: dict[str, bytes]) -> None:
             local.write_bytes(body)
             adds.append((str(local), dest.lstrip("/")))
         rl(batch_bucket_files, bucket_id, add=adds)
+
+
+def add_notify_args(parser: argparse.ArgumentParser) -> None:
+    """Add ``--inspector-url`` so a backfill can fire the ts-refreshed callback.
+
+    Absent flag (and no ``INSPECTOR_URL`` env) → the callback is skipped and the
+    refresh stays silent, exactly as before. The shared secret is read from
+    ``INSPECTOR_WEBHOOK_SECRET`` env, never a flag.
+    """
+    parser.add_argument(
+        "--inspector-url",
+        default=os.environ.get("INSPECTOR_URL"),
+        help="Inspector root URL to POST the ts-refreshed callback to after a "
+        "successful write (e.g. https://hetchyy-quranic-universal-audio.hf.space); "
+        "needs INSPECTOR_WEBHOOK_SECRET in env. Omitted = silent update.",
+    )
+
+
+def notify_ts_refreshed(
+    args: argparse.Namespace, slug: str, *, chapters: list[int] | None = None, reason: str = "manual"
+) -> None:
+    """Fire the post-upload TS-refresh callback for ``slug`` (best-effort).
+
+    No-op unless ``args`` carries an ``--inspector-url`` (and a secret is in
+    env). Routes through the shared ``qua_shared.inspector_notify`` helper so the
+    callback contract has one home. Never raises — a failed callback must not
+    fail a backfill that already wrote the bucket."""
+    url = getattr(args, "inspector_url", None)
+    if not url:
+        return
+    from qua_shared.inspector_notify import notify_ts_refreshed as _notify
+
+    _notify(url, slug, chapters=chapters, reason=reason)
