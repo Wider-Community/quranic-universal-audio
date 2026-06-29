@@ -1,7 +1,5 @@
 {{ release_title }}
 
-Every release contains all reciters aligned up to date, not just new ones from the previous release. 
-
 ## What to download
 
 | Asset | What it gives you |
