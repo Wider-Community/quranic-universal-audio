@@ -49,6 +49,48 @@ describe('assembleOccasion — letters reconstructed from cells when the slot is
         expect(letters[2]).toMatchObject({ char: 'ا', start: null, end: null, silent: true });
     });
 
+    it('gives a shared long vowel to the madd carrier, not the consonant (no co-highlight)', () => {
+        // word "قَا" then "لَ": the long vowel `aˤ:` [120,300] is referenced by
+        // BOTH ق's fatha haraka and ا's madd cell (one shareGroup). A naive
+        // min/max-per-letter stretches ق across the whole vowel so it stays lit
+        // through ا (and any later same-time letter) — the reported co-highlight.
+        const word: SegmentEntry['words'][number] = [
+            1, 0, 400,
+            [], // re-stamped: empty letters slot
+            [['q', 0, 120], ['aˤ:', 120, 300], ['l', 300, 360], ['a', 360, 400]],
+            [
+                ['ق', 'base', 'present', [0], 0],
+                ['َ', 'haraka', 'present', [1], 0, null, 0], // fatha shares the long vowel
+                ['ا', 'madd', 'present', [1], 1, 'madd_tabii', 0], // carrier owns it
+                ['ل', 'base', 'present', [2], 2],
+                ['َ', 'haraka', 'present', [3], 2],
+            ],
+        ];
+        const occ = shardOccasions(shardOf([word]))[0]!;
+        const d = assembleOccasion('r', occ, TXT, TXT, RA, '');
+        const letters = d.words[0]!.letters;
+
+        expect(letters.map((l) => l.char)).toEqual(['ق', 'ا', 'ل']);
+        // ق lights ONLY during its consonant `q` [0,0.12] — NOT through the vowel.
+        expect(letters[0]).toMatchObject({ char: 'ق', start: 0, end: 0.12, silent: false });
+        // The madd carrier owns the long vowel.
+        expect(letters[1]).toMatchObject({ char: 'ا', start: 0.12, end: 0.3, silent: false });
+        expect(letters[2]).toMatchObject({ char: 'ل', start: 0.3, end: 0.4, silent: false });
+
+        // No two letters co-highlight: spans are ordered and non-overlapping.
+        const timed = letters.filter((l) => l.start !== null) as {
+            start: number;
+            end: number;
+        }[];
+        for (let a = 0; a < timed.length; a++) {
+            for (let b = a + 1; b < timed.length; b++) {
+                const A = timed[a]!;
+                const B = timed[b]!;
+                expect(A.end <= B.start || B.end <= A.start).toBe(true);
+            }
+        }
+    });
+
     it('keeps the shard-provided letters verbatim when the slot is populated', () => {
         const word: SegmentEntry['words'][number] = [
             1, 0, 200,

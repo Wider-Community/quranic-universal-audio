@@ -219,3 +219,39 @@ def test_cells_stamped_and_valid_on_fixture(chapter):
                     assert None not in groups and len(groups) == 1
     assert total_words > 0
     assert saw_base, "expected base cells in v5 shard output"
+
+
+@needs_cpm
+@pytest.mark.parametrize("chapter", [101, 102])
+def test_cells_only_restamp_preserves_slot3_letters(chapter):
+    """A cells-only re-stamp must NOT empty the legacy slot-3 ``letters``.
+
+    The teleprompter / filmstrip drive their per-letter reveal off slot-3; a
+    re-stamp that dropped it collapsed char mode to whole-word lighting (the FE
+    ``lettersFromCells`` fallback then had to rebuild it). The backfill's
+    ``_stamp_doc(restamp=True)`` truncates from the cells slot onward (``wd[5:]``)
+    and re-derives cells via the SDK annotator — slot-3 (and its char/timings)
+    must ride through untouched, only growing the v2.6 silent flag.
+    """
+    import scripts.backfills.backfill_cells as bc
+
+    fix = _FIXTURES / f"nasser_al_qatami_mp3quran_{chapter}.shard.json"
+    if not fix.exists():
+        pytest.skip(f"fixture missing: {fix}")
+
+    doc = json.loads(fix.read_text(encoding="utf-8"))
+    before = [
+        [[lt[1], lt[2]] for lt in wd[3]]
+        for seg in doc["segments"]
+        for wd in seg["words"]
+    ]
+    _n, _sd, _td, violations = bc._stamp_doc(doc, restamp=True)
+    assert not violations
+    after = [wd for seg in doc["segments"] for wd in seg["words"]]
+    assert len(after) == len(before)
+    for orig_timings, wd in zip(before, after, strict=True):
+        # slot-3 still present and non-empty (re-stamp did not drop it) — and each
+        # letter's [start, end] is preserved verbatim (a silence MARK may fold onto
+        # the char and the silent flag is appended, but the timings never move).
+        assert wd[3], f"w{wd[0]} lost its slot-3 letters on re-stamp"
+        assert [[lt[1], lt[2]] for lt in wd[3]] == orig_timings

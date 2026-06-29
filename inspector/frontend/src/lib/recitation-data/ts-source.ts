@@ -503,9 +503,20 @@ export function assembleWaslGroup(
  * its phoneme intervals; a group with no audible phoneme is `silent` with null
  * timing (the char-time stamper inherits a neighbour). `phonemeIndices` are
  * already verse-flat, so they index `intervals` directly.
+ *
+ * A long vowel's phoneme is referenced by BOTH the consonant's `haraka` cell and
+ * the following `madd` carrier cell (one `shareGroup`) — e.g. `قَا`'s `aˤ:` rides
+ * the fatha on `ق` and the alef on `ا`. Letting both claim it stretches the
+ * consonant's span across the whole vowel, so it co-highlights with the carrier
+ * (and any later same-time letter). Each phoneme is therefore assigned to exactly
+ * ONE letter — the carrier (`madd`) wins over the consonant's `haraka` — so spans
+ * stay disjoint and ordered, matching the original slot-3 timings.
  */
 function lettersFromCells(cells: TsCell[], intervals: PhonemeInterval[]): Letter[] {
+    // One letter per sourceLetterIndex, in cell (reading) order; remember each
+    // letter's ordinal so phoneme ownership can pick a single winner.
     const out: Letter[] = [];
+    const ordOf = new Map<number, number>();
     let curLi = -1;
     let cur: Letter | null = null;
     for (const c of cells) {
@@ -513,18 +524,40 @@ function lettersFromCells(cells: TsCell[], intervals: PhonemeInterval[]): Letter
         if (li < 0) continue; // implicit cell — carries no orthographic letter
         if (li !== curLi || !cur) {
             cur = { char: c.chars, start: null, end: null, silent: true };
+            ordOf.set(li, out.length);
             out.push(cur);
             curLi = li;
         } else if (!cur.char && c.chars) {
             cur.char = c.chars;
         }
+    }
+
+    // Assign each phoneme to a single owning letter. A `madd` carrier owns the
+    // long vowel it shares with the preceding consonant's `haraka`; otherwise the
+    // first claimant wins (no real contention).
+    const ownerOrd = new Map<number, number>();
+    const ownerIsMadd = new Map<number, boolean>();
+    for (const c of cells) {
+        const li = c.sourceLetterIndex;
+        if (li < 0) continue;
+        const ord = ordOf.get(li);
+        if (ord === undefined) continue;
+        const isMadd = c.role === 'madd';
         for (const pi of c.phonemeIndices) {
-            const iv = intervals[pi];
-            if (!iv) continue;
-            cur.silent = false;
-            if (cur.start === null || iv.start < cur.start) cur.start = iv.start;
-            if (cur.end === null || iv.end > cur.end) cur.end = iv.end;
+            if (!ownerOrd.has(pi) || (isMadd && !ownerIsMadd.get(pi))) {
+                ownerOrd.set(pi, ord);
+                ownerIsMadd.set(pi, isMadd);
+            }
         }
+    }
+
+    for (const [pi, ord] of ownerOrd) {
+        const iv = intervals[pi];
+        const lt = out[ord];
+        if (!iv || !lt) continue;
+        lt.silent = false;
+        if (lt.start === null || iv.start < lt.start) lt.start = iv.start;
+        if (lt.end === null || iv.end > lt.end) lt.end = iv.end;
     }
     return out;
 }
