@@ -22,6 +22,7 @@
     import { splitPhone } from '../utils/phoneme-columns';
     import { buildRendered, groupUnits } from '../utils/rendered-blocks';
     import {
+        ruleHasLabel,
         tjKubraColor,
         tjRuleNames,
         tjShadow,
@@ -40,6 +41,18 @@
     } from '../stores/display';
     import type { TsLoopTarget } from '../stores/playback';
     import { loopTarget } from '../stores/playback';
+    import {
+        focusCell,
+        focusedCellKey,
+        removeStaged,
+        reportMode,
+        type ReportMode,
+        staged,
+        upsertStaged,
+    } from '../stores/report-mode';
+    import { currentVerseReports } from '../stores/ts-reports';
+    import type { TsReport } from '../../../lib/types/generated/schemas';
+    import { cellTargetFromEl, elCellKey, gapKey, targetCellKey, timingLabel } from '../utils/report-target';
     import { focusWaslGroup, loadedVerse } from '../stores/verse';
     import { TS_CLICK_DELAY_MS } from '../utils/constants';
     import WordTranslation from './WordTranslation.svelte';
@@ -249,7 +262,361 @@
         });
         rootEl.querySelectorAll<HTMLElement>('.group-hover').forEach((c) => c.classList.remove('group-hover'));
         rootEl.querySelectorAll<HTMLElement>('.mega-grid').forEach((g) => { g.dataset.hoverGi = ''; });
+        // Strip report flags off reused keyed nodes so a verse switch starts clean.
+        rootEl.querySelectorAll<HTMLElement>(
+            '.report-flag-staged, .report-flag-public, .report-focused, .report-dim',
+        ).forEach((c) => {
+            c.classList.remove(
+                'report-flag-staged',
+                'report-flag-public',
+                'report-focused',
+                'report-dim',
+                'report-inert',
+            );
+            if (c.dataset.reportTip) delete c.dataset.reportTip;
+        });
     }
+
+    // ---- Report mode: in-grid cell flagging (staged + persisted-public) ----
+    // Reactive one-shot passes — deliberately NOT in the 60fps updateHighlights
+    // loop. They toggle `report-*` classes on the cells whenever the mode, the
+    // staged set, the focus, or the verse's reports change. Disjoint class names
+    // from the imperative active-cell path, so the two never clobber.
+    let _reportClickBound = false;
+    $: $reportMode, $staged, $focusedCellKey, $currentVerseReports, rendered,
+        untrack(() => void tick().then(() => { applyReportPasses(); reconcileSeededTajweedOptions(); }));
+
+    function _publicByKey(): Map<string, TsReport[]> {
+        const m = new Map<string, TsReport[]>();
+        for (const r of get(currentVerseReports)) {
+            if (r.status !== 'open') continue;
+            const k = targetCellKey(r.target);
+            const arr = m.get(k);
+            if (arr) arr.push(r);
+            else m.set(k, [r]);
+        }
+        return m;
+    }
+    function _composeReportTip(reps: TsReport[]): string {
+        return reps
+            .map((r) => {
+                const sub =
+                    r.category === 'timing'
+                        ? ` · ${timingLabel(r.onset ?? null, r.offset ?? null)}`
+                        : r.subtype
+                          ? ` · ${r.subtype.replace(/_/g, ' ')}`
+                          : '';
+                const rule = r.selected_rule_tags?.length ? ` (${r.selected_rule_tags.join(', ')})` : '';
+                const c = r.comment ? `: ${r.comment}` : '';
+                return `⚑ ${r.category}${sub}${rule}${c}`;
+            })
+            .join('\n');
+    }
+    function applyReportPasses(): void {
+        if (!rootEl) return;
+        const mode = get(reportMode);
+        const active = mode.kind !== 'inactive';
+        rootEl.classList.toggle('report-mode', active);
+        // Mode-scoped so CSS (e.g. the un-grey of rule-bearing silent cells) applies
+        // only where it should — never to silent letters in a timing session.
+        rootEl.classList.toggle('report-timing', mode.kind === 'timing');
+        rootEl.classList.toggle('report-tajweed', mode.kind === 'tajweed');
+        rootEl.classList.toggle('report-phonemes', mode.kind === 'phonemes');
+        // Silence targets the inter-word gaps: existing pause tiles (boundary / waṣl)
+        // or inserted missed-pause slots (missed). The root class reveals the slots.
+        const silenceMissed = mode.kind === 'silence' && mode.subtype === 'pause_missed';
+        const silenceExisting =
+            mode.kind === 'silence' && (mode.subtype === 'pause_boundary' || mode.subtype === 'pause_wasl');
+        rootEl.classList.toggle('report-silence', mode.kind === 'silence');
+        rootEl.classList.toggle('report-missed', silenceMissed);
+        rootEl.classList.toggle('report-existing', silenceExisting);
+        const stagedMap = get(staged);
+        const focused = get(focusedCellKey);
+        const pub = _publicByKey();
+        const dimWrong = mode.kind === 'tajweed' && mode.subtype === 'wrong_rule';
+        const timing = mode.kind === 'timing';
+        const phonemes = mode.kind === 'phonemes';
+        const silence = mode.kind === 'silence';
+        const els = rootEl.querySelectorAll<HTMLElement>(
+            '[data-cell-index], .mega-phoneme, .mega-block, .pause-bridge, .missed-slot',
+        );
+        els.forEach((el) => {
+            const key = elCellKey(el);
+            // wrong_rule spotlights rule-bearing cells: dim + inert every cell/phoneme
+            // that carries no rule (letters + phonemes expose data-has-tj; blocks
+            // have none). Dimming is tajweed-only — in timing the silent letters keep
+            // their native greyed style and are merely made inert (no opacity change).
+            const noTj = dimWrong && el.hasAttribute('data-has-tj') && el.getAttribute('data-has-tj') !== '1';
+            // A silent letter has no duration to call too-long/short, so it can't be a
+            // timing target — inert it (keep its look) so only timed letters are live.
+            const noTiming = timing && el.hasAttribute('data-cell-index') && el.dataset.cellTimed !== '1';
+            // Phonemes mode targets phoneme spans only — inert the letter/diacritic
+            // cells (NOT the block, which contains the phoneme spans).
+            const noPhoneme = phonemes && el.hasAttribute('data-cell-index');
+            // Silence: only the active gap type stays live; everything else is dimmed +
+            // inert. Dim the words (.mega-block) + off-type gap tiles, not nested cells
+            // (their word already dims — no compounded opacity).
+            const isPauseBridge = el.classList.contains('pause-bridge');
+            const isMissedSlot = el.classList.contains('missed-slot');
+            const isSilenceTarget =
+                (silenceExisting && isPauseBridge) || (silenceMissed && isMissedSlot);
+            const silenceInert = silence && !isSilenceTarget;
+            const silenceDim = silenceInert && (el.classList.contains('mega-block') || isPauseBridge || isMissedSlot);
+            el.classList.toggle('report-dim', noTj || silenceDim);
+            el.classList.toggle('report-inert', noTj || noTiming || noPhoneme || silenceInert);
+            // For .mega-block: flag ring + reportTip go on the .mega-word child so the
+            // outline sits on the hover target (onWordEnter fires on .mega-word) and the
+            // tooltip is reachable. dim/inert stay on the block itself.
+            const flagEl = el.classList.contains('mega-block')
+                ? (el.querySelector<HTMLElement>('.mega-word') ?? el)
+                : el;
+            flagEl.classList.toggle('report-flag-staged', active && !!key && stagedMap.has(key));
+            flagEl.classList.toggle('report-focused', active && !!key && key === focused);
+            const reps = key ? pub.get(key) : undefined;
+            flagEl.classList.toggle('report-flag-public', !!reps?.length);
+            if (reps?.length) flagEl.dataset.reportTip = _composeReportTip(reps);
+            else if (flagEl.dataset.reportTip) delete flagEl.dataset.reportTip;
+            // A missed-slot has no hover/duration plumbing, so surface its public
+            // flag via a native title instead of the custom cell tooltip.
+            if (isMissedSlot) {
+                if (reps?.length) el.title = 'Reported missing pause';
+                else el.removeAttribute('title');
+            }
+        });
+    }
+
+    /** Reconcile seeded tajweed entries against the live DOM so re-entering a
+     *  session shows the cell's full rule set, not just the previously-picked tags. */
+    function reconcileSeededTajweedOptions(): void {
+        if (!rootEl) return;
+        if (get(reportMode).kind !== 'tajweed') return;
+        const stagedMap = get(staged);
+        const els = rootEl.querySelectorAll<HTMLElement>('[data-cell-index], .mega-phoneme');
+        stagedMap.forEach((a, cellKey) => {
+            if (a.kind !== 'tajweed' || !a.originalId) return;
+            for (const el of Array.from(els)) {
+                if (elCellKey(el) !== cellKey) continue;
+                const tags = (el.getAttribute('data-tj-tags') || '')
+                    .split(',')
+                    .filter(Boolean)
+                    .filter(ruleHasLabel);
+                if (tags.length > a.ruleOptions.length) {
+                    upsertStaged({ ...a, ruleOptions: tags });
+                }
+                break;
+            }
+        });
+    }
+
+    // Delegated capture-phase click: in report mode a cell/word click STAGES (and,
+    // for timing, loops the cell) instead of seeking. stopPropagation blocks the
+    // normal letter/word handlers from also firing.
+    function _onReportClickCapture(e: MouseEvent): void {
+        const mode = get(reportMode);
+        if (mode.kind === 'inactive') return;
+        const tgt = e.target as HTMLElement;
+        // Silence targets the inter-word gap tiles only — a pause bridge (existing)
+        // or a missed-pause slot (missed). Swallow every other in-grid click.
+        if (mode.kind === 'silence') {
+            const gapEl = tgt.closest<HTMLElement>('.pause-bridge, .missed-slot');
+            if (gapEl && rootEl.contains(gapEl) && !gapEl.classList.contains('report-inert')) {
+                e.stopPropagation();
+                e.preventDefault();
+                _reportSelectGap(gapEl, mode);
+            } else {
+                e.stopPropagation();
+                e.preventDefault();
+            }
+            return;
+        }
+        const cellEl = tgt.closest<HTMLElement>('[data-cell-index]');
+        if (cellEl && rootEl.contains(cellEl) && !cellEl.classList.contains('report-inert')) {
+            e.stopPropagation();
+            e.preventDefault();
+            _reportSelectCell(cellEl, mode);
+            return;
+        }
+        // A phoneme span (no cell index) is also a selectable target (timing,
+        // tajweed, and the dedicated phonemes mode).
+        const phEl = tgt.closest<HTMLElement>('.mega-phoneme');
+        if (phEl && rootEl.contains(phEl) && !phEl.classList.contains('report-inert')) {
+            e.stopPropagation();
+            e.preventDefault();
+            _reportSelectCell(phEl, mode);
+            return;
+        }
+        if (mode.kind === 'timing') {
+            const blockEl = tgt.closest<HTMLElement>('.mega-block');
+            if (blockEl && rootEl.contains(blockEl)) {
+                e.stopPropagation();
+                e.preventDefault();
+                _reportSelectWord(blockEl);
+            }
+            return;
+        }
+        // tajweed/phonemes: targets only — swallow any other in-grid click so it
+        // can't fall through to the normal seek/select-word handler.
+        e.stopPropagation();
+        e.preventDefault();
+    }
+    function _num(v: string | undefined): number | null {
+        if (v == null || v === '') return null;
+        const n = parseFloat(v);
+        return Number.isNaN(n) ? null : n;
+    }
+    function _reportSelectCell(el: HTMLElement, mode: ReportMode): void {
+        const key = elCellKey(el);
+        const target = cellTargetFromEl(el);
+        if (!key || !target) return;
+        if (mode.kind === 'phonemes') {
+            // Multi-select toggle: re-clicking a flagged phoneme removes it. No loop.
+            if (get(staged).has(key)) {
+                removeStaged(key);
+                return;
+            }
+            if (target.kind !== 'phoneme') return; // letters/diacritics aren't phoneme targets
+            const glyph = (el.querySelector('.ph-base')?.textContent ?? '').trim();
+            upsertStaged({
+                kind: 'phonemes',
+                cellKey: key,
+                target,
+                wordIndex: target.word_index ?? -1,
+                glyph,
+            });
+            focusCell(key);
+            return;
+        }
+        if (!get(staged).has(key)) {
+            if (mode.kind === 'timing') {
+                upsertStaged({ kind: 'timing', cellKey: key, target, wordIndex: target.word_index ?? -1, onset: null, offset: null, comment: '' });
+            } else if (mode.kind === 'tajweed') {
+                // Only real, labelable rules are pickable — drop sentinels like
+                // `silent_unclassified` so the picker never shows a raw tag id.
+                const opts = (el.getAttribute('data-tj-tags') || '')
+                    .split(',')
+                    .filter(Boolean)
+                    .filter(ruleHasLabel);
+                upsertStaged({
+                    kind: 'tajweed',
+                    cellKey: key,
+                    target,
+                    subtype: mode.subtype,
+                    ruleOptions: opts,
+                    selectedRuleTags: opts.length === 1 ? opts : [],
+                    comment: '',
+                });
+            }
+        }
+        focusCell(key); // auto-discards a previously focused incomplete cell
+        // Only timing loops the selected cell (audio reference). Tajweed keeps the
+        // current play/pause state + the whole-verse loop untouched — a tajweed
+        // judgement doesn't need the cell isolated on a loop.
+        if (mode.kind !== 'timing') return;
+        // A letter/diacritic cell loops on its letter span; silent cells with no
+        // timing skip (handled below).
+        const lv = get(loadedVerse);
+        if (!lv) return;
+        const wi = parseInt(el.dataset.wordIndex ?? '-1', 10);
+        const isPhoneme = el.dataset.phonemeFlatIndex != null;
+        const s = isPhoneme
+            ? _num(el.dataset.cellStart)
+            : (_num(el.dataset.letterStart) ?? _num(el.dataset.cellStart));
+        const en = isPhoneme
+            ? _num(el.dataset.cellEnd)
+            : (_num(el.dataset.letterEnd) ?? _num(el.dataset.cellEnd));
+        if (s == null || en == null) return; // silent cell with no own timing — no loop
+        // Set the loop directly so playback stays pinned to this verse (it must
+        // not run on and advance the focus verse out of the session).
+        if (isPhoneme) {
+            const childIndex = parseInt(el.dataset.index ?? '-1', 10);
+            loopTarget.set({ kind: 'phoneme', startSec: s, endSec: en, wordIndex: wi, childIndex });
+        } else {
+            const ci = parseInt(el.dataset.cellIndex ?? '-1', 10);
+            loopTarget.set({ kind: 'letter', startSec: s, endSec: en, wordIndex: wi, childIndex: ci });
+        }
+        if (dashPort.element) {
+            const targetMs = (s + lv.tsSegOffset) * 1000;
+            ensureDashCovering(targetMs);
+            dashPort.seek(targetMs);
+            if (dashPort.paused) dashPort.play();
+        }
+    }
+    function _reportSelectWord(el: HTMLElement): void {
+        const wi = parseInt(el.dataset.wordIndex ?? '-1', 10);
+        if (wi < 0) return;
+        const key = `w${wi}`;
+        if (!get(staged).has(key)) {
+            upsertStaged({
+                kind: 'timing',
+                cellKey: key,
+                target: { kind: 'word', word_index: wi, source_letter_index: null, cell_index: null, phoneme_flat_index: null, share_group: null },
+                wordIndex: wi,
+                onset: null,
+                offset: null,
+                comment: '',
+            });
+        }
+        focusCell(key); // auto-discards a previously focused incomplete cell
+        // Loop the whole word for audio reference (same span as onWordClick).
+        const lv = get(loadedVerse);
+        const word = lv?.data.words[wi];
+        if (!lv || !word) return;
+        loopTarget.set({ kind: 'word', startSec: word.start, endSec: word.end, wordIndex: wi });
+        if (dashPort.element) {
+            const targetMs = (word.start + lv.tsSegOffset) * 1000;
+            ensureDashCovering(targetMs);
+            dashPort.seek(targetMs);
+            if (dashPort.paused) dashPort.play();
+        }
+    }
+    /** Loop the two words straddling a gap (audio reference for a pause report). */
+    function _loopGap(wi: number): void {
+        const lv = get(loadedVerse);
+        const prev = lv?.data.words[wi];
+        const next = lv?.data.words[wi + 1];
+        if (!lv || !prev || !next) return;
+        loopTarget.set({ kind: 'word', startSec: prev.start, endSec: next.end, wordIndex: wi });
+        if (dashPort.element) {
+            const targetMs = (prev.start + lv.tsSegOffset) * 1000;
+            ensureDashCovering(targetMs);
+            dashPort.seek(targetMs);
+            if (dashPort.paused) dashPort.play();
+        }
+    }
+    function _reportSelectGap(el: HTMLElement, mode: ReportMode): void {
+        if (mode.kind !== 'silence') return;
+        const wi = parseInt(el.dataset.gapWordIndex ?? '-1', 10);
+        if (wi < 0) return;
+        const key = gapKey(wi);
+        // The binary subtypes toggle (re-click removes); pause_boundary stays staged
+        // and is completed via the strip's Start/End axes.
+        if (mode.subtype !== 'pause_boundary' && get(staged).has(key)) {
+            removeStaged(key);
+            return;
+        }
+        if (!get(staged).has(key)) {
+            const target = cellTargetFromEl(el);
+            if (!target) return;
+            upsertStaged({
+                kind: 'silence',
+                cellKey: key,
+                target,
+                gapWordIndex: wi,
+                subtype: mode.subtype,
+                onset: null,
+                offset: null,
+            });
+        }
+        focusCell(key);
+        _loopGap(wi);
+    }
+    $: if (rootEl && !_reportClickBound) {
+        rootEl.addEventListener('click', _onReportClickCapture, true);
+        _reportClickBound = true;
+    }
+    onDestroy(() => {
+        if (rootEl) rootEl.removeEventListener('click', _onReportClickCapture, true);
+    });
 
     // Waveform hover → re-run highlights. The rAF loop is stopped while paused,
     // so without this reactive trigger hover-driven previews wouldn't repaint.
@@ -842,6 +1209,8 @@
         if (ms != null) lines.push(`${ms} ms`);
         const rules = el.dataset.tjRules;
         if (rules) lines.push(rules);
+        const report = el.dataset.reportTip;
+        if (report) lines.push(report);
         return lines.length ? lines.join('\n') : null;
     }
 
@@ -913,6 +1282,20 @@
          not a .mega-letter, never highlighted or queried as a cell. -->
     <span class="letter-metrics" aria-hidden="true">ب</span>
     {#each units as unit (unit.key)}
+        {#if unit.gapWordIndex != null}
+            <!-- Missing-pause slot: a between-words tile at a contiguous boundary. A
+                 direct row child so the row column-gap applies symmetrically on both
+                 sides (matching normal word spacing). Hidden at rest; revealed
+                 (spotlit) in the missed-pause report mode, or shown with a red ring +
+                 tooltip when publicly flagged. -->
+            <div class="missed-slot" data-gap-word-index={unit.gapWordIndex} role="group">
+                {#if unit.missedMark}
+                    <span class="pause-waqf" style={waqfRenderStyle(unit.missedMark)}>{unit.missedMark}</span>
+                {:else}
+                    <span class="pause-icon" aria-hidden="true"></span>
+                {/if}
+            </div>
+        {/if}
         <div class="word-unit">
         {#each unit.parts as part}
         {#if part.kind === 'bridge'}
@@ -977,6 +1360,7 @@
                 class="pause-bridge"
                 data-pause-start={pb.startSec}
                 data-pause-end={pb.endSec}
+                data-gap-word-index={pb.fromWordIndex}
                 role="group"
                 on:mouseenter={(e) => onCellEnter(e, pb.startSec, pb.endSec)}
                 on:mouseleave={onCellLeave}
@@ -1041,6 +1425,9 @@
                                             data-cell-start={f.cellStart}
                                             data-cell-end={f.cellEnd}
                                             data-word-index={block.wordIndex}
+                                            data-cell-index={f.cellIndex}
+                                            data-has-tj={f.ruleTags.length || f.tjBadges.length || f.silentRules.length ? '1' : '0'}
+                                            data-tj-tags={f.ruleTags.join(',')}
                                             style:box-shadow={tjShadowFor(f.tjBadges, $tajweedSettings)}
                                             class:tj-kubra={!!tjKubraFor(f.tjBadges, $tajweedSettings)}
                                             style:--tj-kubra={tjKubraFor(f.tjBadges, $tajweedSettings)}
@@ -1058,6 +1445,12 @@
                                             class="mega-letter null-ts"
                                             class:silent={f.silent}
                                             style="grid-column:{ci + 1}; justify-self:stretch"
+                                            data-word-index={block.wordIndex}
+                                            data-cell-index={f.cellIndex}
+                                            data-source-letter-index={f.letterIndex}
+                                            data-share-group={f.shareGroup}
+                                            data-has-tj={f.ruleTags.length || f.tjBadges.length || f.silentRules.length ? '1' : '0'}
+                                            data-tj-tags={f.ruleTags.join(',')}
                                             style:box-shadow={tjShadowFor(f.tjBadges, $tajweedSettings)}
                                             class:tj-kubra={!!tjKubraFor(f.tjBadges, $tajweedSettings)}
                                             style:--tj-kubra={tjKubraFor(f.tjBadges, $tajweedSettings)}
@@ -1085,6 +1478,11 @@
                                             data-letter-end={f.letterEnd}
                                             data-word-index={block.wordIndex}
                                             data-letter-index={f.letterIndex}
+                                            data-cell-index={f.cellIndex}
+                                            data-source-letter-index={f.letterIndex}
+                                            data-share-group={f.shareGroup}
+                                            data-has-tj={f.ruleTags.length || f.tjBadges.length || f.silentRules.length ? '1' : '0'}
+                                            data-tj-tags={f.ruleTags.join(',')}
                                             style:box-shadow={tjShadowFor(f.tjBadges, $tajweedSettings)}
                                             class:tj-kubra={!!tjKubraFor(f.tjBadges, $tajweedSettings)}
                                             style:--tj-kubra={tjKubraFor(f.tjBadges, $tajweedSettings)}
@@ -1113,6 +1511,10 @@
                                             data-cell-end={c.cellEnd}
                                             data-word-index={block.wordIndex}
                                             data-dia-loop-idx={c.phoneIdx.length ? c.phoneIdx[0] : undefined}
+                                            data-cell-index={c.cellIndex}
+                                            data-share-group={c.shareGroup}
+                                            data-has-tj={c.ruleTags.length || c.tjBadges.length || c.silentRules.length ? '1' : '0'}
+                                            data-tj-tags={c.ruleTags.join(',')}
                                             style:box-shadow={tjShadowFor(c.tjBadges, $tajweedSettings)}
                                             class:tj-kubra={!!tjKubraFor(c.tjBadges, $tajweedSettings)}
                                             style:--tj-kubra={tjKubraFor(c.tjBadges, $tajweedSettings)}
@@ -1146,6 +1548,11 @@
                                                 ph.interval.phone === 'sp'}
                                             class:geminate={ph.interval.geminate_start}
                                             data-index={ph.index}
+                                            data-word-index={block.wordIndex}
+                                            data-phoneme-flat-index={ph.wordLocalIndex}
+                                            data-cell-start={ph.interval.start}
+                                            data-cell-end={ph.interval.end}
+                                            data-has-tj={ph.tjBadges.length ? '1' : '0'}
                                             style:box-shadow={tjShadowFor(ph.tjBadges, $tajweedSettings)}
                         class:tj-kubra={!!tjKubraFor(ph.tjBadges, $tajweedSettings)}
                         style:--tj-kubra={tjKubraFor(ph.tjBadges, $tajweedSettings)}
@@ -1177,6 +1584,10 @@
                                 ph.interval.phone === 'sp'}
                             class:geminate={ph.interval.geminate_start}
                             data-index={ph.index}
+                            data-word-index={block.wordIndex}
+                            data-phoneme-flat-index={ph.wordLocalIndex}
+                            data-cell-start={ph.interval.start}
+                            data-cell-end={ph.interval.end}
                             on:click={(e) => onPhonemeClick(e, ph.interval, ph.index, block.wordIndex)}
                             on:dblclick={(e) => onPhonemeDblClick(e, ph.interval, ph.index, block.wordIndex)}
                             on:mouseenter={(e) => onPhonemeEnter(e, ph.interval)}

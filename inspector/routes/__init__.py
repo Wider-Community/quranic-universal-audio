@@ -45,7 +45,7 @@ def register_blueprints(app):
     from routes.segments.edit import seg_edit_bp
     from routes.segments.peaks import peaks_bp
     from routes.segments.validation import seg_val_bp
-    from routes.timestamps.flags import ts_flags_bp
+    from routes.timestamps.reports import ts_reports_bp
     from routes.timestamps.timestamps import ts_bp
     from routes.webhooks.ts_jobs import webhooks_bp
 
@@ -68,7 +68,7 @@ def register_blueprints(app):
     app.register_blueprint(admin_announcements_bp)
     app.register_blueprint(requests_bp)
     app.register_blueprint(ts_bp)
-    app.register_blueprint(ts_flags_bp)
+    app.register_blueprint(ts_reports_bp)
     app.register_blueprint(seg_data_bp)
     app.register_blueprint(seg_edit_bp)
     app.register_blueprint(seg_val_bp)

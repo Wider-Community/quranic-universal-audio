@@ -641,6 +641,21 @@ def _ts_regen_provenance(slug: str) -> tuple[str | None, list[int] | None]:
     return prior.get("version"), affected
 
 
+def _recheck_report_staleness(slug: str, affected_chapters: list[int] | None) -> None:
+    """Best-effort: flag Timestamps reports invalidated by this regeneration.
+
+    Re-resolves each open report's target against the new shards and stales those
+    whose category-relevant content changed. Runs inside the caller's
+    ``durable_transaction`` (the repo write needs it); a failure here must never
+    abort the release write."""
+    try:
+        from services.ts_reports import ts_target_snapshot
+
+        ts_target_snapshot.recheck_reports_staleness(slug, affected_chapters)
+    except Exception:  # noqa: BLE001 — best-effort; never break the release write
+        log.exception("recheck report staleness failed for %s", slug)
+
+
 def complete_timestamps_job(slug: str, job_id: str) -> dict:
     """Record a succeeded timestamps job for ``slug``. Idempotent.
 
@@ -735,6 +750,7 @@ def complete_timestamps_job(slug: str, job_id: str) -> dict:
             # Stamp the HF + most-recent-GH membership as stale (re-publishing
             # clears stale in v1; no explicit ack endpoint).
             repo_releases.stamp_stale(slug, at=now, reason=StaleReason.TS_REGEN)
+            _recheck_report_staleness(slug, affected_chapters)
     except state_service.StateError as exc:
         # Lost a double-fire race, or the row changed under us (e.g. reviewer
         # un-marked). Benign — the winning caller (or a re-run) handles it.
@@ -814,6 +830,7 @@ def _regenerate_timestamps_on_released(slug: str, job_id: str) -> dict:
         )
         # Re-publishing clears stale; TS regen sets it on the HF/GH membership.
         repo_releases.stamp_stale(slug, at=now, reason=StaleReason.TS_REGEN)
+        _recheck_report_staleness(slug, affected_chapters)
         audit.append(
             "reciter.ts_regenerated",
             actor=SYSTEM_ACTOR,

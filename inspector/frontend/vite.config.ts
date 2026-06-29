@@ -23,6 +23,24 @@ const BACKEND_TARGET = `http://${BACKEND_HOST}:${BACKEND_PORT}`;
 // local Flask. `INSPECTOR_API_TARGET=https://hetchyy-quranic-inspector-dev.hf.space`.
 const API_TARGET = process.env.INSPECTOR_API_TARGET || BACKEND_TARGET;
 const API_REMOTE = Boolean(process.env.INSPECTOR_API_TARGET);
+// Hybrid local-reports mode: serve the data-heavy endpoints (manifest/shard/
+// audio/peaks/catalog) from a remote `INSPECTOR_API_TARGET` (the dev Space)
+// while `/api/me` + the report routes hit the LOCAL backend, so a verse loads
+// on Windows (no bucket mount) yet reports persist against local code.
+const LOCAL_REPORTS = process.env.INSPECTOR_LOCAL_REPORTS === '1';
+const localApi = { target: BACKEND_TARGET, changeOrigin: false, secure: false };
+const remoteApi = { target: API_TARGET, changeOrigin: API_REMOTE, secure: true };
+const apiProxy: Record<string, typeof remoteApi> = LOCAL_REPORTS
+  ? {
+      '^/api/me': localApi,
+      '^/api/ts/[^/]+/reports': localApi,
+      '/api': remoteApi,
+      '/audio': remoteApi,
+    }
+  : {
+      '/api': remoteApi,
+      '/audio': remoteApi,
+    };
 
 export default defineConfig(({ mode }) => ({
   root: here,
@@ -47,9 +65,6 @@ export default defineConfig(({ mode }) => ({
   server: {
     port: VITE_PORT,
     strictPort: true,
-    proxy: {
-      '/api': { target: API_TARGET, changeOrigin: API_REMOTE, secure: true },
-      '/audio': { target: API_TARGET, changeOrigin: API_REMOTE, secure: true },
-    },
+    proxy: apiProxy,
   },
 }));

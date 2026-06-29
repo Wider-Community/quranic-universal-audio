@@ -694,6 +694,41 @@
     opacity: 0.7;
 }
 
+/* ---- Missing-pause slot (silence reports) -------------------------------- */
+/* A between-words tile at a contiguous boundary where a pause could be missing.
+   Hidden at rest; revealed + spotlit (clickable) in the missed-pause report mode,
+   or shown with a red ring + native title when publicly flagged. Mirrors the
+   pause-bridge box so an inserted slot reads as the same family. */
+.missed-slot {
+    box-sizing: border-box;
+    display: none;
+    align-self: flex-start;
+    align-items: center;
+    justify-content: center;
+    width: calc(var(--analysis-word-font-size, 1.3rem) * 0.81);
+    height: calc(var(--analysis-word-font-size, 1.3rem) * 0.7);
+    border: 1px dashed var(--border-strong);
+    border-radius: 3px;
+    color: var(--text-faint);
+    overflow: hidden;
+}
+.report-missed .missed-slot {
+    display: flex;
+    cursor: pointer;
+    color: var(--accent);
+    border-color: var(--accent);
+    transition: background var(--t-fast), color var(--t-fast);
+}
+.report-missed .missed-slot:hover {
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+/* A publicly-flagged missed pause shows to ALL viewers (outside report mode too). */
+.missed-slot.report-flag-public,
+.missed-slot.report-flag-staged {
+    display: flex;
+    color: var(--state-missing-fg);
+}
+
 /* Cross-verse waṣl context: a neighbouring verse's words shown as read-only
    context around the focused verse (junction tajweed renders across the
    boundary). Dimmed + non-loopable; click still seeks (focus follows). */
@@ -1055,5 +1090,77 @@
 }
 #animation-display .anim-char {
     display: inline;
+}
+
+/* ---- Report mode: in-grid cell flagging ----------------------------------
+ * Classes toggled imperatively by UnifiedDisplay (disjoint from the 60fps
+ * highlight classes). The flag ring uses `outline` so it never collides with
+ * the inline tajweed-underline box-shadow and never reflows layout. */
+.report-mode .mega-letter,
+.report-mode .haraka-cell,
+.report-mode .mega-letter.implicit {
+    cursor: pointer;
+}
+/* Tajweed wrong-rule spotlight: dim the cells with no rule. */
+.report-dim {
+    opacity: 0.3;
+    transition: opacity var(--t-fast, 140ms) ease;
+}
+/* …and make those rule-less cells inert — kills both click and hover tooltip in
+   one go, so only rule-bearing cells stay interactive in wrong_rule. */
+.report-inert {
+    pointer-events: none;
+}
+/* A silent cell that carries a tajweed rule (hamza-waṣl, lām shamsiyyah, …) is a
+   valid wrong_rule target: un-grey it and make it selectable so it stands with
+   the other spotlighted cells. TAJWEED-ONLY — in a timing session a silent letter
+   keeps its native greyed style (it's never a timing target). */
+.report-tajweed .mega-letter.silent[data-has-tj='1'] {
+    color: inherit;
+    opacity: 1;
+    pointer-events: auto;
+    cursor: pointer;
+}
+/* A flagged cell (own staged or anyone's persisted) — red ring + tooltip. The
+   ring is INSET (negative offset) so it stays within the cell box and never
+   bleeds into a connected neighbour (a letter + its diacritic). */
+.report-flag-public,
+.report-flag-staged {
+    outline: 2px solid var(--state-missing-fg);
+    outline-offset: -2px;
+    border-radius: 2px;
+}
+/* Words + gap tiles are spaced apart, so their ring can sit outset. The flag
+   ring lives on .mega-word (not .mega-block), so the outset exception targets
+   .mega-word — small outline-offset gives diacritics/letters room to breathe. */
+.mega-word.report-flag-public,
+.mega-word.report-flag-staged,
+.pause-bridge.report-flag-public,
+.pause-bridge.report-flag-staged,
+.missed-slot.report-flag-public,
+.missed-slot.report-flag-staged {
+    outline-offset: 2px;
+}
+/* The cell currently being annotated in the strip — accent ring on top. Inset for
+   cells (kept outset for spaced word + gap tiles). */
+.report-focused {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+}
+.mega-word.report-focused,
+.pause-bridge.report-focused,
+.missed-slot.report-focused {
+    outline-offset: 2px;
+}
+/* Silence: existing-pause modes spotlight the pause bridges as the click surface. */
+.report-existing .pause-bridge {
+    cursor: pointer;
+    border-color: var(--accent);
+}
+.report-existing .pause-bridge:hover {
+    background: color-mix(in srgb, var(--accent) 18%, var(--hl-cell-rest));
+}
+@media (prefers-reduced-motion: reduce) {
+    .report-dim { transition: none; }
 }
 

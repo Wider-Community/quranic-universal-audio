@@ -46,6 +46,8 @@ export interface RenderedPauseBridge {
     mark: string | null;
     startSec: number;
     endSec: number;
+    /** The word before this gap (= the silence report's `gap` target word_index). */
+    fromWordIndex: number;
 }
 
 export interface RenderedBlock {
@@ -79,6 +81,13 @@ export interface RenderedUnit {
     parts: RenderedUnitPart[];
     /** Array index of the unit's last block (for bridge-join adjacency). */
     lastBlockIndex: number;
+    /** A plain contiguous boundary (no existing pause / bridge) precedes this unit
+     *  — the word before it, where a "missed pause" could be flagged. `null` for
+     *  the first unit and for a unit that opens with a connector. */
+    gapWordIndex: number | null;
+    /** The preceding word's lifted-out waqf (stop) sign for that missed-pause slot,
+     *  or `null` → the neutral `||` pause symbol. */
+    missedMark: string | null;
 }
 
 /** Build the per-word `RenderedBlock[]` for the analysis view: cross-word
@@ -125,6 +134,22 @@ export function buildRendered(
     const idghamGroupTags = new Map<number, string>();
     for (const c of allCells) {
         if (isBridgeTag(c.tag) && c.shareGroup != null) idghamGroupTags.set(c.shareGroup, c.tag!);
+    }
+
+    // Every rule tag present ANYWHERE in a share group → so a co-lit partner that
+    // owns no tag (a vowel co-lit with its madd letter, an idgham receiver) is
+    // still reportable as that shared rule. Drives `cellRuleTags` (report
+    // targetability), not the visual badge.
+    const shareGroupRuleTags = new Map<number, string[]>();
+    for (const c of allCells) {
+        if (c.shareGroup == null) continue;
+        const own = [c.tag, ...(c.secondaryTags ?? []), izharCellTag.get(c)].filter(
+            (t): t is string => !!t,
+        );
+        if (!own.length) continue;
+        const cur = shareGroupRuleTags.get(c.shareGroup) ?? [];
+        for (const t of own) if (!cur.includes(t)) cur.push(t);
+        shareGroupRuleTags.set(c.shareGroup, cur);
     }
 
     // Per-flat-index underline badges, built verse-wide — the single source for
@@ -250,7 +275,7 @@ export function buildRendered(
             if (target < words.length) {
                 bridgeBeforeBlock.set(target, {
                     phonemes: [{
-                        interval: intervals[pi]!, index: pi,
+                        interval: intervals[pi]!, index: pi, wordLocalIndex: -1,
                         tjBadges: phonemeBadges.get(pi) ?? badgesForTags([intervals[pi]!.bridge]),
                     }],
                     letter: null,
@@ -272,7 +297,7 @@ export function buildRendered(
             const glyph = cellGlyph(kasra.chars, kasra.tag, iv.phone);
             const sr = silentTooltip(kasra.tag);
             bridgeBeforeBlock.set(wi + 1, {
-                phonemes: [{ interval: iv, index: kpi, tjBadges: [] }],
+                phonemes: [{ interval: iv, index: kpi, wordLocalIndex: -1, tjBadges: [] }],
                 letter: {
                     glyph,
                     style: harakaRenderStyle(glyph),
@@ -294,7 +319,7 @@ export function buildRendered(
         if (bridgeBeforeBlock.has(j.target)) continue;
         bridgeBeforeBlock.set(j.target, {
             phonemes: [{
-                interval: intervals[j.headPi]!, index: j.headPi,
+                interval: intervals[j.headPi]!, index: j.headPi, wordLocalIndex: -1,
                 tjBadges: phonemeBadges.get(j.headPi) ?? badgesForTags([j.tag]),
             }],
             letter: null,
@@ -310,20 +335,27 @@ export function buildRendered(
         const bridge: RenderedBridge | null = bridgeBeforeBlock.get(wi) ?? null;
 
         const phonemes: RenderedPhoneme[] = [];
+        // Word-local indexable-phone counter — matches the shard's indexable space
+        // (render-only Q + geminate_end excluded), so a phoneme's `wordLocalIndex`
+        // is the `phoneme_flat_index` a report target keys on.
+        let wli = 0;
         for (const pi of word.phoneme_indices ?? []) {
-            if (excluded.has(pi)) continue;
             const iv = intervals[pi];
-            if (iv && !iv.geminate_end) {
+            if (!iv) continue;
+            const indexable = iv.phone !== 'Q' && !iv.geminate_end;
+            if (!excluded.has(pi) && !iv.geminate_end) {
                 phonemes.push({
                     interval: iv,
                     index: pi,
+                    wordLocalIndex: indexable ? wli : -1,
                     tjBadges: phonemeBadges.get(pi) ?? [],
                     displayPhone: _heavyIkhfaaDisplay(iv.phone, intervals[pi + 1]?.phone),
                 });
             }
+            if (indexable) wli++;
         }
 
-        const groups = cellGroupsFor(word, intervals, shareUnions, nasalUnions, idghamGroupTags, izharCellTag, liftedIltiqaa.has(wi));
+        const groups = cellGroupsFor(word, intervals, shareUnions, nasalUnions, idghamGroupTags, shareGroupRuleTags, izharCellTag, liftedIltiqaa.has(wi));
         _buildColumns(groups, phonemes);
 
         blocks.push({
@@ -350,7 +382,7 @@ export function buildRendered(
         if (endSec <= startSec) continue;
         const { clean, mark } = splitWaqf(a.displayText);
         if (mark) a.displayText = clean;
-        b.pauseBridge = { mark, startSec, endSec };
+        b.pauseBridge = { mark, startSec, endSec, fromWordIndex: a.wordIndex };
     }
     return blocks;
 }
@@ -377,9 +409,18 @@ export function groupUnits(blocks: RenderedBlock[]): RenderedUnit[] {
             cur!.parts.push(connector!, { kind: 'block', block });
             cur!.lastBlockIndex = i;
         } else {
-            cur = { key: block.wordIndex, parts: [], lastBlockIndex: i };
-            // Defensive: a connector with no joinable predecessor still renders.
-            if (connector) cur.parts.push(connector);
+            cur = { key: block.wordIndex, parts: [], lastBlockIndex: i, gapWordIndex: null, missedMark: null };
+            if (connector) {
+                // Defensive: a connector with no joinable predecessor still renders.
+                cur.parts.push(connector);
+            } else if (i > 0) {
+                // A new unit with NO connector opens a plain contiguous boundary with
+                // the previous word — a candidate "missed pause" slot. Lift the
+                // previous word's stop sign (if any) into it, else fall back to `||`.
+                const prev = blocks[i - 1]!;
+                cur.gapWordIndex = prev.wordIndex;
+                cur.missedMark = splitWaqf(prev.displayText).mark;
+            }
             cur.parts.push({ kind: 'block', block });
             units.push(cur);
         }

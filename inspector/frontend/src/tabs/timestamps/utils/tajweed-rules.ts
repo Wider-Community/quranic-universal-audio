@@ -178,6 +178,13 @@ export function silentTooltip(tag: string | null | undefined): string | null {
     return tag ? ((SILENT_TOOLTIPS as Partial<Record<string, string>>)[tag] ?? null) : null;
 }
 
+/** A tag the report rule-picker can present — it has a human label (coloured
+ *  badge or named silent rule). Sentinels like `silent_unclassified` have no
+ *  label and are not a "rule" you can call wrong, so the picker omits them. */
+export function ruleHasLabel(tag: string | null | undefined): boolean {
+    return !!(badgeForTag(tag) || silentTooltip(tag));
+}
+
 /** All tags sharing a legend toggle/colour (e.g. both qalqala subtypes) — derived
  *  from the registry so callers never re-list tag keys. */
 export function tagsForLegend(legendKey: string): Set<string> {

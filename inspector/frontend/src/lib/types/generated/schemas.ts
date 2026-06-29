@@ -1921,39 +1921,6 @@ export interface TsConfigResponse {
   analysis_letter_font_size: string;
 }
 /**
- * Comment author identity — only disclosed to identity-capable callers.
- */
-export interface TsFlagAuthor {
-  hf_user_id?: string | null;
-  login?: string | null;
-  role?: string | null;
-}
-/**
- * One user's comment on a flagged verse (modal list item / POST echo).
- */
-export interface TsFlagComment {
-  comment?: string | null;
-  created_at: string;
-  updated_at: string;
-  mine?: boolean;
-  author?: TsFlagAuthor | null;
-}
-/**
- * Create/update the caller's flag on a verse (``POST .../flags``).
- */
-export interface TsFlagCreateRequest {
-  verse_key: string;
-  comment?: string | null;
-  anon_token?: string | null;
-}
-/**
- * A flagged verse + how many comments it carries (accordion pill).
- */
-export interface TsFlagVerseCount {
-  verse_key: string;
-  count: number;
-}
-/**
  * One job run's durable record (settings + status + logs).
  *
  * ``status`` mirrors HF's lowercased stage (``running`` / ``succeeded`` /
@@ -2018,10 +1985,147 @@ export interface TsManifestReciter {
   vbr_chapters?: number[];
 }
 /**
- * Every flagged verse for a reciter (``GET .../flags``).
+ * Every reported verse for a reciter (``GET .../reports``).
  */
-export interface TsReciterFlags {
-  flags?: TsFlagVerseCount[];
+export interface TsReciterReports {
+  reports?: TsReportVerseCount[];
+}
+/**
+ * A reported verse + its open / resolved counts (accordion pill).
+ */
+export interface TsReportVerseCount {
+  verse_key: string;
+  open_count: number;
+  resolved_count: number;
+}
+/**
+ * One report (verse list item / POST echo).
+ */
+export interface TsReport {
+  id: number;
+  verse_key: string;
+  category: "audio" | "timing" | "tajweed" | "phonemes" | "silence" | "other";
+  subtype?: ("wrong_rule" | "missing_rule" | "pause_boundary" | "pause_wasl" | "pause_missed") | null;
+  onset?: ("early" | "late") | null;
+  offset?: ("early" | "late") | null;
+  target: TsReportTarget;
+  snapshot?: TsReportSnapshot | null;
+  comment?: string | null;
+  selected_rule_tags?: string[];
+  status: "open" | "resolved";
+  stale?: boolean;
+  resolver_comment?: string | null;
+  resolved_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  mine?: boolean;
+  author?: TsReportAuthor | null;
+}
+/**
+ * What a report points at within a verse.
+ *
+ * Indices are word-scoped (``word_index`` 0-based in the verse;
+ * ``source_letter_index`` the anchoring letter; ``cell_index`` into the word's
+ * ``cells[]``; ``phoneme_flat_index`` a word-local indexable-phone index;
+ * ``share_group`` a co-timed cell-group id). A ``gap`` target (silence reports)
+ * addresses the word-boundary between ``word_index`` and ``word_index + 1`` and
+ * needs only ``word_index``. Required fields per ``kind`` are enforced below — a
+ * ``verse`` target leaves them all unset.
+ */
+export interface TsReportTarget {
+  kind: "verse" | "word" | "cell" | "phoneme" | "cell_group" | "gap";
+  word_index?: number | null;
+  source_letter_index?: number | null;
+  cell_index?: number | null;
+  phoneme_flat_index?: number | null;
+  share_group?: number | null;
+}
+/**
+ * Denormalized snapshot of the targeted shard content at create time.
+ *
+ * Informational + the drift fingerprint used to detect staleness on a
+ * re-stamp. ``rule_tags`` collapses the cell ``tag`` + ``secondary_tags``;
+ * ``phoneme_rule_tags`` parallels the cell's phoneme indices; ``phones`` is the
+ * mapped phone list.
+ */
+export interface TsReportSnapshot {
+  chars?: string | null;
+  role?: string | null;
+  status?: string | null;
+  rule_tags?: string[];
+  phoneme_rule_tags?: (string | null)[];
+  phones?: string[];
+  share_group?: number | null;
+  word_text?: string | null;
+  verse_text?: string | null;
+  schema_version?: number | null;
+}
+/**
+ * Report author identity — only disclosed to identity-capable callers.
+ */
+export interface TsReportAuthor {
+  hf_user_id?: string | null;
+  login?: string | null;
+  role?: string | null;
+}
+/**
+ * Submit many staged annotations on ONE verse in a single transaction
+ * (``POST .../reports/batch``). Items may mix categories (timing + tajweed).
+ */
+export interface TsReportBatchCreateRequest {
+  verse_key: string;
+  /**
+   * @minItems 1
+   * @maxItems 200
+   */
+  items: [TsReportBatchItem, ...TsReportBatchItem[]];
+  anon_token?: string | null;
+}
+/**
+ * One staged cell-annotation in a batch submit. Verse + identity are
+ * batch-level, so an item carries only its own category/subtype/target/comment
+ * (+ ``selected_rule_tags`` for tajweed wrong_rule). Same per-category rules as
+ * a single create (shared ``_validate_report_item``).
+ */
+export interface TsReportBatchItem {
+  category: "audio" | "timing" | "tajweed" | "phonemes" | "silence" | "other";
+  subtype?: ("wrong_rule" | "missing_rule" | "pause_boundary" | "pause_wasl" | "pause_missed") | null;
+  onset?: ("early" | "late") | null;
+  offset?: ("early" | "late") | null;
+  target: TsReportTarget;
+  comment?: string | null;
+  selected_rule_tags?: string[];
+}
+/**
+ * Echo of a batch submit: the created/updated reports in input order, plus
+ * insert vs upsert counts.
+ */
+export interface TsReportBatchResult {
+  verse_key: string;
+  reports?: TsReport[];
+  created_count: number;
+  updated_count: number;
+}
+/**
+ * Create the caller's report on a verse (``POST .../reports``).
+ */
+export interface TsReportCreateRequest {
+  verse_key: string;
+  category: "audio" | "timing" | "tajweed" | "phonemes" | "silence" | "other";
+  subtype?: ("wrong_rule" | "missing_rule" | "pause_boundary" | "pause_wasl" | "pause_missed") | null;
+  onset?: ("early" | "late") | null;
+  offset?: ("early" | "late") | null;
+  target: TsReportTarget;
+  comment?: string | null;
+  selected_rule_tags?: string[];
+  anon_token?: string | null;
+}
+/**
+ * Resolve a report (``POST .../reports/<id>/resolve``, or a timing
+ * word-group via ``.../word/<word_index>/<category>/resolve``). Owner-gated.
+ */
+export interface TsReportResolveRequest {
+  comment?: string | null;
 }
 /**
  * Named (object) view of a positional ``CellTiming`` row.
@@ -2120,9 +2224,9 @@ export interface TsValidationVerse {
   [k: string]: unknown;
 }
 /**
- * All comments on a single verse (``GET .../flags/<verse_key>``).
+ * All reports on a single verse (``GET .../reports/<verse_key>``).
  */
-export interface TsVerseFlags {
+export interface TsVerseReports {
   verse_key: string;
-  comments?: TsFlagComment[];
+  reports?: TsReport[];
 }

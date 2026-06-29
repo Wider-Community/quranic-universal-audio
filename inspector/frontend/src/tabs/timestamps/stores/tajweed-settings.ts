@@ -149,6 +149,27 @@ export function resetTajweedRule(legendKey: string): void {
     });
 }
 
+/** Force every rule's underline on transiently (tajweed report mode) WITHOUT
+ *  persisting, so all colours are visible while picking targets. Colours are
+ *  preserved. Returns the prior settings to hand back to
+ *  {@link restoreTajweedSettings} on exit. */
+export function forceAllTajweedEnabled(): TajweedSettings {
+    let prev: TajweedSettings = {};
+    tajweedSettings.update((s) => {
+        prev = s;
+        return Object.fromEntries(
+            LEGEND_KEYS.map((k) => [k, { enabled: true, color: s[k]?.color ?? null }]),
+        );
+    });
+    return prev;
+}
+
+/** Restore a snapshot captured by {@link forceAllTajweedEnabled} (no persist —
+ *  it already reflects the user's saved settings). */
+export function restoreTajweedSettings(snapshot: TajweedSettings): void {
+    tajweedSettings.set(snapshot);
+}
+
 /** Restore every rule to its registry defaults. */
 export function resetAllTajweed(): void {
     const next = defaults();

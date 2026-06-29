@@ -59,5 +59,16 @@ def flag_replied(name: str) -> str:
     return f"New reply on a flag · {name}"
 
 
-def ts_flag_reported(name: str) -> str:
+def ts_report_reported(name: str) -> str:
     return f"Timestamps issue reported · {name}"
+
+
+# --- User-facing: report resolution ---
+
+
+def ts_report_resolved(name: str) -> str:
+    return f"Your timestamps report for {name} was resolved"
+
+
+def ts_report_auto_resolved(name: str) -> str:
+    return f"A timestamps report auto-resolved on regen · {name}"
