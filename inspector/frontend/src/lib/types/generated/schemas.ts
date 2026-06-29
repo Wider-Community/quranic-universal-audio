@@ -690,14 +690,16 @@ export interface AudioSurahsResponse {
  * gates mirror the reviewer's mark-ready submission: skip when they left a
  * written comment (``gate_by_comments``) or flagged any segment
  * (``gate_by_flags``). A checklist-bypass submission is always skipped.
+ *
+ * The TS tunables (beam/probe/model/…) come from the shared
+ * ``ts_generation_defaults``; ``extra="allow"`` tolerates older saved blobs that
+ * still carry the retired per-automation ``beam`` / ``aligner_model`` keys.
  */
 export interface AutoGenTsConfig {
   enabled?: boolean;
   gate_by_comments?: boolean;
   gate_by_flags?: boolean;
-  beam?: number;
-  probe_beams?: number;
-  aligner_model?: string | null;
+  [k: string]: unknown;
 }
 /**
  * The owner's full automation configuration (one persisted blob).
@@ -719,12 +721,12 @@ export interface AutomationConfig {
  * Owner-wide default knobs for every timestamps-generation surface.
  *
  * The single shared source the Releases-tab "Timestamps generation" accordion
- * edits. It is the base every TS launch starts from — the manual form
- * (``routes/admin/reviews.py::_parse_ts_settings``), the auto-gen / stale-regen
- * automations (``services/admin/automation/evaluators.py``) and, through them,
- * the HF job (``qua_jobs/generate_timestamps.py``). Per-surface choices (a form
- * value, a per-automation ``beam`` override) still win; an unset field falls
- * back here, and a field unset here cedes to the job's own ``DEFAULT_*``.
+ * edits. It is the sole source of the TS tunables for every TS launch — the
+ * manual form (``routes/admin/reviews.py::_parse_ts_settings``), the auto-gen /
+ * stale-regen automations (``services/admin/automation/evaluators.py``) and,
+ * through them, the HF job (``qua_jobs/generate_timestamps.py``). The manual
+ * form's ``beam``/``probe_beams``/``chapters`` still win per-launch; an unset
+ * field falls back here, and a field unset here cedes to the job's ``DEFAULT_*``.
  *
  * ``beam`` + ``probe_beams`` resolve to the ``[beam, probe]`` list passed to the
  * aligner. ``padding`` / ``method`` are the pipeline tunables (``None`` → the
@@ -775,13 +777,16 @@ export interface HfPublishConfig {
  * only when the latest timestamp-affecting edit is older than the guard, so
  * consecutive edits coalesce into one regen. ``scope`` picks full-reciter vs
  * just the affected chapters.
+ *
+ * The TS tunables (beam/probe/…) come from the shared
+ * ``ts_generation_defaults``; ``extra="allow"`` tolerates older saved blobs that
+ * still carry the retired per-automation ``beam`` / ``probe_beams`` keys.
  */
 export interface StaleTsRegenConfig {
   enabled?: boolean;
   guard_minutes?: number;
   scope?: "full" | "affected";
-  beam?: number;
-  probe_beams?: number;
+  [k: string]: unknown;
 }
 /**
  * Refresh the HF catalog once a catalog-metadata edit has settled.

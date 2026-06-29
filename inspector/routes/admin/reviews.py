@@ -45,7 +45,7 @@ def review_detail(user, slug):
 @admin_reviews_bp.route("/aligner-models")
 @require_capability("reviews.generate_timestamps")
 def aligner_models(user):
-    """Selectable acoustic models for the TS launch form + automation config."""
+    """Selectable acoustic models for the shared Timestamps-generation defaults card."""
     return jsonify({"models": aligner_models_service.list_models()})
 
 
@@ -113,35 +113,24 @@ def generate_timestamps(user, slug):
 
 
 def _parse_ts_settings(body: dict) -> TsJobSettings:
-    """Validate + normalize the launch form body into ``TsJobSettings``.
+    """Build ``TsJobSettings`` for a manual launch.
 
-    Beams = [alignment_beam, *probe_beams] (deduped, order-preserving). Fields the
-    form leaves unspecified fall back to the owner-wide ``ts_generation_defaults``
-    (the same shared blob the automations read, edited from the Releases-tab
-    "Timestamps generation" accordion). Raises ``ValueError`` with a user-facing
-    message on any invalid field.
+    Every TS tunable (beam/probe/model/workers/batch_size/download_workers/
+    padding/method) comes from the owner-wide ``ts_generation_defaults`` — the
+    single shared blob edited from the Releases-tab "Timestamps generation"
+    accordion (the same source the automations read). The request body carries
+    only the per-launch ``chapters`` scope (which chapters to regenerate); no
+    settings. Raises ``ValueError`` with a user-facing message on an invalid
+    ``chapters`` field.
     """
     from services.admin.automation import config as automation_config
 
     defaults = automation_config.load_config().ts_generation_defaults
 
-    beam = body.get("beam", defaults.beam)
-    probe = body.get("probe_beams")
-    if probe is None:
-        probe = [defaults.probe_beams] if defaults.probe_beams > 0 else []
-    if not isinstance(beam, int) or beam <= 0:
-        raise ValueError("beam must be a positive integer")
-    if not isinstance(probe, list) or not all(isinstance(b, int) and b > 0 for b in probe):
-        raise ValueError("probe_beams must be a list of positive integers")
-    beams: list[int] = []
-    for b in [beam, *probe]:
-        if b not in beams:
-            beams.append(b)
-    workers = body.get("workers")
-    if workers is None:
-        workers = defaults.workers
-    if workers is not None and (not isinstance(workers, int) or not 1 <= workers <= 64):
-        raise ValueError("workers must be an integer in 1..64")
+    beams: list[int] = [defaults.beam]
+    if defaults.probe_beams > 0 and defaults.probe_beams != defaults.beam:
+        beams.append(defaults.probe_beams)
+
     chapters_raw = body.get("chapters")
     chapters: list[int] | None = None
     if chapters_raw is not None:
@@ -152,21 +141,16 @@ def _parse_ts_settings(body: dict) -> TsJobSettings:
         chapters = sorted(set(chapters_raw))
         if not chapters:
             chapters = None  # empty list = full reciter
-    aligner_model = body.get("aligner_model") or defaults.aligner_model
-    if aligner_model is not None and not isinstance(aligner_model, str):
-        raise ValueError("aligner_model must be a string (catalog id)")
     try:
         return TsJobSettings(
             beams=beams,
-            aligner_model=aligner_model,
+            aligner_model=defaults.aligner_model,
             chapters=chapters,
-            workers=workers,
-            flavor=body.get("flavor") or None,
-            timeout=body.get("timeout") or None,
-            batch_size=body.get("batch_size") or defaults.batch_size,
-            download_workers=body.get("download_workers") or defaults.download_workers,
-            padding=body.get("padding") or defaults.padding,
-            method=body.get("method") or defaults.method,
+            workers=defaults.workers,
+            batch_size=defaults.batch_size,
+            download_workers=defaults.download_workers,
+            padding=defaults.padding,
+            method=defaults.method,
         )
     except ValidationError as exc:
         raise ValueError(f"invalid settings: {exc.errors()[0].get('msg', exc)}") from exc

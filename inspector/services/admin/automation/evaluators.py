@@ -65,23 +65,20 @@ def _beams(beam: int, probe: int) -> list[int]:
 def _ts_settings(
     cfg: AutomationConfig,
     *,
-    beam: int,
-    probe_beams: int,
-    aligner_model: str | None = None,
     chapters: list[int] | None = None,
 ) -> TsJobSettings:
     """Build a ``TsJobSettings`` for an automated launch from the shared
-    ``ts_generation_defaults``, with the per-automation values taking precedence.
+    ``ts_generation_defaults`` — the single owner-wide source the Releases-tab
+    "Timestamps generation" accordion edits.
 
-    ``beam`` / ``probe_beams`` / ``aligner_model`` come from the automation's own
-    config (so a per-automation override still wins); the rest (workers,
-    batch_size, download_workers, padding, method) ride along from the shared
-    defaults — the single owner-wide source the Releases-tab accordion edits.
+    All TS tunables (beam/probe/model/workers/batch_size/download_workers/
+    padding/method) come from the shared defaults; only ``chapters`` is the
+    automation's own per-launch scope choice.
     """
     d = cfg.ts_generation_defaults
     return TsJobSettings(
-        beams=_beams(beam, probe_beams),
-        aligner_model=aligner_model if aligner_model is not None else d.aligner_model,
+        beams=_beams(d.beam, d.probe_beams),
+        aligner_model=d.aligner_model,
         chapters=chapters or None,
         workers=d.workers,
         batch_size=d.batch_size,
@@ -181,9 +178,7 @@ def eval_auto_gen_ts(cfg: AutomationConfig, now: datetime) -> None:
         try:
             timestamps_jobs.launch(
                 slug,
-                settings=_ts_settings(
-                    cfg, beam=c.beam, probe_beams=c.probe_beams, aligner_model=c.aligner_model
-                ),
+                settings=_ts_settings(cfg),
                 webhook_base=_webhook_base(),
             )
             launched.append(slug)
@@ -380,9 +375,7 @@ def eval_stale_ts_regen(cfg: AutomationConfig, now: datetime) -> None:
         try:
             timestamps_jobs.launch(
                 slug,
-                settings=_ts_settings(
-                    cfg, beam=c.beam, probe_beams=c.probe_beams, chapters=chapters or None
-                ),
+                settings=_ts_settings(cfg, chapters=chapters or None),
                 webhook_base=_webhook_base(),
             )
             launched.append(slug)

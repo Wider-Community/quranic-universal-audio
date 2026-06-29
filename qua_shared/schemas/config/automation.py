@@ -52,12 +52,12 @@ class TsGenerationDefaults(BaseModel):
     """Owner-wide default knobs for every timestamps-generation surface.
 
     The single shared source the Releases-tab "Timestamps generation" accordion
-    edits. It is the base every TS launch starts from — the manual form
-    (``routes/admin/reviews.py::_parse_ts_settings``), the auto-gen / stale-regen
-    automations (``services/admin/automation/evaluators.py``) and, through them,
-    the HF job (``qua_jobs/generate_timestamps.py``). Per-surface choices (a form
-    value, a per-automation ``beam`` override) still win; an unset field falls
-    back here, and a field unset here cedes to the job's own ``DEFAULT_*``.
+    edits. It is the sole source of the TS tunables for every TS launch — the
+    manual form (``routes/admin/reviews.py::_parse_ts_settings``), the auto-gen /
+    stale-regen automations (``services/admin/automation/evaluators.py``) and,
+    through them, the HF job (``qua_jobs/generate_timestamps.py``). Every TS
+    tunable comes from here; the only per-launch input is the manual form's
+    ``chapters`` scope. A field unset here cedes to the job's ``DEFAULT_*``.
 
     ``beam`` + ``probe_beams`` resolve to the ``[beam, probe]`` list passed to the
     aligner. ``padding`` / ``method`` are the pipeline tunables (``None`` → the
@@ -87,16 +87,17 @@ class AutoGenTsConfig(BaseModel):
     gates mirror the reviewer's mark-ready submission: skip when they left a
     written comment (``gate_by_comments``) or flagged any segment
     (``gate_by_flags``). A checklist-bypass submission is always skipped.
+
+    The TS tunables (beam/probe/model/…) come from the shared
+    ``ts_generation_defaults``; ``extra="allow"`` tolerates older saved blobs that
+    still carry the retired per-automation ``beam`` / ``aligner_model`` keys.
     """
+
+    model_config = ConfigDict(extra="allow")
 
     enabled: bool = False
     gate_by_comments: bool = True
     gate_by_flags: bool = True
-    beam: int = Field(default=_DEFAULT_BEAM, ge=1)
-    probe_beams: int = Field(default=_DEFAULT_PROBE_BEAMS, ge=0)
-    #: Acoustic model (catalog id) for auto-generated runs. None = store default.
-    #: The saved owner-wide preference for the new default aligner.
-    aligner_model: str | None = None
 
 
 class GhCutConfig(BaseModel):
@@ -136,13 +137,17 @@ class StaleTsRegenConfig(BaseModel):
     only when the latest timestamp-affecting edit is older than the guard, so
     consecutive edits coalesce into one regen. ``scope`` picks full-reciter vs
     just the affected chapters.
+
+    The TS tunables (beam/probe/…) come from the shared
+    ``ts_generation_defaults``; ``extra="allow"`` tolerates older saved blobs that
+    still carry the retired per-automation ``beam`` / ``probe_beams`` keys.
     """
+
+    model_config = ConfigDict(extra="allow")
 
     enabled: bool = False
     guard_minutes: int = Field(default=_DEFAULT_GUARD_MINUTES, ge=0)
     scope: Literal["full", "affected"] = "affected"
-    beam: int = Field(default=_DEFAULT_BEAM, ge=1)
-    probe_beams: int = Field(default=_DEFAULT_PROBE_BEAMS, ge=0)
 
 
 class StaleMetadataConfig(BaseModel):
