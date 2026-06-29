@@ -47,7 +47,7 @@ import _bootstrap as bs  # noqa: E402
 
 from qua_sdk.components.timing.lib.cells import (  # noqa: E402
     _is_indexable,
-    annotate_segment_words,
+    annotate_ordered_segments,
 )
 
 from qua_shared import ts_shard_cells  # noqa: E402
@@ -82,8 +82,13 @@ def _stamp_doc(data: dict, *, restamp: bool) -> tuple[int, Counter, Counter, lis
             for wd in seg["words"]:
                 if len(wd) > 5:
                     del wd[5:]
-    for seg in data.get("segments", []):
-        annotate_segment_words(seg["ref"], seg["words"])
+    # Stamp in recitation order with the waṣl context threaded (the shard segments
+    # are already time-ordered + carry the per-segment `wasl` boundary flag), so a
+    # waṣl-continued boundary's cells derive in continuation form and don't drop —
+    # the same linking generation does via annotate_v2_doc.
+    seq = [(seg["ref"], seg["words"], bool(seg.get("wasl")))
+           for seg in data.get("segments", [])]
+    annotate_ordered_segments(seq)
 
     n_cells = 0
     status_dist: Counter = Counter()
