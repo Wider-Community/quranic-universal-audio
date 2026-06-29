@@ -425,6 +425,11 @@ def launch(slug: str, *, settings: TsJobSettings, webhook_base: str | None = Non
         env["BATCH_SIZE"] = str(settings.batch_size)
     if settings.download_workers:
         env["DOWNLOAD_WORKERS"] = str(settings.download_workers)
+    # Pipeline tunables — empty cedes to the job's DEFAULT_PADDING / DEFAULT_METHOD.
+    if settings.padding:
+        env["PADDING"] = settings.padding
+    if settings.method:
+        env["METHOD"] = settings.method
     flavor = settings.flavor or JOB_FLAVOR
     timeout = settings.timeout or JOB_TIMEOUT
 

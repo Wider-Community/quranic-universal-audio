@@ -115,11 +115,20 @@ def generate_timestamps(user, slug):
 def _parse_ts_settings(body: dict) -> TsJobSettings:
     """Validate + normalize the launch form body into ``TsJobSettings``.
 
-    Beams = [alignment_beam, *probe_beams] (deduped, order-preserving). Raises
-    ``ValueError`` with a user-facing message on any invalid field.
+    Beams = [alignment_beam, *probe_beams] (deduped, order-preserving). Fields the
+    form leaves unspecified fall back to the owner-wide ``ts_generation_defaults``
+    (the same shared blob the automations read, edited from the Releases-tab
+    "Timestamps generation" accordion). Raises ``ValueError`` with a user-facing
+    message on any invalid field.
     """
-    beam = body.get("beam", 50)
-    probe = body.get("probe_beams") or []
+    from services.admin.automation import config as automation_config
+
+    defaults = automation_config.load_config().ts_generation_defaults
+
+    beam = body.get("beam", defaults.beam)
+    probe = body.get("probe_beams")
+    if probe is None:
+        probe = [defaults.probe_beams] if defaults.probe_beams > 0 else []
     if not isinstance(beam, int) or beam <= 0:
         raise ValueError("beam must be a positive integer")
     if not isinstance(probe, list) or not all(isinstance(b, int) and b > 0 for b in probe):
@@ -129,6 +138,8 @@ def _parse_ts_settings(body: dict) -> TsJobSettings:
         if b not in beams:
             beams.append(b)
     workers = body.get("workers")
+    if workers is None:
+        workers = defaults.workers
     if workers is not None and (not isinstance(workers, int) or not 1 <= workers <= 64):
         raise ValueError("workers must be an integer in 1..64")
     chapters_raw = body.get("chapters")
@@ -141,7 +152,7 @@ def _parse_ts_settings(body: dict) -> TsJobSettings:
         chapters = sorted(set(chapters_raw))
         if not chapters:
             chapters = None  # empty list = full reciter
-    aligner_model = body.get("aligner_model") or None
+    aligner_model = body.get("aligner_model") or defaults.aligner_model
     if aligner_model is not None and not isinstance(aligner_model, str):
         raise ValueError("aligner_model must be a string (catalog id)")
     try:
@@ -152,8 +163,10 @@ def _parse_ts_settings(body: dict) -> TsJobSettings:
             workers=workers,
             flavor=body.get("flavor") or None,
             timeout=body.get("timeout") or None,
-            batch_size=body.get("batch_size") or None,
-            download_workers=body.get("download_workers") or None,
+            batch_size=body.get("batch_size") or defaults.batch_size,
+            download_workers=body.get("download_workers") or defaults.download_workers,
+            padding=body.get("padding") or defaults.padding,
+            method=body.get("method") or defaults.method,
         )
     except ValidationError as exc:
         raise ValueError(f"invalid settings: {exc.errors()[0].get('msg', exc)}") from exc

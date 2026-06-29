@@ -50,6 +50,27 @@ Migration `0020_automation.sql`, repo `services/db/repo_automation.py`:
   nothing (no bucket upload). `next_run_at` is **not** stored; the route computes
   it live so idle ticks stay write-free.
 
+## Shared TS-generation defaults
+
+`AutomationConfig.ts_generation_defaults` (`TsGenerationDefaults`) is the single
+owner-wide source for the timestamps-generation knobs — beam/probe, aligner
+model, workers, batch_size, download_workers, padding, method. It lives inside
+the same config blob (no separate table) and is the base every generation
+surface reads:
+
+- the manual launch form (`routes/admin/reviews.py::_parse_ts_settings`) defaults
+  unspecified fields from it (form values still win);
+- `eval_auto_gen_ts` / `eval_stale_ts_regen` build their `TsJobSettings` from it
+  via `evaluators._ts_settings` (a per-automation `beam`/`probe_beams`/
+  `aligner_model` override still wins);
+- both thread `padding` / `method` into the HF job env (`PADDING` / `METHOD`),
+  which the job reads with `DEFAULT_PADDING` / `DEFAULT_METHOD` fallbacks.
+
+Edited from the Releases-tab **Timestamps generation** card
+(`TsGenerationSettingsSection.svelte`) via
+`GET|POST /api/admin/releases/ts-generation-defaults`, same
+`release.manage_automation` gate.
+
 ## Route + capability
 
 `GET|POST /api/admin/releases/automation` (`routes/admin/releases.py`), gated by

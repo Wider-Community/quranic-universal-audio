@@ -16,6 +16,12 @@ owner's behalf. Six independent automations, each enable/disable:
                              inactive for N days (frees the recitation to be
                              re-claimed; notifies the reviewer).
 
+It also carries ``ts_generation_defaults`` (``TsGenerationDefaults``) — the single
+owner-wide source for the timestamps-generation knobs (beam/model/workers/
+batch_size/download_workers/padding/method) shared by the manual launch form, the
+auto-gen / stale-regen automations, and the HF job. The Releases-tab
+"Timestamps generation" accordion edits this blob.
+
 This is the owner *config*; per-automation runtime state (last run / result)
 lives in the ``automation_state`` table, not here. The FE consumes the
 codegen'd types, so it is re-exported via ``fe_types.py``.
@@ -40,6 +46,38 @@ _DEFAULT_BEAM = 50
 _DEFAULT_PROBE_BEAMS = 2
 
 _TIME_OF_DAY_RE = r"^([01]\d|2[0-3]):[0-5]\d$"
+
+
+class TsGenerationDefaults(BaseModel):
+    """Owner-wide default knobs for every timestamps-generation surface.
+
+    The single shared source the Releases-tab "Timestamps generation" accordion
+    edits. It is the base every TS launch starts from — the manual form
+    (``routes/admin/reviews.py::_parse_ts_settings``), the auto-gen / stale-regen
+    automations (``services/admin/automation/evaluators.py``) and, through them,
+    the HF job (``qua_jobs/generate_timestamps.py``). Per-surface choices (a form
+    value, a per-automation ``beam`` override) still win; an unset field falls
+    back here, and a field unset here cedes to the job's own ``DEFAULT_*``.
+
+    ``beam`` + ``probe_beams`` resolve to the ``[beam, probe]`` list passed to the
+    aligner. ``padding`` / ``method`` are the pipeline tunables (``None`` → the
+    job's ``DEFAULT_PADDING`` / ``DEFAULT_METHOD``).
+    """
+
+    beam: int = Field(default=_DEFAULT_BEAM, ge=1)
+    probe_beams: int = Field(default=_DEFAULT_PROBE_BEAMS, ge=0)
+    #: Acoustic model (catalog id). ``None`` = the store's default model.
+    aligner_model: str | None = None
+    #: Aligner worker count. ``None`` = the job's capped default.
+    workers: int | None = Field(default=None, ge=1, le=64)
+    #: Batch size for alignment. ``None`` = the job's ``DEFAULT_BATCH_SIZE``.
+    batch_size: int | None = Field(default=None, ge=1)
+    #: Concurrent audio downloads. ``None`` = the job's ``DEFAULT_DOWNLOAD_WORKERS``.
+    download_workers: int | None = Field(default=None, ge=1)
+    #: Phoneme gap-padding strategy (``forward`` | ``symmetric`` | ``none``).
+    padding: str | None = None
+    #: Alignment method (``kalpy`` | …). ``None`` = the job's ``DEFAULT_METHOD``.
+    method: str | None = None
 
 
 class AutoGenTsConfig(BaseModel):
@@ -144,6 +182,10 @@ class AutomationConfig(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
+    #: Owner-wide TS-generation knobs shared by every gen surface (manual launch,
+    #: auto-gen, stale-regen, and the HF job through them). Per-automation /
+    #: per-form overrides still win; unset fields fall back here.
+    ts_generation_defaults: TsGenerationDefaults = Field(default_factory=TsGenerationDefaults)
     auto_gen_ts: AutoGenTsConfig = Field(default_factory=AutoGenTsConfig)
     gh_cut: GhCutConfig = Field(default_factory=GhCutConfig)
     hf_publish: HfPublishConfig = Field(default_factory=HfPublishConfig)
