@@ -472,6 +472,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             ],
             [
                 base(0, [0], { chars: 'ٱ' }),
+                { chars: 'ِ', role: 'haraka', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 1, tag: 'hamza_wasl_vowel', shareGroup: null },
                 { chars: 'ي', role: 'madd', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 1, tag: 'madd_tabii', shareGroup: null },
                 { chars: 'ْ', role: 'haraka', status: 'present', phonemeIndices: [], sourceLetterIndex: 1, tag: null, shareGroup: null },
                 base(2, [2], { chars: 'ت' }),
@@ -487,6 +488,13 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(yaa.classList.contains('dia-inserted')).toBe(true); // dashed transform border
         expect(yaa.classList.contains('silent')).toBe(false);
         expect(yaa.dataset.cellTimed).toBe('1');
+        // the hamza-waṣl helping kasra is a bordered (inserted) small cell forming the
+        // kasra+yaa vowel group — the FE dashes it from status alone (glyph notwithstanding).
+        const kasra = Array.from(container.querySelectorAll<HTMLElement>('.haraka-cell')).find(
+            (h) => h.textContent?.includes('ِ'),
+        )!;
+        expect(kasra).toBeTruthy();
+        expect(kasra.classList.contains('dia-inserted')).toBe(true);
         // the sukūn rides inert and is filtered — no ئ glyph survives.
         expect(Array.from(container.querySelectorAll('.mega-letter')).some((l) => l.textContent === 'ئ')).toBe(false);
         // ʔ (idx 0, under ٱ), iː (idx 1, under ي), t (idx 2, under ت) each in a DISTINCT

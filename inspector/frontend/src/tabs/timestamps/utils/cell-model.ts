@@ -64,7 +64,9 @@ export interface RenderedSmall {
     shareGroup: number | null;
     /** Per-glyph centring style string (`--haraka-*`). */
     renderStyle: string;
-    /** inserted graphemeless vowel (hamza-waṣl / iltiqaa) — affordance only. */
+    /** A `status==='inserted'` vowel not in the rasm (hamza-waṣl / iltiqaa
+     *  connecting kasra, or the started-on ٱئْتُونِى helping kasra) — draws the
+     *  muted dashed "added, not written" border regardless of glyph. */
     inserted: boolean;
     /** Flat interval indices this cell sounds — placed under its own column. */
     phoneIdx: number[];
@@ -505,7 +507,7 @@ export function cellGroupsFor(
             cellEnd: end,
             shareGroup: c.shareGroup,
             renderStyle: harakaRenderStyle(sizeGlyph, 0),
-            inserted: opts.inserted ?? (c.chars === '' && c.status === 'inserted'),
+            inserted: opts.inserted ?? c.status === 'inserted',
             phoneIdx: c.phonemeIndices,
             // Diacritic cells underline from their OWN tag (tanwīn idgham/ikhfaa/
             // iqlab) or the synthesized iẓhar rule (an untagged sounding tanwīn);
