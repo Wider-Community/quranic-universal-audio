@@ -153,3 +153,62 @@ def test_peaks_duration_ms_none_when_peaks_absent(monkeypatch):
     # Unknown URL → None without touching the backend.
     assert audio_fetch.read_prefetched_peaks_duration_ms("rec", "https://cdn/zzz.mp3") is None
     audio_meta._clear_for_test()
+
+
+# ---------------------------------------------------------------------------
+# Per-content read-source gates (INSPECTOR_AUDIO/PEAKS_FROM_BUCKET)
+# ---------------------------------------------------------------------------
+
+
+def _boom_backend(label: str):
+    def _boom(*_a, **_k):
+        raise AssertionError(f"backend must not be reached when {label} is off")
+
+    return type("B", (), {"read_bytes": staticmethod(_boom), "local_path": staticmethod(_boom)})()
+
+
+def test_audio_from_bucket_off_short_circuits(monkeypatch):
+    """INSPECTOR_AUDIO_FROM_BUCKET=0 ⇒ both bucket audio reads return None
+    without touching the backend, so resolve() falls through to the CDN."""
+    from services import audio_fetch, audio_meta
+    from services.audio import audio_fetch as af_mod
+
+    audio_meta._clear_for_test()
+    audio_meta._stage_for_test("rec", {"chapters": {"1": {"url": "https://cdn/1.mp3"}}})
+    monkeypatch.setattr(af_mod, "get_backend", lambda: _boom_backend("audio-from-bucket"))
+    monkeypatch.setenv("INSPECTOR_AUDIO_FROM_BUCKET", "0")
+
+    assert audio_fetch.read_prefetched_audio_bytes("rec", "https://cdn/1.mp3") is None
+    assert audio_fetch.read_prefetched_audio_local_path("rec", "https://cdn/1.mp3") is None
+    audio_meta._clear_for_test()
+
+
+def test_audio_from_bucket_on_reads_backend(monkeypatch):
+    """Default (unset) ⇒ bucket audio bytes are read through the backend."""
+    from services import audio_fetch, audio_meta
+    from services.audio import audio_fetch as af_mod
+
+    audio_meta._clear_for_test()
+    audio_meta._stage_for_test("rec", {"chapters": {"1": {"url": "https://cdn/1.mp3"}}})
+    backend = type("B", (), {"read_bytes": staticmethod(lambda path: b"BYTES")})()
+    monkeypatch.setattr(af_mod, "get_backend", lambda: backend)
+    monkeypatch.delenv("INSPECTOR_AUDIO_FROM_BUCKET", raising=False)
+
+    assert audio_fetch.read_prefetched_audio_bytes("rec", "https://cdn/1.mp3") == b"BYTES"
+    audio_meta._clear_for_test()
+
+
+def test_peaks_from_bucket_off_short_circuits(monkeypatch):
+    """INSPECTOR_PEAKS_FROM_BUCKET=0 ⇒ chapter peaks read returns None without
+    touching the backend, so the FE falls through to ffmpeg compute."""
+    from services import audio_fetch, audio_meta
+    from services.audio import audio_fetch as af_mod
+
+    audio_meta._clear_for_test()
+    audio_meta._stage_for_test("rec", {"chapters": {"1": {"url": "https://cdn/1.mp3"}}})
+    monkeypatch.setattr(af_mod, "get_backend", lambda: _boom_backend("peaks-from-bucket"))
+    monkeypatch.setenv("INSPECTOR_PEAKS_FROM_BUCKET", "0")
+
+    assert audio_fetch.read_prefetched_peaks("rec", "https://cdn/1.mp3") is None
+    assert audio_fetch.read_prefetched_peaks_duration_ms("rec", "https://cdn/1.mp3") is None
+    audio_meta._clear_for_test()

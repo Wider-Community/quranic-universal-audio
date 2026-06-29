@@ -36,6 +36,7 @@ const { values } = parseArgs({
         port: { type: 'string', default: '5199' },
         width: { type: 'string', default: '1600' },
         alltj: { type: 'boolean', default: false },
+        wasl: { type: 'boolean', default: false },
     },
 });
 
@@ -66,6 +67,7 @@ for (const ref of values.ref) {
     const qs = new URLSearchParams({ reciter: values.reciter, ref });
     if (values.words) qs.set('words', values.words);
     if (values.alltj) qs.set('alltj', '1');
+    if (values.wasl) qs.set('wasl', '1');
     const url = `http://localhost:${port}/harness/analysis.html?${qs}`;
     try {
         await page.goto(url, { waitUntil: 'load' });

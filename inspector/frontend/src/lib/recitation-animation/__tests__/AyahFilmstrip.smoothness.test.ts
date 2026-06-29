@@ -39,6 +39,7 @@ const EMPTY: Record<string, { text?: string }> = {};
 
 const PX_PER_SEC = DEFAULT_RECITATION_CONFIG.filmstripPxPerSec; // 12
 const MIN_PX = DEFAULT_RECITATION_CONFIG.filmstripMinCellPx; // 18
+const MICRO_GAP_SEC = 0.06; // mirror AyahFilmstrip: sub-perceptual gaps lay out time-true
 const CW = 600; // forced container width
 const STEP = 16; // ms per frame
 const END = 104_000;
@@ -72,7 +73,10 @@ function deriveCells(model: ReturnType<typeof buildFilmstripModel>): DCell[] {
     for (const c of model.cells) {
         const aw = c.missing === 'full' ? 30 : Math.max(1, Math.round(c.canonDurSec * PX_PER_SEC));
         const w = c.missing === 'full' ? 30 : Math.max(MIN_PX, aw);
-        const gapAfter = Math.round(Math.max(DEFAULT_RECITATION_CONFIG.filmstripGapPx, c.nextGapSec * PX_PER_SEC));
+        const sec = c.nextGapSec;
+        const gapAfter = Math.round(
+            sec < MICRO_GAP_SEC ? sec * PX_PER_SEC : Math.max(DEFAULT_RECITATION_CONFIG.filmstripGapPx, sec * PX_PER_SEC),
+        );
         out.push({ ayah: c.ayah, w, aw, cumBefore: cum, missing: c.missing });
         cum += w + gapAfter;
     }
@@ -353,6 +357,28 @@ describe('AyahFilmstrip smoothness (per-frame)', () => {
         expect(between, 'some inter-take silences exist').toBeGreaterThan(0);
         // The three backward inter-take silences (4→1, 7→6, 8→7) all scroll.
         expect(backward, 'the three backward inter-take silences scrolled').toBeGreaterThanOrEqual(3);
+    });
+
+    it('holds a sub-perceptual inter-verse micro-gap without greying or snapping', async () => {
+        // Verse 1 → verse 2 with a 30ms gap (< MICRO_GAP_SEC: connected flow, not a
+        // waqf stop). The needle must stay lit across it (never grey) and the cursor
+        // must glide, not snap — the cells lay out gapless so verse 2 picks up where
+        // verse 1 ended. (The pre-fix behaviour bursted ~2px in one frame + greyed.)
+        const synth: AnimUnit[] = [
+            unit('1:1:1', [[0, 1]]),
+            unit('1:1:2', [[1, 2]]),
+            unit('1:2:1', [[2.03, 3]]),
+            unit('1:2:2', [[3, 4]]),
+        ];
+        const { frames } = await traceChapter(synth, 'hybrid', 5000);
+        // Around the 1→2 boundary (~2000ms): never grey, highlight never drops, and
+        // no single-frame cursor snap (12px/s flow ≈ 0.2px/frame; 2px is a generous
+        // ceiling that the old floored-gap burst would have blown past).
+        const near = frames.filter((f) => f.t >= 1500 && f.t <= 2500);
+        expect(near.some((f) => f.grey), 'no greyed needle across the micro-gap').toBe(false);
+        expect(near.every((f) => f.activeAyah != null), 'highlight held across the micro-gap').toBe(true);
+        const maxJump = Math.max(...near.map((f) => Math.abs(f.vel) * (STEP / 1000)));
+        expect(maxJump, `max per-frame cursor move ${maxJump.toFixed(2)}px`).toBeLessThan(2);
     });
 
     it('snap mode centers the active cell on ayah change with no continuous-fill divergence', async () => {

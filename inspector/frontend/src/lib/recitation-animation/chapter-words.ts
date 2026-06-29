@@ -17,13 +17,16 @@
  */
 
 import type { TsVerseData } from '../types/ts-client';
-import type { AnimUnit, AyahBoundary, ChapterRecitation } from './types';
+import type { AnimUnit, AyahBoundary, ChapterRecitation, TimeSpan } from './types';
 
 /** One assembled occasion (a contiguous recitation of a verse). A verse may
  *  recur across the chapter, so `verseRef` is not unique across the list. */
 export interface AssembledVerse {
     verseRef: string;
     data: TsVerseData;
+    /** Target ayahKey when this occasion's LAST word continues into the next
+     *  verse without a stop (cross-verse waṣl); from `ChapterOccasion.bridgesOutTo`. */
+    bridgesOutTo?: string | null;
 }
 
 function parseLocation(location: string): { surah: number; ayah: number; word: number } {
@@ -58,12 +61,19 @@ export function buildChapterRecitation(
     // Flatten every occasion's words to chapter-absolute units — one per recited
     // occurrence (repeats included).
     const flat: AnimUnit[] = [];
-    for (const { data } of occasions) {
+    for (const { data, bridgesOutTo } of occasions) {
         const offsetSec = data.time_start_ms / 1000;
-        for (const w of data.words) {
+        for (let wi = 0; wi < data.words.length; wi++) {
+            const w = data.words[wi]!;
             const { surah, ayah, word } = parseLocation(w.location);
             const start = w.start + offsetSec;
             const end = w.end + offsetSec;
+            // The waṣl flag rides the LAST word of the bridging take only.
+            const isLastWord = wi === data.words.length - 1;
+            const span: TimeSpan =
+                isLastWord && bridgesOutTo
+                    ? { start, end, waslTo: bridgesOutTo }
+                    : { start, end };
             flat.push({
                 location: w.location,
                 ayahKey: `${surah}:${ayah}`,
@@ -73,7 +83,7 @@ export function buildChapterRecitation(
                 text: w.display_text || w.text,
                 start,
                 end,
-                intervals: [{ start, end }],
+                intervals: [span],
                 letters: w.letters.map((lt) => ({
                     char: lt.char,
                     start: lt.start === null ? null : lt.start + offsetSec,
@@ -85,24 +95,46 @@ export function buildChapterRecitation(
 
     // Collapse by INDEX (location), not text — a reciter who repeats / goes back
     // re-emits the same word index with a new time span. Each word renders once
-    // (reading order); every occurrence's span is kept on `intervals` so the
-    // highlight can travel back and re-light it.
+    // (reading order); every occurrence's span + its OWN letter timings are kept
+    // (parallel `intervals` / `occurrenceLetters`) so the highlight can travel
+    // back and re-light the word at the CURRENT take's pace, not a stretch of
+    // take 1.
+    interface Occurrence {
+        start: number;
+        end: number;
+        letters: AnimUnit['letters'];
+        /** The bridging take's waṣl target ayahKey (only the take whose last word
+         *  continues into the next verse carries it). */
+        waslTo?: string;
+    }
     const byLoc = new Map<string, AnimUnit>();
+    const occByLoc = new Map<string, Occurrence[]>();
     for (const u of flat) {
+        const occ: Occurrence = { start: u.start, end: u.end, letters: u.letters, waslTo: u.intervals[0]?.waslTo };
         const existing = byLoc.get(u.location);
         if (existing) {
-            existing.intervals.push({ start: u.start, end: u.end });
+            occByLoc.get(u.location)!.push(occ);
             if (u.start < existing.start) existing.start = u.start;
             if (u.end > existing.end) existing.end = u.end;
         } else {
             byLoc.set(u.location, u);
+            occByLoc.set(u.location, [occ]);
         }
     }
 
     const units = [...byLoc.values()].sort(
         (a, b) => a.surah - b.surah || a.ayah - b.ayah || a.word - b.word,
     );
-    for (const u of units) u.intervals.sort((a, b) => a.start - b.start);
+    // Materialise the ascending per-occurrence spans + letters. `intervals[0]` /
+    // `letters` stay the earliest occurrence (the geometry + structure anchor).
+    for (const u of units) {
+        const occ = occByLoc.get(u.location)!.sort((a, b) => a.start - b.start);
+        // Keep the per-occurrence waṣl flag so only the bridging take of a
+        // repeated word carries it (`filmstrip-model`/`wasl-chains` read it).
+        u.intervals = occ.map((o) => ({ start: o.start, end: o.end, waslTo: o.waslTo }));
+        u.occurrenceLetters = occ.map((o) => o.letters);
+        u.letters = u.occurrenceLetters[0] ?? u.letters;
+    }
 
     // Per-ayah boundaries, in reading order.
     const ayahs: AyahBoundary[] = [];

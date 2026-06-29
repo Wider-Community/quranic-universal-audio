@@ -18,6 +18,12 @@ export interface AnimLetter {
 export interface TimeSpan {
     start: number;
     end: number;
+    /** Set on the occurrence that is the LAST word of a take that waṣl-bridges
+     *  into the next verse; value = the target ayahKey ("14:2"). Per-occurrence,
+     *  so a verse recited as both a stop take and a bridge take carries it on
+     *  only the bridging occurrence. A boundary that bridges in any take renders
+     *  permanently merged. Absent otherwise. */
+    waslTo?: string;
 }
 
 /** One animatable word with chapter-absolute timing (seconds). Each canonical
@@ -39,7 +45,15 @@ export interface AnimUnit {
     end: number;
     /** Every occurrence's span, ascending — ≥1 entry; >1 when repeated. */
     intervals: TimeSpan[];
+    /** Canonical (first-occurrence) letter timings — geometry + structure anchor.
+     *  Mirrors `occurrenceLetters[0]`. */
     letters: AnimLetter[];
+    /** Per-occurrence letter timings, index-aligned to `intervals`. A repeated
+     *  word carries each take's OWN letter spans so the per-letter reveal tracks
+     *  the current take instead of linearly stretching take 1. Optional: units
+     *  built outside the chapter assembler (or hand-built test fixtures) omit it
+     *  and the reveal falls back to the canonical remap. */
+    occurrenceLetters?: AnimLetter[][];
 }
 
 /** Per-ayah boundary for the picker + timeline markers. */

@@ -94,6 +94,11 @@
      *  duration to scale from, and playback skips it, so it gets a fixed visible
      *  width purely to stay legible as a skipped slot. */
     const PLACEHOLDER_CELL_PX = 30;
+    /** An inter-verse gap shorter than this (seconds) is connected flow, not a
+     *  waqf stop: it's laid out time-true (no visual floor) and the needle holds lit
+     *  straight through it instead of greying + bursting across a floored gap it has
+     *  no time to cross. A real stop is far longer; loopback/waqf pauses unaffected. */
+    const MICRO_GAP_SEC = 0.06;
 
     let containerEl = $state<HTMLDivElement | undefined>(undefined);
     let cw = $state(0); // container width
@@ -129,8 +134,17 @@
         w: number; // visible width (floored to filmstripMinCellPx)
         aw: number; // active span the cursor crosses (time-true, ≤ w)
         cumBefore: number; // px before this cell's left (cells + gaps)
-        gapAfter: number; // px gap to the right (silence-scaled)
+        gapAfter: number; // px gap to the right (silence-scaled; 0 when merged)
         missing: CellMissing;
+        /** This verse waṣl-bridges into the next present verse (member of a
+         *  rail group) → its outgoing boundary is gapless. */
+        waslNext: boolean;
+        /** Outgoing boundary is merged (gapless) → this cell starts/continues a
+         *  waṣl rail group. (= `waslNext`.) */
+        mergeRight: boolean;
+        /** Incoming boundary is merged → the previous verse bridges into this one
+         *  (continues a rail group). */
+        mergeLeft: boolean;
     }
 
     // The strip is a fixed-scale time-ruler at the global `filmstripPxPerSec`:
@@ -138,11 +152,16 @@
     // between-verse gap = silence seconds × pxPerSec, so a given silence renders to
     // the same px in every surah and for every reciter (no per-chapter
     // normalization). `aw` uses the CANONICAL recited duration, so a loopback's
-    // later occurrence never inflates it. A too-short verse is floored to
+    // later occurrence never inflates it. A too-short SOLO verse is floored to
     // `filmstripMinCellPx` for legibility (visible width `w`); the cursor still
     // crosses only the centered `aw` at the ruler velocity (see `offsetForReci`),
-    // the surplus `w − aw` folding into the adjacent gap. An unrecited placeholder
-    // gets a fixed visible width; a near-zero silence floors to `filmstripGapPx`.
+    // the surplus `w − aw` folding into the adjacent gap. That floor DISSOLVES as a
+    // cell merges into a waṣl capsule (`merged` → `w = aw`): a continuous-recitation
+    // group has no inter-verse gap/silence to absorb the surplus, so keeping the
+    // floor would jerk the cursor at each gapless seam — a merged group is laid out
+    // time-true and crossed at the one constant velocity. An unrecited placeholder
+    // gets a fixed visible width; an audible silence keeps a `filmstripGapPx` floor
+    // while a sub-perceptual micro-gap stays time-true (see `MICRO_GAP_SEC`).
     // Geometry is identical across motion modes, so toggling never shifts layout.
     const cells = $derived.by((): Cell[] => {
         const mc = model.cells;
@@ -153,15 +172,66 @@
         let cum = 0;
         for (let i = 0; i < mc.length; i++) {
             const c = mc[i]!;
-            const aw = c.missing === 'full'
+            const placeholder = c.missing === 'full';
+            const aw = placeholder
                 ? PLACEHOLDER_CELL_PX
                 : Math.max(1, Math.round(c.canonDurSec * pxPerSec));
-            const w = c.missing === 'full' ? PLACEHOLDER_CELL_PX : Math.max(minPx, aw);
-            const gapAfter = Math.round(Math.max(config.filmstripGapPx, c.nextGapSec * pxPerSec));
-            out.push({ ayah: c.ayah, w, aw, cumBefore: cum, gapAfter, missing: c.missing });
+            // Cross-verse waṣl: a boundary that bridges in any take is permanently
+            // gapless (a rail-group member). `mergeRight` = this verse bridges out;
+            // `mergeLeft` = the previous verse bridges into this one.
+            const mergeRight = c.waslNext;
+            const mergeLeft = i > 0 && !!mc[i - 1]!.waslNext;
+            // Visible width: the legibility floor dissolves for a rail-group member
+            // so it's time-true (`w = aw`) and the group crosses at constant
+            // velocity; `gapAfter` derives the same way (gapless inside a group).
+            const merged = mergeRight || mergeLeft;
+            const w = placeholder
+                ? PLACEHOLDER_CELL_PX
+                : merged ? aw : Math.round(aw + Math.max(0, minPx - aw));
+            // Time-ruler gap: px ∝ silence seconds. A clearly-audible gap keeps a
+            // small visual floor; a sub-perceptual micro-gap (connected flow) stays
+            // time-true so the cursor never bursts across a floored gap it has no
+            // time to cross (paired with the silence-hold in `drivePlayback`).
+            const sec = c.nextGapSec;
+            const baseGap = Math.round(
+                sec < MICRO_GAP_SEC ? sec * pxPerSec : Math.max(config.filmstripGapPx, sec * pxPerSec),
+            );
+            const gapAfter = mergeRight ? 0 : baseGap;
+            out.push({
+                ayah: c.ayah, w, aw, cumBefore: cum, gapAfter, missing: c.missing,
+                waslNext: c.waslNext, mergeRight, mergeLeft,
+            });
             cum += w + gapAfter;
         }
         return out;
+    });
+
+    interface WaslGroup {
+        leftPx: number; // group's left edge (track px, pre-pad)
+        rightPx: number; // group's right edge
+    }
+    /** Contiguous waṣl groups — each a maximal run of merged (gapless) cells, tied
+     *  together by a thin accent rail under the row. The sub-cells keep their own
+     *  full borders + verse numbers; the rail is the only "one continuous-recitation
+     *  span" cue (no capsule weld, no range label). A group runs from its
+     *  `mergeRight`-only start through its `mergeLeft`-only end. Empty for the
+     *  all-solo common case → the overlay renders nothing. */
+    const waslGroups = $derived.by((): WaslGroup[] => {
+        const groups: WaslGroup[] = [];
+        let i = 0;
+        while (i < cells.length) {
+            if (cells[i]!.mergeRight && !cells[i]!.mergeLeft) {
+                let j = i;
+                while (j < cells.length - 1 && cells[j]!.mergeRight) j++;
+                const start = cells[i]!;
+                const end = cells[j]!;
+                groups.push({ leftPx: start.cumBefore, rightPx: end.cumBefore + end.w });
+                i = j + 1;
+            } else {
+                i++;
+            }
+        }
+        return groups;
     });
 
     /** A cell that can be navigated to / recited. `full` placeholders (unrecited
@@ -416,17 +486,18 @@
         return false;
     }
 
-    /** The end (seconds) of the latest occurrence interval that finished at or
-     *  before `tSec` — the true start of the silence the audio is now inside.
-     *  Robust for a BACKWARD loopback gap, where the audio left from a later
-     *  occurrence than the frozen verse's forward-flowing `canonEndSec`. */
-    function prevIntervalEnd(tSec: number): number {
-        let end = -Infinity;
+    /** The latest occurrence interval that finished at or before `tSec` — the take
+     *  the audio just LEFT, whose `end` is the true start of the silence the audio
+     *  is now inside and whose `unitIdx` is the word it departed from. Robust for a
+     *  BACKWARD loopback gap, where the audio left from a later occurrence than the
+     *  frozen verse's forward-flowing `canonEndSec`. `null` before the first word. */
+    function prevInterval(tSec: number): { end: number; unitIdx: number } | null {
+        let best: { end: number; unitIdx: number } | null = null;
         for (const iv of sorted) {
             if (iv.start > tSec) break; // sorted by start; nothing later can have begun
-            if (iv.end <= tSec && iv.end > end) end = iv.end;
+            if (iv.end <= tSec && (!best || iv.end > best.end)) best = { end: iv.end, unitIdx: iv.unitIdx };
         }
-        return end;
+        return best;
     }
 
     /** Scroll the needle across the inter-cell gap proportionally to the elapsed
@@ -437,17 +508,30 @@
      *  pxPerSec. `gapStart` is the actual end of the interval the silence follows
      *  (so a backward loopback's gap measures from the looped-FROM occurrence, not
      *  the frozen verse's forward end), `gapEnd` the upcoming occurrence's start. */
-    function scrollThroughGap(tSec: number, nextIv: { start: number }, nextIdx: number): void {
+    function scrollThroughGap(tSec: number, nextIv: { start: number; unitIdx: number }, nextIdx: number): void {
         const mcA = model.cells[frozenIdx];
+        const mcB = model.cells[nextIdx];
         const cellA = cells[frozenIdx];
         const cellB = cells[nextIdx];
-        if (!mcA || !cellA || !cellB || mcA.canonEndSec < 0) return;
-        const prevEnd = prevIntervalEnd(tSec);
-        const gapStart = prevEnd > -Infinity ? prevEnd : mcA.canonEndSec;
+        if (!mcA || !mcB || !cellA || !cellB || mcA.canonEndSec < 0) return;
+        const prev = prevInterval(tSec);
+        const gapStart = prev ? prev.end : mcA.canonEndSec;
         const gapEnd = nextIv.start;
         const p = gapEnd > gapStart ? clamp(0, 1, (tSec - gapStart) / (gapEnd - gapStart)) : 1;
-        const from = cellA.cumBefore + (cellA.w + cellA.aw) / 2; // end of A's active span
-        const to = cellB.cumBefore + (cellB.w - cellB.aw) / 2; //  start of B's active span
+        // Depart from the WORD the audio actually LEFT (`prev`'s unit), not verse A's
+        // end — a mid-verse loopback leaves mid-cell, so anchoring at frac 1 would
+        // jerk forward to the verse end before travelling back. Symmetric with the
+        // resume-word landing below. Falls back to the verse end when the departure
+        // interval isn't in cell A (the canonical forward-flow case).
+        const departFrac = prev && (model.cellOfUnit[prev.unitIdx] ?? -1) === frozenIdx
+            ? mcA.words[prev.unitIdx - mcA.unitStart]?.frac1 ?? 1
+            : 1;
+        // Land on the WORD the reciter actually resumes (`nextIv`'s unit), not verse
+        // B's start — a mid-verse loopback resumes mid-cell, so targeting frac 0
+        // would overshoot to the verse start then jerk forward to the live word.
+        const resumeFrac = mcB.words[nextIv.unitIdx - mcB.unitStart]?.frac0 ?? 0;
+        const from = cellA.cumBefore + (cellA.w - cellA.aw) / 2 + departFrac * cellA.aw; // A's depart word
+        const to = cellB.cumBefore + (cellB.w - cellB.aw) / 2 + resumeFrac * cellB.aw; // B's resume word
         scroll.snap(lerp(from, to, p));
     }
 
@@ -467,18 +551,32 @@
             // travel back to the re-take, not a freeze). Within-verse / leading /
             // trailing silence is left untouched (needle hidden, held), so a
             // reciter's mid-verse pause doesn't grey or move the cursor.
+            const nextIv = config.filmstripMotion !== 'snap' && frozenIdx >= 0
+                ? nextIntervalAfter(sorted, tSec)
+                : null;
+            const nextIdx = nextIv ? (model.cellOfUnit[nextIv.unitIdx] ?? -1) : -1;
+            // A sub-perceptual gap to the IMMEDIATE next verse (connected flow, not
+            // a waqf stop) isn't a silence: hold the verse lit + the needle on so the
+            // cursor glides straight through instead of greying/snapping for a frame
+            // or two. The cells are laid out gapless for such a gap, so the next verse
+            // picks up exactly where this one ended. Restricted to the forward
+            // neighbour (`frozenIdx + 1`) so a backward loopback or a forward skip —
+            // whose own pause can be brief — still scrolls a greyed needle.
+            const microGap = nextIdx === frozenIdx + 1
+                && (model.cells[frozenIdx]?.nextGapSec ?? Infinity) < MICRO_GAP_SEC;
+            if (microGap) {
+                silent = false;
+                crossingGap = false;
+                return;
+            }
             silent = true;
             crossingGap = false;
-            if (config.filmstripMotion !== 'snap' && frozenIdx >= 0) {
-                const nextIv = nextIntervalAfter(sorted, tSec);
-                const nextIdx = nextIv ? (model.cellOfUnit[nextIv.unitIdx] ?? -1) : -1;
-                // Scroll any inter-take silence (forward OR backward), but NOT a
-                // within-verse pause (nextIdx === frozenIdx → hold, needle hidden).
-                if (nextIdx >= 0 && nextIdx !== frozenIdx) {
-                    crossingGap = true;
-                    scrollThroughGap(tSec, nextIv!, nextIdx);
-                    fillIdx = cellSpanningOffset(scroll.offset);
-                }
+            // Scroll any inter-take silence (forward OR backward), but NOT a
+            // within-verse pause (nextIdx === frozenIdx → hold, needle hidden).
+            if (nextIv && nextIdx >= 0 && nextIdx !== frozenIdx) {
+                crossingGap = true;
+                scrollThroughGap(tSec, nextIv, nextIdx);
+                fillIdx = cellSpanningOffset(scroll.offset);
             }
             return;
         }
@@ -724,6 +822,17 @@
                 </div>
             {/each}
             <div class="pad" style:width="{pad}px"></div>
+            <!-- Waṣl rails — an overlay layer (the cells clip overflow) riding the
+                 track transform: a thin accent rail under each gapless cross-verse
+                 group, tying its fully-bordered sub-cells into one continuous span. -->
+            {#each waslGroups as g (g.leftPx)}
+                <div
+                    class="wasl-rail"
+                    style:left="{pad + g.leftPx}px"
+                    style:width="{g.rightPx - g.leftPx}px"
+                    aria-hidden="true"
+                ></div>
+            {/each}
         </div>
         {#if config.filmstripMotion !== 'snap' && (!silent || crossingGap)}
             <div class="needle" class:silent={crossingGap} aria-hidden="true"></div>
@@ -832,6 +941,22 @@
     }
     .cell.missing-full .cell-num {
         color: var(--state-missing-fg);
+    }
+    /* ---- Cross-verse waṣl merge -------------------------------------------
+     * A continuous-recitation run renders as gapless, fully-bordered sub-cells —
+     * each keeps its own number and border (the touching borders mark the verse
+     * boundaries) — tied together by a thin accent rail under the row: the
+     * "mega-cell" read without collapsing any cell's identity. The rail is an
+     * overlay sibling of the cells (so their `overflow:hidden` doesn't clip it),
+     * spans the whole group, and rides the track transform. */
+    .wasl-rail {
+        position: absolute;
+        bottom: -2px;
+        height: 2px;
+        border-radius: 1px;
+        background: var(--accent);
+        box-shadow: 0 0 6px var(--accent-tint);
+        pointer-events: none;
     }
     .cell-fill {
         position: absolute;

@@ -120,7 +120,7 @@ const SILENT_TOOLTIPS = {
 // hamzat-waṣl ibtidāʾ vowels + the raw tanwīn-iltiqāʾ the SDK rewrites). A new
 // phonemizer rule (e.g. a future riwāyah) lands in `TajweedRule` via codegen and
 // breaks this assertion until classified — never a silently-dropped underline.
-const PIPELINE_ONLY_TAGS = [
+const _PIPELINE_ONLY_TAGS = [
     'hamza_wasl_fatha',
     'hamza_wasl_kasra',
     'hamza_wasl_damma',
@@ -128,7 +128,7 @@ const PIPELINE_ONLY_TAGS = [
 ] as const satisfies readonly TajweedRule[];
 
 type RenderedTag = keyof typeof COLOR_RULES | keyof typeof SILENT_TOOLTIPS;
-type UnclassifiedRule = Exclude<TajweedRule, RenderedTag | (typeof PIPELINE_ONLY_TAGS)[number]>;
+type UnclassifiedRule = Exclude<TajweedRule, RenderedTag | (typeof _PIPELINE_ONLY_TAGS)[number]>;
 const _assertAllRulesClassified: UnclassifiedRule extends never ? true : UnclassifiedRule = true;
 void _assertAllRulesClassified;
 
@@ -275,7 +275,10 @@ export function legendRows(group: LegendGroup): LegendRow[] {
 
 /** The legend / settings panel structure — one row per legendKey, grouped by
  *  category. Order is the display order. Noon / Meem splits into two stacked
- *  sub-sections: noon (+ ghunnah) rules, then the three shafawi (mīm) rules. */
+ *  sub-sections: noon (+ ghunnah) rules, then the mīm rules led by the shared
+ *  ghunnah (ghunnah governs a sākin noon AND a sākin mīm, so it heads both
+ *  sub-sections; the two rows couple colour + toggle via the shared `ghunnah`
+ *  legendKey, exactly like qalqala ṣughrā / kubrā). */
 export const LEGEND: LegendGroup[] = [
     { category: 'noon_meem', title: 'Noon / Meem', subgroups: [
         { title: 'Noon', rows: [
@@ -287,6 +290,7 @@ export const LEGEND: LegendGroup[] = [
             { legendKey: 'izhar', label: 'Izhar Halqi', colorVar: '--tj-izhar-halqi', duration: '1' },
         ] },
         { title: 'Meem', rows: [
+            { legendKey: 'ghunnah', label: 'Ghunnah', colorVar: '--tj-ghunnah', duration: '2' },
             { legendKey: 'ikhfaa_shafawi', label: 'Ikhfaa Shafawi', colorVar: '--tj-ikhfaa-shafawi', duration: '2' },
             { legendKey: 'idgham_shafawi', label: 'Idgham Shafawi', colorVar: '--tj-idgham-shafawi', duration: '2' },
             { legendKey: 'izhar_shafawi', label: 'Izhar Shafawi', colorVar: '--tj-izhar-shafawi', duration: '1' },
