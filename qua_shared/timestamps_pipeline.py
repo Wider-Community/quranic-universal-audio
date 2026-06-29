@@ -871,6 +871,93 @@ def _group_verse_items(segments: list, refresh_ayahs: set | None = None) -> list
     return items
 
 
+def _align_chapter_whole_verse(
+    aligner, chapter: dict, beams: list[int], *, padding: str, wb,
+    refresh_ayahs: set | None, sample_rate: int = 16000,
+) -> dict[int, list]:
+    """Whole-verse align ONE chapter → ``{beam: [(seg_idx, result), ...]}``.
+
+    Pure given an aligner: used by both the serial fallback and the per-chapter
+    process pool. Each verse item is ONE ``align_verse`` pass over its contiguous
+    audio span (psil seeded at every segment boundary, split back per-segment);
+    each segment's words are shifted to segment-local time so the seg-offset
+    rebase in ``_normalize_from_results`` lands them back at chapter time.
+    """
+    import numpy as _np
+
+    out: dict[int, list] = {b: [] for b in beams}
+    ch_ref = str(chapter.get("ref", ""))
+    audio_src = chapter.get("audio", "")
+    if not audio_src:
+        log.warning("ch%s: no audio source, skipping", ch_ref)
+        return out
+    try:
+        audio_file = download_audio(audio_src) if _is_url(audio_src) else Path(audio_src)
+        audio_i16 = load_audio_int16(audio_file)
+        if _is_url(audio_src):
+            audio_file.unlink()
+    except Exception as e:
+        log.warning("ch%s: audio download/convert failed: %s", ch_ref, e)
+        return out
+    audio_f = audio_i16.astype(_np.float32) / 32768.0
+    segments = chapter.get("segments", [])
+    items = _group_verse_items(segments, refresh_ayahs)
+    log.info("ch%s: %d whole-verse items from %d segments", ch_ref, len(items), len(segments))
+
+    for it in items:
+        sidx = it["seg_idxs"]
+        wasl_after = it.get("wasl_after") or [False] * (len(sidx) - 1)
+        # Per-segment occurrence flag: does this segment continue into the next
+        # via waṣl? (the last segment of an item never does). Stamped on the
+        # shard so the FE reconstructs waṣl groups per-occurrence (retake-safe).
+        def _wasl_of(j, _wa=wasl_after, _n=len(sidx)):
+            return bool(_wa[j]) if j < _n - 1 else False
+        t0 = int(segments[sidx[0]].get("time_start", 0))
+        t1 = int(segments[sidx[-1]].get("time_end", t0))
+        span = audio_f[int(t0 * sample_rate / 1000): int(t1 * sample_rate / 1000)]
+        refs = [build_mfa_ref(segments[si]) for si in sidx]
+        too_short = len(span) < sample_rate // 50
+        for b in beams:
+            if too_short:
+                rows = [(si, {"status": "error", "error": "empty span", "wasl": _wasl_of(j)})
+                        for j, si in enumerate(sidx)]
+            else:
+                try:
+                    vres = aligner.align_verse(
+                        refs, span, sample_rate, beam=b, retry_beam=b,
+                        include_letters=True, padding=padding,
+                        wasl_after=wasl_after, wb_allocation_resolved=wb)
+                except Exception as e:
+                    rows = [(si, {"status": "error", "error": f"{type(e).__name__}: {e}",
+                                  "wasl": _wasl_of(j)})
+                            for j, si in enumerate(sidx)]
+                else:
+                    rows = []
+                    for j, si in enumerate(sidx):
+                        words = vres[j]["words"] if j < len(vres) else []
+                        delta = (t0 - int(segments[si].get("time_start", 0))) / 1000.0
+                        shifted = [_shift_word_times(w, delta) for w in words]
+                        rows.append((si, {"status": "ok" if shifted else "error",
+                                          "words": shifted, "wasl": _wasl_of(j),
+                                          **({} if shifted else {"error": "no words"})}))
+            out[b].extend(rows)
+    return out
+
+
+def _worker_align_chapter(chapter, beams, padding, word_boundary_allocation, refresh_ayahs, sample_rate):
+    """ProcessPoolExecutor task: whole-verse align one chapter on the worker's
+    own aligner (built once by ``_init_worker``)."""
+    from qua_sdk.components.timing.lib import resolve_word_boundary_allocation
+
+    aligner = _WORKER["aligner"]
+    if aligner is None:
+        raise RuntimeError("Worker not initialized; missing MFA aligner.")
+    wb = resolve_word_boundary_allocation(word_boundary_allocation)
+    return _align_chapter_whole_verse(
+        aligner, chapter, beams, padding=padding, wb=wb,
+        refresh_ayahs=refresh_ayahs, sample_rate=sample_rate)
+
+
 def _align_whole_verse(
     chapters_to_process: list,
     beams: list[int],
@@ -881,84 +968,56 @@ def _align_whole_verse(
     word_boundary_allocation: dict | None,
     refresh_ayahs: set | None = None,
     sample_rate: int = 16000,
+    workers: int = 1,
 ) -> dict:
     """Whole-verse alignment → the same ``results_by_beam`` the per-segment path
     builds, so all downstream (``build_raw_v2`` → shards, ``ts_validation``)
     is unchanged.
 
-    Each verse item is ONE ``align_verse`` pass over its contiguous audio span
-    (psil seeded at every segment boundary, split back per-segment); each
-    segment's words are shifted to segment-local time so the seg-offset rebase in
-    ``_normalize_from_results`` lands them back at chapter time. Per-occurrence,
-    raw and faithful to the audio as allocated; failures degrade per item.
+    Chapters are independent (waṣl never crosses a chapter boundary), so with
+    ``workers > 1`` they fan out across a ProcessPoolExecutor — each worker
+    builds its own ``MfaLocalAligner`` via the shared ``_init_worker``. Serial
+    (single in-process aligner) when ``workers <= 1``.
     """
-    import numpy as _np
     from qua_sdk.components.timing.lib import resolve_word_boundary_allocation
     from qua_sdk.components.timing.runtimes.mfa_local import MfaLocalAligner
 
-    aligner = MfaLocalAligner(str(mfa_model_path), str(mfa_dictionary_path),
-                              num_threads=1, use_pool=False)
-    log.info("whole-verse aligner: supports_psil=%s keep_q=%s",
-             aligner.supports_psil, aligner.keep_q)
-    wb = resolve_word_boundary_allocation(word_boundary_allocation)
     results_by_beam: dict[int, dict[int, list]] = {b: {} for b in beams}
+    n_workers = max(1, min(int(workers), len(chapters_to_process)))
 
-    for ch_idx, chapter in chapters_to_process:
-        ch_ref = str(chapter.get("ref", ""))
-        audio_src = chapter.get("audio", "")
-        if not audio_src:
-            log.warning("ch%s: no audio source, skipping", ch_ref)
-            continue
-        try:
-            audio_file = download_audio(audio_src) if _is_url(audio_src) else Path(audio_src)
-            audio_i16 = load_audio_int16(audio_file)
-            if _is_url(audio_src):
-                audio_file.unlink()
-        except Exception as e:
-            log.warning("ch%s: audio download/convert failed: %s", ch_ref, e)
-            continue
-        audio_f = audio_i16.astype(_np.float32) / 32768.0
-        segments = chapter.get("segments", [])
-        items = _group_verse_items(segments, refresh_ayahs)
-        log.info("ch%s: %d whole-verse items from %d segments", ch_ref, len(items), len(segments))
-
-        for it in items:
-            sidx = it["seg_idxs"]
-            wasl_after = it.get("wasl_after") or [False] * (len(sidx) - 1)
-            # Per-segment occurrence flag: does this segment continue into the next
-            # via waṣl? (the last segment of an item never does). Stamped on the
-            # shard so the FE reconstructs waṣl groups per-occurrence (retake-safe).
-            def _wasl_of(j, _wa=wasl_after, _n=len(sidx)):
-                return bool(_wa[j]) if j < _n - 1 else False
-            t0 = int(segments[sidx[0]].get("time_start", 0))
-            t1 = int(segments[sidx[-1]].get("time_end", t0))
-            span = audio_f[int(t0 * sample_rate / 1000): int(t1 * sample_rate / 1000)]
-            refs = [build_mfa_ref(segments[si]) for si in sidx]
-            too_short = len(span) < sample_rate // 50
+    if n_workers <= 1:
+        aligner = MfaLocalAligner(str(mfa_model_path), str(mfa_dictionary_path),
+                                  num_threads=1, use_pool=False)
+        log.info("whole-verse aligner (serial): supports_psil=%s keep_q=%s",
+                 aligner.supports_psil, aligner.keep_q)
+        wb = resolve_word_boundary_allocation(word_boundary_allocation)
+        for ch_idx, chapter in chapters_to_process:
+            out = _align_chapter_whole_verse(
+                aligner, chapter, beams, padding=padding, wb=wb,
+                refresh_ayahs=refresh_ayahs, sample_rate=sample_rate)
             for b in beams:
-                if too_short:
-                    rows = [(si, {"status": "error", "error": "empty span", "wasl": _wasl_of(j)})
-                            for j, si in enumerate(sidx)]
-                else:
-                    try:
-                        vres = aligner.align_verse(
-                            refs, span, sample_rate, beam=b, retry_beam=b,
-                            include_letters=True, padding=padding,
-                            wasl_after=wasl_after, wb_allocation_resolved=wb)
-                    except Exception as e:
-                        rows = [(si, {"status": "error", "error": f"{type(e).__name__}: {e}",
-                                      "wasl": _wasl_of(j)})
-                                for j, si in enumerate(sidx)]
-                    else:
-                        rows = []
-                        for j, si in enumerate(sidx):
-                            words = vres[j]["words"] if j < len(vres) else []
-                            delta = (t0 - int(segments[si].get("time_start", 0))) / 1000.0
-                            shifted = [_shift_word_times(w, delta) for w in words]
-                            rows.append((si, {"status": "ok" if shifted else "error",
-                                              "words": shifted, "wasl": _wasl_of(j),
-                                              **({} if shifted else {"error": "no words"})}))
-                results_by_beam[b].setdefault(ch_idx, []).extend(rows)
+                if out[b]:
+                    results_by_beam[b].setdefault(ch_idx, []).extend(out[b])
+        return results_by_beam
+
+    log.info("whole-verse aligner (parallel): %d workers over %d chapters",
+             n_workers, len(chapters_to_process))
+    with ProcessPoolExecutor(
+        max_workers=n_workers,
+        initializer=_init_worker,
+        initargs=(str(mfa_model_path), str(mfa_dictionary_path)),
+    ) as pool:
+        futs = {
+            pool.submit(_worker_align_chapter, chapter, beams, padding,
+                        word_boundary_allocation, refresh_ayahs, sample_rate): ch_idx
+            for ch_idx, chapter in chapters_to_process
+        }
+        for fut in as_completed(futs):
+            ch_idx = futs[fut]
+            out = fut.result()
+            for b in beams:
+                if out[b]:
+                    results_by_beam[b].setdefault(ch_idx, []).extend(out[b])
     return results_by_beam
 
 
@@ -1251,7 +1310,7 @@ def process(
             chapters_to_process, beams,
             mfa_model_path=mfa_model_path, mfa_dictionary_path=mfa_dictionary_path,
             padding=padding, word_boundary_allocation=word_boundary_allocation,
-            refresh_ayahs=refresh_ayahs,
+            refresh_ayahs=refresh_ayahs, workers=workers,
         )
         return _finalize_shards(
             results_by_beam, chapters=chapters, canonical_beam=canonical_beam,
