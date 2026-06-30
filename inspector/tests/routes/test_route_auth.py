@@ -53,7 +53,7 @@ def test_me_anonymous_returns_null_shape(flask_client):
         "capabilities": [
             "view.catalog",
             "view.public_activity",
-            "timestamps.flag",
+            "timestamps.report",
             "notify.email_subscriptions",
         ],
         # No identity → no guide read marks.

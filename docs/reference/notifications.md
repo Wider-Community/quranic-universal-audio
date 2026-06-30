@@ -19,19 +19,20 @@ the redirect is transparent on hover (`NotificationsRail.navTarget`):
 | `reciter.alignment_completed`, `reciter.claimed` | "Review in Segments" | `gotoSegments(slug)` — Segments tab, reciter loaded (mirrors the post-claim redirect) |
 | `reciter.marked_ready` | "Review submission" | `gotoSegments(slug, {openMarkReadyReview})` — Segments tab + the read-only `MarkReadyReviewModal` (the reviewer's free-text notes, no checklist) |
 | `flag.reply`, `flag.created`, `flag.replied` | "Open flagged segment" | `gotoSegments(slug, {openFlagged, focusFlaggedUid})` — Segments tab + Flagged accordion open + scrolled to the flagged segment |
-| `ts_flag.created` | "View flagged verse" | `gotoTimestamps(slug, payload.verse_key)` — Timestamps tab, that reciter loaded + playhead seeked to the verse (public verse-flag report) |
+| `ts_report.created`, `ts_report.resolved` | "View reported verse" | `gotoTimestamps(slug, payload.verse_key)` — Timestamps tab, that reciter loaded + playhead seeked to the verse (categorized report / its resolution) |
 | `request.received` | (none) | informational — no click-through; a type pill (`payload.kind`) names the request kind |
 | everything else | "View reciter" | dashboard detail modal (`openDetail`), when the reciter is still catalogued |
 
 A `cardBadge(n)` helper renders a small type pill next to the title:
 `request.received` → the kind (Edit existing combo / New riwāyah · style / New
 reciter), `reciter.marked_ready` → "Has notes", `flag.created` → "Flag · comment",
-`flag.replied` → "Flag · reply", `ts_flag.created` → "Timestamps · report".
+`flag.replied` → "Flag · reply", `ts_report.created` → "Timestamps · report",
+`ts_report.resolved` → "Timestamps · resolved".
 
-For `ts_flag.created`, the card body shows the reporter's login (from
+For `ts_report.created`, the card body shows the reporter's login (from
 `payload.author_login`, or "an anonymous listener") only to callers holding
-`timestamps.see_flagger_identity` (owner-default) — otherwise just the
-verse + comment. The FE gate lives in `NotificationsRail.cardBody`.
+`timestamps.see_reporter_identity` (owner-default) — otherwise just the
+verse + category. The FE gate lives in `NotificationsRail.cardBody`.
 
 The flag deep-link is a cross-tab handoff: `gotoSegments` writes
 `pendingSegmentsDeepLink` (`lib/utils/goto-segments.ts`); `ValidationPanel`
@@ -120,7 +121,8 @@ acting user (an owner's own request / mark-ready / flag never notifies them).
 | `request.received` | `notify_owners_new_request` — called from the slug-based edit-request route AND `intake.submit` (NOT a `reciter.requested` resolver, which re-fires on ingest) | "New request · X" + a body detail; `payload.kind` = `existing_combo_edit` / `existing_reciter_new_combo` / `new_reciter` |
 | `reciter.marked_ready` | `_r_marked_ready` resolver (only when `comment_checks` or `comment_issues` is non-empty) | "X marked ready — reviewer left notes" + the notes; `payload.openMarkReadyReview` |
 | `flag.created` / `flag.replied` | `notify_owners_flag_activity` — from the segment-save flow for `set` / `followup` flag ops | "New flag on X" / "New reply on a flag · X" + `surah:ayah — comment`; `payload.segment_uid` |
-| `ts_flag.created` | `notify_owners_ts_flag` — from the public Timestamps-tab flag route, **once per new comment** (re-edits don't re-notify) | "Timestamps issue reported · X" + `verse_key — comment`; `payload.verse_key` + `author_id` / `author_login` (null for anonymous). `source_key=tsflag:<slug>:<verse>:<at_utc>` |
+| `ts_report.created` | `notify_owners_ts_report` — from the public Timestamps-tab report route, **once per new report** (re-submits of the same category+target don't re-notify) | "Timestamps issue reported · X" + `verse_key · category`; `payload.verse_key` + `category` + `report_id` + `author_id` / `author_login` (null for anonymous). `source_key=tsreport:<slug>:<report_id>` |
+| `ts_report.resolved` | `notify_reporter_ts_report_resolved` — from the resolve route, to the (signed-in) reporter only; anonymous reporters are skipped | "Your timestamps report for X was resolved" + a generic thank-you + the owner's optional comment; `payload.verse_key` + `report_id`. `source_key=tsreportresolved:<slug>:<report_id>` |
 
 **Auto-archive.** `request.received` cards are informational. When the reciter
 reaches `awaiting_review` (the `reciter.alignment_completed` event), the request
