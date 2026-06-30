@@ -724,9 +724,9 @@ export interface AutomationConfig {
  * edits. It is the sole source of the TS tunables for every TS launch — the
  * manual form (``routes/admin/reviews.py::_parse_ts_settings``), the auto-gen /
  * stale-regen automations (``services/admin/automation/evaluators.py``) and,
- * through them, the HF job (``qua_jobs/generate_timestamps.py``). The manual
- * form's ``beam``/``probe_beams``/``chapters`` still win per-launch; an unset
- * field falls back here, and a field unset here cedes to the job's ``DEFAULT_*``.
+ * through them, the HF job (``qua_jobs/generate_timestamps.py``). Every TS
+ * tunable comes from here; the only per-launch input is the manual form's
+ * ``chapters`` scope. A field unset here cedes to the job's ``DEFAULT_*``.
  *
  * ``beam`` + ``probe_beams`` resolve to the ``[beam, probe]`` list passed to the
  * aligner. ``padding`` / ``method`` are the pipeline tunables (``None`` → the
