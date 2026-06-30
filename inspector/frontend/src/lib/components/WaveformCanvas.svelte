@@ -11,7 +11,9 @@
 
     import { onMount } from 'svelte';
 
+    import { THEME_CHANGE_EVENT } from '../stores/theme.svelte';
     import type { PeakBucket } from '../types/peaks-transport';
+    import { themeColor } from '../utils/canvas-theme';
     import { drawWaveformPeaks } from '../utils/waveform-draw';
 
     /** Peak data to render. null = show empty (black) canvas. Both nested
@@ -58,13 +60,21 @@
     function clearCanvas(): void {
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
-        ctx.fillStyle = '#0f0f23';
+        ctx.fillStyle = themeColor('--wf-bg', '#0f0f23');
         ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
 
-    onMount(() => {
+    /** Repaint with the active theme's colours (peaks → redraw, else clear). */
+    function repaint(): void {
+        if (!canvas) return;
         if (peaks) redraw();
         else clearCanvas();
+    }
+
+    onMount(() => {
+        repaint();
+        window.addEventListener(THEME_CHANGE_EVENT, repaint);
+        return () => window.removeEventListener(THEME_CHANGE_EVENT, repaint);
     });
 
     /** Expose the raw canvas element so extension components can draw overlays. */
@@ -78,6 +88,6 @@
 <style>
     canvas {
         display: block;
-        background: #0f0f23;
+        background: var(--wf-bg, #0f0f23);
     }
 </style>

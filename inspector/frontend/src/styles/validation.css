@@ -17,9 +17,9 @@
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    color: #7a8aa0;
+    color: var(--text-muted);
     padding: 6px 0 2px;
-    border-top: 1px solid #1e2a3a;
+    border-top: 1px solid var(--border-quiet);
     margin-top: 4px;
 }
 
@@ -29,14 +29,14 @@
 }
 
 .seg-validation details {
-    background: #16213e;
+    background: var(--panel);
     border-radius: 6px;
     margin-bottom: 4px;
-    border: 1px solid #2a2a4a;
+    border: 1px solid var(--border-default);
 }
 
 .seg-validation details[open] {
-    border-color: #3a3a5a;
+    border-color: var(--border-strong);
 }
 
 .seg-validation summary {
@@ -46,7 +46,7 @@
     padding: 8px 12px;
     cursor: pointer;
     font-size: 0.85rem;
-    color: #aaa;
+    color: var(--text-secondary);
     user-select: none;
     list-style: none;
     /* Pin the category header to the top of the page scroll so it (and the
@@ -55,7 +55,7 @@
     position: sticky;
     top: 0;
     z-index: 3;
-    background: #16213e;
+    background: var(--panel);
 }
 
 .seg-validation summary::before {
@@ -75,8 +75,8 @@
     margin-left: 4px;
 }
 
-.seg-validation summary .val-count.has-errors { color: #f44336; }
-.seg-validation summary .val-count.has-warnings { color: #ff9800; }
+.seg-validation summary .val-count.has-errors { color: var(--bad-fg); }
+.seg-validation summary .val-count.has-warnings { color: var(--warn-fg); }
 
 .val-summary-main {
     display: inline-flex;
@@ -102,10 +102,10 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid #384563;
+    border: 1px solid var(--border-strong);
     border-radius: 50%;
-    background: #101a33;
-    color: #bfc9e5;
+    background: var(--surface-sunken);
+    color: var(--text-secondary);
     cursor: pointer;
     font-size: 0.78rem;
     line-height: 1;
@@ -113,8 +113,8 @@
 
 .val-guide-btn:hover,
 .val-guide-btn:focus-visible {
-    background: #1c2b50;
-    color: #fff;
+    background: var(--panel-2);
+    color: var(--text-primary);
     outline: none;
 }
 
@@ -132,13 +132,13 @@
     gap: 10px;
     padding: 6px 12px 4px;
     font-size: 0.78rem;
-    color: #aaa;
+    color: var(--text-secondary);
 }
 .lc-slider-label { white-space: nowrap; }
-.lc-slider-val { color: #f0a500; font-weight: 600; }
+.lc-slider-val { color: var(--cta-bg); font-weight: 600; }
 .lc-slider {
     flex: 1;
-    accent-color: #f0a500;
+    accent-color: var(--cta-bg);
     cursor: pointer;
     max-width: 180px;
 }
@@ -153,7 +153,7 @@
 }
 
 .seg-validation .val-none {
-    color: #555;
+    color: var(--text-faint);
     font-size: 0.8rem;
     padding: 4px 12px 10px;
 }
@@ -162,70 +162,70 @@
     padding: 2px 8px;
     font-size: 0.75rem;
     font-family: monospace;
-    border: 1px solid #444;
+    border: 1px solid var(--border-strong);
     border-radius: 4px;
-    background: #0f0f23;
-    color: #ccc;
+    background: var(--canvas-inset);
+    color: var(--text-secondary);
     cursor: pointer;
     white-space: nowrap;
 }
 
 .val-btn:hover {
-    background: #1a2a4e;
-    border-color: #4cc9f0;
+    background: var(--panel-2);
+    border-color: var(--accent);
 }
 
 .val-btn.val-error {
-    border-color: #f44336;
-    color: #f44336;
+    border-color: var(--bad-fg);
+    color: var(--bad-fg);
 }
 
 .val-btn.val-error:hover {
-    background: rgba(244, 67, 54, 0.15);
+    background: var(--bad-tint-strong);
 }
 
 .val-btn.val-warning {
-    border-color: #ff9800;
-    color: #ff9800;
+    border-color: var(--warn-fg);
+    color: var(--warn-fg);
 }
 
 .val-btn.val-warning:hover {
-    background: rgba(255, 152, 0, 0.15);
+    background: var(--warn-tint);
 }
 
 .val-btn.val-conf-low {
-    border-color: #f44336;
-    color: #f44336;
-    background: rgba(244, 67, 54, 0.1);
+    border-color: var(--bad-fg);
+    color: var(--bad-fg);
+    background: var(--bad-tint);
 }
 
 .val-btn.val-conf-mid {
-    border-color: #ff9800;
-    color: #ff9800;
-    background: rgba(255, 152, 0, 0.1);
+    border-color: var(--warn-fg);
+    color: var(--warn-fg);
+    background: var(--warn-tint);
 }
 
 .val-btn.val-cross {
-    border-color: #4cc9f0;
-    color: #4cc9f0;
+    border-color: var(--accent);
+    color: var(--accent);
 }
 
 .val-btn.val-cross:hover {
-    background: rgba(76, 201, 240, 0.15);
+    background: var(--accent-tint-hover);
 }
 
 .val-cross-count {
-    background: rgba(76, 201, 240, 0.2);
-    color: #4cc9f0;
+    background: var(--accent-tint-strong);
+    color: var(--accent);
 }
 
 /* Sort pills — one per registry `sorts` option; active pill carries a
    direction arrow and the cyan-active fill shared with the qalqala filters. */
 .val-sort-row { gap: 6px; }
 .val-btn.val-sort-pill.active {
-    background: rgba(76, 201, 240, 0.3);
-    border-color: #4cc9f0;
-    color: #fff;
+    background: var(--accent-tint-strong);
+    border-color: var(--accent);
+    color: var(--text-primary);
 }
 .val-sort-arrow {
     margin-left: 4px;
@@ -235,38 +235,38 @@
 .qalqala-filter-row { gap: 6px; }
 .val-btn.qalqala-letter-btn { font-size: 1.1em; min-width: 2.2em; }
 .val-btn.qalqala-letter-btn.active {
-    background: rgba(76, 201, 240, 0.3);
-    border-color: #4cc9f0;
-    color: #fff;
+    background: var(--accent-tint-strong);
+    border-color: var(--accent);
+    color: var(--text-primary);
 }
 .val-btn.qalqala-eov-btn.active {
-    background: rgba(76, 201, 240, 0.3);
-    border-color: #4cc9f0;
-    color: #fff;
+    background: var(--accent-tint-strong);
+    border-color: var(--accent);
+    color: var(--text-primary);
 }
 .val-ctx-all-row { padding: 4px 10px 2px; }
 
 .val-btn.val-bleed {
-    border-color: #e07c3a;
-    color: #e07c3a;
+    border-color: var(--bleed-orange);
+    color: var(--bleed-orange);
 }
 
 .val-btn.val-bleed:hover {
-    background: rgba(224, 124, 58, 0.15);
+    background: var(--bleed-orange-tint);
 }
 
 .val-rep-count {
-    background: rgba(168, 130, 255, 0.2);
-    color: #a882ff;
+    background: var(--repeat-violet-tint);
+    color: var(--repeat-violet);
 }
 
 .val-btn.val-rep {
-    border-color: #a882ff;
-    color: #a882ff;
+    border-color: var(--repeat-violet);
+    color: var(--repeat-violet);
 }
 
 .val-btn.val-rep:hover {
-    background: rgba(168, 130, 255, 0.15);
+    background: var(--repeat-violet-tint);
 }
 
 /* ============ Validation Error Cards ============ */
@@ -289,10 +289,10 @@
 }
 
 .val-card-wrapper {
-    border: 1px solid #2a2a4a;
+    border: 1px solid var(--border-default);
     border-radius: 6px;
     padding: 8px;
-    background: #0f0f23;
+    background: var(--canvas-inset);
     /* NOTE: do NOT add content-visibility here. It implies `contain: paint`,
      * which creates a stacking context on every wrapper and traps the
      * edit-target .seg-row's `z-index: 11` inside the wrapper's root-level
@@ -309,13 +309,13 @@
 }
 
 .seg-row-context .seg-text {
-    border-left-color: #666;
+    border-left-color: var(--text-faint);
 }
 
 /* Context label inside seg-text */
 .seg-text-label {
     font-size: 0.7rem;
-    color: #888;
+    color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.5px;
     margin-bottom: 2px;
@@ -324,28 +324,28 @@
 /* Play / Go To buttons for error cards */
 .seg-card-play-btn,
 .seg-card-goto-btn {
-    background: #37474f;
+    background: var(--btn-slate-bg);
 }
 
 .seg-card-play-btn:hover,
 .seg-card-goto-btn:hover {
-    background: #455a64;
+    background: var(--btn-slate-bg-hover);
 }
 
 .val-card-gap-label {
     font-size: 0.75rem;
-    color: #f44336;
+    color: var(--bad-fg);
     padding: 4px 8px;
     margin-bottom: 6px;
-    border: 1px dashed #f44336;
+    border: 1px dashed var(--bad-fg);
     border-radius: 4px;
-    background: rgba(244, 67, 54, 0.08);
+    background: var(--bad-tint);
     text-align: center;
 }
 
 .val-card-issue-label {
     font-size: 0.75rem;
-    color: #ff9800;
+    color: var(--warn-fg);
     padding: 2px 0 4px;
 }
 
@@ -360,31 +360,31 @@
 .val-phoneme-tail {
     font-family: monospace;
     font-size: 0.7rem;
-    color: #8888aa;
+    color: var(--text-muted);
     padding: 3px 4px 0;
     text-align: left;
     white-space: pre-line;
     line-height: 1.4;
     margin-top: 2px;
 }
-.val-tail-label { color: #6a6a8a; font-weight: 600; }
-.val-tail-phonemes { color: #aaaacc; letter-spacing: 0.5px; }
+.val-tail-label { color: var(--text-faint); font-weight: 600; }
+.val-tail-phonemes { color: var(--text-secondary); letter-spacing: 0.5px; }
 
 /* Unified action button style */
 .val-action-btn {
     padding: 3px 12px;
-    background: #28a745;
-    color: white;
+    background: var(--ok-solid);
+    color: var(--ink-on-color);
     border: none;
     border-radius: 4px;
     cursor: pointer;
     font-size: 0.78rem;
 }
-.val-action-btn:hover { background: #218838; }
-.val-action-btn:disabled { background: #6c757d; cursor: default; }
+.val-action-btn:hover { background: var(--ok-solid-hover); }
+.val-action-btn:disabled { background: var(--neutral-solid); cursor: default; }
 
-.val-action-btn-danger { background: #dc3545; }
-.val-action-btn-danger:hover { background: #c82333; }
+.val-action-btn-danger { background: var(--bad-solid); }
+.val-action-btn-danger:hover { background: var(--bad-solid-hover); }
 
-.val-action-btn-muted { background: #37474f; }
-.val-action-btn-muted:hover { background: #455a64; }
+.val-action-btn-muted { background: var(--btn-slate-bg); }
+.val-action-btn-muted:hover { background: var(--btn-slate-bg-hover); }

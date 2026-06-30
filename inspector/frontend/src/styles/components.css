@@ -4,12 +4,12 @@
     align-items: center;
     gap: 30px;
     padding: 15px 20px;
-    background: #16213e;
+    background: var(--panel);
     border-radius: 8px;
 }
 
 .info-bar label {
-    color: #aaa;
+    color: var(--text-secondary);
     display: flex;
     align-items: center;
     gap: 6px;
@@ -20,9 +20,9 @@
 
 .info-bar select {
     padding: 8px 12px;
-    background: #1a1a3e;
-    color: #4cc9f0;
-    border: 1px solid #333;
+    background: var(--input-bg);
+    color: var(--accent);
+    border: 1px solid var(--border-default);
     border-radius: 6px;
     font-size: 14px;
     max-width: 660px;
@@ -31,8 +31,8 @@
 /* ============ Buttons ============ */
 .btn {
     padding: 10px 20px;
-    background: #4361ee;
-    color: white;
+    background: var(--info-solid);
+    color: var(--ink-on-color);
     border: none;
     border-radius: 6px;
     cursor: pointer;
@@ -42,11 +42,11 @@
 }
 
 .btn:hover {
-    background: #3a56d4;
+    background: var(--info-solid-hover);
 }
 
 .btn:disabled {
-    background: #555;
+    background: var(--btn-disabled-bg);
     cursor: not-allowed;
 }
 
@@ -62,72 +62,72 @@
     border-radius: 4px;
     border: none;
     cursor: pointer;
-    color: #eee;
+    color: var(--text-primary);
 }
 
 .btn-save {
-    background: #2e7d32;
+    background: var(--ok-solid);
     margin-left: 0;
 }
 
 .btn-save:hover:not(:disabled) {
-    background: #1b5e20;
+    background: var(--ok-solid-hover);
 }
 
 .btn-history {
-    background: #1a237e;
+    background: var(--btn-history-bg);
     margin-left: 0;
 }
 .btn-history:hover:not(:disabled) {
-    background: #283593;
+    background: var(--btn-history-bg-hover);
 }
 
 .btn-confirm {
-    background: #2e7d32;
+    background: var(--ok-solid);
 }
 
 .btn-confirm:hover {
-    background: #1b5e20;
+    background: var(--ok-solid-hover);
 }
 
 .btn-cancel {
-    background: #616161;
+    background: var(--neutral-solid);
 }
 
 .btn-cancel:hover {
-    background: #424242;
+    background: var(--neutral-solid-hover);
 }
 
 .btn-preview {
-    background: #6a1b9a;
+    background: var(--btn-preview-bg);
 }
 
 .btn-preview:hover {
-    background: #4a148c;
+    background: var(--btn-preview-bg-hover);
 }
 
 .btn-adjust,
 .btn-split,
 .btn-edit-ref {
-    background: #37474f;
+    background: var(--btn-slate-bg);
 }
 
 .btn-adjust:hover,
 .btn-split:hover,
 .btn-edit-ref:hover {
-    background: #455a64;
+    background: var(--btn-slate-bg-hover);
 }
 
 .btn-delete {
-    background: #6d1a1a;
+    background: var(--bad-solid);
 }
 
 .btn-delete:hover {
-    background: #b71c1c;
+    background: var(--bad-solid-hover);
 }
 
-.btn-merge-prev, .btn-merge-next { background: #1565c0; }
-.btn-merge-prev:hover, .btn-merge-next:hover { background: #0d47a1; }
+.btn-merge-prev, .btn-merge-next { background: var(--btn-merge-bg); }
+.btn-merge-prev:hover, .btn-merge-next:hover { background: var(--btn-merge-bg-hover); }
 
 /* ============ Audio controls ============ */
 .audio-controls {
@@ -143,15 +143,15 @@
 }
 .ts-speed-label {
     font-size: 0.85rem;
-    color: #aaa;
+    color: var(--text-secondary);
     display: flex;
     align-items: center;
     gap: 4px;
 }
 .ts-speed-label select {
-    background: #16213e;
-    color: #e0e0e0;
-    border: 1px solid #333;
+    background: var(--input-bg);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-default);
     border-radius: 4px;
     padding: 2px 4px;
     font-size: 0.85rem;
@@ -183,21 +183,21 @@
 /* ============ Shortcuts & Guide ============ */
 
 .shortcuts-guide {
-    background: #16213e;
-    border: 1px solid #2a2a4a;
+    background: var(--panel);
+    border: 1px solid var(--border-default);
     border-radius: 6px;
     margin-bottom: 8px;
 }
 
 .shortcuts-guide[open] {
-    border-color: #3a3a5a;
+    border-color: var(--border-strong);
 }
 
 .shortcuts-guide-summary {
     padding: 8px 12px;
     cursor: pointer;
     font-size: 0.85rem;
-    color: #aaa;
+    color: var(--text-secondary);
     user-select: none;
     list-style: none;
     font-weight: 600;
@@ -225,7 +225,7 @@
 .shortcuts-guide-body h4 {
     margin: 0 0 4px;
     font-size: 0.8rem;
-    color: #8ab4f8;
+    color: var(--role-blue);
     font-weight: 600;
 }
 
@@ -238,14 +238,14 @@
 }
 
 .shortcuts-guide-body dt {
-    color: #ccc;
+    color: var(--text-secondary);
     font-family: monospace;
     white-space: nowrap;
 }
 
 .shortcuts-guide-body dd {
     margin: 0;
-    color: #888;
+    color: var(--text-muted);
 }
 
 /* ============ SearchableSelect ============ */
@@ -254,16 +254,16 @@
     display: inline-block;
 }
 .ss-input {
-    background: #16213e;
-    color: #4cc9f0;
-    border: 1px solid #333;
+    background: var(--input-bg);
+    color: var(--accent);
+    border: 1px solid var(--border-default);
     border-radius: 4px;
     padding: 4px 8px;
     font-size: 0.9rem;
     width: 260px;
 }
 .ss-input:focus {
-    outline: 1px solid #4cc9f0;
+    outline: 1px solid var(--accent);
 }
 .ss-dropdown {
     position: absolute;
@@ -272,8 +272,8 @@
     right: 0;
     max-height: 260px;
     overflow-y: auto;
-    background: #1a1a3e;
-    border: 1px solid #333;
+    background: var(--input-bg);
+    border: 1px solid var(--border-default);
     border-radius: 0 0 4px 4px;
     z-index: 100;
 }
@@ -281,7 +281,7 @@
     padding: 6px 8px 3px;
     font-size: 0.72rem;
     font-weight: 700;
-    color: #8fb8d8;
+    color: var(--text-secondary);
     letter-spacing: 0.03em;
     white-space: nowrap;
 }
@@ -289,7 +289,7 @@
     padding: 4px 8px;
     cursor: pointer;
     font-size: 0.85rem;
-    color: #ccc;
+    color: var(--text-secondary);
     white-space: nowrap;
 }
 .ss-option-grouped {
@@ -297,8 +297,8 @@
 }
 .ss-option:hover,
 .ss-highlight {
-    background: #16213e;
-    color: #4cc9f0;
+    background: var(--input-hover-bg);
+    color: var(--accent);
 }
 
 .reciter-select .ss-input {

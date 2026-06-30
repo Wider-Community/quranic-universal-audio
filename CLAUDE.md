@@ -114,6 +114,7 @@ Deep, agent-facing reference docs live in `docs/reference/` (flat). **Read the o
 | [`segments-editor.md`](docs/reference/segments-editor.md) | command grammar, normalized state, identity, save flow, edit_history, undo |
 | [`validation.md`](docs/reference/validation.md) | validation engine, categories, persisted classifier fields, bench/drift harness |
 | [`frontend.md`](docs/reference/frontend.md) | Svelte 5 SPA — dashboard/timestamps/segments tabs, lib, stores, charts |
+| [`theming.md`](docs/reference/theming.md) | light/dark themes — token contract (`tokens.css` + `theme-light.css`), flash-free init, `themeStore`+toggle, `canvas-theme.ts` resolver, theme-conditional accent-derivation, the no-raw-color rule |
 | [`keyboard-shortcuts.md`](docs/reference/keyboard-shortcuts.md) | Segments user-editable, context-scoped keyboard shortcuts — catalogue, binding store, dispatcher, active-row registry, accordion nav/auto-scroll, footer rebind popover |
 | [`accordion-guides.md`](docs/reference/accordion-guides.md) | validation accordion help-modal guide templates |
 | [`dataset-and-releases.md`](docs/reference/dataset-and-releases.md) | dataset releasing — bucket-as-canonical + 3 adapter formats (HF, GH release tiers, future API), `releases` table, publish state model, schema |

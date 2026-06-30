@@ -12,6 +12,7 @@
     import NowReciting from './lib/components/player/NowReciting.svelte';
     import PlayerMetaChip from './lib/components/player/PlayerMetaChip.svelte';
     import SignInModal from './lib/components/SignInModal.svelte';
+    import ThemeToggle from './lib/components/ThemeToggle.svelte';
     import ToastHost from './lib/components/ToastHost.svelte';
     import { dashPort } from './lib/playback/dash-port';
     import { currentUser, isSignedIn, loadCurrentUser } from './lib/stores/current-user';
@@ -120,6 +121,7 @@
             <button class="tab-btn" class:active={activeTab === TAB_NAMES.SEGMENTS} data-tab={TAB_NAMES.SEGMENTS} on:click={() => setActiveTab(TAB_NAMES.SEGMENTS)}>Segments</button>
         </div>
         <div class="auth-controls">
+            <ThemeToggle />
             {#if $currentUser.dev_mode}
                 <!-- Local dev only — never rendered on the deployed Space. -->
                 <DevRoleSwitcher />
@@ -235,38 +237,38 @@
     }
     .auth-login {
         font-size: 0.92rem;
-        color: #ccc;
+        color: var(--text-secondary);
     }
     .auth-role {
         margin-left: 4px;
         font-weight: 600;
-        color: #8ab4f8;
+        color: var(--role-blue);
         text-transform: capitalize;
     }
     .auth-btn {
-        border: 1px solid #333;
-        background: #16213e;
-        color: #ccc;
+        border: 1px solid var(--border-default);
+        background: var(--panel);
+        color: var(--text-secondary);
         padding: 6px 12px;
-        border-radius: 6px;
+        border-radius: var(--r-2);
         cursor: pointer;
         font-size: 0.9rem;
-        transition: background 0.2s, border-color 0.2s, color 0.2s;
+        transition: background var(--t-base), border-color var(--t-base), color var(--t-base);
     }
     .auth-btn:hover {
-        background: #1a2a4e;
-        border-color: #4cc9f0;
-        color: #4cc9f0;
+        background: var(--panel-2);
+        border-color: var(--accent);
+        color: var(--accent);
     }
     .auth-btn--cta {
-        background: #f0a500;
-        color: #1a1a1a;
+        background: var(--cta-bg);
+        color: var(--cta-fg);
         border: 0;
         font-weight: 600;
     }
     .auth-btn--cta:hover {
-        background: #ffba2c;
+        background: var(--cta-bg-hover);
         border-color: transparent;
-        color: #1a1a1a;
+        color: var(--cta-fg);
     }
 </style>

@@ -12,7 +12,7 @@
 .seg-history-title {
     font-size: 0.95rem;
     font-weight: 600;
-    color: #ccc;
+    color: var(--text-secondary);
 }
 
 /* Summary stats — compact inline row */
@@ -34,19 +34,19 @@
     min-width: 0;
 }
 .seg-history-stat-card:not(:last-child) {
-    border-right: 1px solid #2a2a3a;
+    border-right: 1px solid var(--border-default);
     margin-right: 12px;
     padding-right: 12px;
 }
 .seg-history-stat-value {
-    color: #8899cc;
+    color: var(--text-secondary);
     font-size: 0.85rem;
     font-weight: 700;
     line-height: 1;
 }
 .seg-history-stat-label {
     font-size: 0.62rem;
-    color: #555;
+    color: var(--text-faint);
     text-transform: uppercase;
     letter-spacing: 0.04em;
 }
@@ -57,7 +57,7 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
-    border-bottom: 1px solid #2a2a4a;
+    border-bottom: 1px solid var(--border-default);
 }
 .seg-history-filter-section {
     display: flex;
@@ -67,7 +67,7 @@
 }
 .seg-history-filter-label {
     font-size: 0.68rem;
-    color: #555;
+    color: var(--text-faint);
     min-width: 68px;
     white-space: nowrap;
 }
@@ -78,44 +78,44 @@
 }
 .seg-history-filter-pill {
     display: inline-block;
-    background: #1a1a3e;
-    border: 1px solid #2e2e50;
+    background: var(--input-bg);
+    border: 1px solid var(--border-default);
     border-radius: 10px;
     padding: 1px 8px;
     font-size: 0.68rem;
-    color: #999;
+    color: var(--text-muted);
     cursor: pointer;
     transition: background 0.15s, border-color 0.15s, color 0.15s;
     user-select: none;
 }
 .seg-history-filter-pill:hover {
-    background: #1a2a4e;
-    color: #ccc;
+    background: var(--panel-2);
+    color: var(--text-secondary);
 }
 .seg-history-filter-pill.active {
-    background: #4361ee;
-    border-color: #4361ee;
-    color: #fff;
+    background: var(--info-solid);
+    border-color: var(--info-solid);
+    color: var(--ink-on-color);
 }
 .seg-history-filter-pill.empty {
     opacity: 0.4;
     background: transparent;
-    border-color: #3a3a5a;
-    color: #888;
+    border-color: var(--border-strong);
+    color: var(--text-muted);
 }
 .seg-history-filter-pill.empty:hover {
     background: transparent;
-    color: #888;
+    color: var(--text-muted);
 }
 .seg-history-filter-pill .pill-count {
-    color: #4cc9f0;
+    color: var(--accent);
     font-weight: 600;
 }
 .seg-history-filter-pill.active .pill-count {
-    color: #fff;
+    color: var(--ink-on-color);
 }
 .seg-history-filter-pill.empty .pill-count {
-    color: #666;
+    color: var(--text-faint);
 }
 
 /* Empty state (shared between filter-no-results and delete placeholder) */
@@ -126,10 +126,10 @@
     min-height: 70px;
     padding: 24px;
     text-align: center;
-    color: #555;
+    color: var(--text-faint);
     font-style: italic;
     font-size: 0.85rem;
-    border: 1px dashed #333;
+    border: 1px dashed var(--border-default);
     border-radius: 6px;
 }
 
@@ -144,24 +144,24 @@
     min-height: 70px;
     padding: 24px;
     background: transparent;
-    color: #aab;
+    color: var(--text-secondary);
     font: inherit;
     font-style: italic;
     font-size: 0.85rem;
-    border: 1px dashed #333;
+    border: 1px dashed var(--border-default);
     border-radius: 6px;
     cursor: pointer;
 }
 .seg-history-deleted-toggle:hover {
-    color: #d4d4f0;
-    border-color: #4a4a6a;
-    background: rgba(255, 255, 255, 0.02);
+    color: var(--text-primary);
+    border-color: var(--border-strong);
+    background: var(--panel-2);
 }
 .seg-history-deleted-toggle[aria-expanded="true"] {
-    color: #d4d4f0;
+    color: var(--text-primary);
     border-style: solid;
-    border-color: #4a4a6a;
-    background: rgba(255, 255, 255, 0.02);
+    border-color: var(--border-strong);
+    background: var(--panel-2);
 }
 
 /* Indented per-op deletion rows, shown only when the toggle is expanded. */
@@ -171,7 +171,7 @@
     gap: 4px;
     margin-top: 6px;
     padding-left: 24px;
-    border-left: 2px solid #3a3a5a;
+    border-left: 2px solid var(--border-strong);
 }
 
 /* Batches container — own scroll context so virtualization can map
@@ -191,42 +191,42 @@
 
 /* Individual batch */
 .seg-history-batch {
-    background: #0f0f23;
+    background: var(--canvas-inset);
     border-radius: 6px;
-    border: 1px solid #3a3a5a;
+    border: 1px solid var(--border-strong);
     overflow: hidden;
 }
 
 .seg-history-batch-header {
     padding: 8px 12px;
     font-size: 0.8rem;
-    color: #aaa;
+    color: var(--text-secondary);
     display: flex;
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
-    border-bottom: 1px solid #2a2a4a;
+    border-bottom: 1px solid var(--border-default);
 }
 
 .seg-history-batch.is-revert {
     opacity: 0.6;
 }
 .seg-history-batch-time {
-    color: #ccc;
+    color: var(--text-secondary);
     font-weight: 600;
 }
 .seg-history-batch-chapter {
-    color: #4cc9f0;
+    color: var(--accent);
 }
 .seg-history-batch-ops-count {
-    background: #16213e;
+    background: var(--panel);
     border-radius: 8px;
     padding: 1px 8px;
     font-size: 0.72rem;
 }
 .seg-history-batch-revert-badge {
-    background: #5a3a1e;
-    color: #ffb347;
+    background: var(--state-warn-bg);
+    color: var(--state-warn-fg);
     border-radius: 8px;
     padding: 1px 8px;
     font-size: 0.72rem;
@@ -238,15 +238,15 @@
     font-size: 0.72rem;
     padding: 2px 10px;
     background: transparent;
-    border: 1px solid #f44336;
-    color: #f44336;
+    border: 1px solid var(--bad-fg);
+    color: var(--bad-fg);
     border-radius: 4px;
     cursor: pointer;
     white-space: nowrap;
 }
 .seg-history-undo-btn:hover:not(:disabled) {
-    background: #f44336;
-    color: #fff;
+    background: var(--bad-fg);
+    color: var(--ink-on-color);
 }
 .seg-history-undo-btn:disabled {
     opacity: 0.5;
@@ -258,15 +258,15 @@
     font-size: 0.68rem;
     padding: 1px 8px;
     background: transparent;
-    border: 1px solid #f44336;
-    color: #f44336;
+    border: 1px solid var(--bad-fg);
+    color: var(--bad-fg);
     border-radius: 3px;
     cursor: pointer;
     white-space: nowrap;
 }
 .seg-history-op-undo-btn:hover:not(:disabled) {
-    background: #f44336;
-    color: #fff;
+    background: var(--bad-fg);
+    color: var(--ink-on-color);
 }
 .seg-history-op-undo-btn:disabled {
     opacity: 0.5;
@@ -280,12 +280,12 @@
     padding: 1px 7px;
 }
 .seg-history-val-delta.improved {
-    background: rgba(76, 175, 80, 0.15);
-    color: #4caf50;
+    background: var(--ok-tint);
+    color: var(--ok-fg);
 }
 .seg-history-val-delta.regression {
-    background: rgba(244, 67, 54, 0.15);
-    color: #f44336;
+    background: var(--bad-tint-strong);
+    color: var(--bad-fg);
 }
 
 /* Batch operations container */
@@ -298,7 +298,7 @@
 
 /* Compact chapter list for multi-chapter auto-fix batches */
 .seg-history-chapter-list {
-    color: #aaa;
+    color: var(--text-secondary);
     font-size: 0.82rem;
     line-height: 1.5;
     padding: 4px 0;
@@ -306,24 +306,24 @@
 
 /* Single operation */
 .seg-history-op {
-    background: #16213e;
+    background: var(--panel);
     border-radius: 6px;
     padding: 8px;
 }
 .seg-history-op-label {
     font-size: 0.73rem;
-    color: #888;
+    color: var(--text-muted);
     margin-bottom: 6px;
     display: flex;
     align-items: center;
     gap: 6px;
 }
 .seg-history-op-type-badge {
-    background: #1a1a3e;
-    border: 1px solid #3a3a5a;
+    background: var(--input-bg);
+    border: 1px solid var(--border-strong);
     border-radius: 4px;
     padding: 1px 8px;
-    color: #ccc;
+    color: var(--text-secondary);
     font-weight: 600;
 }
 .seg-history-op-type-badge.secondary {
@@ -332,7 +332,7 @@
     opacity: 0.7;
 }
 .seg-history-op-fix-kind {
-    color: #666;
+    color: var(--text-faint);
     font-style: italic;
 }
 
@@ -393,29 +393,29 @@
     display: flex;
     flex-direction: column;
     border-left: none;
-    border-top: 4px solid #666;
+    border-top: 4px solid var(--border-strong);
     padding: 4px 8px;
 }
-.seg-history-diff .seg-text.conf-high  { border-top-color: #4caf50; border-left: none; }
-.seg-history-diff .seg-text.conf-mid   { border-top-color: #ff9800; border-left: none; }
-.seg-history-diff .seg-text.conf-low   { border-top-color: #f44336; border-left: none; }
-.seg-history-diff .seg-text.conf-fail  { border-top-color: #555;    border-left: none; }
+.seg-history-diff .seg-text.conf-high  { border-top-color: var(--ok-fg); border-left: none; }
+.seg-history-diff .seg-text.conf-mid   { border-top-color: var(--warn-fg); border-left: none; }
+.seg-history-diff .seg-text.conf-low   { border-top-color: var(--bad-fg); border-left: none; }
+.seg-history-diff .seg-text.conf-fail  { border-top-color: var(--border-strong);    border-left: none; }
 
 /* Change highlighting */
 .seg-history-changed {
-    color: #f0a500 !important;
+    color: var(--warn-fg) !important;
 }
 
 /* Save preview toolbar */
 .seg-save-preview-toolbar { justify-content: space-between; }
 .seg-save-preview-toolbar .seg-history-title { flex: 1; text-align: center; }
 .seg-save-preview-warning {
-    background: #3e2723;
-    border: 1px solid #f0a500;
+    background: var(--state-warn-bg);
+    border: 1px solid var(--state-warn-border);
     border-radius: 6px;
     padding: 10px 14px;
     margin: 8px 12px;
-    color: #f0a500;
+    color: var(--state-warn-fg);
     font-size: 0.82rem;
 }
 

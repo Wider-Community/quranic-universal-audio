@@ -66,8 +66,8 @@
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: #1a1a2e;
-    color: #eee;
+    background: var(--canvas);
+    color: var(--text-primary);
     min-height: 100vh;
 }
 
@@ -83,7 +83,7 @@ header {
 h1 {
     font-size: 1.8rem;
     margin-bottom: 15px;
-    color: #fff;
+    color: var(--text-primary);
 }
 
 main {
@@ -95,7 +95,7 @@ main {
 footer {
     margin-top: 30px;
     text-align: center;
-    color: #666;
+    color: var(--text-faint);
     font-size: 0.85rem;
 }
 
@@ -107,12 +107,12 @@ footer {
 
 /* ============ Header links ============ */
 .header-links {
-    color: #888;
+    color: var(--text-muted);
     font-size: 0.9rem;
     margin: 0 0 12px 0;
 }
 .header-links a {
-    color: #4cc9f0;
+    color: var(--accent);
     text-decoration: none;
 }
 .header-links a:hover {
@@ -126,16 +126,16 @@ footer {
 }
 
 ::-webkit-scrollbar-track {
-    background: #0f0f23;
+    background: var(--canvas-inset);
 }
 
 ::-webkit-scrollbar-thumb {
-    background: #333;
+    background: var(--border-default);
     border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: #444;
+    background: var(--border-strong);
 }
 
 /* ============ Tab bar ============ */
@@ -147,9 +147,9 @@ footer {
 
 .tab-btn {
     padding: 10px 24px;
-    background: #16213e;
-    color: #aaa;
-    border: 1px solid #333;
+    background: var(--panel);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-default);
     border-radius: 8px 8px 0 0;
     cursor: pointer;
     font-size: 1rem;
@@ -157,12 +157,12 @@ footer {
 }
 
 .tab-btn:hover {
-    background: #1a2a4e;
-    color: #ccc;
+    background: var(--panel-2);
+    color: var(--text-secondary);
 }
 
 .tab-btn.active {
-    background: #1a1a2e;
-    color: #4cc9f0;
-    border-bottom-color: #1a1a2e;
+    background: var(--canvas);
+    color: var(--accent);
+    border-bottom-color: var(--canvas);
 }

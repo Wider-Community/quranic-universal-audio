@@ -150,9 +150,9 @@
     .ss-input {
         width: 100%;
         padding: 6px 10px;
-        background: #16213e;
-        color: #eee;
-        border: 1px solid #333;
+        background: var(--input-bg);
+        color: var(--text-primary);
+        border: 1px solid var(--border-default);
         border-radius: 4px;
         font-size: 0.9rem;
         cursor: pointer;
@@ -160,27 +160,27 @@
     }
     .ss-input:focus {
         outline: none;
-        border-color: #4361ee;
+        border-color: var(--info-fg);
     }
     .ss-dropdown {
         position: absolute;
         top: 100%;
         left: 0;
         right: 0;
-        background: #16213e;
-        border: 1px solid #333;
+        background: var(--panel);
+        border: 1px solid var(--border-default);
         border-top: none;
         border-radius: 0 0 4px 4px;
         max-height: 260px;
         overflow-y: auto;
         z-index: 100;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        box-shadow: var(--shadow-pop);
     }
     .ss-option {
         padding: 6px 10px;
         cursor: pointer;
         font-size: 0.9rem;
-        color: #eee;
+        color: var(--text-primary);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -190,19 +190,19 @@
     }
     .ss-option:hover,
     .ss-highlight {
-        background: #1a2a4e;
+        background: var(--panel-2);
     }
     .ss-group-label {
         padding: 4px 10px 2px;
         font-size: 0.75rem;
-        color: #888;
+        color: var(--text-muted);
         text-transform: uppercase;
         letter-spacing: 0.04em;
-        background: #0f0f23;
+        background: var(--canvas-inset);
     }
     .ss-empty {
         padding: 8px 10px;
-        color: #666;
+        color: var(--text-faint);
         font-size: 0.85rem;
         font-style: italic;
     }

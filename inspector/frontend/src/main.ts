@@ -20,6 +20,10 @@ import './styles/highlight-constants.css';
 import './styles/timestamps.css';
 import './styles/validation.css';
 import './styles/combination-picker.css';
+// theme-light.css MUST stay last: its :root[data-theme="light"] block overrides
+// the dark token defaults from every stylesheet above. Imported here (not in
+// tokens.css) so it wins the cascade regardless of token source file.
+import './styles/theme-light.css';
 
 import { mount } from 'svelte';
 

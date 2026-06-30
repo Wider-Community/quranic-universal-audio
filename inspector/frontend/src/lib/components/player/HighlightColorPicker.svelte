@@ -167,10 +167,10 @@
         flex-direction: column;
         gap: 9px;
         padding: 10px;
-        background: var(--panel-2, #232a44);
-        border: 1px solid var(--border-strong, #4a4f6b);
+        background: var(--panel-2);
+        border: 1px solid var(--border-strong);
         border-radius: var(--r-2, 8px);
-        box-shadow: 0 10px 30px oklch(0 0 0 / 0.45);
+        box-shadow: var(--shadow-pop);
     }
     .sw-row {
         display: grid;
@@ -180,12 +180,12 @@
     .sw {
         aspect-ratio: 1;
         border-radius: 4px;
-        border: 1px solid oklch(1 0 0 / 0.18);
+        border: 1px solid var(--hairline-on-color);
         cursor: pointer;
         padding: 0;
     }
     .sw:hover {
-        outline: 2px solid var(--text-primary, #fff);
+        outline: 2px solid var(--text-primary);
         outline-offset: 1px;
     }
     .ax {
@@ -193,7 +193,7 @@
         flex-direction: column;
         gap: 4px;
         font-size: 10.5px;
-        color: var(--text-secondary, #aeb4c8);
+        color: var(--text-secondary);
     }
     .ax input[type='range'] {
         appearance: none;
@@ -201,7 +201,7 @@
         width: 100%;
         height: 12px;
         border-radius: 6px;
-        border: 1px solid oklch(1 0 0 / 0.14);
+        border: 1px solid var(--hairline-on-color);
         cursor: pointer;
     }
     .ax input[type='range']::-webkit-slider-thumb {
@@ -209,16 +209,16 @@
         width: 14px;
         height: 14px;
         border-radius: 50%;
-        background: #fff;
-        border: 2px solid oklch(0 0 0 / 0.5);
+        background: var(--ink-on-color);
+        border: 2px solid var(--knob-ring);
         cursor: pointer;
     }
     .ax input[type='range']::-moz-range-thumb {
         width: 14px;
         height: 14px;
         border-radius: 50%;
-        background: #fff;
-        border: 2px solid oklch(0 0 0 / 0.5);
+        background: var(--ink-on-color);
+        border: 2px solid var(--knob-ring);
         cursor: pointer;
     }
 </style>

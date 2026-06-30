@@ -11,9 +11,10 @@
      * Chart lifecycle: full destroy+rebuild on data change.
      * onDestroy cleans up the Chart instance.
      */
-    import { onDestroy } from 'svelte';
+    import { onDestroy, onMount } from 'svelte';
 
     import { fetchJson } from '../../../../lib/api';
+    import { THEME_CHANGE_EVENT } from '../../../../lib/stores/theme.svelte';
     import type { SegSaveChartResponse } from '../../../../lib/types/view-models';
     import type { Chart } from '../../../../lib/utils/chart';
     import type { ChartCfg, Distribution } from '../../types/stats';
@@ -46,6 +47,14 @@
     // populates `canvasEl`, so a separate `onMount(buildChart)` would
     // double-fire (build → destroy → rebuild). Reactive-only is sufficient.
     $: if (canvasEl && dist) { buildChart(); }
+
+    // Theme flip: rebuild so the new --chart-*/--panel/--text colours apply
+    // (drawBarChart resolves tokens at config-build time).
+    onMount(() => {
+        const onThemeChange = (): void => { buildChart(); };
+        window.addEventListener(THEME_CHANGE_EVENT, onThemeChange);
+        return () => window.removeEventListener(THEME_CHANGE_EVENT, onThemeChange);
+    });
 
     onDestroy(() => {
         if (chartInstance) { chartInstance.destroy(); chartInstance = null; }

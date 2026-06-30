@@ -106,8 +106,8 @@
         width: 14px;
         height: 14px;
         border-radius: 50%;
-        background: var(--accent-fg, #fff);
-        box-shadow: 0 1px 2px oklch(0 0 0 / 0.35);
+        background: var(--accent-fg, var(--ink-on-color));
+        box-shadow: var(--knob-shadow);
         transition: transform var(--t-fast);
         display: flex;
         align-items: center;

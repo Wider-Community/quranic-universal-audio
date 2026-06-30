@@ -24,6 +24,9 @@ export const LS_KEYS = {
     DISMISSED_ANNOUNCEMENTS: 'insp_dismissed_announcements',
     SEEN_ANNOUNCEMENTS:      'insp_seen_announcements',
     ANON_FLAG_TOKEN: 'insp_anon_flag_token',
+    // NOTE: the literal 'insp_theme' is ALSO duplicated in index.html's inline
+    // flash-free init script (which can't import this module) — keep in sync.
+    THEME:           'insp_theme',
 } as const;
 
 export const PLACEHOLDER_SELECT = '-- select --';

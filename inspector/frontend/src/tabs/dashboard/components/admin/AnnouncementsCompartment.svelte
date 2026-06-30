@@ -187,7 +187,7 @@
     .send {
         padding: var(--s-2) var(--s-4);
         background: var(--accent);
-        color: var(--surface-base, #fff);
+        color: var(--ink-on-color);
         border: 0;
         border-radius: var(--radius-sm, 4px);
         font-size: var(--fs-body);

@@ -8,6 +8,7 @@
 
 import type { ChartConfiguration, TooltipItem } from 'chart.js';
 
+import { themeColor } from '../../../lib/utils/canvas-theme';
 import { Chart } from '../../../lib/utils/chart';
 import type { ChartCfg, Distribution } from '../types/stats';
 
@@ -31,10 +32,31 @@ export function drawBarChart(canvas: HTMLCanvasElement, d: Distribution, c: Char
     const { bins, counts } = d;
     const n = counts.length;
     if (n === 0) return undefined;
+
+    // Resolve theme tokens once at config-build time. A theme flip rebuilds the
+    // chart (StatsChart / ChartFullscreen destroy + recreate on `themechange`),
+    // so these pick up the active light/dark values on the next build.
+    const COL = {
+        panel:        themeColor('--panel', '#16213e'),
+        bar:          themeColor('--chart-bar', '#4cc9f0'),
+        refline:      themeColor('--chart-refline', '#f44336'),
+        median:       themeColor('--chart-median', '#e0e040'),
+        labelBg:      themeColor('--chart-label-bg', 'rgba(15,15,35,0.7)'),
+        textMuted:    themeColor('--text-muted', '#888'),
+        textBody:     themeColor('--text-secondary', '#e0e0e0'),
+        gridX:        themeColor('--border-default', '#2a2a4a'),
+        gridY:        themeColor('--border-quiet', '#1a1a3e'),
+        axisBorder:   themeColor('--border-default', '#2a2a4a'),
+    };
     const totalCount = counts.reduce((a, b) => a + b, 0);
     const labels = bins.map(b => c.formatBin ? c.formatBin(b) : String(b));
     const bgColors = bins.map((b, i) => c.barColor(b, i, bins));
+    // Hover = bar lightened by +40 per channel. Only `#rrggbb` bars can be
+    // channel-shifted this way; theme tokens may resolve to oklch()/rgba()
+    // (e.g. light theme), so fall back to the base colour for non-hex inputs
+    // rather than emitting `rgb(NaN,…)`.
     const hoverColors = bgColors.map(col => {
+        if (!/^#[0-9a-fA-F]{6}$/.test(col)) return col;
         const r = parseInt(col.slice(1, 3), 16);
         const g = parseInt(col.slice(3, 5), 16);
         const bVal = parseInt(col.slice(5, 7), 16);
@@ -48,20 +70,20 @@ export function drawBarChart(canvas: HTMLCanvasElement, d: Distribution, c: Char
     ];
     if (refLines.length > 0 && bins.length >= 2) {
         refLines.forEach((rl, i) => {
-            const color = rl.color ?? '#f44336';
+            const color = rl.color ?? COL.refline;
             const dash = rl.dash ?? [4, 3];
             annotations[`refLine_${i}`] = {
                 type: 'line', scaleID: 'x', value: findBinIndex(bins, rl.value),
                 borderColor: color, borderWidth: 1.5, borderDash: dash,
-                label: { display: true, content: rl.label, position: 'start', color, font: { size: 9, family: 'monospace' }, backgroundColor: 'rgba(15,15,35,0.7)' },
+                label: { display: true, content: rl.label, position: 'start', color, font: { size: 9, family: 'monospace' }, backgroundColor: COL.labelBg },
             };
         });
     }
     if (d.percentiles && bins.length >= 2) {
         const pCfg: Record<string, { color: string; dash: number[]; label: string }> = {
-            p25: { color: '#888', dash: [3, 3], label: 'P25' },
-            p50: { color: '#e0e040', dash: [6, 3], label: 'Med' },
-            p75: { color: '#888', dash: [3, 3], label: 'P75' },
+            p25: { color: COL.textMuted, dash: [3, 3], label: 'P25' },
+            p50: { color: COL.median, dash: [6, 3], label: 'Med' },
+            p75: { color: COL.textMuted, dash: [3, 3], label: 'P75' },
         };
         for (const [key, val] of Object.entries(d.percentiles)) {
             const pc = pCfg[key];
@@ -70,7 +92,7 @@ export function drawBarChart(canvas: HTMLCanvasElement, d: Distribution, c: Char
             annotations[key] = {
                 type: 'line', scaleID: 'x', value: findBinIndex(bins, val),
                 borderColor: pc.color, borderWidth: 1, borderDash: pc.dash,
-                label: { display: true, content: `${pc.label} ${fmtVal}`, position: 'start', color: pc.color, font: { size: 8, family: 'monospace' }, backgroundColor: 'rgba(15,15,35,0.7)' },
+                label: { display: true, content: `${pc.label} ${fmtVal}`, position: 'start', color: pc.color, font: { size: 8, family: 'monospace' }, backgroundColor: COL.labelBg },
             };
         }
     }
@@ -96,8 +118,8 @@ export function drawBarChart(canvas: HTMLCanvasElement, d: Distribution, c: Char
             plugins: {
                 legend: { display: false },
                 tooltip: {
-                    backgroundColor: '#16213e', borderColor: '#4cc9f0', borderWidth: 1,
-                    titleColor: '#4cc9f0', bodyColor: '#e0e0e0', footerColor: '#888',
+                    backgroundColor: COL.panel, borderColor: COL.bar, borderWidth: 1,
+                    titleColor: COL.bar, bodyColor: COL.textBody, footerColor: COL.textMuted,
                     titleFont: { family: 'monospace', size: 11 },
                     bodyFont: { family: 'monospace', size: 11 },
                     footerFont: { family: 'monospace', size: 10 },
@@ -116,15 +138,15 @@ export function drawBarChart(canvas: HTMLCanvasElement, d: Distribution, c: Char
             },
             scales: {
                 x: {
-                    grid: { color: '#2a2a4a', lineWidth: 0.5 },
-                    ticks: { color: '#888', font: { family: 'monospace', size: 9 }, autoSkip: !c.showAllLabels, maxRotation: 45, minRotation: 0 },
-                    border: { color: '#2a2a4a' },
+                    grid: { color: COL.gridX, lineWidth: 0.5 },
+                    ticks: { color: COL.textMuted, font: { family: 'monospace', size: 9 }, autoSkip: !c.showAllLabels, maxRotation: 45, minRotation: 0 },
+                    border: { color: COL.axisBorder },
                 },
                 y: {
                     beginAtZero: true,
-                    grid: { color: '#1a1a3e', lineWidth: 0.5 },
-                    ticks: { color: '#888', font: { family: 'monospace', size: 10 } },
-                    border: { color: '#2a2a4a' },
+                    grid: { color: COL.gridY, lineWidth: 0.5 },
+                    ticks: { color: COL.textMuted, font: { family: 'monospace', size: 10 } },
+                    border: { color: COL.axisBorder },
                 },
             },
         },

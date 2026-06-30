@@ -48,7 +48,7 @@
     column-gap: var(--mega-row-gap, 16px);
     row-gap: var(--mega-line-gap, 16px);
     padding: 20px;
-    background: var(--hl-frame-bg, #16213e);
+    background: var(--hl-frame-bg, var(--panel));
     border-radius: 10px;
 }
 
@@ -83,7 +83,7 @@
  * independent. Alpha values match the waveform hover fills for visual
  * consistency across panels. */
 .mega-word:hover {
-    background: color-mix(in srgb, var(--anim-highlight-color, #f0a500) 15%, transparent);
+    background: color-mix(in srgb, var(--anim-highlight-color, var(--cta-bg)) 15%, transparent);
 }
 
 .mega-letter:not(.null-ts):hover {
@@ -98,19 +98,19 @@
    than the hovered token by using a lighter 30%-strength preview treatment. */
 .mega-block.hover-preview .mega-word {
     background: color-mix(in srgb, var(--anim-highlight-color) 30%, var(--hl-cell-rest));
-    color: color-mix(in srgb, var(--anim-highlight-color) 70%, #d7d7df);
+    color: color-mix(in srgb, var(--anim-highlight-color) 70%, var(--text-primary));
     border-color: color-mix(in srgb, var(--anim-highlight-color) 40%, transparent);
 }
 
 .mega-letter.hover-preview {
     background: color-mix(in srgb, var(--ts-letter-color, var(--hl-letter-color)) 30%, transparent);
-    color: #e7fffb;
+    color: var(--ink-on-color);
     border-color: color-mix(in srgb, var(--ts-letter-color, var(--hl-letter-color)) 35%, transparent);
 }
 
 .mega-phoneme.hover-preview {
     background: color-mix(in srgb, var(--ts-phoneme-color, var(--hl-phoneme-color)) 30%, transparent);
-    color: #e6ebff;
+    color: var(--ink-on-color);
     border-color: color-mix(in srgb, var(--ts-phoneme-color, var(--hl-phoneme-color)) 35%, transparent);
 }
 
@@ -136,7 +136,7 @@
     /* Part of the tile family, kept a touch quieter than the word so the
        Arabic stays the hero (see PRODUCT.md: the reciter's word outranks any
        companion info). Distinction comes from the warm text, not a louder box. */
-    background: oklch(0.205 0.014 274);
+    background: var(--ts-translation-bg);
     font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
     /* Scale with the analysis zoom (like the word/letter tiers) but stay
        proportionally secondary, so the gloss tracks the user's chosen size. */
@@ -146,7 +146,7 @@
     /* Warm-neutral so the meaning tier reads as human language, distinct from
        the cool #aaa of the phonetic letter/phoneme tiers, without using gold
        (reserved for the active word and banned as religious-site ornament). */
-    color: oklch(0.79 0.022 80);
+    color: var(--ts-translation-fg);
     text-align: center;
     text-wrap: balance;
     overflow-wrap: anywhere;
@@ -260,7 +260,7 @@
        Arabic' unchanged. See the SilenceMark @font-face in base.css. */
     font-family: 'SilenceMark', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
     font-size: var(--analysis-letter-font-size, 1.05rem);
-    color: var(--hl-letter-idle, #aaa);
+    color: var(--hl-letter-idle, var(--ts-idle-fg));
     text-align: center;
     line-height: 1.3;
     transition: background var(--hl-release-dur) var(--hl-release-ease),
@@ -276,7 +276,7 @@
 }
 
 .mega-letter.null-ts {
-    color: #444;
+    color: var(--text-faint);
     cursor: default;
 }
 
@@ -292,7 +292,7 @@
 
 .mega-letter.active {
     background: var(--ts-letter-deep, var(--hl-letter-color));
-    color: var(--hl-letter-ink, #fff);
+    color: var(--hl-letter-ink, var(--ink-on-color));
     border-color: var(--ts-letter-color, var(--hl-letter-color));
 }
 
@@ -301,7 +301,7 @@
    highlighted — the highlight/hover/click all land on the pronounced letter that
    shares its timing. */
 .mega-letter.silent {
-    color: #777;
+    color: var(--ts-silent-fg);
     opacity: 0.55;
     pointer-events: none;
     cursor: default;
@@ -379,7 +379,7 @@
 .haraka-cell .g {
     font-family: 'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
     line-height: 1;
-    color: var(--hl-letter-idle, #aaa);
+    color: var(--hl-letter-idle, var(--ts-idle-fg));
     display: inline-block;
     /* per-glyph scale relative to the analysis letter font. */
     font-size: calc(var(--analysis-letter-font-size, 1.05rem) * var(--haraka-scale, 1.4));
@@ -392,7 +392,7 @@
     border-color: var(--ts-letter-color, var(--hl-letter-color));
 }
 .haraka-cell.active .g {
-    color: var(--hl-letter-ink, #fff);
+    color: var(--hl-letter-ink, var(--ink-on-color));
 }
 .haraka-cell.hover-preview {
     background: color-mix(in srgb, var(--ts-letter-color, var(--hl-letter-color)) 30%, transparent);
@@ -402,7 +402,7 @@
     opacity: 0.5;
 }
 .haraka-cell.dia-dropped .g {
-    color: #777;
+    color: var(--ts-silent-fg);
 }
 /* Small diacritic cells render as plain marks — no replaced/shortened affordance
    (those would read as "special" on what should look like an ordinary haraka).
@@ -412,7 +412,7 @@
    madd FULL cell below, so it reads as "added, not written". */
 .haraka-cell.dia-inserted {
     border-style: dashed;
-    border-color: #6a6f8c;
+    border-color: var(--ts-inserted-border);
 }
 
 /* --- Implicit-madd FULL cell affordance ---------------------------------- */
@@ -421,15 +421,15 @@
    "not in the rasm". */
 .mega-letter.implicit {
     border-style: dashed;
-    border-color: #6a6f8c;
-    color: var(--hl-letter-idle, #aaa);
+    border-color: var(--ts-inserted-border);
+    color: var(--hl-letter-idle, var(--ts-idle-fg));
 }
 /* A WRITTEN-but-"added" full cell (the madd-ʿiwaḍ alef substituted for the
    fatḥatan at waqf) — same muted dashed border as the implicit madd, but it
    keeps its own ink + interactivity (it's a real, sounding letter). */
 .mega-letter.dia-inserted {
     border-style: dashed;
-    border-color: #6a6f8c;
+    border-color: var(--ts-inserted-border);
 }
 .mega-letter.implicit.dia-replaced {
     border-style: solid;
@@ -439,7 +439,7 @@
 }
 .mega-letter.implicit.active {
     background: var(--ts-letter-deep, var(--hl-letter-color));
-    color: var(--hl-letter-ink, #fff);
+    color: var(--hl-letter-ink, var(--ink-on-color));
 }
 
 /* --- Seekable diacritic / implicit-madd cells --------------------------- */
@@ -473,7 +473,7 @@
     border-radius: 3px;
     font-family: 'Consolas', 'Monaco', monospace;
     font-size: 0.85rem;
-    color: var(--hl-phoneme-idle, #aaa);
+    color: var(--hl-phoneme-idle, var(--ts-idle-fg));
     display: flex;
     align-items: center;
     justify-content: center;
@@ -493,7 +493,7 @@
 }
 
 .mega-phoneme.silence {
-    color: #555;
+    color: var(--text-faint);
     font-style: italic;
 }
 
@@ -584,7 +584,7 @@
     height: calc(var(--letter-cell-h) * var(--haraka-dia-h));
     background: var(--hl-cell-rest);
     border-radius: 3px;
-    border: 1px dashed #6a6f8c;
+    border: 1px dashed var(--ts-inserted-border);
     transition: background var(--hl-release-dur) var(--hl-release-ease),
         color var(--hl-release-dur) var(--hl-release-ease),
         border-color var(--hl-release-dur) var(--hl-release-ease);
@@ -592,7 +592,7 @@
 .bridge-letter .g {
     font-family: 'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
     line-height: 1;
-    color: var(--hl-letter-idle, #aaa);
+    color: var(--hl-letter-idle, var(--ts-idle-fg));
     display: inline-block;
     font-size: calc(var(--analysis-letter-font-size, 1.05rem) * var(--haraka-scale, 1.4));
     transform: translate(var(--haraka-shift, 0em), var(--haraka-raise, 0em));
@@ -601,7 +601,7 @@
     background: var(--ts-letter-deep, var(--hl-letter-color));
 }
 .bridge-letter.active .g {
-    color: var(--hl-letter-ink, #fff);
+    color: var(--hl-letter-ink, var(--ink-on-color));
 }
 .bridge-letter:hover .bg {
     background: color-mix(in srgb, var(--ts-letter-color, var(--hl-letter-color)) 30%, transparent);
@@ -630,7 +630,7 @@
     background: var(--hl-cell-rest);
     border: 1px solid transparent;
     border-radius: 3px;
-    color: #bbb;
+    color: var(--text-secondary);
     overflow: hidden;
     /* tooltip-only (its duration), not a seek target → "help" cursor. */
     cursor: help;
@@ -647,12 +647,12 @@
 .pause-bridge.active {
     background: var(--ts-word-deep, var(--anim-highlight-color));
     border-color: var(--anim-highlight-color);
-    color: var(--hl-word-ink, #fff);
+    color: var(--hl-word-ink, var(--ink-on-color));
 }
 .pause-bridge.hover-preview {
     background: color-mix(in srgb, var(--anim-highlight-color) 30%, var(--hl-cell-rest));
     border-color: color-mix(in srgb, var(--anim-highlight-color) 40%, transparent);
-    color: color-mix(in srgb, var(--anim-highlight-color) 75%, #d7d7df);
+    color: color-mix(in srgb, var(--anim-highlight-color) 75%, var(--text-primary));
 }
 /* A lone waqf mark is a zero-width combining glyph whose ink size + position vary
    per mark; the calibration lives in `tabs/timestamps/utils/waqf-render.ts` and is
@@ -747,9 +747,9 @@
     z-index: 60;
     transform: translate(-50%, calc(-100% - 8px));
     pointer-events: none;
-    background: #1a1a2e;
-    color: #e7e7ef;
-    border: 1px solid #3a3f5c;
+    background: var(--popover-bg);
+    color: var(--text-primary);
+    border: 1px solid var(--border-strong);
     border-radius: 4px;
     padding: 3px 8px;
     font-size: 0.72rem;
@@ -757,7 +757,7 @@
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
     text-align: center;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+    box-shadow: var(--shadow-pop);
 }
 /* The tajweed rule name(s) under the ms duration — quieter than the figure. */
 .cell-tip .tip-rule {
@@ -834,11 +834,11 @@
         var(--ts-letter-deep, var(--hl-letter-color)) calc(var(--fill, 0) * 100%),
         var(--hl-letter-track, color-mix(in srgb, var(--ts-letter-deep, var(--hl-letter-color)) 30%, var(--hl-cell-rest))) 0
     );
-    color: var(--hl-letter-ink, #fff);
+    color: var(--hl-letter-ink, var(--ink-on-color));
     transition: none;
 }
 .hl-track .haraka-cell.active .g {
-    color: var(--hl-letter-ink, #fff);
+    color: var(--hl-letter-ink, var(--ink-on-color));
 }
 .hl-track .mega-phoneme.active,
 .hl-track .mega-block.active .mega-phoneme.active {
@@ -847,20 +847,20 @@
         var(--ts-phoneme-deep, var(--hl-phoneme-color)) calc(var(--fill, 0) * 100%),
         var(--hl-phoneme-track, color-mix(in srgb, var(--ts-phoneme-deep, var(--hl-phoneme-color)) 30%, var(--hl-cell-rest))) 0
     );
-    color: var(--hl-phoneme-ink, #fff);
+    color: var(--hl-phoneme-ink, var(--ink-on-color));
     transition: none;
 }
 
 /* Active states */
 .mega-phoneme.active {
     background: var(--ts-phoneme-deep, var(--hl-phoneme-color));
-    color: var(--hl-phoneme-ink, #fff);
+    color: var(--hl-phoneme-ink, var(--ink-on-color));
     border-color: var(--ts-phoneme-color, var(--hl-phoneme-color));
 }
 
 .mega-block.active .mega-word {
     background: var(--ts-word-deep, var(--anim-highlight-color));
-    color: var(--hl-word-ink, #fff);
+    color: var(--hl-word-ink, var(--ink-on-color));
     font-weight: bold;
     border-color: var(--anim-highlight-color);
 }
@@ -871,19 +871,19 @@
    their own rules below, so only the resting siblings are washed. */
 .hl-word-wash .mega-block.active .mega-phoneme {
     background: var(--hl-cell-wash);
-    color: #ccc;
+    color: var(--text-secondary);
     border-color: color-mix(in srgb, var(--ts-phoneme-color, var(--hl-phoneme-color)) var(--hl-wash-border), transparent);
 }
 
 .mega-block.active .mega-phoneme.active {
     background: var(--ts-phoneme-deep, var(--hl-phoneme-color));
-    color: var(--hl-phoneme-ink, #fff);
+    color: var(--hl-phoneme-ink, var(--ink-on-color));
     border-color: var(--ts-phoneme-color, var(--hl-phoneme-color));
 }
 
 .hl-word-wash .mega-block.active .mega-letter:not(.implicit) {
     background: var(--hl-cell-wash);
-    color: #ccc;
+    color: var(--text-secondary);
     border-color: color-mix(in srgb, var(--ts-letter-color, var(--hl-letter-color)) var(--hl-wash-border), transparent);
 }
 
@@ -896,14 +896,14 @@
 
 .mega-block.active .mega-letter.active {
     background: var(--ts-letter-deep, var(--hl-letter-color));
-    color: var(--hl-letter-ink, #fff);
+    color: var(--hl-letter-ink, var(--ink-on-color));
     border-color: var(--ts-letter-color, var(--hl-letter-color));
 }
 
 /* Silent cells read identically whether or not their word is active — the
    active-block letter treatment above must not brighten or recolour them. */
 .mega-block.active .mega-letter.silent {
-    color: #777;
+    color: var(--ts-silent-fg);
     background: var(--hl-cell-rest);
     border-color: transparent;
 }
@@ -916,14 +916,14 @@
    never light. */
 .mega-letter.silent.active,
 .mega-block.active .mega-letter.silent.active {
-    color: var(--hl-letter-ink, #fff);
+    color: var(--hl-letter-ink, var(--ink-on-color));
     opacity: 1;
     background: var(--ts-letter-deep, var(--hl-letter-color));
     border-color: var(--ts-letter-color, var(--hl-letter-color));
 }
 
 .mega-block.active .mega-letter.null-ts {
-    color: #555;
+    color: var(--text-faint);
     background: var(--hl-cell-rest);
     border-color: transparent;
 }
@@ -976,13 +976,13 @@
    siblings so the offset outline isn't clipped by the next box's background
    (painting order otherwise covers the outline on the leading/trailing edge). */
 .mega-block.loop {
-    outline: 2px solid var(--anim-highlight-color, #f0a500);
+    outline: 2px solid var(--anim-highlight-color, var(--cta-bg));
     outline-offset: 2px;
     position: relative;
     z-index: 1;
 }
 #animation-display .anim-word.loop {
-    outline: 2px solid var(--anim-highlight-color, #f0a500);
+    outline: 2px solid var(--anim-highlight-color, var(--cta-bg));
     outline-offset: 2px;
     opacity: 1 !important;
 }
@@ -1005,13 +1005,13 @@
     padding: 4px 12px;
     border: none;
     background: transparent;
-    color: #888;
+    color: var(--text-muted);
     cursor: pointer;
     border-radius: 4px;
     font-size: 0.85rem;
     text-align: center;
 }
-.ts-view-btn.active, .ts-mode-btn.active { background: var(--anim-highlight-color); color: #1a1a2e; font-weight: bold; }
+.ts-view-btn.active, .ts-mode-btn.active { background: var(--anim-highlight-color); color: var(--cta-fg); font-weight: bold; }
 /* Translations toggle + language picker span the full group width (its own
    row under the Analysis/Animation + Letters/Phonemes rows). */
 .ts-translations-toggle {
@@ -1063,9 +1063,9 @@
     font-size: var(--anim-font-size, 28px);
     line-height: var(--anim-line-height, 2.0);
     word-spacing: var(--anim-word-spacing, 0.15em);
-    color: #ccc;
+    color: var(--text-secondary);
     padding: 20px;
-    background: #16213e;
+    background: var(--panel);
     border-radius: 8px;
     max-height: var(--unified-display-max-height, 400px);
     overflow-y: auto;

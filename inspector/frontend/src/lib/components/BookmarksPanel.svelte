@@ -147,15 +147,15 @@
         width: 340px;
         max-width: 90vw;
         height: 100vh;
-        background: #0f1530;
-        border-right: 1px solid #2a3a6a;
-        box-shadow: 8px 0 24px rgba(0, 0, 0, 0.45);
+        background: var(--panel-sidebar);
+        border-right: 1px solid var(--border-default);
+        box-shadow: var(--shadow-pop);
         z-index: 1000;
         display: flex;
         flex-direction: column;
         padding: 16px;
         overflow-y: auto;
-        color: #d8def0;
+        color: var(--text-secondary);
     }
     .bm-header {
         display: flex;
@@ -166,54 +166,54 @@
     .bm-header h2 {
         font-size: 1.1rem;
         margin: 0;
-        color: #fff;
+        color: var(--text-primary);
     }
     .bm-close {
         background: none;
         border: 0;
-        color: #9aa6c8;
+        color: var(--text-secondary);
         font-size: 1.5rem;
         line-height: 1;
         cursor: pointer;
     }
-    .bm-close:hover { color: #fff; }
+    .bm-close:hover { color: var(--text-primary); }
     .bm-conn { margin-bottom: 14px; }
     .bm-conn-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-    .bm-conn-on { color: #5fd38a; font-size: 0.85rem; font-weight: 600; }
-    .bm-conn-dev { color: #d8a13a; font-size: 0.85rem; font-weight: 600; }
+    .bm-conn-on { color: var(--ok-fg); font-size: 0.85rem; font-weight: 600; }
+    .bm-conn-dev { color: var(--state-dev-fg); font-size: 0.85rem; font-weight: 600; }
     .bm-disconnect {
         background: none;
-        border: 1px solid #3a3a5a;
-        color: #9aa6c8;
+        border: 1px solid var(--border-strong);
+        color: var(--text-secondary);
         border-radius: 6px;
         padding: 4px 10px;
         font-size: 0.78rem;
         cursor: pointer;
     }
-    .bm-disconnect:hover { border-color: #ff6b6b; color: #ff6b6b; }
+    .bm-disconnect:hover { border-color: var(--bad-fg); color: var(--bad-fg); }
     .bm-connect {
         display: block;
         width: 100%;
         box-sizing: border-box;
         text-align: center;
         text-decoration: none;
-        background: #f0a500;
-        color: #1a1a1a;
+        background: var(--cta-bg);
+        color: var(--cta-fg);
         border: 0;
         border-radius: 6px;
         padding: 8px 12px;
         font-weight: 600;
         cursor: pointer;
     }
-    .bm-connect:hover { background: #ffba2c; }
-    .bm-conn-hint { font-size: 0.75rem; color: #8a93b2; margin: 6px 0 0; }
-    .bm-empty { font-size: 0.85rem; color: #8a93b2; line-height: 1.5; }
+    .bm-connect:hover { background: var(--cta-bg-hover); }
+    .bm-conn-hint { font-size: 0.75rem; color: var(--text-muted); margin: 6px 0 0; }
+    .bm-empty { font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; }
     .bm-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
     .bm-item {
         display: flex;
         align-items: stretch;
-        background: #16213e;
-        border: 1px solid #25325c;
+        background: var(--panel);
+        border: 1px solid var(--border-default);
         border-radius: 8px;
         overflow: hidden;
     }
@@ -222,24 +222,24 @@
         text-align: right;
         background: none;
         border: 0;
-        color: #d8def0;
+        color: var(--text-secondary);
         padding: 10px 12px;
         cursor: pointer;
         display: flex;
         flex-direction: column;
         gap: 2px;
     }
-    .bm-open:hover { background: #1c294b; }
-    .bm-verse { font-size: 0.95rem; color: #fff; }
-    .bm-ayah { font-size: 0.78rem; color: #9aa6c8; }
+    .bm-open:hover { background: var(--panel-2); }
+    .bm-verse { font-size: 0.95rem; color: var(--text-primary); }
+    .bm-ayah { font-size: 0.78rem; color: var(--text-secondary); }
     .bm-remove {
         background: none;
         border: 0;
-        border-left: 1px solid #25325c;
-        color: #7c87a8;
+        border-left: 1px solid var(--border-default);
+        color: var(--text-muted);
         font-size: 1.2rem;
         padding: 0 12px;
         cursor: pointer;
     }
-    .bm-remove:hover { color: #ff6b6b; background: #1c294b; }
+    .bm-remove:hover { color: var(--bad-fg); background: var(--panel-2); }
 </style>

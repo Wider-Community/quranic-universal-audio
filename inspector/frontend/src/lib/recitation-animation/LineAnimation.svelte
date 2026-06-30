@@ -22,6 +22,7 @@
      */
     import { toArabicNumeral, ZWSP } from '../utils/arabic-text';
     import { ayahUnitRanges } from './chapter-words';
+    import { themeStore } from '../stores/theme.svelte';
     import { cssVarText, type RecitationAnimConfig } from './config';
     import { buildAnimStructure, stampCharTimes, type AnimSourceWord } from './engine/build-structure';
     import {
@@ -486,7 +487,7 @@
     class="ra-line"
     class:ra-chars={config.granularity === 'char'}
     class:ra-no-transition={suppressTransition}
-    style={cssVarText(config)}
+    style={cssVarText(config, themeStore.current)}
     style:text-align={pageCount === null ? 'right' : null}
 >
     {#each structure as w, i (pageStart + '-' + i)}

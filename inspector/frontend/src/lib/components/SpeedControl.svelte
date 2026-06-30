@@ -65,12 +65,12 @@
         align-items: center;
         gap: 6px;
         font-size: 0.9rem;
-        color: #ccc;
+        color: var(--text-secondary);
     }
     .speed-select {
-        background: #16213e;
-        color: #eee;
-        border: 1px solid #333;
+        background: var(--input-bg);
+        color: var(--text-primary);
+        border: 1px solid var(--border-default);
         border-radius: 4px;
         padding: 3px 6px;
         font-size: 0.85rem;

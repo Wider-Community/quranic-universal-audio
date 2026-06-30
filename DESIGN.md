@@ -1,6 +1,6 @@
 ---
 name: Quranic Universal Audio — Inspector
-description: A dark, quiet operator surface for a living archive of Quran recitations and their timestamps.
+description: A quiet operator surface for a living archive of Quran recitations and their timestamps — dark by default, with a calm light peer.
 colors:
   canvas: "oklch(0.186 0.042 285)"
   canvas-inset: "oklch(0.130 0.034 285)"
@@ -122,8 +122,8 @@ One language, three moods. **Dashboard** orients and invites — let the scale s
 This system explicitly rejects the generic-SaaS-admin reflex (no hero-metric template, no identical icon-headline-text card grids, no blue-on-white modern-admin look), heavy bureaucratic density-for-its-own-sake (no six-toolbar Jira energy), religious-site cliché (no green-and-gold, no arabesque ornament, no calligraphic flourish as decoration — Arabic type is functional), and the media-player-that-shouts (no visualizer flash, no neon EQ, no motion competing with the audio).
 
 **Key Characteristics:**
-- Dark by conviction — built for multi-hour review sittings and relaxed listening, no flash-of-light, no white modals on dark.
-- Flat tonal layering, zero decorative shadow. Depth is a five-step surface ramp, not elevation.
+- Dark by default — built for multi-hour review sittings and relaxed listening, no flash-of-theme on load. A calm, cool light theme is a fully-supported opt-in peer (header toggle, persisted); it keeps the same blue-violet identity on paper rather than reaching for warm cream. Both themes flow from one token set — see [`docs/reference/theming.md`](docs/reference/theming.md).
+- Flat tonal layering in dark, zero decorative shadow — depth is a five-step surface ramp, not elevation. Near white the light theme has no lightness headroom for that, so it adds a single soft shadow on floating surfaces (the one theme-conditional exception).
 - One restrained cyan accent. Rarity is the point.
 - OKLCH throughout, system fonts for chrome, one embedded Arabic face for the Quranic text.
 - Calm scales with complexity: the busier the engine, the stiller the surface.
@@ -187,8 +187,10 @@ This system is **flat. There are no decorative shadows.** Depth is conveyed enti
 
 The only `box-shadow` permitted is a **focus ring** — a tight `0 0 0` spread of `accent-tint`, used to indicate keyboard focus or an active control, never to fake elevation.
 
+The **light theme** is the one exception: near white there is no lightness headroom to float a surface by ramp alone, so floating surfaces (dropdowns, drop-ups, modals) carry a single soft `--shadow-*` token. That shadow is `none` in dark — the flat rule still holds there. Elevation is the same idea in both, expressed differently: ramp in dark, ramp-plus-soft-shadow in light.
+
 ### Named Rules
-**The Flat-By-Default Rule.** Surfaces are flat at rest and flat on hover. The single allowed shadow is the accent focus ring. Ambient/structural drop-shadows are forbidden; reach for the next step up the surface ramp instead.
+**The Flat-By-Default Rule.** In dark, surfaces are flat at rest and flat on hover; the single allowed shadow is the accent focus ring, and ambient/structural drop-shadows are forbidden (reach for the next step up the surface ramp instead). In light, a soft `--shadow-*` is permitted on genuinely floating surfaces only.
 
 ## 5. Components
 
@@ -236,7 +238,7 @@ The defining custom surface. A waveform (server-rendered peaks, boundary markers
 ### Don't:
 - **Don't** introduce Material-Design button colors (`#4361ee` primary, `#2e7d32` green, `#6d1a1a` red, `#6a1b9a` purple, etc.) or any per-button palette. There is one accent; buttons use `panel` / `accent` / transparent. *(The live app still carries a legacy Material button palette in older CSS — it is drift, not the system. New work must not extend it.)*
 - **Don't** hardcode hex, off-scale radii (`4px`, `6px`, `10px`, `12px`), or ad-hoc rem font sizes. Snap to the token scales (`3/5/8px` radii, the `--fs-*` ladder). *(Older components drift to `4`/`6px` and ad-hoc rem; do not copy them.)*
-- **Don't** add decorative shadows or glassmorphism. Surfaces are flat; the only shadow is the accent focus ring.
+- **Don't** add decorative shadows or glassmorphism. Dark surfaces are flat; the only dark shadow is the accent focus ring. (Light adds a single soft `--shadow-*` on floating surfaces only — see Elevation.)
 - **Don't** use a `border-left`/`border-right` colored stripe on cards, rows, or callouts. Use full hairline borders, surface tint, or the active-row accent border.
 - **Don't** ship a hero-metric block (big number, small label, gradient accent) or an identical icon-headline-text card grid. Let the catalog data carry the scale.
 - **Don't** decorate the religious content: no green-and-gold, no arabesque borders, no mosque silhouettes, no calligraphic flourish as ornament. Arabic type is functional.

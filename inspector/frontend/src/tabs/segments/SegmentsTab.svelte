@@ -456,19 +456,19 @@
         align-items: center;
         gap: 7px;
         padding: 6px 12px;
-        border: 1px solid #2c3a59;
+        border: 1px solid var(--border-default);
         border-radius: 8px;
-        background: #101a33;
-        color: #c5cfe7;
+        background: var(--surface-sunken);
+        color: var(--text-secondary);
         font-size: 0.84rem;
         cursor: pointer;
         transition: background 0.15s ease, border-color 0.15s ease;
     }
     .seg-guide-entry:hover,
     .seg-guide-entry:focus-visible {
-        background: #16223f;
-        border-color: #3a4a6e;
-        color: #fff;
+        background: var(--panel-2);
+        border-color: var(--border-strong);
+        color: var(--text-primary);
         outline: none;
     }
     .seg-guide-entry-icon { font-size: 0.95rem; line-height: 1; }

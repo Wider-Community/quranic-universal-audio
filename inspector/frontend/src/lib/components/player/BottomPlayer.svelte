@@ -41,6 +41,7 @@
         recitationConfigStore,
     } from '../../recitation-animation/recitation-settings';
     import { accentVarText } from '../../utils/accent-override';
+    import { theme$ } from '../../stores/theme.svelte';
     import { loadVbrChapters } from '../../recitation-data/ts-source';
     import {
         loadPersistedSlice,
@@ -593,7 +594,7 @@
 <div
     class="player"
     class:has-reciter={$playerContext.reciter !== null}
-    style={accentVarText($recitationConfigStore.highlightColor)}
+    style={accentVarText($recitationConfigStore.highlightColor, $theme$)}
 >
     <PlayerProgress
         positionMs={$playerContext.positionMs}

@@ -2,6 +2,7 @@ import { get } from 'svelte/store';
 
 import type { AudioPeaks, PeakBucket } from '../../../../lib/types/peaks-transport';
 import type { Segment } from '../../../../lib/types/view-models';
+import { themeColor } from '../../../../lib/utils/canvas-theme';
 import {
     PREVIEW_PLAYHEAD_COLOR,
     WAVEFORM_BG_COLOR,
@@ -82,7 +83,7 @@ export function drawSegBaseAndOverlays(
 ): boolean {
     const ctx = canvas.getContext('2d');
     if (!ctx) return false;
-    ctx.fillStyle = WAVEFORM_BG_COLOR;
+    ctx.fillStyle = themeColor('--wf-bg', WAVEFORM_BG_COLOR);
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     let drew = false;
@@ -153,14 +154,15 @@ export function drawSegPlayhead(
     const progress = (currentTimeMs - startMs) / (endMs - startMs);
     const x = progress * width;
 
-    ctx.strokeStyle = PREVIEW_PLAYHEAD_COLOR;
+    const playheadColor = themeColor('--wf-preview-playhead', PREVIEW_PLAYHEAD_COLOR);
+    ctx.strokeStyle = playheadColor;
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(x, 0);
     ctx.lineTo(x, height);
     ctx.stroke();
 
-    ctx.fillStyle = PREVIEW_PLAYHEAD_COLOR;
+    ctx.fillStyle = playheadColor;
     ctx.beginPath();
     ctx.moveTo(x - 4, 0);
     ctx.lineTo(x + 4, 0);
@@ -200,7 +202,7 @@ export function drawEditPeakBase(
 
     const data = _slicePeaks(audioUrl, startMs, endMs, width);
     if (!data) {
-        ctx.fillStyle = WAVEFORM_BG_COLOR;
+        ctx.fillStyle = themeColor('--wf-bg', WAVEFORM_BG_COLOR);
         ctx.fillRect(0, 0, width, height);
         return false;
     }
@@ -317,7 +319,9 @@ export function _drawTrimHighlight(canvas: SegCanvas, seg: Segment): void {
     const clipEnd = hl.clipEnd ?? seg.time_end;
     const toX = (ms: number): number => ((ms - seg.time_start) / dur) * w;
 
-    const rgba = hl.color === 'red' ? 'rgba(244, 67, 54, 0.3)' : 'rgba(76, 175, 80, 0.3)';
+    const rgba = hl.color === 'red'
+        ? themeColor('--wf-delta-remove', 'rgba(244, 67, 54, 0.3)')
+        : themeColor('--wf-delta-add', 'rgba(76, 175, 80, 0.3)');
     ctx.fillStyle = rgba;
 
     // Left region: canvas ∩ clip ∩ [-∞, otherStart]
@@ -358,11 +362,11 @@ export function _drawSplitHighlight(canvas: SegCanvas, wfSeg: Segment): void {
     const x1 = toX(hlStart);
     const x2 = toX(hlEnd);
 
-    ctx.fillStyle = WAVEFORM_DIM_OVERLAY_COLOR;
+    ctx.fillStyle = themeColor('--wf-dim-overlay', WAVEFORM_DIM_OVERLAY_COLOR);
     if (x1 > 0) ctx.fillRect(0, 0, x1, h);
     if (x2 < w) ctx.fillRect(x2, 0, w - x2, h);
 
-    ctx.fillStyle = 'rgba(76, 175, 80, 0.3)';
+    ctx.fillStyle = themeColor('--wf-delta-add', 'rgba(76, 175, 80, 0.3)');
     if (x2 > x1) ctx.fillRect(x1, 0, x2 - x1, h);
 }
 
@@ -379,14 +383,15 @@ export function _drawMergeHighlight(canvas: SegCanvas, seg: Segment): void {
 
     const x = toX(hl.mergePoint);
 
-    ctx.strokeStyle = '#eab308'; // yellow-500
+    const mergeColor = themeColor('--wf-merge-cursor', '#eab308');
+    ctx.strokeStyle = mergeColor;
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(x, 0);
     ctx.lineTo(x, h);
     ctx.stroke();
 
-    ctx.fillStyle = '#eab308';
+    ctx.fillStyle = mergeColor;
     ctx.beginPath();
     ctx.moveTo(x - 4, 0);
     ctx.lineTo(x + 4, 0);

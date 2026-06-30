@@ -5,6 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <title>Quranic Universal Audio</title>
+    <!-- Flash-free theme: set data-theme on <html> synchronously, BEFORE any
+         stylesheet parses, so light-theme users never see a dark first paint.
+         Runs before the module graph (main.ts) loads. The 'insp_theme' key is
+         duplicated from LS_KEYS.THEME (src/lib/utils/constants.ts) — keep in
+         sync. Default is dark by conviction; a first-time visitor whose OS is
+         set to light starts light. -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('insp_theme');
+          if (t !== 'light' && t !== 'dark') {
+            t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+          }
+          document.documentElement.setAttribute('data-theme', t);
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      })();
+    </script>
 </head>
 <body>
     <div id="app"></div>

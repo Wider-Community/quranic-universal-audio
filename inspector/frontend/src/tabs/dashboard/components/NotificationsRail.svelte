@@ -395,7 +395,7 @@
         padding: 2px 6px;
         border-radius: 999px;
         background: var(--state-requested-fg);
-        color: var(--surface-base, #fff);
+        color: var(--ink-on-color);
     }
     .toggle {
         margin-left: auto;
