@@ -124,6 +124,9 @@ def complete(
 
     Inserts a new ``per_recitation_releases(track='hf')`` row, supersedes any
     prior current row for the slug, and fires ``released({track:'hf', ...})``.
+    When the slug has no current ``ts`` row (timestamps ingested offline, never
+    through an in-app TS job), it first registers one (``version='offline-ingest'``)
+    so the published reciter isn't orphaned from staleness / GH-cut eligibility.
 
     ``version`` is the HF revision SHA the publish landed at; pulled from the
     webhook payload OR from a fallback that reads the just-pushed dataset.
@@ -163,6 +166,15 @@ def complete(
         # superseded_at IS NULL only blocks two CURRENT rows.
         if repo_releases.release_by_version("hf", slug, version) is not None:
             return {"ok": True, "skipped": "duplicate"}
+        # Invariant: an HF dataset release rests on a TS production. A reciter
+        # whose timestamps were ingested offline (bucket upload, never an in-app
+        # TS job) has no ts release row, so publishing it here would leave it
+        # orphaned — invisible to staleness / GH-cut eligibility / ts-refresh.
+        # Register the production now so the published reciter is tracked.
+        if repo_releases.current_release("ts", slug) is None:
+            repo_releases.insert_per_recitation_release(
+                track="ts", slug=slug, version="offline-ingest",
+                produced_at=now, produced_by="SYSTEM_ACTOR")
         # Supersede prior current row FIRST — the partial-unique blocks two
         # current rows for (hf, slug) so we can't insert before clearing.
         repo_releases.supersede_current("hf", slug, except_id=-1, at=now)

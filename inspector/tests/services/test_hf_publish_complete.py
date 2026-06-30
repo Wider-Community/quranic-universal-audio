@@ -56,3 +56,37 @@ def test_first_complete_records_and_advances_db_seq():
     rel = repo_releases.current_release("hf", slug)
     assert rel is not None
     assert rel["version"] == version
+
+
+def test_complete_creates_missing_ts_release_for_offline_reciter():
+    """Publishing a reciter ingested offline (no in-app TS job → no ts row)
+    registers a ts release so it isn't orphaned from staleness / GH eligibility."""
+    slug, version = "rec_offline", "rev-1"
+    from tests.conftest import _seed_state
+
+    _seed_state(slug, state="released")
+    assert repo_releases.current_release("ts", slug) is None
+
+    hf_publish.complete(slug, "job-1", version=version)
+
+    ts = repo_releases.current_release("ts", slug)
+    assert ts is not None
+    assert ts["version"] == "offline-ingest"
+
+
+def test_complete_preserves_existing_ts_release():
+    """A reciter that already has a ts release keeps it — no duplicate / supersede."""
+    slug, version = "rec_has_ts", "rev-1"
+    from tests.conftest import _seed_state
+
+    _seed_state(slug, state="released")
+    with db.transaction():
+        repo_releases.insert_per_recitation_release(
+            track="ts", slug=slug, version="job-abc",
+            produced_at=datetime.now(UTC), produced_by="SYSTEM_ACTOR")
+
+    hf_publish.complete(slug, "job-1", version=version)
+
+    ts = repo_releases.current_release("ts", slug)
+    assert ts is not None
+    assert ts["version"] == "job-abc"
