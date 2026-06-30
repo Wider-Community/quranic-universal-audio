@@ -79,6 +79,36 @@ def test_within_pass_loopback_retained_verbatim():
     assert out["1:1"]["verse_end_ms"] == 2000  # trailing [4,5] seg trimmed
 
 
+# --- per-segment occurrence spans: pivot-repeated boundary word ---
+
+
+def test_segment_spans_pin_repeated_pivot_occurrence():
+    # A look-back where word 6 is the pivot recited in BOTH segments (2:6 shape):
+    # seg A = words 1..6, seg B = words 6..11. The flat words carry word 6 twice.
+    # The emitted ``segments`` must pin each segment to its OWN occurrence so an
+    # index-keyed consumer can't collapse the boundary to the wrong (last) one
+    # and overlap the segments.
+    shard = _shard(
+        [
+            _seg("1:1", 0, 6000, [1, 2, 3, 4, 5, 6]),  # word 6 (first) -> [5000, 6000]
+            _seg("1:1", 6010, 12000, [6, 7, 8, 9, 10, 11]),  # word 6 (second) -> [6010, ...]
+        ]
+    )
+    spans = project_segment_shard(shard)["1:1"]["segments"]
+    assert len(spans) == 2
+    assert (spans[0]["w_from"], spans[0]["w_to"]) == (1, 6)
+    assert (spans[1]["w_from"], spans[1]["w_to"]) == (6, 11)
+    # Half-open occurrence ranges partition the flat words (6 + 6 == 12).
+    assert (spans[0]["occ_start"], spans[0]["occ_end"]) == (0, 6)
+    assert (spans[1]["occ_start"], spans[1]["occ_end"]) == (6, 12)
+    # seg A ends at the FIRST occurrence's end; seg B starts at the SECOND
+    # occurrence's start → strictly non-overlapping (the bug would tie both to
+    # the second occurrence, overlapping A into B).
+    assert spans[0]["end_ms"] == 6000
+    assert spans[1]["start_ms"] == 6010
+    assert spans[1]["start_ms"] >= spans[0]["end_ms"]
+
+
 # --- full then a redundant trailing segment: trailing trimmed ---
 
 

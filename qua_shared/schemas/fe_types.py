@@ -45,6 +45,7 @@ from .config.automation import (
     HfPublishConfig,
     StaleMetadataConfig,
     StaleTsRegenConfig,
+    TsGenerationDefaults,
 )
 from .wire._envelopes import ErrorEnvelope, OkAck
 from .wire.admin_permissions import (
@@ -210,6 +211,7 @@ __all__ = [
     "HfPublishConfig",
     "StaleMetadataConfig",
     "StaleTsRegenConfig",
+    "TsGenerationDefaults",
     "AdminActiveClaim",
     "AdminActivityEvent",
     "AdminCapabilityRow",

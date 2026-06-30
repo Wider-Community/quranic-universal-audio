@@ -48,11 +48,16 @@ def launch(
     *,
     version: str | None = None,
     launched_by: str | None = None,
+    settings=None,
     webhook_base: str | None = None,
 ) -> dict:
     """Launch a cut-release job. Returns ``{job_id, url}``.
 
-    Global single-flight — refuses if another cut is in flight.
+    Global single-flight — refuses if another cut is in flight. ``settings`` is
+    an optional ``ReleaseSettings`` (clip-edge pads); its fields thread to the
+    job as ``PUBLISH_PAD_START`` / ``PUBLISH_PAD_END`` / ``PUBLISH_MIN_GAP`` —
+    the SAME env the HF publish reads, so the release verse bounds match the
+    dataset's clip windows.
     """
     from huggingface_hub import Volume, get_token, run_job
 
@@ -70,6 +75,10 @@ def launch(
         env["RELEASE_VERSION"] = version
     if launched_by:
         env["LAUNCHED_BY"] = launched_by
+    if settings is not None:
+        env["PUBLISH_PAD_START"] = str(settings.pad_start)
+        env["PUBLISH_PAD_END"] = str(settings.pad_end)
+        env["PUBLISH_MIN_GAP"] = str(settings.min_gap)
     secrets = {"HF_TOKEN": get_token()}
     gh_token = os.environ.get("INSPECTOR_GH_RELEASE_TOKEN", "").strip()
     if gh_token:

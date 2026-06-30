@@ -125,7 +125,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 _INSTALL = (
     "mamba install -y -c conda-forge python=3.11 montreal-forced-aligner "
     "&& /opt/conda/bin/pip install gradio soundfile tgt numpy PyYAML requests psutil "
-    "'quranic-phonemizer>=2.7,<3' 'huggingface_hub>=1.8.0' "  # >=2.7: marks, maddah-token, carrier-waw silent, word-final silah
+    "'quranic-phonemizer>=2.8,<3' 'huggingface_hub>=1.8.0' "  # >=2.8: char-phoneme mappings + secondary tags (v9 cells); marks, maddah-token, carrier-waw silent
     "&& mkdir -p /scratch"
 )
 _ENTRYPOINT = "python /aux/code/qua_jobs/generate_timestamps.py"
@@ -425,6 +425,11 @@ def launch(slug: str, *, settings: TsJobSettings, webhook_base: str | None = Non
         env["BATCH_SIZE"] = str(settings.batch_size)
     if settings.download_workers:
         env["DOWNLOAD_WORKERS"] = str(settings.download_workers)
+    # Pipeline tunables — empty cedes to the job's DEFAULT_PADDING / DEFAULT_METHOD.
+    if settings.padding:
+        env["PADDING"] = settings.padding
+    if settings.method:
+        env["METHOD"] = settings.method
     flavor = settings.flavor or JOB_FLAVOR
     timeout = settings.timeout or JOB_TIMEOUT
 

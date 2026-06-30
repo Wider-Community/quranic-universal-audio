@@ -151,6 +151,11 @@ class TsShardSegment(BaseModel):
     ``[start_ms, end_ms]`` span. A verse may recur across several entries
     (loopbacks / re-dos) — every accepted occurrence is one entry, emitted in
     recitation order.
+
+    ``wasl`` (v10, optional) marks an occurrence that continued into the *next*
+    occurrence without a stop: its junction word carries waṣl (not waqf)
+    phonemes, and the FE walks consecutive flagged occurrences to reconstruct a
+    waṣl group. Absent (= False) on a stop/waqf occurrence.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -158,6 +163,7 @@ class TsShardSegment(BaseModel):
     ref: str = Field(..., min_length=1)
     t: tuple[int, int]
     words: list[TsShardWord] = Field(default_factory=list)
+    wasl: bool = False
 
 
 class TsShardMeta(BaseModel):

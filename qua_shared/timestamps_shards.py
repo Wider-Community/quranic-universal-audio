@@ -70,7 +70,12 @@ _SEGMENT_META_PROVENANCE = (
 # on the grapheme but lost the single-``tag`` pick — ``["tafkheem"]`` on a heavy
 # madd/qalqala cell), so a renderer can stack the heaviness badge; when only it is
 # present the 8th slot is padded ``None``. Readers tolerate its absence (v5-v8).
-SEGMENT_SCHEMA_VERSION = 9
+# v10 adds an OPTIONAL per-segment ``wasl`` flag (segment entry, sibling of
+# ``ref``/``t``/``words``): True when this occurrence continued into the next
+# without a stop, so its junction word carries waṣl (not waqf) phonemes. Emitted
+# only when True; absence = waqf. The FE walks consecutive flagged occurrences to
+# reconstruct a waṣl group (per-occurrence, so retakes regroup correctly).
+SEGMENT_SCHEMA_VERSION = 10
 
 
 def _filter_mfa_failures(failures: list[dict] | None, chapter: int) -> list[dict]:
@@ -259,6 +264,11 @@ def build_segment_shards(
                 "ref": ref,
                 "t": [occ["time_start"], occ["time_end"]],
                 "words": words,
+                # Per-occurrence waṣl flag (v10): this occurrence continued into the
+                # next without a stop, so its junction word carries waṣl phonemes.
+                # Emitted only when True (additive; absence = waqf). The FE walks
+                # consecutive flagged occurrences to reconstruct a waṣl group.
+                **({"wasl": True} if occ.get("wasl") else {}),
             }
             by_chapter.setdefault(chapter, []).append((occ, entry))
 

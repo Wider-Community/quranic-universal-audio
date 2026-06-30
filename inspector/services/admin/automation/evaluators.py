@@ -62,6 +62,32 @@ def _beams(beam: int, probe: int) -> list[int]:
     return [beam] if probe <= 0 or probe == beam else [beam, probe]
 
 
+def _ts_settings(
+    cfg: AutomationConfig,
+    *,
+    chapters: list[int] | None = None,
+) -> TsJobSettings:
+    """Build a ``TsJobSettings`` for an automated launch from the shared
+    ``ts_generation_defaults`` — the single owner-wide source the Releases-tab
+    "Timestamps generation" accordion edits.
+
+    All TS tunables (beam/probe/model/workers/batch_size/download_workers/
+    padding/method) come from the shared defaults; only ``chapters`` is the
+    automation's own per-launch scope choice.
+    """
+    d = cfg.ts_generation_defaults
+    return TsJobSettings(
+        beams=_beams(d.beam, d.probe_beams),
+        aligner_model=d.aligner_model,
+        chapters=chapters or None,
+        workers=d.workers,
+        batch_size=d.batch_size,
+        download_workers=d.download_workers,
+        padding=d.padding,
+        method=d.method,
+    )
+
+
 def _record(
     automation_id: str,
     *,
@@ -152,9 +178,7 @@ def eval_auto_gen_ts(cfg: AutomationConfig, now: datetime) -> None:
         try:
             timestamps_jobs.launch(
                 slug,
-                settings=TsJobSettings(
-                    beams=_beams(c.beam, c.probe_beams), aligner_model=c.aligner_model
-                ),
+                settings=_ts_settings(cfg),
                 webhook_base=_webhook_base(),
             )
             launched.append(slug)
@@ -351,9 +375,7 @@ def eval_stale_ts_regen(cfg: AutomationConfig, now: datetime) -> None:
         try:
             timestamps_jobs.launch(
                 slug,
-                settings=TsJobSettings(
-                    beams=_beams(c.beam, c.probe_beams), chapters=chapters or None
-                ),
+                settings=_ts_settings(cfg, chapters=chapters or None),
                 webhook_base=_webhook_base(),
             )
             launched.append(slug)

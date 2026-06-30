@@ -9,8 +9,8 @@ admin Releases tab. The engine is a single opt-in reconciler daemon; it reacts t
 
 | id | What it does | Trigger | Owner settings |
 |---|---|---|---|
-| `auto_gen_ts` | Launch the timestamps job for a marked-ready recitation that clears the gates | A `ready_to_generate` row (marked-ready, no TS) | gate-by-comments, gate-by-flags, beam, probe |
-| `stale_ts_regen` | Regenerate timestamps once segment edits settle | A `behind_edits` row past the guard | guard-minutes, scope (full \| affected), beam, probe |
+| `auto_gen_ts` | Launch the timestamps job for a marked-ready recitation that clears the gates | A `ready_to_generate` row (marked-ready, no TS) | gate-by-comments, gate-by-flags |
+| `stale_ts_regen` | Regenerate timestamps once segment edits settle | A `behind_edits` row past the guard | guard-minutes, scope (full \| affected) |
 | `stale_metadata` | Refresh the HF catalog once a metadata edit settles | An HF row stale for `catalog_edit` past the guard | guard-minutes |
 | `auto_release_inactive` | Force-release a reviewer's claim after prolonged inactivity (back to the awaiting-review pool; reviewer notified) | An open, not-yet-marked-ready under-review claim whose reviewer has been idle ≥ N days | inactive-days |
 | `hf_publish` | Batch-publish every fresh + stale HF candidate | Scheduled: every N days at HH:MM (owner tz) | interval-days, time-of-day, timezone |
@@ -49,6 +49,27 @@ Migration `0020_automation.sql`, repo `services/db/repo_automation.py`:
   `last_detail`. Written **only when an automation acts** — an idle tick writes
   nothing (no bucket upload). `next_run_at` is **not** stored; the route computes
   it live so idle ticks stay write-free.
+
+## Shared TS-generation defaults
+
+`AutomationConfig.ts_generation_defaults` (`TsGenerationDefaults`) is the single
+owner-wide source for the timestamps-generation knobs — beam/probe, aligner
+model, workers, batch_size, download_workers, padding, method. It lives inside
+the same config blob (no separate table) and is the base every generation
+surface reads:
+
+- the manual launch form (`routes/admin/reviews.py::_parse_ts_settings`) takes
+  every TS tunable from it; the request body carries only the per-launch
+  `chapters` scope;
+- `eval_auto_gen_ts` / `eval_stale_ts_regen` build their `TsJobSettings` from it
+  via `evaluators._ts_settings` (only `chapters` is the automation's own scope);
+- both thread `padding` / `method` into the HF job env (`PADDING` / `METHOD`),
+  which the job reads with `DEFAULT_PADDING` / `DEFAULT_METHOD` fallbacks.
+
+Edited from the Releases-tab **Timestamps generation** card
+(`TsGenerationSettingsSection.svelte`) via
+`GET|POST /api/admin/releases/ts-generation-defaults`, same
+`release.manage_automation` gate.
 
 ## Route + capability
 

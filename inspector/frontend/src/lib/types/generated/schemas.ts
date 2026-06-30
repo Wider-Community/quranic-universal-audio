@@ -144,6 +144,15 @@ export interface AdminClaimEvent {
 export interface AdminCutReleaseRequest {
   version?: string | null;
   expected_version_at_preview?: string | null;
+  settings?: ReleaseSettings | null;
+}
+/**
+ * Clip-edge padding for both release channels (all in milliseconds).
+ */
+export interface ReleaseSettings {
+  pad_start?: number;
+  pad_end?: number;
+  min_gap?: number;
 }
 /**
  * A discarded combo surfaced in the admin reciter view.
@@ -244,6 +253,7 @@ export interface AdminPublishBatchRequest {
    * @minItems 1
    */
   slugs: [string, ...string[]];
+  settings?: ReleaseSettings | null;
 }
 /**
  * A reciter's failure in the most recent batch publish. Surfaced on the
@@ -680,14 +690,16 @@ export interface AudioSurahsResponse {
  * gates mirror the reviewer's mark-ready submission: skip when they left a
  * written comment (``gate_by_comments``) or flagged any segment
  * (``gate_by_flags``). A checklist-bypass submission is always skipped.
+ *
+ * The TS tunables (beam/probe/model/…) come from the shared
+ * ``ts_generation_defaults``; ``extra="allow"`` tolerates older saved blobs that
+ * still carry the retired per-automation ``beam`` / ``aligner_model`` keys.
  */
 export interface AutoGenTsConfig {
   enabled?: boolean;
   gate_by_comments?: boolean;
   gate_by_flags?: boolean;
-  beam?: number;
-  probe_beams?: number;
-  aligner_model?: string | null;
+  [k: string]: unknown;
 }
 /**
  * The owner's full automation configuration (one persisted blob).
@@ -696,6 +708,7 @@ export interface AutoGenTsConfig {
  * being dropped when an older server re-serializes the blob (forward-compat).
  */
 export interface AutomationConfig {
+  ts_generation_defaults?: TsGenerationDefaults;
   auto_gen_ts?: AutoGenTsConfig;
   gh_cut?: GhCutConfig;
   hf_publish?: HfPublishConfig;
@@ -703,6 +716,31 @@ export interface AutomationConfig {
   stale_metadata?: StaleMetadataConfig;
   auto_release_inactive?: AutoReleaseInactiveConfig;
   [k: string]: unknown;
+}
+/**
+ * Owner-wide default knobs for every timestamps-generation surface.
+ *
+ * The single shared source the Releases-tab "Timestamps generation" accordion
+ * edits. It is the sole source of the TS tunables for every TS launch — the
+ * manual form (``routes/admin/reviews.py::_parse_ts_settings``), the auto-gen /
+ * stale-regen automations (``services/admin/automation/evaluators.py``) and,
+ * through them, the HF job (``qua_jobs/generate_timestamps.py``). Every TS
+ * tunable comes from here; the only per-launch input is the manual form's
+ * ``chapters`` scope. A field unset here cedes to the job's ``DEFAULT_*``.
+ *
+ * ``beam`` + ``probe_beams`` resolve to the ``[beam, probe]`` list passed to the
+ * aligner. ``padding`` / ``method`` are the pipeline tunables (``None`` → the
+ * job's ``DEFAULT_PADDING`` / ``DEFAULT_METHOD``).
+ */
+export interface TsGenerationDefaults {
+  beam?: number;
+  probe_beams?: number;
+  aligner_model?: string | null;
+  workers?: number | null;
+  batch_size?: number | null;
+  download_workers?: number | null;
+  padding?: string | null;
+  method?: string | null;
 }
 /**
  * Cut a global GH release on a fixed cadence (owner timezone).
@@ -739,13 +777,16 @@ export interface HfPublishConfig {
  * only when the latest timestamp-affecting edit is older than the guard, so
  * consecutive edits coalesce into one regen. ``scope`` picks full-reciter vs
  * just the affected chapters.
+ *
+ * The TS tunables (beam/probe/…) come from the shared
+ * ``ts_generation_defaults``; ``extra="allow"`` tolerates older saved blobs that
+ * still carry the retired per-automation ``beam`` / ``probe_beams`` keys.
  */
 export interface StaleTsRegenConfig {
   enabled?: boolean;
   guard_minutes?: number;
   scope?: "full" | "affected";
-  beam?: number;
-  probe_beams?: number;
+  [k: string]: unknown;
 }
 /**
  * Refresh the HF catalog once a catalog-metadata edit has settled.
@@ -1266,6 +1307,8 @@ export interface TsJobSettings {
   timeout?: string | null;
   batch_size?: number | null;
   download_workers?: number | null;
+  padding?: string | null;
+  method?: string | null;
 }
 /**
  * Payload for ``GET /api/admin/jobs`` — the unified list + a running tally.
@@ -2183,6 +2226,11 @@ export interface TsShardMeta {
  * ``[start_ms, end_ms]`` span. A verse may recur across several entries
  * (loopbacks / re-dos) — every accepted occurrence is one entry, emitted in
  * recitation order.
+ *
+ * ``wasl`` (v10, optional) marks an occurrence that continued into the *next*
+ * occurrence without a stop: its junction word carries waṣl (not waqf)
+ * phonemes, and the FE walks consecutive flagged occurrences to reconstruct a
+ * waṣl group. Absent (= False) on a stop/waqf occurrence.
  */
 export interface TsShardSegment {
   ref: string;
@@ -2192,6 +2240,7 @@ export interface TsShardSegment {
    */
   t: [unknown, unknown];
   words?: TsShardWord[];
+  wasl?: boolean;
 }
 /**
  * The ``ts_validation.json`` document — meta + verse-keyed flags.

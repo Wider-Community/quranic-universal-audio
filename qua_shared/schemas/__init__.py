@@ -60,6 +60,7 @@ from .config.automation import (
     HfPublishConfig,
     StaleMetadataConfig,
     StaleTsRegenConfig,
+    TsGenerationDefaults,
 )
 from .config.capabilities import (
     CAPABILITIES,
@@ -221,6 +222,7 @@ from .wire.seg import (
     SegValStats,
     SegValStructuralErrorItem,
 )
+from .wire.ts_refreshed import TsRefreshedRequest
 from .wire.timestamps import (
     Letter,
     PhonemeInterval,
@@ -291,6 +293,7 @@ __all__ = [
     "HfPublishConfig",
     "StaleMetadataConfig",
     "StaleTsRegenConfig",
+    "TsGenerationDefaults",
     "AdminCapabilityRow",
     "AdminCapabilityTierState",
     "AdminCutReleaseRequest",
@@ -436,6 +439,7 @@ __all__ = [
     "TsVbrResponse",
     "TsReciter",
     "TsRecitersResponse",
+    "TsRefreshedRequest",
     "Letter",
     "PhonemeInterval",
     "TsWord",

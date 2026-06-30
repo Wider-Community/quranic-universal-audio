@@ -47,7 +47,7 @@ import _bootstrap as bs  # noqa: E402
 
 from qua_sdk.components.timing.lib.cells import (  # noqa: E402
     _is_indexable,
-    annotate_segment_words,
+    annotate_ordered_segments,
 )
 
 from qua_shared import ts_shard_cells  # noqa: E402
@@ -82,8 +82,13 @@ def _stamp_doc(data: dict, *, restamp: bool) -> tuple[int, Counter, Counter, lis
             for wd in seg["words"]:
                 if len(wd) > 5:
                     del wd[5:]
-    for seg in data.get("segments", []):
-        annotate_segment_words(seg["ref"], seg["words"])
+    # Stamp in recitation order with the waṣl context threaded (the shard segments
+    # are already time-ordered + carry the per-segment `wasl` boundary flag), so a
+    # waṣl-continued boundary's cells derive in continuation form and don't drop —
+    # the same linking generation does via annotate_v2_doc.
+    seq = [(seg["ref"], seg["words"], bool(seg.get("wasl")))
+           for seg in data.get("segments", [])]
+    annotate_ordered_segments(seq)
 
     n_cells = 0
     status_dist: Counter = Counter()
@@ -149,13 +154,19 @@ def process_reciter(fs, bucket: str, slug: str, *, write: bool, restamp: bool, l
     # One Xet batch per reciter (paths, not bytes) — far faster than a commit/file.
     if to_write:
         bs.batch_write(bucket, to_write)
+    written_chapters = sorted(int(p.rsplit("/", 1)[-1].split(".")[0]) for p in to_write)
     log(
         f"{slug:44} shards={len(shards):3} cells={total_cells:6} skipped={skipped:3} "
         f"violations={len(violations)}"
         + ("" if not violations else f"  !! {violations[:3]}")
         + ("  [WROTE]" if write and not violations else "")
     )
-    return {"status": status, "tags": tags, "violations": violations}
+    return {
+        "status": status,
+        "tags": tags,
+        "violations": violations,
+        "written_chapters": written_chapters,
+    }
 
 
 # --- local-dir mode --------------------------------------------------------
@@ -222,6 +233,7 @@ def main() -> int:
     ap.add_argument("--write", action="store_true", help="write stamped shards (default: dry-run)")
     ap.add_argument("--restamp", action="store_true", help="re-derive cells even on v5 shards")
     bs.add_bucket_args(ap)
+    bs.add_notify_args(ap)
     args = ap.parse_args()
 
     def log(msg):
@@ -248,6 +260,12 @@ def main() -> int:
             if res:
                 grand_status.update(res["status"]); grand_tags.update(res["tags"])
                 grand_viol += len(res["violations"])
+                # Tell the Inspector the shards changed so staleness re-evaluates
+                # (otherwise this bucket-direct write is silent). Best-effort.
+                if args.write and res["written_chapters"]:
+                    bs.notify_ts_refreshed(
+                        args, slug, chapters=res["written_chapters"], reason="backfill_cells"
+                    )
 
     log("\n=== corpus cell status distribution ===")
     for st, c in grand_status.most_common():

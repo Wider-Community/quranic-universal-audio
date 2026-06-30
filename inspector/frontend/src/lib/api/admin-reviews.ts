@@ -147,21 +147,12 @@ export interface TimestampsJobLaunch {
     url: string | null;
 }
 
-/** Launch-form settings (maps to the backend ``_parse_ts_settings`` body).
- * The job is alignment-only — it no longer persists audio nor bakes peaks. */
-export interface TimestampsJobSettings {
-    beam: number;
-    probe_beams: number[];
-    // Acoustic model (catalog id); omitted/null → store default.
-    aligner_model?: string | null;
-    // Affected-only regen scope (omitted → full reciter).
+/** Manual launch body (maps to the backend ``_parse_ts_settings`` body).
+ * All TS tunables come from the shared owner-wide "Timestamps generation"
+ * defaults; the request carries only the per-launch chapter scope. */
+export interface TimestampsJobLaunchBody {
+    // Affected-only regen scope (omitted/null → full reciter).
     chapters?: number[] | null;
-    // Advanced (omitted → server defaults).
-    workers?: number | null;
-    flavor?: string | null;
-    timeout?: string | null;
-    batch_size?: number | null;
-    download_workers?: number | null;
 }
 
 export interface AlignerModel {
@@ -170,7 +161,7 @@ export interface AlignerModel {
     default: boolean;
 }
 
-/** Selectable acoustic models (the store catalog) for the launch form. */
+/** Selectable acoustic models (the store catalog) for the shared defaults card. */
 export async function fetchAlignerModels(signal?: AbortSignal): Promise<AlignerModel[]> {
     const resp = await fetch('/api/admin/aligner-models', { signal });
     if (!resp.ok) return _unwrapError(resp);
@@ -207,14 +198,14 @@ async function _unwrapError(resp: Response): Promise<never> {
  */
 export async function generateTimestamps(
     slug: string,
-    settings: TimestampsJobSettings,
+    body: TimestampsJobLaunchBody,
 ): Promise<TimestampsJobLaunch> {
     const resp = await fetch(
         `/api/admin/generate-timestamps/${encodeURIComponent(slug)}`,
         {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(settings),
+            body: JSON.stringify(body),
         },
     );
     if (!resp.ok) return _unwrapError(resp);

@@ -20,23 +20,10 @@
         fetchAutomation,
         saveAutomation,
     } from '../../../../../lib/api/admin-releases';
-    import { fetchAlignerModels, type AlignerModel } from '../../../../../lib/api/admin-reviews';
-
-    // Selectable acoustic models (the store catalog) for the auto-gen default.
-    let alignerModels = $state<AlignerModel[]>([]);
-    $effect(() => {
-        fetchAlignerModels()
-            .then((ms) => (alignerModels = ms))
-            .catch(() => {});
-    });
 
     // The codegen marks every defaulted field optional. The server always sends a
     // complete blob, so we normalize into a fully-required local shape on load —
     // that keeps the editor bindings type-safe and the dirty check apples-to-apples.
-    interface BeamCfg {
-        beam: number;
-        probe_beams: number;
-    }
     interface SchedCfg {
         enabled: boolean;
         interval_days: number;
@@ -48,9 +35,8 @@
             enabled: boolean;
             gate_by_comments: boolean;
             gate_by_flags: boolean;
-            aligner_model: string | null;
-        } & BeamCfg;
-        stale_ts_regen: { enabled: boolean; guard_minutes: number; scope: 'full' | 'affected' } & BeamCfg;
+        };
+        stale_ts_regen: { enabled: boolean; guard_minutes: number; scope: 'full' | 'affected' };
         stale_metadata: { enabled: boolean; guard_minutes: number };
         hf_publish: SchedCfg;
         gh_cut: SchedCfg & { next_version_override: string | null };
@@ -69,16 +55,11 @@
                 enabled: a.enabled ?? false,
                 gate_by_comments: a.gate_by_comments ?? true,
                 gate_by_flags: a.gate_by_flags ?? true,
-                aligner_model: a.aligner_model ?? null,
-                beam: a.beam ?? 50,
-                probe_beams: a.probe_beams ?? 2,
             },
             stale_ts_regen: {
                 enabled: r.enabled ?? false,
                 guard_minutes: r.guard_minutes ?? 60,
                 scope: r.scope ?? 'affected',
-                beam: r.beam ?? 50,
-                probe_beams: r.probe_beams ?? 2,
             },
             stale_metadata: { enabled: m.enabled ?? false, guard_minutes: m.guard_minutes ?? 60 },
             hf_publish: {
@@ -260,19 +241,6 @@
                                 <input type="checkbox" bind:checked={draft.auto_gen_ts.gate_by_flags} />
                                 <span>Skip when any segment is flagged</span>
                             </label>
-                            {@render beams(draft.auto_gen_ts)}
-                            {#if alignerModels.length > 1}
-                                <label class="field wide">
-                                    <span class="lbl">model</span>
-                                    <select bind:value={draft.auto_gen_ts.aligner_model}>
-                                        {#each alignerModels as m (m.id)}
-                                            <option value={m.id}>
-                                                {m.label}{m.default ? ' (default)' : ''}
-                                            </option>
-                                        {/each}
-                                    </select>
-                                </label>
-                            {/if}
                         </div>
                     {/if}
                 </div>
@@ -301,7 +269,6 @@
                                     </label>
                                 </span>
                             </div>
-                            {@render beams(draft.stale_ts_regen)}
                         </div>
                     {/if}
                 </div>
@@ -442,20 +409,6 @@
             <div class="desc">{desc}</div>
             <div class="status">{statusLine(id)}</div>
         </div>
-    </div>
-{/snippet}
-
-<!-- beam + probe (shared with the manual TS launch form). -->
-{#snippet beams(cfg: { beam: number; probe_beams: number })}
-    <div class="line">
-        <label class="field">
-            <span class="lbl">beam</span>
-            <input type="number" min="1" bind:value={cfg.beam} />
-        </label>
-        <label class="field">
-            <span class="lbl">probe</span>
-            <input type="number" min="0" bind:value={cfg.probe_beams} />
-        </label>
     </div>
 {/snippet}
 

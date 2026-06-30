@@ -133,13 +133,19 @@ def process_reciter(fs, bucket: str, slug: str, *, write: bool, log) -> dict:
     # One Xet batch per reciter (paths, not bytes) — far faster than a commit/file.
     if to_write:
         bs.batch_write(bucket, to_write)
+    written_chapters = sorted(int(p.rsplit("/", 1)[-1].split(".")[0]) for p in to_write)
     log(
         f"{slug:44} shards={len(shards):3} tagged={total_tagged:6} "
         f"repeat_segs={total_repeat:4} violations={len(violations)}"
         + ("" if not violations else f"  !! {violations[:3]}")
         + ("  [WROTE]" if write else "")
     )
-    return {"dist": dist, "violations": violations, "tagged": total_tagged}
+    return {
+        "dist": dist,
+        "violations": violations,
+        "tagged": total_tagged,
+        "written_chapters": written_chapters,
+    }
 
 
 def main() -> int:
@@ -153,6 +159,7 @@ def main() -> int:
         "--write", action="store_true", help="upload re-tagged shards (default: dry-run)"
     )
     bs.add_bucket_args(ap)
+    bs.add_notify_args(ap)
     args = ap.parse_args()
     if args.write:
         bs.confirm_mutation(args, "backfill bridge tags")
@@ -170,6 +177,11 @@ def main() -> int:
         if res:
             grand.update(res["dist"])
             grand_viol += len(res["violations"])
+            # Record the bucket-direct write so staleness re-evaluates. Best-effort.
+            if args.write and res["written_chapters"]:
+                bs.notify_ts_refreshed(
+                    args, slug, chapters=res["written_chapters"], reason="backfill_bridge_tags"
+                )
 
     log("\n=== corpus bridge distribution ===")
     for rule, c in grand.most_common():

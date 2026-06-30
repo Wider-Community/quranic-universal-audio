@@ -455,10 +455,10 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(letters).toContain('ۥ' + MADDAH);
     });
 
-    it('hamza-waṣl ibtidaa madd (ٱئْتُونِى started-on): kasra + ئ are one co-lit vowel group', () => {
-        // ٱ sounds ʔ; the synthetic helping kasra (iː) + the dropped ئ seat form ONE
-        // shared [kasra, carrier] vowel group — the ئ co-lights the iː (not greyed),
-        // mirroring the final ـِى. (Start form; cells as the phonemizer stamps them.)
+    it('hamza-waṣl ibtidaa madd (ٱئْتُونِى started-on): ئ transforms to a ي madd carrier sounding iː', () => {
+        // ٱ sounds only ʔ; the yaa-hamza ئ transforms to a ي madd carrier sounding the
+        // iː (madd ṭabīʿī), rendered as a dashed (inserted) transform cell — NOT greyed.
+        // Cells as the phonemizer now stamps them (the FE no longer re-pairs anything).
         const intervals: PhonemeInterval[] = [
             { phone: 'ʔ', start: 0, end: 0.1 },
             { phone: 'i:', start: 0.1, end: 0.4 },
@@ -472,25 +472,42 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             ],
             [
                 base(0, [0], { chars: 'ٱ' }),
-                { chars: '', role: 'haraka', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 0, tag: 'hamza_wasl_vowel', shareGroup: null },
-                base(1, [], { chars: 'ئ', status: 'dropped', tag: 'silent_unclassified' }),
+                { chars: 'ِ', role: 'haraka', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 1, tag: 'hamza_wasl_vowel', shareGroup: null },
+                { chars: 'ي', role: 'madd', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 1, tag: 'madd_tabii', shareGroup: null },
                 { chars: 'ْ', role: 'haraka', status: 'present', phonemeIndices: [], sourceLetterIndex: 1, tag: null, shareGroup: null },
                 base(2, [2], { chars: 'ت' }),
             ],
             [0, 1, 2],
         );
+        setRuleEnabled('madd_tabii', true); // colour madd-ṭabīʿī so its underline renders
         const { container } = mount([word], intervals);
-        // the kasra + ئ form a vowel group; the ئ carrier co-lights (not greyed silent).
-        const vowel = Array.from(container.querySelectorAll<HTMLElement>('.cell-group'))
-            .find((g) => g.classList.contains('vowel') && g.querySelector('.mega-letter')?.textContent === 'ئ')!;
-        expect(vowel).toBeTruthy();
-        const carrier = vowel.querySelector<HTMLElement>('.mega-letter')!;
-        expect(carrier.classList.contains('silent')).toBe(false);
-        expect(carrier.dataset.cellTimed).toBe('1');
-        // the synthetic helping vowel renders as an inserted small KASRA in that group.
-        const small = vowel.querySelector<HTMLElement>('.haraka-cell.dia-inserted .g')!;
-        expect(small.textContent).toBe('ِ');
-        // ٱ stays its own base sounding ʔ — separate from the [kasra, ئ] unit.
+        // ئ renders as the transformed ي glyph: a madd cell with the dashed (inserted)
+        // transform border, sounding (timed) — not greyed/silent.
+        const yaa = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter')).find((l) => l.textContent === 'ي')!;
+        expect(yaa).toBeTruthy();
+        expect(yaa.classList.contains('dia-inserted')).toBe(true); // dashed transform border
+        expect(yaa.classList.contains('silent')).toBe(false);
+        expect(yaa.dataset.cellTimed).toBe('1');
+        // the hamza-waṣl helping kasra is a bordered (inserted) small cell forming the
+        // kasra+yaa vowel group — the FE dashes it from status alone (glyph notwithstanding).
+        const kasra = Array.from(container.querySelectorAll<HTMLElement>('.haraka-cell')).find(
+            (h) => h.textContent?.includes('ِ'),
+        )!;
+        expect(kasra).toBeTruthy();
+        expect(kasra.classList.contains('dia-inserted')).toBe(true);
+        // the sukūn rides inert and is filtered — no ئ glyph survives.
+        expect(Array.from(container.querySelectorAll('.mega-letter')).some((l) => l.textContent === 'ئ')).toBe(false);
+        // ʔ (idx 0, under ٱ), iː (idx 1, under ي), t (idx 2, under ت) each in a DISTINCT
+        // cluster — not snapped onto the first letter.
+        const clusters = Array.from(container.querySelectorAll<HTMLElement>('.phoneme-cluster'));
+        const cl = (i: string) => clusters.findIndex((c) => c.querySelector(`.mega-phoneme[data-index="${i}"]`));
+        expect(new Set([cl('0'), cl('1'), cl('2')]).size).toBe(3);
+        // the iː phoneme carries the madd_tabii rule (the bug: it was tagged
+        // hamza_wasl_vowel and never got the madd before) — with the rule coloured it
+        // underlines on the iː itself.
+        const iLong = container.querySelector<HTMLElement>('.mega-phoneme[data-index="1"]')!;
+        expect(iLong.style.boxShadow).not.toBe('');
+        // ٱ stays its own base sounding ʔ.
         const alif = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter')).find((l) => l.textContent === 'ٱ')!;
         expect(alif.dataset.cellTimed).toBe('1');
     });
