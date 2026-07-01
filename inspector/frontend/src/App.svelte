@@ -1,10 +1,9 @@
 <script lang="ts">
     import { onMount } from 'svelte';
 
-    import { signIn, signOut } from './lib/api/auth-client';
+    import AuthControls from './lib/components/AuthControls.svelte';
     import BookmarksPanel from './lib/components/BookmarksPanel.svelte';
     import ClaimConfirmModal from './lib/components/ClaimConfirmModal.svelte';
-    import DevRoleSwitcher from './lib/components/DevRoleSwitcher.svelte';
     import EditAffordancePopover from './lib/components/EditAffordancePopover.svelte';
     import ExternalLinks from './lib/components/ExternalLinks.svelte';
     import InfoModal from './lib/components/info/InfoModal.svelte';
@@ -15,7 +14,7 @@
     import ThemeToggle from './lib/components/ThemeToggle.svelte';
     import ToastHost from './lib/components/ToastHost.svelte';
     import { dashPort } from './lib/playback/dash-port';
-    import { currentUser, isSignedIn, loadCurrentUser } from './lib/stores/current-user';
+    import { loadCurrentUser } from './lib/stores/current-user';
     import { playerContext } from './lib/stores/player-context';
     import type { PublicDelivery } from './lib/types/generated/schemas';
     import { activeTab as activeTabStore, getActiveTab, setActiveTab } from './lib/utils/active-tab';
@@ -61,14 +60,6 @@
     function onCombinationSelect(ev: CustomEvent<PublicDelivery>): void {
         const d = ev.detail;
         playerContext.update((s) => ({ ...s, delivery: d, positionMs: 0, isPlaying: true }));
-    }
-
-    function _onSignIn() {
-        signIn();
-    }
-
-    function _onSignOut() {
-        void signOut();
     }
 
     function cleanupLegacyAudioKeys(): void {
@@ -122,22 +113,7 @@
         </div>
         <div class="auth-controls">
             <ThemeToggle />
-            {#if $currentUser.dev_mode}
-                <!-- Local dev only — never rendered on the deployed Space. -->
-                <DevRoleSwitcher />
-            {:else if isSignedIn($currentUser)}
-                <span class="auth-login" title="Signed in as {$currentUser.login}">
-                    {$currentUser.login}
-                    {#if $currentUser.role && $currentUser.role !== 'contributor'}
-                        <span class="auth-role">·{$currentUser.role}</span>
-                    {/if}
-                </span>
-                <button type="button" class="auth-btn" on:click={_onSignOut}>Sign out</button>
-            {:else}
-                <button type="button" class="auth-btn auth-btn--cta" on:click={_onSignIn}>
-                    Sign in with HF
-                </button>
-            {/if}
+            <AuthControls />
         </div>
     </header>
 
@@ -231,44 +207,8 @@
     .auth-controls {
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 8px;
         grid-column: 3;
         justify-self: end;
-    }
-    .auth-login {
-        font-size: 0.92rem;
-        color: var(--text-secondary);
-    }
-    .auth-role {
-        margin-left: 4px;
-        font-weight: 600;
-        color: var(--role-blue);
-        text-transform: capitalize;
-    }
-    .auth-btn {
-        border: 1px solid var(--border-default);
-        background: var(--panel);
-        color: var(--text-secondary);
-        padding: 6px 12px;
-        border-radius: var(--r-2);
-        cursor: pointer;
-        font-size: 0.9rem;
-        transition: background var(--t-base), border-color var(--t-base), color var(--t-base);
-    }
-    .auth-btn:hover {
-        background: var(--panel-2);
-        border-color: var(--accent);
-        color: var(--accent);
-    }
-    .auth-btn--cta {
-        background: var(--cta-bg);
-        color: var(--cta-fg);
-        border: 0;
-        font-weight: 600;
-    }
-    .auth-btn--cta:hover {
-        background: var(--cta-bg-hover);
-        border-color: transparent;
-        color: var(--cta-fg);
     }
 </style>
