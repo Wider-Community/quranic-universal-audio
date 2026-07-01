@@ -222,11 +222,12 @@
     --banner-info-bg:      #1b3a4b;
     --banner-info-border:  #4361ee;
 
-    /* external-link brand marks */
+    /* external-link brand marks (hover) + the muted resting rail colour */
     --brand-gh:            #e6edf3;
     --brand-hf:            #ffd21e;
     --brand-discord:       #5865f2;
     --brand-rel:           #f0a500;
+    --brand-rail-fg:       oklch(0.560 0.010 268);   /* = text-muted on dark */
 
     /* dev-only chrome (DevRoleSwitcher) */
     --state-dev-fg:        #d8a13a;

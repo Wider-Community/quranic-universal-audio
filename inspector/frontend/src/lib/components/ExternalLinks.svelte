@@ -64,7 +64,7 @@
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        color: var(--text-muted);
+        color: var(--brand-rail-fg);
         text-decoration: none;
         padding: 8px;
         border-radius: 7px;
@@ -91,7 +91,7 @@
         transition: filter 0.2s cubic-bezier(0.22, 1, 0.36, 1);
     }
     :global(html[data-theme='light']) .link .hf-logo {
-        filter: grayscale(1) brightness(0.5) opacity(0.8);
+        filter: grayscale(1) brightness(0.72) opacity(0.7);
     }
     .link:hover .hf-logo,
     .link:focus-visible .hf-logo {
