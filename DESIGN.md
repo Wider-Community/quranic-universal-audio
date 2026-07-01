@@ -162,6 +162,9 @@ Text is a four-step grey ramp on the dark surface; borders a three-step ramp.
 
 **The Hue-Plus-Label Rule.** State is never communicated by color alone. Every state hue ships with a text label and is safe to lose to color-blindness or grayscale.
 
+### Two Themes
+The palette above is the **dark** default. A calm, cool-paper **light theme** is a fully-supported opt-in peer: the same blue-violet identity carried onto near-white, every accent and state hue darkened to clear AA on paper, both flowing from one token set. This section stays the *core dark reference* — the full contract (surface ramp for both themes, the extended semantic families added since this doc was first written: status `ok`/`warn`/`bad`/`info`, the tokenized editor action-button palette, waveform `--wf-*`, chart `--chart-*`, scrims + `--shadow-*`, and the light value for every token) lives in [`docs/reference/theming.md`](docs/reference/theming.md), the ground truth for anything colour. New UI consumes `var(--token)` and themes for both automatically; never a raw colour in component code.
+
 ## 3. Typography
 
 **Body / UI Font:** system sans — `-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif`

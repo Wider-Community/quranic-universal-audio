@@ -10,7 +10,7 @@ Three-tab SPA at `inspector/frontend/src/`. TypeScript (strict) + Vite + Svelte 
 | Bundler | Vite 5, `target: es2022` |
 | UI | Svelte 5 (`@sveltejs/vite-plugin-svelte` ^4, mounted via `mount()` in `main.ts`) |
 | Charts | Chart.js 4 + chartjs-plugin-annotation; split into a `charts` chunk via `rollupOptions.output.manualChunks` |
-| CSS | Plain CSS in `src/styles/`, imported from `main.ts` (`tokens.css` first — defines `:root` vars) |
+| CSS | Plain CSS in `src/styles/`, imported from `main.ts` (`tokens.css` first — defines the dark `:root` vars; `theme-light.css` last — the `[data-theme="light"]` override). Token-driven light/dark; canvas colours bridge via `lib/utils/canvas-theme.ts`. → [`theming.md`](theming.md) |
 | Audio | Web Audio API; per-tab `AudioPort` transport (`lib/playback/`) |
 | Unit tests | Vitest 3 + `@testing-library/svelte` 5 + `happy-dom` |
 | E2E | Playwright (`npm run test:e2e`) |
