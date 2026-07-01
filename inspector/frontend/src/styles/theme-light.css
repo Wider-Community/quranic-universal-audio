@@ -109,8 +109,11 @@
     --info-fg:             oklch(0.520 0.160 262);
     --info-solid:          oklch(0.520 0.160 262);
     --info-solid-hover:    oklch(0.460 0.160 262);
-    --neutral-solid:       oklch(0.520 0.012 262);
-    --neutral-solid-hover: oklch(0.460 0.012 262);
+    /* neutral/secondary BUTTON surface — light grey with dark ink (the buttons
+       take --text-primary via .btn-sm, which flips dark on light), so a heavy
+       dark solid never lands on the light card. */
+    --neutral-solid:       oklch(0.928 0.008 262);
+    --neutral-solid-hover: oklch(0.896 0.010 262);
     --neutral-tint:        oklch(0.520 0.012 262 / 0.10);
 
     /* ---------- editor action buttons ---------- */
@@ -120,8 +123,10 @@
     --btn-preview-bg-hover:  oklch(0.390 0.160 312);
     --btn-merge-bg:          oklch(0.520 0.150 255);
     --btn-merge-bg-hover:    oklch(0.460 0.150 255);
-    --btn-slate-bg:          oklch(0.450 0.020 235);
-    --btn-slate-bg-hover:    oklch(0.390 0.020 235);
+    /* slate = the SECONDARY editor buttons (Adjust / Split / Edit Ref / Play /
+       Go to / val-muted). Light grey surface + dark ink, not a dark solid. */
+    --btn-slate-bg:          oklch(0.928 0.008 262);
+    --btn-slate-bg-hover:    oklch(0.896 0.010 262);
     --btn-disabled-bg:       oklch(0.870 0.006 268);
 
     /* ---------- secondary marker accents ---------- */

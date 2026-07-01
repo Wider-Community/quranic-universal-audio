@@ -41,6 +41,22 @@
     transition: background 0.2s;
 }
 
+/* Solid, colour-carrying action buttons always take white ink — .btn-sm below
+   sets --text-primary (which flips DARK on the light theme), so without this the
+   glyph would go dark-on-red/blue/green and vanish. Selectors are doubled
+   (.btn.btn-x) to out-specify .btn-sm regardless of source order. The
+   neutral/slate secondary buttons deliberately keep --text-primary: their
+   light-theme fill is a light grey, so dark ink is what reads. */
+.btn.btn-confirm,
+.btn.btn-delete,
+.btn.btn-merge-prev,
+.btn.btn-merge-next,
+.btn.btn-save,
+.btn.btn-history,
+.btn.btn-preview {
+    color: var(--ink-on-color);
+}
+
 .btn:hover {
     background: var(--info-solid-hover);
 }

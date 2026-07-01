@@ -381,10 +381,12 @@
     font-size: 0.78rem;
 }
 .val-action-btn:hover { background: var(--ok-solid-hover); }
-.val-action-btn:disabled { background: var(--neutral-solid); cursor: default; }
+.val-action-btn:disabled { background: var(--neutral-solid); color: var(--text-faint); cursor: default; }
 
 .val-action-btn-danger { background: var(--bad-solid); }
 .val-action-btn-danger:hover { background: var(--bad-solid-hover); }
 
-.val-action-btn-muted { background: var(--btn-slate-bg); }
+/* Muted = the secondary/quiet action: a light-grey surface on the light theme,
+   so it takes dark ink (--text-primary) rather than the base white. */
+.val-action-btn-muted { background: var(--btn-slate-bg); color: var(--text-primary); }
 .val-action-btn-muted:hover { background: var(--btn-slate-bg-hover); }
