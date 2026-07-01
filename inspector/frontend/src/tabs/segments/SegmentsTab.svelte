@@ -19,7 +19,7 @@
     import { openGuidesGate } from '../../lib/stores/guides-gate';
     import type { SegReciter } from '../../lib/types/generated/schemas';
     import { LS_KEYS } from '../../lib/utils/constants';
-    import { pendingSegmentsDeepLink } from '../../lib/utils/goto-segments';
+    import { pendingSegmentsDeepLink, type SegmentsDeepLink } from '../../lib/utils/goto-segments';
     import { surahInfoReady } from '../../lib/utils/surah-info';
     import { catalogData, loadCatalog, startCatalogPolling } from '../dashboard/stores/catalog-data';
     import EditOverlay from './components/edit/EditOverlay.svelte';
@@ -38,6 +38,7 @@
     import {
         getChapterSegments,
         pickerDisplayChapter,
+        type SegAllState,
         segAllData,
         segAllReciters,
         selectedChapter,
@@ -139,6 +140,58 @@
         markReadyReviewSlug = $selectedReciter;
         markReadyReviewOpen = true;
         pendingSegmentsDeepLink.set(null);
+    }
+
+    // "Open in Segments" verse deep-link (Timestamps footer redirect): once the
+    // target reciter's corpus is loaded, switch to the verse's chapter and
+    // scroll its first segment row into view. `segAllData !== null` is the
+    // "fresh corpus for the current reciter" signal — reloadCurrentReciter nulls
+    // it (clearPerReciterState) before refetching — and the `slug` guard rejects
+    // a stale corpus mid-switch. `tick()` defers past the synchronous reactive
+    // flush so a concurrent switch (null → refetch) has settled before we act.
+    // Consumed once, then cleared.
+    let _verseDeepLinkDone = '';
+    $: void maybeConsumeVerseDeepLink($pendingSegmentsDeepLink, $selectedReciter, $segAllData);
+
+    async function maybeConsumeVerseDeepLink(
+        dl: SegmentsDeepLink | null,
+        reciter: string,
+        all: SegAllState | null,
+    ): Promise<void> {
+        const fv = dl?.focusVerse;
+        if (!fv || !all || reciter !== fv.slug) return;
+        const key = `${fv.slug}:${fv.chapter}:${fv.verse}`;
+        if (_verseDeepLinkDone === key) return;
+        await tick();
+        // Re-validate after the flush: only act when the fresh corpus for this
+        // slug is resident and the intent hasn't been superseded (the pending-
+        // store check is the mutex against concurrent reactive fires).
+        if (get(segAllData) === null || get(selectedReciter) !== fv.slug) return;
+        if (get(pendingSegmentsDeepLink) !== dl) return;
+        _verseDeepLinkDone = key;
+        pendingSegmentsDeepLink.set(null);
+        await _focusVerse(fv.chapter, fv.verse);
+    }
+
+    async function _focusVerse(chapter: number, verse: number): Promise<void> {
+        const chStr = String(chapter);
+        if (get(selectedChapter) !== chStr) {
+            // Mirror the manual Sura pick: collapse any open accordion + clear
+            // the picker-display override, then load the chapter.
+            valUiOpenCategory.set(null);
+            clearAccordionPin();
+            pickerDisplayChapter.set(null);
+            selectedChapter.set(chStr);
+            await loadChapterData(get(selectedReciter), chStr);
+        }
+        await tick();
+        // Find the verse's first segment and scroll its row into view — the same
+        // path Go-To / verse-jump use (SegmentRow watches targetSegmentIndex).
+        const segs = getChapterSegments(chapter);
+        const first = segs.find((s) => s.matched_ref?.startsWith(`${chapter}:${verse}:`));
+        if (!first) return;
+        selectedVerse.set(String(verse));
+        targetSegmentIndex.set({ chapter: first.chapter ?? chapter, index: first.index });
     }
 
     $: filterBarHidden = $segAllData === null;

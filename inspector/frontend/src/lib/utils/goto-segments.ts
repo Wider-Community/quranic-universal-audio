@@ -21,7 +21,9 @@ import { LS_KEYS, TAB_NAMES } from './constants';
 
 /** A follow-up focus intent for the Segments tab, applied after the reciter's
  *  segments load. Cross-tab handoff: set by a navigating surface (e.g. the
- *  notifications rail), consumed exactly once by `ValidationPanel`. */
+ *  notifications rail, or the Timestamps footer "open in Segments" redirect),
+ *  consumed exactly once by `ValidationPanel` (flag intents) or `SegmentsTab`
+ *  (`focusVerse` / `openMarkReadyReview`). */
 export interface SegmentsDeepLink {
     /** Open the "Flagged Issues" accordion once flagged segments are present. */
     openFlagged?: boolean;
@@ -29,6 +31,11 @@ export interface SegmentsDeepLink {
     focusFlaggedUid?: string;
     /** Open the read-only mark-ready review modal once the reciter task loads. */
     openMarkReadyReview?: boolean;
+    /** Switch to this verse's chapter and scroll its first segment row into
+     *  view, once the target reciter's corpus + chapter data have loaded.
+     *  `slug` guards the consumer against firing while the previous reciter's
+     *  corpus is still resident during a switch. Consumed by `SegmentsTab`. */
+    focusVerse?: { slug: string; chapter: number; verse: number };
 }
 
 export const pendingSegmentsDeepLink = writable<SegmentsDeepLink | null>(null);

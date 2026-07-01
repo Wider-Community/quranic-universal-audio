@@ -24,6 +24,7 @@
     import { segPort } from './tabs/segments/stores/playback';
     import TimestampsFooterAnalysis from './tabs/timestamps/components/TimestampsFooterAnalysis.svelte';
     import TimestampsFooterLeft from './tabs/timestamps/components/TimestampsFooterLeft.svelte';
+    import TimestampsFooterOpenSegments from './tabs/timestamps/components/TimestampsFooterOpenSegments.svelte';
     import TimestampsFooterReport from './tabs/timestamps/components/TimestampsFooterReport.svelte';
     import TimestampsTab from './tabs/timestamps/TimestampsTab.svelte';
 
@@ -167,6 +168,11 @@
             <svelte:fragment slot="center-trail">
                 {#if activeTab === TAB_NAMES.TIMESTAMPS}
                     <TimestampsFooterAnalysis />
+                {/if}
+            </svelte:fragment>
+            <svelte:fragment slot="download-lead">
+                {#if activeTab === TAB_NAMES.TIMESTAMPS}
+                    <TimestampsFooterOpenSegments />
                 {/if}
             </svelte:fragment>
         </BottomPlayer>
