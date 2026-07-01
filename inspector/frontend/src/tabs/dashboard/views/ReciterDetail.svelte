@@ -535,8 +535,11 @@
 <style>
     .detail {
         padding: var(--s-4) var(--s-6) var(--s-6);
-        max-width: 1100px;
-        width: min(96vw, 1100px);
+        /* Fill the modal shell rather than force a fixed width — the Modal card
+           caps at 1080px, so a wider detail overflowed and scrolled the body
+           horizontally. Filling also keeps the timeline-pin's negative-margin
+           bleed aligned to the body edges. */
+        width: 100%;
         min-height: 240px;
     }
     .state {

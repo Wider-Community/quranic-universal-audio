@@ -104,7 +104,7 @@
 </script>
 
 <div class="container">
-    <header>
+    <header class:rail-aligned={activeTab === TAB_NAMES.DASHBOARD}>
         <ExternalLinks />
         <div class="tab-bar">
             <button class="tab-btn" class:active={activeTab === TAB_NAMES.DASHBOARD} data-tab={TAB_NAMES.DASHBOARD} on:click={() => setActiveTab(TAB_NAMES.DASHBOARD)}>Dashboard</button>
@@ -210,5 +210,17 @@
         gap: 8px;
         grid-column: 3;
         justify-self: end;
+    }
+    /* Dashboard lays its content out as two 320px rails inset one --gutter from
+       the page edge. Match that in the header (Dashboard only, since the other
+       tabs are full-bleed): the project-link icons line up with the left rail's
+       text column, and the auth/theme cluster with the right rail's edge. */
+    header.rail-aligned :global(.link-rail) {
+        /* the rail's labels (e.g. "Status") sit 16px inside the rail box and the
+           icon carries 8px of inner padding, so glyph offset = gutter + 16 - 8 */
+        padding-left: calc(var(--gutter) + 8px);
+    }
+    header.rail-aligned .auth-controls {
+        padding-right: var(--gutter);
     }
 </style>
