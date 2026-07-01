@@ -158,7 +158,7 @@
     .backdrop {
         position: fixed;
         inset: 0;
-        background: oklch(0.06 0.005 268 / 0.72);
+        background: var(--scrim);
         backdrop-filter: blur(3px);
         z-index: 120;
         display: flex;
@@ -181,8 +181,7 @@
         display: flex;
         flex-direction: column;
         overflow: hidden;
-        box-shadow: 0 32px 80px oklch(0 0 0 / 0.45),
-                    0 2px 8px oklch(0 0 0 / 0.3);
+        box-shadow: var(--shadow-modal);
         animation: modal-in var(--t-slow) var(--ease-out-expo);
     }
     .modal.wide {

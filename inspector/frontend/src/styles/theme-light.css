@@ -1,0 +1,274 @@
+/* theme-light.css — the light theme.
+ *
+ * One override block, keyed off `:root[data-theme="light"]` (the attribute is
+ * set on <html> by the inline script in index.html before first paint, and
+ * thereafter by lib/stores/theme.svelte.ts). Imported LAST in main.ts so it
+ * wins the cascade over tokens.css / base.css / highlight-constants.css.
+ *
+ * Design intent — "calm, cool paper". The dark theme's blue-violet identity is
+ * preserved: a soft cool-grey page (never warm cream), low chroma, softened
+ * contrast for long review sittings. The cyan accent and every lifecycle/state
+ * hue DARKEN so they stay legible on a light surface (white-on-dark inks flip to
+ * dark-on-light, and the accent's own button-ink flips to white). Depth, which
+ * the dark theme carries purely by a lightness ramp, is carried here by borders
+ * plus a single soft shadow on floating surfaces (dark stays flat).
+ *
+ * INVARIANT: custom properties only — no selectors beyond this one. Re-skinning
+ * is entirely a token swap; component CSS is theme-agnostic.
+ */
+
+:root[data-theme="light"] {
+    /* ---------- surface ramp ---------- */
+    /* Cool blue-violet greys. Page is a restful grey; cards lift to near-white;
+       hover is a gentle grey wash; wells recede. Near white there's little
+       lightness headroom, so borders + shadows do the elevation work. */
+    --canvas:           oklch(0.971 0.004 268);
+    --canvas-inset:     oklch(0.934 0.007 268);
+    --panel:            oklch(0.999 0.0015 268);
+    --panel-2:          oklch(0.957 0.008 268);
+    --elevated:         oklch(0.928 0.011 268);
+
+    /* ---------- borders ---------- */
+    --border-quiet:     oklch(0.922 0.006 268);
+    --border-default:   oklch(0.880 0.009 268);
+    --border-strong:    oklch(0.780 0.013 268);
+
+    /* ---------- text ---------- */
+    --text-primary:     oklch(0.270 0.020 275);
+    --text-secondary:   oklch(0.430 0.018 275);
+    --text-muted:       oklch(0.510 0.016 275);
+    --text-faint:       oklch(0.600 0.012 275);
+
+    /* ---------- accent (darkened for paper; ink flips to white) ---------- */
+    --accent:           oklch(0.560 0.130 233);
+    --accent-strong:    oklch(0.500 0.135 233);
+    --accent-tint:      oklch(0.560 0.130 233 / 0.12);
+    --accent-tint-soft: oklch(0.560 0.130 233 / 0.06);
+    --accent-fg:        oklch(0.995 0 0);
+
+    /* ---------- lifecycle state semantics (darkened fg; pale tint bg) ---------- */
+    --state-published-fg:         oklch(0.500 0.130 150);
+    --state-published-bg:         oklch(0.500 0.130 150 / 0.14);
+    --state-under-review-fg:      oklch(0.520 0.120 233);
+    --state-under-review-bg:      oklch(0.520 0.120 233 / 0.14);
+    --state-available-fg:         oklch(0.500 0.150 300);
+    --state-available-bg:         oklch(0.500 0.150 300 / 0.14);
+    --state-requested-fg:         oklch(0.500 0.020 270);
+    --state-requested-bg:         oklch(0.500 0.020 270 / 0.12);
+    --state-available-request-fg: oklch(0.560 0.014 270);
+    --state-available-request-bg: oklch(0.560 0.014 270 / 0.12);
+    --state-discarded-fg:         oklch(0.600 0.010 270);
+    --state-discarded-bg:         oklch(0.600 0.010 270 / 0.10);
+    /* amber is illegible on white — error/warn become a darker ochre. */
+    --state-error-fg:             oklch(0.520 0.130 55);
+    --state-error-bg:             oklch(0.520 0.130 55 / 0.14);
+    --state-warn-fg:              oklch(0.520 0.130 62);
+    --state-warn-bg:              oklch(0.520 0.130 62 / 0.13);
+    --state-warn-border:          oklch(0.520 0.130 62 / 0.40);
+    --state-missing-fg:           oklch(0.520 0.190 27);
+    --state-missing-bg:           oklch(0.520 0.190 27 / 0.14);
+    --state-missing-border:       oklch(0.520 0.190 27 / 0.45);
+    --state-missing-border-strong:oklch(0.520 0.190 27 / 0.85);
+
+    /* ---------- on-color ink ---------- */
+    --ink-on-color:        oklch(0.999 0 0);
+
+    /* ---------- form controls + extra surfaces ---------- */
+    --input-bg:            oklch(0.999 0.0015 268);
+    --input-hover-bg:      oklch(0.952 0.009 268);
+    --surface-sunken:      oklch(0.944 0.008 268);
+    --popover-bg:          oklch(0.999 0.0015 268);
+    --panel-sidebar:       oklch(0.963 0.006 268);
+
+    /* ---------- accent derivations ---------- */
+    --accent-tint-strong:  oklch(0.560 0.130 233 / 0.20);
+    --accent-tint-hover:   oklch(0.560 0.130 233 / 0.12);
+    --accent-border:       oklch(0.560 0.130 233 / 0.40);
+    --accent-border-soft:  oklch(0.560 0.130 233 / 0.28);
+    --accent-soft:         oklch(0.560 0.130 233 / 0.55);
+    --accent-banner-fg:    oklch(0.400 0.100 233);
+
+    /* ---------- role / CTA ---------- */
+    --role-blue:           oklch(0.520 0.140 262);
+    --cta-bg:              oklch(0.740 0.145 72);
+    --cta-bg-hover:        oklch(0.680 0.150 70);
+    --cta-fg:              oklch(0.200 0.020 70);
+    /* Sign-in: amber reads garish on paper, so it becomes the calm app accent
+       (ties into the pill's blue avatar + role chip); ink flips to white. */
+    --signin-bg:           oklch(0.560 0.130 233);
+    --signin-bg-hover:     oklch(0.500 0.135 233);
+    --signin-fg:           oklch(0.995 0 0);
+
+    /* ---------- status semantics (unified onto one calm hue each) ---------- */
+    --ok-fg:               oklch(0.520 0.130 150);
+    --ok-tint:             oklch(0.520 0.130 150 / 0.12);
+    --ok-solid:            oklch(0.520 0.130 150);
+    --ok-solid-hover:      oklch(0.460 0.130 150);
+    --warn-fg:             oklch(0.550 0.140 65);
+    --warn-tint:           oklch(0.550 0.140 65 / 0.13);
+    --bad-fg:              oklch(0.530 0.190 27);
+    --bad-tint:            oklch(0.530 0.190 27 / 0.12);
+    --bad-tint-strong:     oklch(0.530 0.190 27 / 0.16);
+    --bad-solid:           oklch(0.530 0.190 27);
+    --bad-solid-hover:     oklch(0.470 0.190 27);
+    --info-fg:             oklch(0.520 0.160 262);
+    --info-solid:          oklch(0.520 0.160 262);
+    --info-solid-hover:    oklch(0.460 0.160 262);
+    /* neutral/secondary BUTTON surface — light grey with dark ink (the buttons
+       take --text-primary via .btn-sm, which flips dark on light), so a heavy
+       dark solid never lands on the light card. */
+    --neutral-solid:       oklch(0.928 0.008 262);
+    --neutral-solid-hover: oklch(0.896 0.010 262);
+    --neutral-tint:        oklch(0.520 0.012 262 / 0.10);
+
+    /* ---------- editor action buttons ---------- */
+    --btn-history-bg:        oklch(0.420 0.150 274);
+    --btn-history-bg-hover:  oklch(0.360 0.140 274);
+    --btn-preview-bg:        oklch(0.450 0.170 312);
+    --btn-preview-bg-hover:  oklch(0.390 0.160 312);
+    --btn-merge-bg:          oklch(0.520 0.150 255);
+    --btn-merge-bg-hover:    oklch(0.460 0.150 255);
+    /* slate = the SECONDARY editor buttons (Adjust / Split / Edit Ref / Play /
+       Go to / val-muted). Light grey surface + dark ink, not a dark solid. */
+    --btn-slate-bg:          oklch(0.928 0.008 262);
+    --btn-slate-bg-hover:    oklch(0.896 0.010 262);
+    --btn-disabled-bg:       oklch(0.870 0.006 268);
+
+    /* ---------- secondary marker accents ---------- */
+    --bleed-orange:        oklch(0.580 0.150 55);
+    --bleed-orange-tint:   oklch(0.580 0.150 55 / 0.15);
+    --repeat-violet:       oklch(0.520 0.170 300);
+    --repeat-violet-tint:  oklch(0.520 0.170 300 / 0.16);
+    --split-yellow:        oklch(0.620 0.160 95);
+
+    /* ---------- waveform + edit-mode cursors ---------- */
+    --wf-bg:               oklch(0.945 0.007 268);
+    --wf-fill:             oklch(0.560 0.130 233 / 0.22);
+    --wf-stroke:           oklch(0.520 0.130 233);
+    /* dim un-focused regions with a LIGHT veil, not black */
+    --wf-dim-overlay:      oklch(0.971 0.004 268 / 0.60);
+    --wf-preview-playhead: oklch(0.550 0.220 5);
+    --wf-delta-add:        oklch(0.520 0.130 150 / 0.28);
+    --wf-delta-remove:     oklch(0.530 0.190 27 / 0.26);
+    --wf-handle-start:     oklch(0.520 0.130 150);
+    --wf-handle-end:       oklch(0.530 0.190 27);
+    --wf-split-cursor:     oklch(0.620 0.160 95);
+    --wf-merge-cursor:     oklch(0.600 0.150 80);
+    --wf-region-tint:      oklch(0.550 0.140 65 / 0.14);
+
+    /* ---------- stats charts ---------- */
+    --chart-bar:           oklch(0.560 0.130 233);
+    --chart-bar-muted:     oklch(0.620 0.012 268);
+    --chart-bar-warn:      oklch(0.550 0.140 65);
+    --chart-bar-bad:       oklch(0.530 0.190 27);
+    --chart-bar-good:      oklch(0.520 0.130 150);
+    --chart-refline:       oklch(0.530 0.190 27);
+    --chart-refline-floor: oklch(0.480 0.170 320);
+    --chart-median:        oklch(0.580 0.120 100);
+    --chart-label-bg:      oklch(0.999 0.0015 268 / 0.85);
+
+    /* ---------- analysis-cell chrome ---------- */
+    --ts-inserted-border:  oklch(0.620 0.020 270);
+    --ts-silent-fg:        oklch(0.560 0.012 268);
+    --ts-idle-fg:          oklch(0.480 0.015 268);
+    --ts-waqf-fg:          oklch(0.450 0.020 270);
+    /* Deeper fade than dark: over near-white paper a 0.5 wash barely separates a
+       silent glyph from a pronounced one, so light needs a heavier mute. */
+    --ts-mute-opacity:     0.4;
+    --ts-translation-bg:   oklch(0.960 0.014 80);
+    --ts-translation-fg:   oklch(0.420 0.040 80);
+
+    /* ---------- segments edit-toolbar chrome (lightness inverted) ---------- */
+    --chrome-ink:          oklch(0.400 0.012 250);
+    --chrome-ink-muted:    oklch(0.500 0.012 250);
+    --chrome-ink-strong:   oklch(0.280 0.012 250);
+    --chrome-border:       oklch(0.860 0.008 250);
+    --chrome-hover-bg:     oklch(0.950 0.008 250);
+    --chrome-hover-border: oklch(0.840 0.010 250);
+    --chrome-active-bg:    oklch(0.930 0.010 250);
+
+    /* ---------- split-cursor active pill ---------- */
+    --split-active-bg:     oklch(0.850 0.100 95 / 0.55);
+    --split-active-border: oklch(0.620 0.150 95);
+    --split-active-fg:     oklch(0.400 0.100 95);
+    --split-muted:         oklch(0.700 0.040 95 / 0.50);
+
+    /* ---------- guide goal callout ---------- */
+    --goal-fg:             oklch(0.500 0.120 165);
+    --goal-text:           oklch(0.380 0.080 165);
+    --goal-accent:         oklch(0.550 0.140 162);
+    --goal-bg:             oklch(0.550 0.140 162 / 0.10);
+    --goal-border:         oklch(0.550 0.140 162 / 0.30);
+
+    /* ---------- sticky info banner ---------- */
+    --banner-info-bg:      oklch(0.940 0.030 233);
+    --banner-info-border:  oklch(0.550 0.140 255);
+
+    /* ---------- external-link brand marks (GitHub near-white inverts) ---------- */
+    --brand-gh:            oklch(0.300 0.010 268);
+    --brand-hf:            oklch(0.800 0.160 85);
+    --brand-discord:       oklch(0.520 0.200 268);
+    --brand-rel:           oklch(0.700 0.150 72);
+    /* Softer, recessive resting rail on paper — text-muted (0.51) reads too
+       heavy on near-white; this is the light peer of the dark muted mark. */
+    --brand-rail-fg:       oklch(0.680 0.010 268);
+
+    /* ---------- dev-only chrome ---------- */
+    --state-dev-fg:        oklch(0.550 0.130 70);
+    --state-dev-bg:        oklch(0.550 0.130 70 / 0.10);
+    --dev-select-fg:       oklch(0.350 0.060 70);
+
+    /* ---------- control knobs ---------- */
+    --knob-shadow:         0 1px 2px oklch(0.300 0.030 275 / 0.25);
+    --knob-ring:           oklch(0.300 0.030 275 / 0.35);
+
+    /* ---------- subtle confirm / discard buttons ---------- */
+    --btn-confirm-bg:      oklch(0.500 0.130 150);
+    --btn-confirm-bg-hover:oklch(0.440 0.130 150);
+    --btn-confirm-border:  oklch(0.560 0.130 150);
+    --btn-confirm-fg:      oklch(0.999 0 0);
+    --btn-discard-bg:      oklch(0.520 0.190 27);
+    --btn-discard-bg-hover:oklch(0.460 0.190 27);
+    --btn-discard-border:  oklch(0.560 0.190 27);
+    --btn-discard-fg:      oklch(0.999 0 0);
+
+    /* ---------- scrims + elevation (soft shadows, soft veil) ---------- */
+    --scrim:               oklch(0.300 0.030 275 / 0.32);
+    --scrim-strong:        oklch(0.280 0.030 275 / 0.40);
+    --hairline-on-color:   oklch(1 0 0 / 0.28);
+    --shadow-card:         0 1px 2px oklch(0.300 0.030 275 / 0.08);
+    --shadow-pop:          0 8px 28px oklch(0.300 0.030 275 / 0.14);
+    --shadow-modal:        0 18px 48px oklch(0.300 0.030 275 / 0.20),
+                           0 2px 6px oklch(0.300 0.030 275 / 0.10);
+
+    /* ---------- playback highlight default (overridden live by config) ---------- */
+    --anim-highlight-color: oklch(0.620 0.150 70);
+
+    /* ---------- analysis highlight surfaces (also set by highlight-model JS) ---------- */
+    --hl-cell-rest:        oklch(0.955 0.006 268);
+    --hl-cell-wash:        oklch(0.918 0.010 268);
+    --hl-letter-color:     oklch(0.550 0.110 185);
+    --hl-phoneme-color:    oklch(0.500 0.160 265);
+
+    /* ---------- tajweed underlines (darkened to read on light cells) ---------- */
+    --tj-madd-jaiz:        oklch(0.580 0.150 350);
+    --tj-madd-wajib:       oklch(0.520 0.180 355);
+    --tj-madd-lazim:       oklch(0.500 0.160 32);
+    --tj-madd-arid:        oklch(0.620 0.160 55);
+    --tj-madd-leen:        oklch(0.640 0.140 75);
+    --tj-madd-tabii:       oklch(0.480 0.090 80);
+    --tj-idgham-ghunnah:   oklch(0.560 0.090 195);
+    --tj-idgham-shafawi:   oklch(0.560 0.150 155);
+    --tj-ghunnah:          oklch(0.480 0.120 160);
+    --tj-ikhfaa:           oklch(0.560 0.140 310);
+    --tj-ikhfaa-shafawi:   oklch(0.520 0.160 295);
+    --tj-iqlab:            oklch(0.460 0.160 270);
+    --tj-izhar-halqi:      oklch(0.580 0.110 20);
+    --tj-izhar-shafawi:    oklch(0.580 0.110 20);
+    --tj-tafkheem:         oklch(0.420 0.220 265);
+    --tj-qalqala:          oklch(0.560 0.140 250);
+    --tj-idgham-bila:      oklch(0.550 0 0);
+    --tj-mutamathilayn:    oklch(0.500 0.100 105);
+    --tj-mutaqaribayn:     oklch(0.560 0.110 105);
+    --tj-mutajanisayn:     oklch(0.600 0.140 105);
+}

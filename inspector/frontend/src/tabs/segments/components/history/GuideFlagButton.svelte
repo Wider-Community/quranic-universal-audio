@@ -192,10 +192,10 @@
 
 <style>
     .guide-flag-btn {
-        border: 1px dashed #5a6b9a;
+        border: 1px dashed var(--border-strong);
         border-radius: 5px;
-        background: #131d38;
-        color: #b8c4e6;
+        background: var(--panel-2);
+        color: var(--text-secondary);
         font-size: 0.72rem;
         padding: 1px 7px;
         cursor: pointer;
@@ -203,14 +203,14 @@
     }
 
     .guide-flag-btn:hover {
-        background: #1d2a4f;
-        color: #eef2ff;
+        background: var(--elevated);
+        color: var(--text-primary);
     }
 
     .guide-flag-btn.saved {
         border-style: solid;
-        border-color: #3a7d4a;
-        color: #9be3ac;
+        border-color: var(--ok-fg);
+        color: var(--ok-fg);
     }
 
     /* Portalled to <body> — fixed so the scrolling History list can't clip it. */
@@ -221,14 +221,14 @@
         flex-direction: column;
         gap: 8px;
         padding: 12px;
-        border: 1px solid #344063;
+        border: 1px solid var(--border-default);
         border-radius: 8px;
-        background: #0f1830;
-        box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+        background: var(--popover-bg);
+        box-shadow: var(--shadow-pop);
     }
 
     .guide-flag-meta {
-        color: #8ea0c8;
+        color: var(--text-muted);
         font-size: 0.72rem;
     }
 
@@ -236,7 +236,7 @@
         display: flex;
         flex-direction: column;
         gap: 3px;
-        color: #c4cde8;
+        color: var(--text-secondary);
         font-size: 0.74rem;
     }
 
@@ -245,10 +245,10 @@
     .guide-flag-pop input {
         width: 100%;
         box-sizing: border-box;
-        border: 1px solid #2f3a5c;
+        border: 1px solid var(--border-default);
         border-radius: 5px;
-        background: #0a1024;
-        color: #e6e8f2;
+        background: var(--input-bg);
+        color: var(--text-primary);
         font-size: 0.78rem;
         padding: 5px 7px;
     }
@@ -260,7 +260,7 @@
 
     .guide-flag-err {
         margin: 0;
-        color: #ff9aa2;
+        color: var(--bad-fg);
         font-size: 0.72rem;
     }
 
@@ -271,19 +271,19 @@
     }
 
     .guide-flag-actions button {
-        border: 1px solid #344063;
+        border: 1px solid var(--border-default);
         border-radius: 5px;
-        background: #16213e;
-        color: #d5daeb;
+        background: var(--panel);
+        color: var(--text-secondary);
         font-size: 0.74rem;
         padding: 3px 10px;
         cursor: pointer;
     }
 
     .guide-flag-actions button.primary {
-        background: #2c4a86;
-        border-color: #3a5fa8;
-        color: #fff;
+        background: var(--info-solid);
+        border-color: var(--info-solid-hover);
+        color: var(--ink-on-color);
     }
 
     .guide-flag-actions button:disabled {

@@ -10,7 +10,7 @@ Three-tab SPA at `inspector/frontend/src/`. TypeScript (strict) + Vite + Svelte 
 | Bundler | Vite 5, `target: es2022` |
 | UI | Svelte 5 (`@sveltejs/vite-plugin-svelte` ^4, mounted via `mount()` in `main.ts`) |
 | Charts | Chart.js 4 + chartjs-plugin-annotation; split into a `charts` chunk via `rollupOptions.output.manualChunks` |
-| CSS | Plain CSS in `src/styles/`, imported from `main.ts` (`tokens.css` first — defines `:root` vars) |
+| CSS | Plain CSS in `src/styles/`, imported from `main.ts` (`tokens.css` first — defines the dark `:root` vars; `theme-light.css` last — the `[data-theme="light"]` override). Token-driven light/dark; canvas colours bridge via `lib/utils/canvas-theme.ts`. → [`theming.md`](theming.md) |
 | Audio | Web Audio API; per-tab `AudioPort` transport (`lib/playback/`) |
 | Unit tests | Vitest 3 + `@testing-library/svelte` 5 + `happy-dom` |
 | E2E | Playwright (`npm run test:e2e`) |
@@ -217,10 +217,13 @@ Waveform + phoneme display for published reciters (plus owner preview of generat
 |---|---|
 | `TimestampsTab.svelte` | Shell — reciter/chapter/verse cascade, config→CSS vars, view toggle, keyboard, waveform animation (imperative) |
 | `components/` | `UnifiedDisplay`, `AnimationDisplay`, `TimestampsWaveform` (exempt), `TimestampsControls`, `TimestampsAudio`, `TimestampsKeyboard`, `TimestampsViewControls`, `TimestampsShortcutsGuide`, `TranslationLangSelect`, `WordTranslation`, `TsValidationPanel` (owner low-confidence accordion) |
+| `components/` (footer) | `TimestampsFooterLeft` (reciter picker + shuffle), `TimestampsFooterReport` (report drop-up), `TimestampsFooterAnalysis` (loop / letters / phonemes / tajweed / help), `TimestampsFooterOpenSegments` (→ Segments editor redirect) — filled into `BottomPlayer`'s `meta` / `loc-lead` / `center-trail` / `download-lead` slots by `App.svelte`, only while the Timestamps tab is active |
 | `services/ts_client.ts` | Shard-fetch data layer |
 | `utils/` | `constants.ts`, `loop-target.ts`, `zoom.ts`, `range-spec.ts`, `audio-load.ts` |
 
 **Public reports (Phase 2 — UI pending).** The categorized Timestamps report backend (`/api/ts/<slug>/reports*`, gated by `timestamps.report`, anon-eligible) is built (see `docs/reference/database.md` `ts_reports` + `capabilities.md`); the report-creation UI and target-picking from the analysis grid are the deferred Phase-2 work. Owners get a `ts_report.created` notification on a new report and the reporter a `ts_report.resolved` on resolution; both rail redirects use `gotoTimestamps(slug, verseKey)` (`lib/utils/goto-timestamps.ts`) → the shared `pendingTsNavigation` channel → `jumpToTarget`.
+
+**"Open in Segments" redirect.** `TimestampsFooterOpenSegments` (the ↗ next to the footer download button) deep-links the focused reciter + verse into the Segments editor via `gotoSegments(slug, { focusVerse: { slug, chapter, verse } })` (`lib/utils/goto-segments.ts`). `SegmentsTab` consumes the `focusVerse` intent once the target reciter's corpus is resident (`segAllData !== null`, the `clearPerReciterState` null being the fresh-corpus barrier) — switching to the verse's chapter, loading it, then scrolling the verse's first segment row into view via `targetSegmentIndex` (the same path Go-To / verse-jump use). The `slug` guard + a post-`tick()` re-validation reject a stale corpus mid-switch.
 
 **Stores:** `verse.ts` (reciter/chapter/verse selection + `loadedVerse` + `validationData`), `display.ts` (view mode, granularity, show-tashkeel/phonemes; localStorage-persisted), `playback.ts` (auto-play, `currentTime`; defines `tsPort` but the tab plays through the shared `dashPort`), `zoom.ts` (slice-relative visible window).
 

@@ -358,7 +358,9 @@
         margin-bottom: var(--s-4);
     }
     header h2 {
-        font-size: var(--fs-h3);
+        /* One notch below the rail's other headings so the title + Email button
+           + Active/Archive toggle fit the 320px column without overflowing. */
+        font-size: var(--fs-row);
         color: var(--text-primary);
         font-weight: 500;
         margin: 0;
@@ -395,7 +397,7 @@
         padding: 2px 6px;
         border-radius: 999px;
         background: var(--state-requested-fg);
-        color: var(--surface-base, #fff);
+        color: var(--ink-on-color);
     }
     .toggle {
         margin-left: auto;

@@ -41,6 +41,7 @@
         recitationConfigStore,
     } from '../../recitation-animation/recitation-settings';
     import { accentVarText } from '../../utils/accent-override';
+    import { theme$ } from '../../stores/theme.svelte';
     import { loadVbrChapters } from '../../recitation-data/ts-source';
     import {
         loadPersistedSlice,
@@ -593,7 +594,7 @@
 <div
     class="player"
     class:has-reciter={$playerContext.reciter !== null}
-    style={accentVarText($recitationConfigStore.highlightColor)}
+    style={accentVarText($recitationConfigStore.highlightColor, $theme$)}
 >
     <PlayerProgress
         positionMs={$playerContext.positionMs}
@@ -688,30 +689,37 @@
                 <slot name="center-trail"></slot>
             </div>
 
-            <button
-                type="button"
-                class="download-btn"
-                on:click={downloadSurah}
-                disabled={!canDownload}
-                aria-label="Download surah"
-                title="Download surah"
-            >
-                <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    aria-hidden="true"
+            <!-- Far-right cluster: a tab-specific lead affordance (Timestamps
+                 fills it with the "open in Segments" redirect) sits directly
+                 left of the always-present download button. -->
+            <div class="right-edge">
+                <slot name="download-lead" />
+
+                <button
+                    type="button"
+                    class="download-btn"
+                    on:click={downloadSurah}
+                    disabled={!canDownload}
+                    aria-label="Download surah"
+                    title="Download surah"
                 >
-                    <path d="M12 3v12" />
-                    <path d="m7 10 5 5 5-5" />
-                    <path d="M5 21h14" />
-                </svg>
-            </button>
+                    <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                    >
+                        <path d="M12 3v12" />
+                        <path d="m7 10 5 5 5-5" />
+                        <path d="M5 21h14" />
+                    </svg>
+                </button>
+            </div>
         </div>
     </div>
 
@@ -756,6 +764,14 @@
         align-items: center;
         gap: var(--s-4);
         min-width: 0;
+    }
+    /* Download + its optional tab-specific lead, kept together at the outer
+       edge while `right-inner` stays pinned to the transport via space-between. */
+    .right-edge {
+        display: flex;
+        align-items: center;
+        gap: var(--s-2);
+        flex: 0 0 auto;
     }
     .controls {
         display: flex;

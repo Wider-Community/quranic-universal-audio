@@ -44,7 +44,8 @@
     import { playerContext, setIsLoading, setIsPlaying } from '../../lib/stores/player-context';
     import type { TsConfigResponse } from '../../lib/types/generated/schemas';
     import { getActiveTab, activeTab as activeTabStore } from '../../lib/utils/active-tab';
-    import { DEFAULT_HIGHLIGHT_MODEL, resolveHighlightVars } from '../../lib/utils/highlight-model';
+    import { modelForTheme, resolveHighlightVars } from '../../lib/utils/highlight-model';
+    import { themeStore, THEME_CHANGE_EVENT } from '../../lib/stores/theme.svelte';
     import { LS_KEYS, TAB_NAMES } from '../../lib/utils/constants';
     import { shouldHandleKey } from '../../lib/utils/keyboard-guard';
     import { prewarmVersePeaks } from '../../lib/utils/peaks-fetch';
@@ -158,7 +159,11 @@
     // the karaoke track, light/dark) so the surfaces can't drift. See
     // `lib/utils/highlight-model.ts`.
     $: cfg = $tsConfig;
-    $: hlVars = resolveHighlightVars($recitationConfigStore.highlightColor, DEFAULT_HIGHLIGHT_MODEL);
+    // The highlight model is theme-conditional (light gets a darker legible band
+    // + auto ink). Mirror the runes theme store into a legacy-reactive local so
+    // the `$:` below recomputes the analysis vars on a theme flip.
+    let curTheme = themeStore.current;
+    $: hlVars = resolveHighlightVars($recitationConfigStore.highlightColor, modelForTheme(curTheme));
     $: hlVarsText = Object.entries(hlVars)
         .map(([k, v]) => `${k}: ${v}`)
         .join('; ');
@@ -1083,10 +1088,14 @@
         // by the once-per-verse guard.
         const offTimeUpdate = dashPort.onTimeUpdate((fileMs) => maybeFireShuffle(fileMs));
         const offEnded = dashPort.onEnded(() => maybeFireShuffle(Number.POSITIVE_INFINITY));
+        // Recompute the analysis highlight vars when the theme flips.
+        const onTheme = (): void => { curTheme = themeStore.current; };
+        window.addEventListener(THEME_CHANGE_EVENT, onTheme);
         _primedOnce = true;
         return () => {
             unsubTab(); unsubShuf(); unsubManualShuffle(); unsubLoop();
             offTimeUpdate(); offEnded();
+            window.removeEventListener(THEME_CHANGE_EVENT, onTheme);
         };
     });
 

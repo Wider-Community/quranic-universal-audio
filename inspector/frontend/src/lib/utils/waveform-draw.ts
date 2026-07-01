@@ -4,6 +4,7 @@
  */
 
 import type { PeakBucket } from '../types/peaks-transport';
+import { themeColor } from './canvas-theme';
 import { WAVEFORM_BG_COLOR, WAVEFORM_FILL_COLOR, WAVEFORM_SILENCE_THRESHOLD, WAVEFORM_STROKE_COLOR } from './constants';
 import { viewPeaks } from './peaks-view';
 
@@ -54,7 +55,7 @@ export function drawWaveformPeaks(
     const { width, height, startMs, endMs, totalDurationMs } = opts;
     const centerY = height / 2;
 
-    ctx.fillStyle = WAVEFORM_BG_COLOR;
+    ctx.fillStyle = themeColor('--wf-bg', WAVEFORM_BG_COLOR);
     ctx.fillRect(0, 0, width, height);
 
     if (!peaks) return;
@@ -145,9 +146,9 @@ export function drawWaveformPeaks(
         ctx.lineTo(x, y);
     }
     ctx.closePath();
-    ctx.fillStyle = WAVEFORM_FILL_COLOR;
+    ctx.fillStyle = themeColor('--wf-fill', WAVEFORM_FILL_COLOR);
     ctx.fill();
-    ctx.strokeStyle = WAVEFORM_STROKE_COLOR;
+    ctx.strokeStyle = themeColor('--wf-stroke', WAVEFORM_STROKE_COLOR);
     ctx.lineWidth = 1;
     ctx.stroke();
 }

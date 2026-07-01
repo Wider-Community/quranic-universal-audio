@@ -9,8 +9,8 @@
     align-items: center;
     gap: 8px;
     padding: 12px 16px;
-    background: #0d1b2a;
-    border: 1px solid #1b2838;
+    background: var(--surface-sunken);
+    border: 1px solid var(--canvas-inset);
     border-radius: 6px;
     margin: 8px 12px 4px;
 }
@@ -23,24 +23,24 @@
     padding: 8px 28px;
     font-size: 0.95rem;
     font-weight: 600;
-    background: #1a5c2a;
-    color: #8f8;
-    border: 1px solid #2a8c3a;
+    background: var(--btn-confirm-bg);
+    color: var(--btn-confirm-fg);
+    border: 1px solid var(--btn-confirm-border);
     border-radius: 6px;
     cursor: pointer;
 }
-.seg-cache-download-btn:hover { background: #237a35; }
+.seg-cache-download-btn:hover { background: var(--btn-confirm-bg-hover); }
 .seg-cache-download-btn:disabled { opacity: 0.6; cursor: default; }
 .seg-cache-delete-btn {
     padding: 6px 16px;
     font-size: 0.8rem;
-    background: #3a1515;
-    color: #e88;
-    border: 1px solid #5a2020;
+    background: var(--btn-discard-bg);
+    color: var(--btn-discard-fg);
+    border: 1px solid var(--btn-discard-border);
     border-radius: 6px;
     cursor: pointer;
 }
-.seg-cache-delete-btn:hover { background: #5a2020; }
+.seg-cache-delete-btn:hover { background: var(--btn-discard-bg-hover); }
 .seg-cache-delete-btn:disabled { opacity: 0.6; cursor: default; }
 .seg-cache-progress {
     width: 100%;
@@ -53,24 +53,24 @@
 .seg-cache-progress-bar {
     width: 100%;
     height: 8px;
-    background: #1b2838;
+    background: var(--canvas-inset);
     border-radius: 4px;
     overflow: hidden;
 }
 .seg-cache-progress-fill {
     height: 100%;
-    background: linear-gradient(90deg, #2a8c3a, #4caf50);
+    background: linear-gradient(90deg, var(--btn-confirm-border), var(--ok-fg));
     border-radius: 4px;
     transition: width 0.3s ease;
     width: 0%;
 }
 .seg-cache-progress-text {
     font-size: 0.82rem;
-    color: #8ab4f8;
+    color: var(--role-blue);
 }
 .seg-cache-status {
     font-size: 0.8rem;
-    color: #7a8a9a;
+    color: var(--text-muted);
 }
 
 /* Segment list */
@@ -106,7 +106,7 @@
     gap: 12px;
     align-items: stretch;
     padding: 8px;
-    background: #16213e;
+    background: var(--panel);
     border-radius: 12px;
     border: 2px solid transparent;
     cursor: pointer;
@@ -118,12 +118,12 @@
 }
 
 .seg-row:hover {
-    background: #1a2a4e;
+    background: var(--panel-2);
 }
 
 .seg-row.playing {
-    border-color: #4cc9f0;
-    background: #1a2a4e;
+    border-color: var(--accent);
+    background: var(--panel-2);
 }
 
 .seg-left {
@@ -136,7 +136,7 @@
 .seg-row canvas {
     width: 100%;
     height: 60px;
-    background: #0f0f23;
+    background: var(--canvas-inset);
     border-radius: 10px;
     cursor: crosshair;
 }
@@ -150,7 +150,7 @@
     gap: 2px 12px;
     padding: 6px 10px;
     border-radius: 6px;
-    border-left: 4px solid #666;
+    border-left: 4px solid var(--text-faint);
     min-width: 0;
 }
 
@@ -162,23 +162,23 @@
 }
 
 .seg-text.conf-high {
-    border-color: #4caf50;
-    background: rgba(76, 175, 80, 0.08);
+    border-color: var(--ok-fg);
+    background: var(--ok-tint);
 }
 
 .seg-text.conf-mid {
-    border-color: #ff9800;
-    background: rgba(255, 152, 0, 0.08);
+    border-color: var(--warn-fg);
+    background: var(--warn-tint);
 }
 
 .seg-text.conf-low {
-    border-color: #f44336;
-    background: rgba(244, 67, 54, 0.08);
+    border-color: var(--bad-fg);
+    background: var(--bad-tint);
 }
 
 .seg-text.conf-fail {
-    border-color: #555;
-    background: rgba(100, 100, 100, 0.08);
+    border-color: var(--text-faint);
+    background: var(--neutral-tint);
 }
 
 .seg-text-header {
@@ -189,13 +189,13 @@
 
 .seg-text-index {
     font-size: 0.75rem;
-    color: #666;
+    color: var(--text-faint);
     font-family: monospace;
 }
 
 .seg-text-ref {
     font-size: 0.75rem;
-    color: #4cc9f0;
+    color: var(--accent);
     font-family: monospace;
     cursor: pointer;
 }
@@ -206,10 +206,10 @@
 
 .seg-text-ref-input {
     font-size: 0.75rem;
-    color: #4cc9f0;
+    color: var(--accent);
     font-family: monospace;
-    background: #0f0f23;
-    border: 1px solid #4cc9f0;
+    background: var(--input-bg);
+    border: 1px solid var(--accent);
     border-radius: 3px;
     padding: 1px 4px;
     outline: none;
@@ -217,13 +217,13 @@
 }
 
 .seg-text-ref-input.invalid {
-    color: #f44336;
-    border-color: #f44336;
-    background: rgba(244, 67, 54, 0.15);
+    color: var(--bad-fg);
+    border-color: var(--bad-fg);
+    background: var(--bad-tint-strong);
 }
 
 .seg-row.dirty {
-    border-color: #f0a500;
+    border-color: var(--cta-bg);
 }
 
 .seg-text-conf {
@@ -232,16 +232,16 @@
     font-weight: bold;
 }
 
-.seg-text-conf.conf-high { color: #4caf50; }
-.seg-text-conf.conf-mid { color: #ff9800; }
-.seg-text-conf.conf-low { color: #f44336; }
-.seg-text-conf.conf-fail { color: #666; }
+.seg-text-conf.conf-high { color: var(--ok-fg); }
+.seg-text-conf.conf-mid { color: var(--warn-fg); }
+.seg-text-conf.conf-low { color: var(--bad-fg); }
+.seg-text-conf.conf-fail { color: var(--text-faint); }
 
 .seg-text-body {
     font-family: 'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
     font-size: var(--seg-font-size, 1.84rem);
     word-spacing: var(--seg-word-spacing, 0.15em);
-    color: #eee;
+    color: var(--text-primary);
     direction: rtl;
     line-height: 1.5;
     text-align: right;
@@ -249,12 +249,12 @@
 
 .seg-text-duration {
     font-size: 0.75rem;
-    color: #888;
+    color: var(--text-muted);
     font-family: monospace;
 }
 
 .seg-text-sep {
-    color: #444;
+    color: var(--border-strong);
     font-size: 0.75rem;
     user-select: none;
 }
@@ -272,34 +272,34 @@
     gap: 6px;
     font-family: monospace;
     font-variant-numeric: tabular-nums;
-    color: #bbb;
+    color: var(--text-secondary);
 }
 
 .seg-text-time {
     font-family: monospace;
     font-variant-numeric: tabular-nums;
-    color: #bbb;
+    color: var(--text-secondary);
     cursor: pointer;
     padding: 1px 3px;
     border-radius: 3px;
 }
 
 .seg-text-time.clickable:hover {
-    background: rgba(76, 201, 240, 0.12);
-    color: #4cc9f0;
+    background: var(--accent-tint);
+    color: var(--accent);
 }
 
 .seg-text-time-editing {
-    background: rgba(76, 201, 240, 0.08);
-    border: 1px solid rgba(76, 201, 240, 0.35);
+    background: var(--accent-tint-soft);
+    border: 1px solid var(--accent-border-soft);
     padding: 1px 3px;
     border-radius: 3px;
-    color: #ddd;
+    color: var(--text-secondary);
 }
 
 .seg-text-time-editing.invalid {
-    background: rgba(244, 67, 54, 0.15);
-    border-color: #f44336;
+    background: var(--bad-tint-strong);
+    border-color: var(--bad-fg);
 }
 
 .seg-time-group {
@@ -310,22 +310,22 @@
 }
 
 .seg-time-group.editable {
-    color: #4cc9f0;
+    color: var(--accent);
     cursor: pointer;
 }
 
 .seg-time-group.editable:hover {
-    background: rgba(76, 201, 240, 0.18);
+    background: var(--accent-tint-hover);
 }
 
 .seg-time-group.greyed {
-    color: #555;
+    color: var(--text-faint);
     cursor: not-allowed;
     pointer-events: none;
 }
 
 .seg-time-sep {
-    color: #666;
+    color: var(--text-faint);
     user-select: none;
 }
 
@@ -333,9 +333,9 @@
     font-family: monospace;
     font-variant-numeric: tabular-nums;
     font-size: inherit;
-    color: #4cc9f0;
-    background: #0f0f23;
-    border: 1px solid #4cc9f0;
+    color: var(--accent);
+    background: var(--input-bg);
+    border: 1px solid var(--accent);
     border-radius: 2px;
     padding: 0 2px;
     outline: none;
@@ -346,7 +346,7 @@
 .seg-loading {
     text-align: center;
     padding: 40px;
-    color: #666;
+    color: var(--text-faint);
     font-size: 1rem;
 }
 
@@ -361,7 +361,7 @@
 .seg-edit-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.55);
+    background: var(--scrim);
     z-index: 10;
     pointer-events: auto;
 }
@@ -417,7 +417,7 @@
 
 .seg-edit-inline .seg-edit-duration,
 .seg-edit-inline .seg-edit-info {
-    color: #888;
+    color: var(--text-muted);
     font-size: 0.75rem;
     font-family: monospace;
     flex: none;
@@ -477,11 +477,11 @@
     align-items: stretch;
     gap: 2px;
     padding-bottom: 4px;
-    border-bottom: 2px solid var(--nudge-accent, oklch(0.55 0.01 250));
+    border-bottom: 2px solid var(--nudge-accent, var(--chrome-border));
 }
-.seg-nudge-start { --nudge-accent: #4caf50; }  /* matches trim-draw start handle */
-.seg-nudge-end   { --nudge-accent: #f44336; }  /* matches trim-draw end   handle */
-.seg-nudge-split { --nudge-accent: #ffeb3b; }  /* matches split-draw cursor line */
+.seg-nudge-start { --nudge-accent: var(--wf-handle-start); }  /* matches trim-draw start handle */
+.seg-nudge-end   { --nudge-accent: var(--wf-handle-end); }  /* matches trim-draw end   handle */
+.seg-nudge-split { --nudge-accent: var(--wf-split-cursor); }  /* matches split-draw cursor line */
 
 .seg-edit-inline .seg-edit-buttons .seg-nudge {
     flex: 0 0 auto;
@@ -491,18 +491,18 @@
     border: 1px solid transparent;
     border-radius: 4px;
     background: transparent;
-    color: oklch(0.82 0.01 250);
+    color: var(--chrome-ink);
     font: 600 0.95rem/1 ui-monospace, monospace;
     cursor: pointer;
     transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
 .seg-edit-inline .seg-edit-buttons .seg-nudge:hover:not(:disabled) {
-    background: oklch(0.24 0.012 250);
-    border-color: oklch(0.32 0.012 250);
-    color: oklch(0.94 0.005 250);
+    background: var(--chrome-hover-bg);
+    border-color: var(--chrome-hover-border);
+    color: var(--chrome-ink-strong);
 }
 .seg-edit-inline .seg-edit-buttons .seg-nudge:active:not(:disabled) {
-    background: oklch(0.20 0.012 250);
+    background: var(--chrome-active-bg);
 }
 .seg-edit-inline .seg-edit-buttons .seg-nudge:disabled {
     opacity: 0.3;
@@ -514,7 +514,7 @@
  * Inactive pairs mute their split-line underline so the active boundary's
  * bright accent draws the eye (the buttons themselves dim via :disabled). */
 .seg-edit-inline .seg-edit-buttons .seg-nudge-pair.inactive {
-    border-bottom-color: oklch(0.45 0.03 95 / 0.4);
+    border-bottom-color: var(--split-muted);
 }
 
 /* Replay button — sits between the START / END nudger pairs in the trim
@@ -533,14 +533,14 @@
     border: 1px solid transparent;
     border-radius: 4px;
     background: transparent;
-    color: oklch(0.82 0.01 250);
+    color: var(--chrome-ink);
     cursor: pointer;
     transition: background 0.12s, color 0.12s, border-color 0.12s, transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .seg-edit-inline .seg-edit-buttons .seg-replay:hover:not(:disabled) {
-    background: oklch(0.24 0.012 250);
-    border-color: oklch(0.32 0.012 250);
-    color: oklch(0.94 0.005 250);
+    background: var(--chrome-hover-bg);
+    border-color: var(--chrome-hover-border);
+    color: var(--chrome-ink-strong);
 }
 .seg-edit-inline .seg-edit-buttons .seg-replay:active:not(:disabled) {
     transform: rotate(-30deg);  /* tiny motion cue — mirrors the icon arc */
@@ -559,23 +559,23 @@
     min-width: 28px;
     height: 24px;
     padding: 0 11px;
-    border: 1px solid oklch(0.32 0.012 250);
+    border: 1px solid var(--chrome-border);
     border-radius: 4px;
     background: transparent;
-    color: oklch(0.74 0.012 250);
+    color: var(--chrome-ink-muted);
     font: 600 0.78rem/1 ui-monospace, monospace;
     cursor: pointer;
     transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
 .seg-edit-inline .seg-edit-buttons .seg-side-pick:hover:not(.active) {
-    background: oklch(0.22 0.012 250);
-    color: oklch(0.92 0.005 250);
-    border-color: oklch(0.40 0.012 250);
+    background: var(--chrome-hover-bg);
+    color: var(--chrome-ink-strong);
+    border-color: var(--chrome-hover-border);
 }
 .seg-edit-inline .seg-edit-buttons .seg-side-pick.active {
-    background: oklch(0.30 0.08 95 / 0.55);
-    border-color: oklch(0.65 0.16 95);
-    color: oklch(0.94 0.10 95);
+    background: var(--split-active-bg);
+    border-color: var(--split-active-border);
+    color: var(--split-active-fg);
     font-weight: 700;
 }
 
@@ -586,7 +586,7 @@
 }
 
 .seg-edit-inline .seg-edit-status {
-    color: #ff4444;
+    color: var(--bad-fg);
     font-size: 0.75rem;
     flex: none;
     width: 100%;
@@ -594,8 +594,8 @@
 
 /* Edit-target card gets an active border */
 .seg-row.seg-edit-target {
-    border-color: #4cc9f0;
-    background: #1a2a4e;
+    border-color: var(--accent);
+    background: var(--panel-2);
 }
 
 .seg-row.seg-edit-target canvas {
@@ -619,8 +619,8 @@
     padding: 1px 10px;
     font-size: 0.65rem;
     font-weight: bold;
-    color: #888;
-    border: 1px solid #555;
+    color: var(--text-muted);
+    border: 1px solid var(--border-strong);
     border-radius: 10px;
 }
-.seg-row.seg-neighbour { border-left: 3px solid #f0a500; opacity: 0.85; }
+.seg-row.seg-neighbour { border-left: 3px solid var(--cta-bg); opacity: 0.85; }

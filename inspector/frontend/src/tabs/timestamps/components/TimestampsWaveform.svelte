@@ -30,9 +30,11 @@
     import { dashPort } from '../../../lib/playback/dash-port';
     import { ensureDashCovering } from '../../../lib/playback/dash-covering';
     import { recitationConfigStore } from '../../../lib/recitation-animation/recitation-settings';
+    import { themeStore, THEME_CHANGE_EVENT } from '../../../lib/stores/theme.svelte';
     import type { AudioPeaks, PeakBucket, SegmentPeaks } from '../../../lib/types/peaks-transport';
     import type { TsVerseData } from '../../../lib/types/ts-client';
-    import { analogousTriad } from '../../../lib/utils/color-derive';
+    import { themeColor } from '../../../lib/utils/canvas-theme';
+    import { triadForTheme } from '../../../lib/utils/highlight-model';
     import {
         PREVIEW_PLAYHEAD_COLOR,
         WAVEFORM_BG_COLOR,
@@ -141,7 +143,12 @@
     // Waveform overlay colors derive from the SHARED recitation accent so the
     // word/letter/phoneme bands + boundary strokes match the analysis display
     // and the now-reciting animation (one analogous family).
-    $: triad = analogousTriad($recitationConfigStore.highlightColor);
+    // Theme-conditional band (mirrors the analysis cells): light uses a darker
+    // legible band so the markers read on the light waveform. `curTheme` is a
+    // local mirror of the runes theme store, updated by the `themechange`
+    // listener below (a legacy `$:` can't reliably track the store field).
+    let curTheme = themeStore.current;
+    $: triad = triadForTheme($recitationConfigStore.highlightColor, curTheme);
     $: wordColor = triad.word;
     $: letterColor = triad.letter;
     $: phonemeColor = triad.phoneme;
@@ -149,7 +156,12 @@
     // Redraw when toggles / hover store / loop store change so overlays update
     // even while paused. Subscriptions on `$tsHoveredElement` and `$loopTarget`
     // trigger block-originated hover renders + loop band updates respectively.
-    $: ($tsHoveredElement, $loopTarget, lettersActive, phonemesActive, wordColor, drawOverlays());
+    // `themeStore.current` is listed so a light/dark flip re-runs the redraw;
+    // because a legacy `$:` block may not reliably track a runes-store field,
+    // the onMount `themechange` listener below is the guaranteed repaint path
+    // (it also invalidates the cached base snapshot so peaks repaint, not just
+    // overlays).
+    $: ($tsHoveredElement, $loopTarget, lettersActive, phonemesActive, wordColor, themeStore.current, drawOverlays());
 
     // ---- Zoom: pass sub-range to WaveformCanvas + recapture base on change ----
 
@@ -499,7 +511,7 @@
                 totalDurationMs: range.totalDurationMs,
             });
         } else {
-            ctx.fillStyle = '#0f0f23';
+            ctx.fillStyle = themeColor('--wf-bg', '#0f0f23');
             ctx.fillRect(0, 0, width, height);
         }
 
@@ -518,7 +530,7 @@
         //      gives the classic DAW "quiet zone" look without a rectangular wash.
         const dimSilence = (start: number, end: number): void => {
             if (end <= start) return;
-            _fillBand(ctx, tToX(start), tToX(end), height, WAVEFORM_BG_COLOR, SILENCE_DIM_ALPHA);
+            _fillBand(ctx, tToX(start), tToX(end), height, themeColor('--wf-bg', WAVEFORM_BG_COLOR), SILENCE_DIM_ALPHA);
         };
         if (words.length > 0) {
             const first = words[0];
@@ -908,10 +920,22 @@
             updateSizeFromContainer();
         };
         window.addEventListener('resize', onResize);
+        // Theme flip: invalidate the cached base snapshot so peaks repaint with
+        // the new theme's --wf-* colours, then redraw overlays. The reactive
+        // `themeStore.current` dep above can't be relied on inside a legacy `$:`,
+        // so this listener is the guaranteed repaint trigger.
+        const onThemeChange = (): void => {
+            curTheme = themeStore.current; // recompute the tier triad in the new band
+            _baseImageData = null;
+            _baseCacheKey = null;
+            drawOverlays();
+        };
+        window.addEventListener(THEME_CHANGE_EVENT, onThemeChange);
         const canvas = waveformRef?.getCanvas();
         canvas?.addEventListener('wheel', onWheel, { passive: false });
         return () => {
             window.removeEventListener('resize', onResize);
+            window.removeEventListener(THEME_CHANGE_EVENT, onThemeChange);
             canvas?.removeEventListener('wheel', onWheel);
             _forceEndPan();
         };

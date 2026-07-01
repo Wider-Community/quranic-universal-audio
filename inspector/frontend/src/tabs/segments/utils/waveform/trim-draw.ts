@@ -2,12 +2,14 @@
  * Canvas drawing functions for trim mode — the waveform base cache,
  * dimmed regions, and drag handles.
  *
- * Reads `segConfig.trimDimAlpha` for the dimming overlay alpha.
+ * The dim scrim, start/end handles resolve their colours via `themeColor`
+ * so trim mode tracks the active light/dark theme. The scrim uses the
+ * `--wf-dim-overlay` token (which carries its own per-theme alpha — black in
+ * dark, near-white in light), superseding the legacy `segConfig.trimDimAlpha`
+ * knob whose default matched the dark token.
  */
 
-import { get } from 'svelte/store';
-
-import { segConfig } from '../../stores/config';
+import { themeColor } from '../../../../lib/utils/canvas-theme';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { drawEditPeakBase } from './draw-seg';
 
@@ -68,18 +70,18 @@ export function drawTrimWaveform(canvas: SegCanvas): void {
     const leftDimEnd    = Math.max(0, Math.min(width, sxRaw));
     const rightDimStart = Math.max(0, Math.min(width, exRaw));
 
-    ctx.fillStyle = `rgba(0, 0, 0, ${get(segConfig).trimDimAlpha})`;
+    ctx.fillStyle = themeColor('--wf-dim-overlay', 'rgba(0, 0, 0, 0.45)');
     ctx.fillRect(0, 0, leftDimEnd, height);
     ctx.fillRect(rightDimStart, 0, width - rightDimStart, height);
 
-    ctx.strokeStyle = '#4caf50';
+    ctx.strokeStyle = themeColor('--wf-handle-start', '#4caf50');
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.moveTo(startX, 0);
     ctx.lineTo(startX, height);
     ctx.stroke();
 
-    ctx.strokeStyle = '#f44336';
+    ctx.strokeStyle = themeColor('--wf-handle-end', '#f44336');
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.moveTo(endX, 0);

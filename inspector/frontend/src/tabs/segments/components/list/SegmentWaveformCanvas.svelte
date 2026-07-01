@@ -13,6 +13,7 @@
     import { onMount } from 'svelte';
 
     import WaveformCanvas from '../../../../lib/components/WaveformCanvas.svelte';
+    import { THEME_CHANGE_EVENT } from '../../../../lib/stores/theme.svelte';
     import type { AudioPeaks } from '../../../../lib/types/peaks-transport';
 import type { Segment } from '../../../../lib/types/view-models';
     import type { SegCanvas } from '../../types/segments-waveform';
@@ -68,7 +69,22 @@ import type { Segment } from '../../../../lib/types/view-models';
         return waveformCanvas.getCanvas() as SegCanvas;
     }
 
-    onMount(() => {});
+    onMount(() => {
+        // The child WaveformCanvas repaints its structural peaks on theme flip.
+        // The imperative overlay/playhead layer (draw-seg.ts) caches the base
+        // render as ImageData on the canvas; drop those caches so the next
+        // playhead tick / overlay refresh rebuilds them with fresh theme
+        // colours instead of blitting the stale-coloured snapshot.
+        const onThemeChange = (): void => {
+            const c = waveformCanvas?.getCanvas() as SegCanvas | undefined;
+            if (!c) return;
+            c._wfCache = null;
+            c._trimBaseCache = null;
+            c._splitBaseCache = null;
+        };
+        window.addEventListener(THEME_CHANGE_EVENT, onThemeChange);
+        return () => window.removeEventListener(THEME_CHANGE_EVENT, onThemeChange);
+    });
 </script>
 
 <!--

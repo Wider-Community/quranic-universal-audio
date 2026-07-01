@@ -11,9 +11,10 @@
      * Escape or backdrop click closes the overlay.
      * A separate Chart.js instance is used (not the inline card canvas).
      */
-    import { onDestroy } from 'svelte';
+    import { onDestroy, onMount } from 'svelte';
 
     import { fetchJson } from '../../../../lib/api';
+    import { THEME_CHANGE_EVENT } from '../../../../lib/stores/theme.svelte';
     import type { SegSaveChartResponse } from '../../../../lib/types/view-models';
     import type { Chart } from '../../../../lib/utils/chart';
     import type { ChartCfg, Distribution } from '../../types/stats';
@@ -38,6 +39,16 @@
     $: if (!dist || !cfg) {
         if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
     }
+
+    // Theme flip: rebuild the overlay chart (if open) so the new theme colours
+    // apply — drawBarChart resolves --chart-*/--panel/--text at build time.
+    onMount(() => {
+        const onThemeChange = (): void => {
+            if (canvasEl && dist && cfg) rebuildChart(canvasEl, dist, cfg);
+        };
+        window.addEventListener(THEME_CHANGE_EVENT, onThemeChange);
+        return () => window.removeEventListener(THEME_CHANGE_EVENT, onThemeChange);
+    });
 
     onDestroy(() => {
         if (chartInstance) { chartInstance.destroy(); chartInstance = null; }

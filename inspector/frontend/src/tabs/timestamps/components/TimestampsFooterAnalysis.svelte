@@ -236,6 +236,10 @@
     }
     .icon-btn:hover .img-icon { opacity: 0.9; }
     .icon-btn.on .img-icon { opacity: 1; }
+    /* White monochrome SVG glyphs (built for the dark button) — invert to a dark
+       mark on the light theme's near-white button surface. */
+    :global(html[data-theme='light']) .img-icon,
+    :global(html[data-theme='light']) .g-img { filter: invert(1); }
 
     .guide-wrap { position: relative; display: inline-flex; }
     .guide-pop {

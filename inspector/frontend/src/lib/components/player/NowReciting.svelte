@@ -50,6 +50,7 @@
         toggleGranularity,
     } from '../../recitation-animation/recitation-settings';
     import { accentVarText } from '../../utils/accent-override';
+    import { theme$ } from '../../stores/theme.svelte';
     import {
         addBookmark,
         bookmarkKey,
@@ -235,7 +236,7 @@
 </script>
 
 {#if shown}
-    <div class="now-reciting" bind:clientHeight={rootH} style={accentVarText(config.highlightColor)}>
+    <div class="now-reciting" bind:clientHeight={rootH} style={accentVarText(config.highlightColor, $theme$)}>
         <!-- Handle row: the recitation display controls flank the collapse chip.
              Left = upcoming-eye · word/letter; right = size− · size+. Collapsing
              hides the recitation LINE *and* this settings row (only the chip

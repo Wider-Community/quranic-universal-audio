@@ -16,16 +16,25 @@
  * `--accent-fg` (ink on a filled accent, e.g. the play glyph) is the WCAG
  * auto-contrast pick so it stays legible on any chosen colour.
  */
-import { inkFor, legibleAccent } from './color-derive';
+import { inkFor, legibleAccent, legibleAccentCfg } from './color-derive';
+import type { Theme } from './highlight-model';
 
-export function accentVars(hex: string): Record<string, string> {
-    // The footer/filmstrip chrome paints the accent directly on the dark bg, so a
-    // too-dark pick is lifted into the legible band first (in-band picks are kept
-    // verbatim). Tints + ink derive from the legible colour so they track it.
-    const a = legibleAccent(hex);
+// On light paper the footer/player chrome paints the accent on a near-white bg,
+// so the legibility clamp must pull a too-LIGHT pick DOWN into a darker band
+// (the dark theme lifts a too-DARK pick up instead). Hover lightens on dark,
+// darkens on light.
+const LIGHT_BAND_MIN_L = 0.46;
+const LIGHT_BAND_MAX_L = 0.70;
+
+export function accentVars(hex: string, theme: Theme = 'dark'): Record<string, string> {
+    // The footer/filmstrip chrome paints the accent directly on the page bg, so a
+    // pick outside the legible band is clamped first (in-band picks kept verbatim).
+    // Tints + ink derive from the legible colour so they track it.
+    const isLight = theme === 'light';
+    const a = isLight ? legibleAccentCfg(hex, LIGHT_BAND_MIN_L, LIGHT_BAND_MAX_L) : legibleAccent(hex);
     return {
         '--accent': a,
-        '--accent-strong': `color-mix(in oklab, ${a} 85%, white)`,
+        '--accent-strong': `color-mix(in oklab, ${a} 85%, ${isLight ? 'black' : 'white'})`,
         '--accent-tint': `color-mix(in srgb, ${a} 14%, transparent)`,
         '--accent-tint-soft': `color-mix(in srgb, ${a} 7%, transparent)`,
         '--accent-fg': inkFor(a),
@@ -33,8 +42,8 @@ export function accentVars(hex: string): Record<string, string> {
 }
 
 /** The override as inline `cssText` for a `style={...}` binding. */
-export function accentVarText(hex: string): string {
-    return Object.entries(accentVars(hex))
+export function accentVarText(hex: string, theme: Theme = 'dark'): string {
+    return Object.entries(accentVars(hex, theme))
         .map(([k, v]) => `${k}: ${v}`)
         .join('; ');
 }

@@ -101,8 +101,8 @@
     .val-card-wrapper {
         margin-bottom: 8px;
         padding: 6px 8px;
-        background: #0f0f23;
-        border: 1px solid #2a2a4a;
+        background: var(--canvas-inset);
+        border: 1px solid var(--border-default);
         border-radius: 4px;
     }
 </style>

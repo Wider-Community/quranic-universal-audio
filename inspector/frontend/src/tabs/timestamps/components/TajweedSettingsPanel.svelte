@@ -17,6 +17,7 @@
      * the `tajweed-settings` store; colours apply via `--tj-*` overrides, toggles
      * drive the per-cell underline.
      */
+    import { themeStore } from '../../../lib/stores/theme.svelte';
     import { harakaRenderStyle } from '../utils/haraka-render';
     import { LEGEND, type LegendRow } from '../utils/tajweed-rules';
     import {
@@ -89,6 +90,7 @@
      *  once per pass instead of calling getComputedStyle per row. */
     const rootStyle = $derived.by(() => {
         void $tajweedSettings;
+        void themeStore.current; // re-read the --tj-* vars after a theme flip
         return typeof document !== 'undefined' ? getComputedStyle(document.documentElement) : null;
     });
 
@@ -566,24 +568,24 @@
     }
     .kharaka.dashed {
         border-style: dashed;
-        border-color: #6a6f8c;
+        border-color: var(--ts-inserted-border);
     }
     .kg {
         display: inline-block;
         line-height: 1;
-        color: #aaa;
+        color: var(--ts-idle-fg);
         font-family: 'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
         font-size: calc(var(--analysis-letter-font-size, 1.05rem) * var(--haraka-scale, 1.4));
         transform: translate(var(--haraka-shift, 0em), var(--haraka-raise, 0em));
     }
     .kcell.dashed {
         border-style: dashed;
-        border-color: #6a6f8c;
-        color: #aaa;
+        border-color: var(--ts-inserted-border);
+        color: var(--ts-idle-fg);
     }
     .kcell.silent {
-        opacity: 0.5;
-        color: #777;
+        opacity: var(--ts-mute-opacity);
+        color: var(--ts-silent-fg);
     }
     .kcap {
         font-size: 11px;
@@ -634,7 +636,7 @@
     .waqf-mark {
         display: inline-block;
         line-height: 1;
-        color: #cfd3e6;
+        color: var(--ts-waqf-fg);
         font-family: 'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
         font-size: calc(var(--analysis-word-font-size, 1.3rem) * var(--waqf-scale, 1));
         transform: translate(var(--waqf-shift, 0), var(--waqf-raise, 0));
