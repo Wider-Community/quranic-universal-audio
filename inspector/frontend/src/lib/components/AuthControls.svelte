@@ -107,7 +107,7 @@
         align-self: stretch;
         display: grid;
         place-items: center;
-        width: 32px;
+        width: 30px;
         padding: 0;
         border: 0;
         border-left: 1px solid var(--border-quiet);
@@ -115,6 +115,11 @@
         color: var(--text-muted);
         cursor: pointer;
         transition: background var(--t-fast), color var(--t-fast);
+    }
+    /* The logout glyph's arrow points outward (right), so its bounding box reads
+       right-heavy; nudge left a hair to optically centre it in the cell. */
+    .signout svg {
+        transform: translateX(-1px);
     }
     .signout:hover {
         background: var(--bad-tint);
@@ -129,23 +134,23 @@
     .signin {
         display: inline-flex;
         align-items: center;
-        gap: 6px;
+        gap: 7px;
         height: 32px;
         padding: 0 14px;
         border: 0;
         border-radius: var(--r-2);
-        background: var(--cta-bg);
-        color: var(--cta-fg);
+        background: var(--signin-bg);
+        color: var(--signin-fg);
         font-size: 0.85rem;
         font-weight: 600;
         cursor: pointer;
         transition: background var(--t-fast);
     }
     .signin:hover {
-        background: var(--cta-bg-hover);
+        background: var(--signin-bg-hover);
     }
     .signin:focus-visible {
-        outline: 2px solid var(--cta-bg);
+        outline: 2px solid var(--signin-bg);
         outline-offset: 2px;
     }
 </style>

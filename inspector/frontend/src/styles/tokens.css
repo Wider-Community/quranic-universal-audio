@@ -118,10 +118,16 @@
     /* owner-role / info blue */
     --role-blue:           #8ab4f8;
 
-    /* CTA amber (Sign in with HF, mark-ready bypass) — the one warm CTA */
+    /* CTA amber (mark-ready bypass) — the one warm CTA */
     --cta-bg:              #f0a500;
     --cta-bg-hover:        #ffba2c;
     --cta-fg:              #1a1a1a;
+
+    /* Sign-in with HF button — warm amber here; the light layer recolours it to
+       the app accent so it sits calmly on paper. */
+    --signin-bg:           #f0a500;
+    --signin-bg-hover:     #ffba2c;
+    --signin-fg:           #1a1a1a;
 
     /* status semantics (fg + tint + solid) — green/amber/red/blue/grey.
        Shared by validation confidence, toasts, charts, segment chips. Dark

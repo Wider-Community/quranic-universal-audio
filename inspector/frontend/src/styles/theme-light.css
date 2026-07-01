@@ -93,6 +93,11 @@
     --cta-bg:              oklch(0.740 0.145 72);
     --cta-bg-hover:        oklch(0.680 0.150 70);
     --cta-fg:              oklch(0.200 0.020 70);
+    /* Sign-in: amber reads garish on paper, so it becomes the calm app accent
+       (ties into the pill's blue avatar + role chip); ink flips to white. */
+    --signin-bg:           oklch(0.560 0.130 233);
+    --signin-bg-hover:     oklch(0.500 0.135 233);
+    --signin-fg:           oklch(0.995 0 0);
 
     /* ---------- status semantics (unified onto one calm hue each) ---------- */
     --ok-fg:               oklch(0.520 0.130 150);
