@@ -302,7 +302,7 @@
    shares its timing. */
 .mega-letter.silent {
     color: var(--ts-silent-fg);
-    opacity: 0.55;
+    opacity: var(--ts-mute-opacity);
     pointer-events: none;
     cursor: default;
 }
@@ -399,7 +399,7 @@
 }
 /* dropped (e.g. tanwīn silenced at waqf) — greyed, never lights */
 .haraka-cell.dia-dropped {
-    opacity: 0.5;
+    opacity: var(--ts-mute-opacity);
 }
 .haraka-cell.dia-dropped .g {
     color: var(--ts-silent-fg);
@@ -435,7 +435,7 @@
     border-style: solid;
 }
 .mega-letter.implicit.dia-dropped {
-    opacity: 0.5;
+    opacity: var(--ts-mute-opacity);
 }
 .mega-letter.implicit.active {
     background: var(--ts-letter-deep, var(--hl-letter-color));

@@ -193,6 +193,10 @@
     --ts-silent-fg:        #777777;
     --ts-idle-fg:          #aaaaaa;
     --ts-waqf-fg:          #cfd3e6;
+    /* Fade for every muted cell (silent grapheme, dropped diacritic, dropped
+       implicit madd) — theme-aware: light deepens it so the wash reads as muted
+       on near-white paper instead of vanishing. */
+    --ts-mute-opacity:     0.5;
     --ts-translation-bg:   oklch(0.205 0.014 274);
     --ts-translation-fg:   oklch(0.79 0.022 80);
 

@@ -98,6 +98,14 @@ banded**, and the band is theme-dependent:
   **down** into the darker band (dark clamps a too-dark pick up) and darkens on
   hover instead of lightening.
 
+**Muted cells** (silent grapheme, dropped diacritic, dropped implicit madd) fade
+via `--ts-mute-opacity` — one token every muted cell reads (`timestamps.css` +
+the `TajweedSettingsPanel` legend), so the fade is uniform and tunable in one
+place. It is theme-conditional: `0.5` in dark, **`0.4`** in light — the only
+non-color token overridden per theme, because a fixed alpha that reads as muted
+over the near-black dark cell washes a silent glyph almost invisible over
+near-white paper, so light needs a deeper fade to still read as *muted*.
+
 ## Adding color — the checklist
 
 - Need a color in CSS? Use an existing `var(--token)`. No token fits? Add it to

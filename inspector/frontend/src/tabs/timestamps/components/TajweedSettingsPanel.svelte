@@ -584,7 +584,7 @@
         color: var(--ts-idle-fg);
     }
     .kcell.silent {
-        opacity: 0.5;
+        opacity: var(--ts-mute-opacity);
         color: var(--ts-silent-fg);
     }
     .kcap {
