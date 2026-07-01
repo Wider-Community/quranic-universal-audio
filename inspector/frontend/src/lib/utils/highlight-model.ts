@@ -128,6 +128,10 @@ export const SHIPPED_HIGHLIGHT_PRESETS: string[] = [
 ];
 
 const GREY = '#aaa';
+// The idle (non-active) glyph on the LIGHT theme: #aaa is legible-on-dark but
+// washes out on the near-white cell, so light gets a darker cool grey that still
+// reads as "secondary" against the near-black active ink.
+const GREY_LIGHT = 'oklch(0.48 0.015 268)';
 const DARK_INK = '#1a1a2e';
 const REST = 'var(--hl-cell-rest)';
 
@@ -210,11 +214,12 @@ function inkColor(solidHex: string, base: string, s: TierStyle): string {
     }
 }
 
-function idleInk(base: string, s: TierStyle): string {
+function idleInk(base: string, s: TierStyle, theme: Theme): string {
+    const grey = theme === 'light' ? GREY_LIGHT : GREY;
     switch (s.idle) {
         case 'accent': return base;
-        case 'grey': return GREY;
-        case 'dim-accent': return `color-mix(in srgb, ${base} 55%, ${GREY})`;
+        case 'grey': return grey;
+        case 'dim-accent': return `color-mix(in srgb, ${base} 55%, ${grey})`;
         case 'custom': return s.idleCustom;
     }
 }
@@ -250,7 +255,7 @@ export function resolveHighlightVars(accentHex: string, m: HighlightModel): Reco
         out[colorVar] = base;
         out[`--ts-${key}-deep`] = withOpacity(solidCss, style);
         out[`--hl-${key}-ink`] = inkColor(solidHex, base, style);
-        out[`--hl-${key}-idle`] = idleInk(base, style);
+        out[`--hl-${key}-idle`] = idleInk(base, style, m.theme);
         out[`--hl-${key}-track`] = trackColor(base, solidCss, m);
     }
 

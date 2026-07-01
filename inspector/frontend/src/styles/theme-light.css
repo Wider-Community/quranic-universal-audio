@@ -164,8 +164,8 @@
 
     /* ---------- analysis-cell chrome ---------- */
     --ts-inserted-border:  oklch(0.620 0.020 270);
-    --ts-silent-fg:        oklch(0.620 0.010 268);
-    --ts-idle-fg:          oklch(0.580 0.012 268);
+    --ts-silent-fg:        oklch(0.560 0.012 268);
+    --ts-idle-fg:          oklch(0.480 0.015 268);
     --ts-waqf-fg:          oklch(0.450 0.020 270);
     --ts-translation-bg:   oklch(0.960 0.014 80);
     --ts-translation-fg:   oklch(0.420 0.040 80);
