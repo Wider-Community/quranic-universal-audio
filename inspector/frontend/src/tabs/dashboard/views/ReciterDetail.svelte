@@ -14,6 +14,7 @@
     import { fetchPublicReciter } from '../../../lib/api/public-reciter-detail';
     import { undiscardReciter } from '../../../lib/api/requests';
     import { localeStore, tr } from '../../../lib/i18n/locale-store';
+    import { vocabLabel } from '../../../lib/i18n/vocab';
     import * as m from '../../../lib/paraglide/messages';
     import Modal from '../../../lib/components/Modal.svelte';
     import StatePill from '../../../lib/components/StatePill.svelte';
@@ -34,7 +35,6 @@
         channelDisplay,
         countryName,
         coverageLabel,
-        titleCaseSlug,
         totalHoursLabel,
     } from '../../../lib/utils/delivery-label';
     import { compareDeliveries } from '../../../lib/utils/delivery-sort';
@@ -197,9 +197,9 @@
     }
 
     const ALL_COLS: ColSpec[] = [
-        { key: 'riwayah', label: m.dashboard_detail_col_riwayah, present: (d) => !!d.riwayah, value: (d) => titleCaseSlug(d.riwayah) },
-        { key: 'style',   label: m.dashboard_detail_col_style,   present: (d) => !!d.style,   value: (d) => titleCaseSlug(d.style) },
-        { key: 'context', label: m.dashboard_detail_col_context, present: (d) => !!d.recording_context, value: (d) => titleCaseSlug(d.recording_context!) },
+        { key: 'riwayah', label: m.dashboard_detail_col_riwayah, present: (d) => !!d.riwayah, value: (d) => vocabLabel('riwayah', d.riwayah) },
+        { key: 'style',   label: m.dashboard_detail_col_style,   present: (d) => !!d.style,   value: (d) => vocabLabel('style', d.style) },
+        { key: 'context', label: m.dashboard_detail_col_context, present: (d) => !!d.recording_context, value: (d) => vocabLabel('context', d.recording_context) },
         { key: 'year',    label: m.dashboard_detail_col_year,    present: (d) => d.recording_year != null, value: (d) => String(d.recording_year ?? '') },
         { key: 'category', label: m.dashboard_detail_col_category, present: (d) => !!d.audio_category, value: (d) => categoryLabel(d) },
         { key: 'coverage', label: m.dashboard_detail_col_coverage, present: (d) => d.chapter_count > 0, value: (d) => coverageLabel(d) },
@@ -335,7 +335,7 @@
                     {/if}
                 </div>
                 {#if reciter.country}
-                    <div class="country">{countryName(reciter.country)}</div>
+                    <div class="country">{countryName(reciter.country, lang)}</div>
                 {/if}
             </header>
 
@@ -515,8 +515,8 @@
                             <li>
                                 <div class="d-row">
                                     <span class="d-combo">
-                                        {titleCaseSlug(d.riwayah)} · {titleCaseSlug(d.style)}
-                                        {#if d.recording_context}· {titleCaseSlug(d.recording_context)}{/if}
+                                        {vocabLabel('riwayah', d.riwayah)} · {vocabLabel('style', d.style)}
+                                        {#if d.recording_context}· {vocabLabel('context', d.recording_context)}{/if}
                                         {#if d.recording_year}· {d.recording_year}{/if}
                                     </span>
                                     <StatePill state={'discarded'} size="sm" />

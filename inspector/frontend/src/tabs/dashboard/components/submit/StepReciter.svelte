@@ -20,9 +20,11 @@
     import { fade, fly } from 'svelte/transition';
 
     import { localeStore, tr } from '$lib/i18n/locale-store';
+    import { vocabLabel } from '$lib/i18n/vocab';
     import * as m from '$lib/paraglide/messages';
-    import { COUNTRIES, countryByName } from '../../../../lib/utils/countries';
-    import { channelDisplay, titleCaseSlug } from '../../../../lib/utils/delivery-label';
+    import CountryPicker from '../../../../lib/components/CountryPicker.svelte';
+    import { countryByName } from '../../../../lib/utils/countries';
+    import { channelDisplay } from '../../../../lib/utils/delivery-label';
     import { filterByFields, match } from '../../../../lib/utils/fuzzy-match';
     import { catalogData } from '../../stores/catalog-data';
     import { openDetail } from '../../stores/dashboard-state';
@@ -129,20 +131,11 @@
                   .slice(0, 4)
             : [];
 
-    // Country picker dance — copied from RequestForm.
-    let countryFocusStash: string | null = null;
-    $: countryName = state.newReciter.countryName;
-    $: countryCode = countryByName(countryName)?.code ?? '';
-    function onCountryFocus(): void {
-        countryFocusStash = countryName;
-        updateNew('countryName', '');
-    }
-    function onCountryBlur(): void {
-        if (!countryName && countryFocusStash != null) {
-            updateNew('countryName', countryFocusStash);
-        }
-        countryFocusStash = null;
-    }
+    // Country picker: CountryPicker two-way binds `countryInput`; push changes back
+    // into the wizard store (guarded so a redundant tick doesn't churn the store).
+    let countryInput = state.newReciter.countryName;
+    $: if (countryInput !== state.newReciter.countryName) updateNew('countryName', countryInput);
+    $: countryCode = countryByName(countryInput, lang)?.code ?? '';
 </script>
 
 <div class="step" in:fade={{ duration: 180 }}>
@@ -227,13 +220,13 @@
                                         style:--row={i}
                                     >
                                         <span class="combo-tags">
-                                            <span class="ct">{titleCaseSlug(d.riwayah)}</span>
+                                            <span class="ct">{vocabLabel('riwayah', d.riwayah)}</span>
                                             <span class="ct dim">·</span>
-                                            <span class="ct">{titleCaseSlug(d.style)}</span>
+                                            <span class="ct">{vocabLabel('style', d.style)}</span>
                                             {#if d.recording_context}
                                                 <span class="ct dim">·</span>
                                                 <span class="ct dim"
-                                                    >{titleCaseSlug(d.recording_context)}</span
+                                                    >{vocabLabel('context', d.recording_context)}</span
                                                 >
                                             {/if}
                                             {#if d.channel}
@@ -261,9 +254,9 @@
                             {#each pickedReciter.deliveries as d (d.slug)}
                                 <span class="combo-pill">
                                     {[
-                                        titleCaseSlug(d.riwayah),
-                                        titleCaseSlug(d.style),
-                                        d.recording_context ? titleCaseSlug(d.recording_context) : null,
+                                        vocabLabel('riwayah', d.riwayah),
+                                        vocabLabel('style', d.style),
+                                        d.recording_context ? vocabLabel('context', d.recording_context) : null,
                                         d.channel ? channelDisplay(d) : null,
                                     ]
                                         .filter(Boolean)
@@ -343,26 +336,16 @@
                     {fieldCountry}
                     {#if countryCode}
                         <span class="label-meta">({countryCode})</span>
-                    {:else if countryName}
+                    {:else if countryInput}
                         <span class="label-meta warn">{countryUnknown}</span>
                     {/if}
                 </span>
-                <input
-                    type="text"
-                    list="submit-wizard-countries"
+                <CountryPicker
+                    bind:value={countryInput}
+                    locale={lang}
                     placeholder={countryPlaceholder}
-                    value={state.newReciter.countryName}
-                    on:input={(e) =>
-                        updateNew('countryName', (e.currentTarget as HTMLInputElement).value)}
-                    on:focus={onCountryFocus}
-                    on:blur={onCountryBlur}
                 />
             </label>
-            <datalist id="submit-wizard-countries">
-                {#each COUNTRIES as c (c.code)}
-                    <option value={c.name} label={c.code}></option>
-                {/each}
-            </datalist>
 
             {#if dupCandidates.length > 0}
                 <div class="dup-matches" transition:fade={{ duration: 160 }}>

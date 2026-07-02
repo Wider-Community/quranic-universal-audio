@@ -22,7 +22,7 @@
     } from '../../stores/history';
     import { undoPending } from '../../stores/undo-pending';
     import type { MergeHighlight, TrimHighlight } from '../../types/segments-waveform';
-    import { EDIT_OP_LABELS } from '../../utils/constants';
+    import { editOpLabel } from '../../i18n/history-labels';
     import type { PreviewPlaybackContext } from '../../utils/playback/preview';
     import { onOpUndoClick } from '../../utils/save/undo';
     import SegmentRow from '../list/SegmentRow.svelte';
@@ -152,12 +152,12 @@
         <div class="seg-history-op-label">
             {#if primary}
                 <span class="seg-history-op-type-badge">
-                    {EDIT_OP_LABELS[primary.op_type] || primary.op_type}
+                    {tr($localeStore, editOpLabel(primary.op_type))}
                 </span>
             {/if}
             {#each Object.entries(followUp) as [t, count]}
                 <span class="seg-history-op-type-badge secondary">
-                    {m.segments_history_followup_badge({ opLabel: EDIT_OP_LABELS[t] || t, countSuffix: count > 1 ? ` \u00d7${count}` : '' })}
+                    {tr($localeStore, m.segments_history_followup_badge({ opLabel: editOpLabel(t), countSuffix: count > 1 ? ` \u00d7${count}` : '' }))}
                 </span>
             {/each}
             {#each fixKinds as fk}

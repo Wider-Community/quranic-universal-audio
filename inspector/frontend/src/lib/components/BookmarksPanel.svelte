@@ -81,7 +81,7 @@
     }
 
     function label(surah: number): string {
-        return surahOptionText(surah);
+        return surahOptionText(surah, i18n.locale);
     }
 
     // Reading i18n.locale here makes every derived message re-run on locale switch.

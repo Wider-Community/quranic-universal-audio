@@ -14,6 +14,7 @@
     import { onDestroy, onMount } from 'svelte';
 
     import { localeStore, tr } from '$lib/i18n/locale-store';
+    import { vocabLabel } from '$lib/i18n/vocab';
     import * as m from '$lib/paraglide/messages';
     import {
         fetchPublicActivity,
@@ -22,7 +23,6 @@
     } from '../../../lib/api/public-activity';
     import { deletePublicActivity } from '../../../lib/api/public-activity-admin';
     import { can } from '../../../lib/stores/capabilities';
-    import { titleCaseSlug } from '../../../lib/utils/delivery-label';
     import { relativeTime } from '../../../lib/utils/relative-time';
     import { visiblePoll } from '../../../lib/utils/visible-poll';
     import NotificationsRail from './NotificationsRail.svelte';
@@ -79,7 +79,7 @@
 
     function formatLine(card: PublicActivityCard): string {
         if (card.riwayah && card.style) {
-            return `${card.name} (${titleCaseSlug(card.riwayah)}) (${titleCaseSlug(card.style)}) ${ACTION[card.kind]()}`;
+            return `${card.name} (${vocabLabel('riwayah', card.riwayah)}) (${vocabLabel('style', card.style)}) ${ACTION[card.kind]()}`;
         }
         return card.text;
     }

@@ -584,7 +584,11 @@
 
     let _surahMap: ReturnType<typeof getSurahInfo> = {};
     void surahInfoReady.then(() => { _surahMap = getSurahInfo(); });
-    $: activeSurahName = _surahMap[String($playerContext.surahNum)]?.name_en ?? null;
+    $: activeSurahName = ((): string | null => {
+        const info = _surahMap[String($playerContext.surahNum)];
+        if (!info) return null;
+        return lang === 'ar' && info.name_ar ? info.name_ar.replace(/^سُورَةُ\s*/, '') : info.name_en;
+    })();
 
     $: canPrev = $playerContext.surahNum !== null && surahNums.indexOf($playerContext.surahNum) > 0;
     $: canNext = $playerContext.surahNum !== null

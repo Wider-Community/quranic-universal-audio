@@ -381,5 +381,17 @@
   "segments_guides_gate_read_button": "Read",
   "segments_guides_gate_done_gate": "You're all set — editing is unlocked.",
   "segments_guides_gate_done_browse": "All guides read.",
-  "segments_guides_gate_start_editing_button": "Start editing"
+  "segments_guides_gate_start_editing_button": "Start editing",
+  "segments_history_optype_trim_segment": "Boundary adjustment",
+  "segments_history_optype_split_segment": "Split",
+  "segments_history_optype_merge_segments": "Merge",
+  "segments_history_optype_delete_segment": "Deletion",
+  "segments_history_optype_edit_reference": "Reference edit",
+  "segments_history_optype_confirm_reference": "Reference confirmation",
+  "segments_history_optype_auto_fix_missing_word": "Auto-fill missing word",
+  "segments_history_optype_ignore_issue": "Ignored issue",
+  "segments_history_optype_set_is_wasl": "Wasl annotation",
+  "segments_history_optype_flag_segment": "Flag comment",
+  "segments_history_optype_pipeline": "Pipeline edit",
+  "segments_history_optype_remove_sadaqa": "Remove Sadaqa"
 }

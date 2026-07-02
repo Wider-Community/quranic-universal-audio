@@ -25,6 +25,21 @@ export function titleCaseSlug(slug: string | null | undefined): string {
         .join(' ');
 }
 
+/** DB enum vocab kinds that carry a `vocab_<kind>_<value>` translation. */
+export type VocabKind = 'riwayah' | 'style' | 'context' | 'coverage';
+
+/**
+ * Locale-aware label for a DB enum value (riwayah / style / recording context /
+ * coverage). Returns the `vocab_<kind>_<value>` message in the ambient locale, or
+ * `titleCaseSlug(value)` when no translation is registered. Channels stay Latin —
+ * use `channelDisplay()` for those, not this.
+ */
+export function vocabLabel(kind: VocabKind, value: string | null | undefined): string {
+    if (!value) return '';
+    const fn = (m as unknown as Record<string, (() => string) | undefined>)[`vocab_${kind}_${value}`];
+    return fn ? fn() : titleCaseSlug(value);
+}
+
 const BITRATE_MODE_LABEL: Record<string, () => string> = {
     cbr: m.common_delivery_bitrate_cbr,
     vbr: m.common_delivery_bitrate_vbr,
@@ -90,7 +105,7 @@ export function totalHoursLabel(d: PublicDelivery): string {
  * "Hafs · Murattal · QDC Official"
  */
 export function combinationCompact(d: PublicDelivery): string {
-    return [titleCaseSlug(d.riwayah), titleCaseSlug(d.style), channelDisplay(d)]
+    return [vocabLabel('riwayah', d.riwayah), vocabLabel('style', d.style), channelDisplay(d)]
         .filter(Boolean)
         .join(SEP);
 }
@@ -101,8 +116,8 @@ export function combinationCompact(d: PublicDelivery): string {
  * line 2: Coverage · Bitrate · [Hours]
  */
 export function combinationStandard(d: PublicDelivery): { line1: string; line2: string } {
-    const line1Parts: string[] = [titleCaseSlug(d.riwayah), titleCaseSlug(d.style)];
-    if (d.recording_context) line1Parts.push(titleCaseSlug(d.recording_context));
+    const line1Parts: string[] = [vocabLabel('riwayah', d.riwayah), vocabLabel('style', d.style)];
+    if (d.recording_context) line1Parts.push(vocabLabel('context', d.recording_context));
     line1Parts.push(channelDisplay(d));
 
     const line2Parts: string[] = [coverageLabel(d), bitrateLabel(d)];
@@ -115,20 +130,24 @@ export function combinationStandard(d: PublicDelivery): { line1: string; line2: 
     };
 }
 
-/** ISO-2 → country display name. Falls back to the code when unknown. */
-let _countryDisplay: Intl.DisplayNames | null | undefined = undefined;
-function countryDisplayInstance(): Intl.DisplayNames | null {
-    if (_countryDisplay !== undefined) return _countryDisplay;
+/** ISO-2 → country display name in a given locale (default English). Falls back to
+ * the code when unknown. Instances are cached per locale. */
+const _countryDisplay = new Map<string, Intl.DisplayNames | null>();
+function countryDisplayInstance(locale: string): Intl.DisplayNames | null {
+    const cached = _countryDisplay.get(locale);
+    if (cached !== undefined) return cached;
+    let dn: Intl.DisplayNames | null;
     try {
-        _countryDisplay = new Intl.DisplayNames(['en'], { type: 'region' });
+        dn = new Intl.DisplayNames([locale], { type: 'region' });
     } catch {
-        _countryDisplay = null;
+        dn = null;
     }
-    return _countryDisplay;
+    _countryDisplay.set(locale, dn);
+    return dn;
 }
-export function countryName(iso2: string | null | undefined): string {
+export function countryName(iso2: string | null | undefined, locale = 'en'): string {
     if (!iso2) return '';
-    const dn = countryDisplayInstance();
+    const dn = countryDisplayInstance(locale);
     if (!dn) return iso2.toUpperCase();
     try {
         return dn.of(iso2.toUpperCase()) ?? iso2.toUpperCase();

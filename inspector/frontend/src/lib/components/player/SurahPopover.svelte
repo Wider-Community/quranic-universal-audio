@@ -8,7 +8,7 @@
     import { localeStore, tr } from '$lib/i18n/locale-store';
     import * as m from '$lib/paraglide/messages';
 
-    import { getSurahInfo, surahInfoReady, surahOptionText } from '../../utils/surah-info';
+    import { getSurahInfo, surahInfoReady } from '../../utils/surah-info';
 
     export let surahNums: number[] = [];
     export let value: number | null = null;
@@ -28,7 +28,8 @@
         n: number;
         nameEn: string;
         nameAr: string;
-        label: string;
+        /** Combined search key: number + English + Arabic, so filtering matches either script. */
+        search: string;
     }
 
     $: items = ready
@@ -36,11 +37,11 @@
               const info = getSurahInfo()[String(n)];
               const nameEn = info?.name_en ?? String(n);
               const nameAr = info?.name_ar.replace(/^سُورَةُ\s*/, '') ?? '';
-              return { n, nameEn, nameAr, label: surahOptionText(n) } as Item;
+              return { n, nameEn, nameAr, search: `${n} ${nameEn} ${nameAr}`.toLowerCase() } as Item;
           })
         : [];
     $: filtered = query.trim()
-        ? items.filter((it) => it.label.toLowerCase().includes(query.trim().toLowerCase()))
+        ? items.filter((it) => it.search.includes(query.trim().toLowerCase()))
         : items;
 
     const dispatch = createEventDispatcher<{ change: number; hover: number }>();

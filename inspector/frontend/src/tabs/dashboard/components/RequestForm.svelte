@@ -16,6 +16,7 @@
      * with another delivery of the same reciter — admin gets full agency.
      */
     import { createEventDispatcher, onMount } from 'svelte';
+    import { get } from 'svelte/store';
 
     import { localeStore, tr } from '../../../lib/i18n/locale-store';
     import * as m from '../../../lib/paraglide/messages';
@@ -27,14 +28,15 @@
         rejectRequestSoft,
         submitRequest,
     } from '../../../lib/api/requests';
+    import CountryPicker from '../../../lib/components/CountryPicker.svelte';
     import { loadCatalogJson } from '../../../lib/resources/catalog';
     import { isOwner } from '../../../lib/stores/current-user';
     import type {
         PublicDelivery,
         PublicReciter,
     } from '../../../lib/types/generated/schemas';
+    import { countryName as countryLabel } from '../../../lib/utils/delivery-label';
     import {
-        COUNTRIES,
         countryByCode,
         countryByName,
         normalizeCountry as resolveCountry,
@@ -78,7 +80,7 @@
     let countryName: string = (() => {
         const code = resolveCountry(reciter.country);
         const known = countryByCode(code);
-        if (known) return known.name;
+        if (known) return countryLabel(known.code, get(localeStore));
         return reciter.country ?? '';
     })();
     let recording_context = delivery.recording_context ?? '';
@@ -126,7 +128,7 @@
                     if (incoming != null) {
                         const code = resolveCountry(incoming);
                         const known = countryByCode(code);
-                        countryName = known ? known.name : incoming;
+                        countryName = known ? countryLabel(known.code, get(localeStore)) : incoming;
                     }
                 }
                 recording_context =
@@ -144,33 +146,11 @@
 
     /** Resolved ISO-2 code for the currently-typed name. Empty when blank
      *  or unrecognised — the label suffix uses this to render `(SA)` etc. */
-    $: countryCode = countryByName(countryName)?.code ?? '';
+    $: countryCode = countryByName(countryName, lang)?.code ?? '';
     /** True iff the user typed a country that doesn't match any ISO-2 entry.
      *  Blank is fine (truly unknown is allowed); only a populated-but-invalid
      *  value blocks submission. */
     $: invalidCountry = !!countryName && !countryCode;
-
-    /**
-     * Focus/blur dance: clicking into the field temporarily blanks it so
-     * the datalist drops the unfiltered list (Chromium otherwise filters
-     * to the option exactly matching the current value, which is useless
-     * for browsing). On blur, if the user didn't pick or type anything,
-     * restore the previous value — so an accidental click + click-away
-     * is a no-op rather than a destroying-the-selection trap.
-     */
-    let countryFocusStash: string | null = null;
-    function onCountryFocus(): void {
-        if (readOnly) return;
-        countryFocusStash = countryName;
-        countryName = '';
-    }
-    function onCountryBlur(): void {
-        if (readOnly) return;
-        if (!countryName && countryFocusStash != null) {
-            countryName = countryFocusStash;
-        }
-        countryFocusStash = null;
-    }
 
     /**
      * Compute the proposed_edits patch: only include fields the user
@@ -187,7 +167,7 @@
         // full-name catalog value doesn't surface as a phantom edit when the
         // user hasn't touched the field.
         {
-            const submittedCode = countryByName(countryName)?.code ?? '';
+            const submittedCode = countryByName(countryName, lang)?.code ?? '';
             const originalCode = resolveCountry(reciter.country);
             if (submittedCode !== originalCode) {
                 out.country = submittedCode || null;
@@ -418,14 +398,11 @@
                     <span class="label-meta warn">{countryUnknown}</span>
                 {/if}
             </span>
-            <input
-                type="text"
-                list="request-form-countries"
+            <CountryPicker
                 bind:value={countryName}
+                locale={lang}
                 placeholder={countryPlaceholder}
                 disabled={readOnly}
-                on:focus={onCountryFocus}
-                on:blur={onCountryBlur}
             />
         </label>
 
@@ -462,12 +439,6 @@
             {/if}
         </label>
     </div>
-
-    <datalist id="request-form-countries">
-        {#each COUNTRIES as c (c.code)}
-            <option value={c.name} label={c.code}></option>
-        {/each}
-    </datalist>
 
     <label class="comments">
         <span>{fieldComments} {mode === 'create' ? optionalParen : ''}</span>

@@ -37,7 +37,7 @@
     import type { PublicBucket } from '../../../../lib/types/public-bucket';
     import { displayTimeMs } from '../../../../lib/playback/audio-graph';
     import { LS_KEYS } from '../../../../lib/utils/constants';
-    import { titleCaseSlug } from '../../../../lib/utils/delivery-label';
+    import { vocabLabel } from '../../../../lib/i18n/vocab';
     import { getSurahInfo, surahInfoReady } from '../../../../lib/utils/surah-info';
     import { SEGMENTS_SPEEDS } from '../../../../lib/utils/speed-control';
     import { autoSaveEnabled, toggleAutoSave } from '../../stores/autosave';
@@ -244,11 +244,18 @@
 
     let _surahMap: ReturnType<typeof getSurahInfo> = {};
     void surahInfoReady.then(() => { _surahMap = getSurahInfo(); });
-    $: displaySurahName = _surahMap[String(displaySurahNum)]?.name_en ?? null;
+    $: displaySurahName = ((): string | null => {
+        const info = _surahMap[String(displaySurahNum)];
+        if (!info) return null;
+        return $localeStore === 'ar' && info.name_ar ? info.name_ar.replace(/^سُورَةُ\s*/, '') : info.name_en;
+    })();
 
-    $: chipMeta = [titleCaseSlug(contextRiwayah), titleCaseSlug(contextStyle)]
-        .filter(Boolean)
-        .join(' · ');
+    $: chipMeta = tr(
+        $localeStore,
+        [vocabLabel('riwayah', contextRiwayah), vocabLabel('style', contextStyle)]
+            .filter(Boolean)
+            .join(' · '),
+    );
 
     // Filtered to surahs the reciter actually has in their audio manifest.
     // Manifest keys are either "<surah>" or "<surah>:<ayah>" — take the

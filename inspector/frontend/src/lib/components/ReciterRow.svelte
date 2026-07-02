@@ -90,7 +90,7 @@
                 <span class="name-ar" dir="rtl">{reciter.name_ar}</span>
             {/if}
             {#if reciter.country}
-                <span class="country">{countryName(reciter.country)}</span>
+                <span class="country">{countryName(reciter.country, $localeStore)}</span>
             {/if}
         </div>
         {#if visibleBuckets.length > 0}

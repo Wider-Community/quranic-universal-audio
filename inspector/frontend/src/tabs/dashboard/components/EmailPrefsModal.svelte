@@ -32,7 +32,7 @@
     import Toggle from '../../../lib/components/Toggle.svelte';
     import { pushToast } from '../../../lib/stores/toast';
     import type { SelectOption } from '../../../lib/types/ui';
-    import { titleCaseSlug } from '../../../lib/utils/delivery-label';
+    import { vocabLabel } from '../../../lib/i18n/vocab';
     import { catalogData, loadCatalog } from '../stores/catalog-data';
 
     interface Props {
@@ -87,7 +87,7 @@
     const riwayahOptions = $derived.by<SelectOption[]>(() => {
         const set = new Set<string>();
         for (const r of $catalogData.reciters) for (const rw of r.riwayat) set.add(rw);
-        return [...set].sort().map((v) => ({ value: v, label: titleCaseSlug(v) }));
+        return [...set].sort().map((v) => ({ value: v, label: vocabLabel('riwayah', v) }));
     });
 
     const dirty = $derived(working ? JSON.stringify(working) !== baseline : false);

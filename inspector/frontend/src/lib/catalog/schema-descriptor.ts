@@ -111,14 +111,14 @@ export function buildSchemaDescriptor(deliveries: readonly PublicDelivery[]): Sc
     if (contextCounts.size > 0) {
         axes.push({
             key: 'recording_context',
-            label: 'Recording context',
+            label: m.dashboard_facet_axis_recording_context(),
             tagsOf: (d) => (d.recording_context ? [d.recording_context] : []),
             options: optionsByCount(contextCounts),
         });
     }
     axes.push({
         key: 'channel',
-        label: 'Channel',
+        label: m.dashboard_facet_axis_channel(),
         tagsOf: (d) => [d.channel],
         options: optionsByCount(channelCounts, channelNames),
     });

@@ -36,7 +36,9 @@
         toggleTierFilter,
         toggleWaslFilter,
     } from '../../stores/history';
-    import { EDIT_OP_LABELS, ERROR_CAT_LABELS } from '../../utils/constants';
+    import { editOpLabel } from '../../i18n/history-labels';
+    import { VALIDATION_TITLE } from '../../i18n/validation-labels';
+    import { ERROR_CAT_LABELS } from '../../utils/constants';
     import { deriveOpIssueDelta } from '../../utils/validation/classified-issues';
 
     const HISTORY_NEUTRAL_CATEGORIES = new Set(['basmala_amin', 'muqattaat']);
@@ -242,7 +244,7 @@
                         data-filter-value={opType}
                         on:click={() => toggleFilter('op', opType)}
                     >
-                        {EDIT_OP_LABELS[opType] || opType} <span class="pill-count">{count}</span>
+                        {tr($localeStore, editOpLabel(opType))} <span class="pill-count">{count}</span>
                     </button>
                 {/each}
             </div>
@@ -262,7 +264,7 @@
                         data-filter-value={cat}
                         on:click={() => toggleFilter('cat', cat)}
                     >
-                        {ERROR_CAT_LABELS[cat]} <span class="pill-count">{count}</span>
+                        {tr($localeStore, VALIDATION_TITLE[cat]?.() ?? ERROR_CAT_LABELS[cat] ?? cat)} <span class="pill-count">{count}</span>
                     </button>
                 {/each}
             </div>

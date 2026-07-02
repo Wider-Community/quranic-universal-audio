@@ -10,6 +10,8 @@
  * narrows the dropdown.
  */
 
+import { countryName } from './delivery-label';
+
 export interface Country {
     code: string;   // ISO-3166-1 alpha-2 (uppercase)
     name: string;
@@ -275,12 +277,69 @@ export function countryByCode(code: string | null | undefined): Country | null {
 }
 
 
-/** Lookup by full country name (case-insensitive). Returns null when no match. */
-export function countryByName(name: string | null | undefined): Country | null {
+/**
+ * Reverse index of localized (e.g. Arabic) display name → ISO-2 code, built
+ * lazily per locale so a name typed/selected in the active locale still resolves
+ * to its canonical code. English names live in `COUNTRIES`; other locales come
+ * from `Intl.DisplayNames` via `countryName`.
+ */
+const _localizedIndex = new Map<string, Map<string, string>>();
+function localizedNameIndex(locale: string): Map<string, string> {
+    const cached = _localizedIndex.get(locale);
+    if (cached) return cached;
+    const map = new Map<string, string>();
+    for (const c of COUNTRIES) {
+        const label = countryName(c.code, locale);
+        if (label) map.set(label.trim().toLowerCase(), c.code);
+    }
+    _localizedIndex.set(locale, map);
+    return map;
+}
+
+/**
+ * Lookup by country name (case-insensitive), matching the English short-name, the
+ * localized name in `locale` (default Arabic when a non-en locale is given), OR the
+ * ISO-2 code. Returns null when no match — so a value chosen or typed in the active
+ * locale still resolves to its canonical entry.
+ */
+export function countryByName(name: string | null | undefined, locale?: string): Country | null {
     if (!name) return null;
-    const lower = name.trim().toLowerCase();
+    const trimmed = name.trim();
+    const lower = trimmed.toLowerCase();
     if (!lower) return null;
-    return COUNTRIES.find((c) => c.name.toLowerCase() === lower) ?? null;
+    const byEn = COUNTRIES.find((c) => c.name.toLowerCase() === lower);
+    if (byEn) return byEn;
+    const byCode = countryByCode(trimmed);
+    if (byCode) return byCode;
+    for (const loc of locale && locale !== 'en' ? [locale] : ['ar']) {
+        const code = localizedNameIndex(loc).get(lower);
+        if (code) return countryByCode(code);
+    }
+    return null;
+}
+
+export interface CountryOption {
+    code: string;
+    /** Display label in the requested locale. */
+    label: string;
+}
+
+/**
+ * Filtered, localized country options for a combobox. Matches the query against
+ * the ISO-2 code, the English short-name, and the localized name; each option's
+ * `label` is the name in `locale`. An empty query returns the full list.
+ */
+export function filterCountries(query: string | null | undefined, locale = 'en'): CountryOption[] {
+    const q = (query ?? '').trim().toLowerCase();
+    return COUNTRIES.filter((c) => {
+        if (!q) return true;
+        const ar = locale !== 'en' ? countryName(c.code, locale).toLowerCase() : '';
+        return (
+            c.code.toLowerCase().includes(q) ||
+            c.name.toLowerCase().includes(q) ||
+            (!!ar && ar.includes(q))
+        );
+    }).map((c) => ({ code: c.code, label: countryName(c.code, locale) || c.name }));
 }
 
 

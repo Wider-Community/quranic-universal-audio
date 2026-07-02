@@ -16,9 +16,23 @@ export function getSurahInfo(): SurahInfoResponse {
     return _surahInfo;
 }
 
-export function surahOptionText(num: number | string): string {
+/** Arabic surah name with the leading "سُورَةُ" stripped, falling back to English. */
+export function surahName(num: number | string, locale?: string): string {
     const info = _surahInfo[String(num)];
     if (!info) return String(num);
-    const ar = info.name_ar.replace(/^سُورَةُ\s*/, '');
-    return `${num} ${info.name_en} ${ar}`;
+    if (locale === 'ar' && info.name_ar) return info.name_ar.replace(/^سُورَةُ\s*/, '');
+    return info.name_en;
+}
+
+/**
+ * Option text for surah pickers. In `ar` shows "{num} {name_ar}"; otherwise
+ * "{num} {name_en}". With no locale the English form is used (legacy callers).
+ */
+export function surahOptionText(num: number | string, locale?: string): string {
+    const info = _surahInfo[String(num)];
+    if (!info) return String(num);
+    if (locale === 'ar' && info.name_ar) {
+        return `${num} ${info.name_ar.replace(/^سُورَةُ\s*/, '')}`;
+    }
+    return `${num} ${info.name_en}`;
 }

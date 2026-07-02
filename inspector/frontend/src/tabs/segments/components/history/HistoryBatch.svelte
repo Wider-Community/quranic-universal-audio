@@ -30,8 +30,8 @@
         snapToSeg,
     } from '../../stores/history';
     import { undoPending } from '../../stores/undo-pending';
-    import { EDIT_OP_LABELS } from '../../utils/constants';
     import type { PreviewPlaybackContext } from '../../utils/playback/preview';
+    import { editOpLabel } from '../../i18n/history-labels';
     import {
         onOpUndoClick,
         onPendingOpsDiscard,
@@ -122,17 +122,17 @@
             <span class="seg-history-op-type-badge">{m.segments_history_deletion_badge({ n: group.length })}</span>
         {:else if item.type === 'multi-chapter-card'}
             <span class="seg-history-op-type-badge">
-                {m.segments_history_multi_chapter_badge({ opLabel: EDIT_OP_LABELS[primary?.op_type ?? ''] || primary?.op_type || '', n: group.length })}
+                {tr($localeStore, m.segments_history_multi_chapter_badge({ opLabel: editOpLabel(primary?.op_type), n: group.length }))}
             </span>
         {:else if item.type === 'revert-card'}
             <!-- no op badge -->
         {:else if primary}
             <span class="seg-history-op-type-badge">
-                {EDIT_OP_LABELS[primary.op_type] || primary.op_type}
+                {tr($localeStore, editOpLabel(primary.op_type))}
             </span>
             {#each Object.entries(followUp) as [t, count]}
                 <span class="seg-history-op-type-badge secondary">
-                    {m.segments_history_followup_badge({ opLabel: EDIT_OP_LABELS[t] || t, countSuffix: count > 1 ? ` \u00d7${count}` : '' })}
+                    {tr($localeStore, m.segments_history_followup_badge({ opLabel: editOpLabel(t), countSuffix: count > 1 ? ` \u00d7${count}` : '' }))}
                 </span>
             {/each}
         {/if}
@@ -155,7 +155,7 @@
         {/if}
 
         {#if item.chapter != null}
-            <span class="seg-history-batch-chapter">{surahOptionText(item.chapter)}</span>
+            <span class="seg-history-batch-chapter">{surahOptionText(item.chapter, $localeStore)}</span>
         {/if}
 
         <span class="seg-history-batch-time">{batchDateLabel}</span>
@@ -236,7 +236,7 @@
                 {/if}
             {:else if item.type === 'multi-chapter-card'}
                 <div class="seg-history-chapter-list">
-                    {m.segments_history_chapters_list_prefix({ list: (item.chapters || []).map((c) => surahOptionText(c)).join(', ') })}
+                    {m.segments_history_chapters_list_prefix({ list: (item.chapters || []).map((c) => surahOptionText(c, $localeStore)).join(', ') })}
                 </div>
             {:else if group.length === 1 && primary}
                 <HistoryOp

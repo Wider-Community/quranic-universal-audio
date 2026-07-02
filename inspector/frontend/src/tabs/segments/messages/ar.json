@@ -405,5 +405,17 @@
   "segments_guides_gate_read_button": "اقرأ",
   "segments_guides_gate_done_gate": "كل شيء جاهز — التحرير مفتوح.",
   "segments_guides_gate_done_browse": "قرئت جميع الأدلة.",
-  "segments_guides_gate_start_editing_button": "ابدأ التحرير"
+  "segments_guides_gate_start_editing_button": "ابدأ التحرير",
+  "segments_history_optype_trim_segment": "تعديل الحدود",
+  "segments_history_optype_split_segment": "تقسيم",
+  "segments_history_optype_merge_segments": "دمج",
+  "segments_history_optype_delete_segment": "حذف",
+  "segments_history_optype_edit_reference": "تعديل المرجع",
+  "segments_history_optype_confirm_reference": "تأكيد المرجع",
+  "segments_history_optype_auto_fix_missing_word": "ملء الكلمة الناقصة تلقائيًا",
+  "segments_history_optype_ignore_issue": "مشكلة متجاهَلة",
+  "segments_history_optype_set_is_wasl": "وسم الوصل",
+  "segments_history_optype_flag_segment": "تعليق الإبلاغ",
+  "segments_history_optype_pipeline": "تعديل عبر خط المعالجة",
+  "segments_history_optype_remove_sadaqa": "إزالة “صدق الله”"
 }

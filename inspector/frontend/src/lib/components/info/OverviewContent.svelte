@@ -28,9 +28,27 @@
     const slugify = (s: string): string =>
         s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
+    // Unique, non-empty slug per heading block. Arabic headings slugify to '' (no
+    // ASCII), so a bare slug would collide across every section and crash the keyed
+    // {#each}; a per-base counter guarantees uniqueness while keeping readable
+    // slugs for ASCII headings. Keyed by block reference so the nav and the heading
+    // anchor resolve to the same slug.
+    $: headingSlugs = ((): Map<object, string> => {
+        const map = new Map<object, string>();
+        const seen = new Map<string, number>();
+        for (const b of overviewDoc.blocks) {
+            if (b.type !== 'heading') continue;
+            const base = slugify(b.text) || 'section';
+            const n = seen.get(base) ?? 0;
+            seen.set(base, n + 1);
+            map.set(b, n === 0 ? base : `${base}-${n}`);
+        }
+        return map;
+    })();
+
     // Jump index built from the `##` section headings (re-derives on locale switch).
     $: sections = overviewDoc.blocks.flatMap((b) =>
-        b.type === 'heading' ? [{ title: b.text, slug: slugify(b.text) }] : [],
+        b.type === 'heading' ? [{ title: b.text, slug: headingSlugs.get(b) ?? '' }] : [],
     );
 
     // Scroll-spy: the section whose heading currently sits under the pinned index.
@@ -158,7 +176,7 @@
 <div class="info-doc" bind:this={rootEl}>
     {#each overviewDoc.blocks as block, i (i)}
         {#if block.type === 'heading'}
-            <h3 class="info-h" data-slug={slugify(block.text)}>{block.text}</h3>
+            <h3 class="info-h" data-slug={headingSlugs.get(block) ?? ''}>{block.text}</h3>
         {:else if block.type === 'paragraph'}
             <p class="info-p">{@render inline(block.tokens)}</p>
         {:else if block.type === 'list'}
