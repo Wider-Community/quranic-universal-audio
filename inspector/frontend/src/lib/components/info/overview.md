@@ -66,4 +66,4 @@ Both formats support both gapless surah and ayah-by-ayah playback. Both ship a s
 
 ## Privacy
 
-When you sign in with Hugging Face, we store your Hugging Face user ID and username, and we record the edits, reviews, and actions you make for contribution history. A sign-in cookie keeps you logged in for about a week. We don't collect your email, no third-party tracking or ads, and do not share your data. Data is hosted on Hugging Face infra, whose terms also apply. Your contributions are visible to maintainers only and not to the public.
+When you sign in with Hugging Face, we store your Hugging Face user ID and username, and we record the edits, reviews, and actions you make for contribution history. We don't collect your email, no third-party tracking or ads, and do not share your data. Data is hosted on Hugging Face infra, whose terms also apply. Your contributions are visible to maintainers only and not to the public.

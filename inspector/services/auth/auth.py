@@ -10,7 +10,8 @@ OAuth-state store + one cookie surface:
   round-trip. Safe because the app is pinned to a single worker (see
   ``app.py`` ``_assert_single_worker``).
 - ``inspector_session`` cookie signed via ``itsdangerous`` is the long-lived
-  (1 week) identity cookie, set after a successful callback. Holds
+  identity cookie (``SESSION_COOKIE_MAX_AGE_DAYS``, default 30, overridable via
+  ``INSPECTOR_SESSION_MAX_AGE_DAYS``), set after a successful callback. Holds
   ``{login, hf_user_id, iat}``.
 
 The identity cookie does NOT carry ``role`` — ``current_user()`` resolves
@@ -49,7 +50,11 @@ from .secrets_guard import MissingSecret, get_session_secret
 logger = logging.getLogger(__name__)
 
 SESSION_COOKIE_NAME = "inspector_session"
-SESSION_COOKIE_MAX_AGE = 60 * 60 * 24 * 7  # 1 week — mirrors hf_oauth_expiration_minutes: 10080
+# How long the identity cookie stays valid before a re-login is required.
+# Overridable per-Space via INSPECTOR_SESSION_MAX_AGE_DAYS (a plain Space
+# variable) without a redeploy.
+SESSION_COOKIE_MAX_AGE_DAYS = int(os.getenv("INSPECTOR_SESSION_MAX_AGE_DAYS", "30"))
+SESSION_COOKIE_MAX_AGE = 60 * 60 * 24 * SESSION_COOKIE_MAX_AGE_DAYS
 SESSION_SALT = "inspector-session-v1"
 
 # Dev-mode synthetic identity. Unsigned cookie; only honoured when
