@@ -233,6 +233,11 @@
 </script>
 
 {#if visible}
+    <!-- Re-render the whole rail on a locale switch: its labels are read via
+         m.*() across many branches and helper returns (navTarget / cardBadge),
+         so one locale dependency here is simpler and safer than threading one
+         through each call site. -->
+    {#key i18n.locale}
     <aside class="notifs" aria-label={m.dashboard_notifs_rail_aria_label()}>
         <header>
             <h2>{m.dashboard_notifs_rail_heading()}</h2>
@@ -352,6 +357,7 @@
             </ol>
         {/if}
     </aside>
+    {/key}
 {/if}
 
 <EmailPrefsModal {manageToken} open={prefsOpen} onclose={() => (prefsOpen = false)} />
