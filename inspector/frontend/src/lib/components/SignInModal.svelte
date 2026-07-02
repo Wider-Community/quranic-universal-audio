@@ -64,30 +64,24 @@
             aria-labelledby="sign-in-title"
         >
             {#if embedded && phase === 'trying'}
-                <h2 id="sign-in-title" class="sign-in-title">Signing you in…</h2>
-                <p class="sign-in-body">Connecting to your Hugging Face account.</p>
+                <h2 id="sign-in-title" class="sign-in-title">Signing in…</h2>
             {:else if embedded && phase === 'need-tab'}
-                <h2 id="sign-in-title" class="sign-in-title">One more step</h2>
+                <h2 id="sign-in-title" class="sign-in-title">Continue in a new tab</h2>
                 <p class="sign-in-body">
-                    Your browser won't let sign-in finish inside this embedded
-                    view. Continue in a new tab — you'll come right back here,
-                    signed in.
+                    This browser blocks sign-in inside embedded pages.
                 </p>
                 <div class="sign-in-actions">
                     <button type="button" class="sign-in-cta" on:click={continueInTab}>
-                        Continue in a new tab
+                        Open new tab
                     </button>
                     <button type="button" class="sign-in-dismiss" on:click={_close}>Cancel</button>
                 </div>
             {:else if embedded && phase === 'awaiting-tab'}
-                <h2 id="sign-in-title" class="sign-in-title">Finish in the new tab</h2>
-                <p class="sign-in-body">
-                    Complete sign-in in the tab that just opened, then return
-                    here. This updates automatically.
-                </p>
+                <h2 id="sign-in-title" class="sign-in-title">Waiting for sign-in</h2>
+                <p class="sign-in-body">Finish in the other tab.</p>
                 <div class="sign-in-actions">
                     <button type="button" class="sign-in-cta" on:click={() => void recheckSession()}>
-                        I've signed in
+                        Recheck
                     </button>
                     <button type="button" class="sign-in-dismiss" on:click={_close}>Cancel</button>
                 </div>

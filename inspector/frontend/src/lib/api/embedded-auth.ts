@@ -140,7 +140,10 @@ export async function beginEmbeddedSignIn(returnPath: string): Promise<void> {
  * is why this can't be fully automatic.
  */
 export function continueInTab(): void {
-    window.open(`/api/auth/login?return=${encodeURIComponent(_returnPath)}`, '_blank');
+    // popup=1 → the sign-in tab closes itself after auth, returning the user to
+    // the HF page they came from — instead of landing them on the bare
+    // *.hf.space app. The embedded view then picks up the session below.
+    window.open('/api/auth/login?popup=1&return=%2F', '_blank');
     _setPhase('awaiting-tab');
     _watchForReturn();
 }
@@ -159,11 +162,19 @@ function _watchForReturn(): void {
     const onVisible = (): void => {
         if (document.visibilityState === 'visible') void check();
     };
+    // The self-closing tab posts here right before it closes → pick up instantly.
+    const onMessage = (e: MessageEvent): void => {
+        if (e.origin === window.location.origin && e.data?.source === 'inspector-auth' && e.data?.ok) {
+            void check();
+        }
+    };
     window.addEventListener('focus', check);
+    window.addEventListener('message', onMessage);
     document.addEventListener('visibilitychange', onVisible);
     const poll = window.setInterval(check, RETURN_POLL_MS);
     _stopWatch = () => {
         window.removeEventListener('focus', check);
+        window.removeEventListener('message', onMessage);
         document.removeEventListener('visibilitychange', onVisible);
         window.clearInterval(poll);
     };
