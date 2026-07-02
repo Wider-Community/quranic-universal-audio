@@ -122,15 +122,26 @@ function _watchPopup(): void {
     };
 }
 
+function _delay(ms: number): Promise<void> {
+    return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 /** Popup finished: resolve identity. If the iframe still can't see the session,
  *  ask for one more click to grant storage access with a fresh gesture. */
 async function _finish(): Promise<void> {
     _teardown();
     _setPhase('finishing');
-    const me = await loadCurrentUser();
-    if (me.hf_user_id) {
-        _setPhase('done');
-        return;
+    // Where third-party cookies are allowed the popup's cookie is readable
+    // straight away; a couple of short retries absorb the set-cookie/postMessage
+    // race so those users skip the extra click. Browsers that block third-party
+    // cookies never resolve here and fall through to the storage-access step.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+        const me = await loadCurrentUser();
+        if (me.hf_user_id) {
+            _setPhase('done');
+            return;
+        }
+        if (attempt < 2) await _delay(500);
     }
     _setPhase('needs-continue');
 }
