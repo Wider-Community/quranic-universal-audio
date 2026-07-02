@@ -42,6 +42,7 @@
      */
     import * as m from '$lib/paraglide/messages';
     import { i18n } from '$lib/i18n/locale.svelte';
+    import { toArabicNumeral } from '../utils/arabic-text';
     import { type RecitationAnimConfig } from './config';
     import { createStripScroller, GLIDE_MIN_MS, glideDur } from './filmstrip-scroll.svelte';
     import type { ActiveCellInfo, CellMissing, FilmstripModel } from './filmstrip-model';
@@ -278,10 +279,13 @@
     }
 
     function missingTitle(c: Cell): string | undefined {
-        if (c.missing === 'full') return 'Not recited';
+        void i18n.locale; // re-evaluate the label on locale switch
+        if (c.missing === 'full') return m.common_filmstrip_not_recited();
         if (c.missing !== 'words') return undefined;
-        const m = missingWordsByAyah?.get(c.ayah);
-        return m && m.length ? `Missing words: ${m.join(', ')}` : 'Missing words';
+        const mw = missingWordsByAyah?.get(c.ayah);
+        if (!mw || !mw.length) return m.common_filmstrip_missing_words();
+        const list = i18n.locale === 'ar' ? mw.map(toArabicNumeral).join('، ') : mw.join(', ');
+        return m.common_filmstrip_missing_words_list({ indices: list });
     }
 
     const sorted = $derived(buildSortedIntervals(units));
@@ -823,7 +827,7 @@
                     {#if c.missing !== 'full'}
                         <div class="cell-fill" class:glide={jumping && i === fillIdx}></div>
                     {/if}
-                    <span class="cell-num">{c.ayah}</span>
+                    <span class="cell-num">{i18n.locale === 'ar' ? toArabicNumeral(c.ayah) : c.ayah}</span>
                 </div>
             {/each}
             <div class="pad" style:width="{pad}px"></div>

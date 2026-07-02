@@ -16,6 +16,9 @@ export interface PublicActivityCard {
     ts: string;
     kind: PublicEventKind;
     name: string;
+    /** Reciter's Arabic name. `null` when the catalog has none; the rail prefers
+     *  it in the ar locale and falls back to `name`. */
+    name_ar?: string | null;
     /** Delivery riwayah slug. `null` when the slug is no longer in the catalog. */
     riwayah: string | null;
     /** Delivery style slug. `null` when the slug is no longer in the catalog. */

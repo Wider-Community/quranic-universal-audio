@@ -218,9 +218,10 @@ class _StubDelivery:
 
 
 class _StubReciter:
-    def __init__(self, reciter_id, name_en):
+    def __init__(self, reciter_id, name_en, name_ar=None):
         self.reciter_id = reciter_id
         self.name_en = name_en
+        self.name_ar = name_ar
 
 
 def _install_delivery_descriptor(monkeypatch, deliveries, reciters):
@@ -261,7 +262,9 @@ def test_card_carries_riwayah_and_style(monkeypatch):
             style="murattal",
         ),
     }
-    reciters = {"husary": _StubReciter("husary", "Mahmoud Khalil Al-Husary")}
+    reciters = {
+        "husary": _StubReciter("husary", "Mahmoud Khalil Al-Husary", name_ar="محمود خليل الحصري"),
+    }
 
     _install_audit(monkeypatch, [_record("reciter.claimed", slug="husary_qdc")])
     _install_delivery_descriptor(monkeypatch, deliveries, reciters)
@@ -270,6 +273,7 @@ def test_card_carries_riwayah_and_style(monkeypatch):
     assert len(cards) == 1
     card = cards[0]
     assert card["name"] == "Mahmoud Khalil Al-Husary"
+    assert card["name_ar"] == "محمود خليل الحصري"
     assert card["riwayah"] == "hafs_an_asim"
     assert card["style"] == "murattal"
     # Text fallback still emitted for older clients.
@@ -289,6 +293,7 @@ def test_card_falls_back_when_slug_missing_from_catalog(monkeypatch):
     assert len(cards) == 1
     card = cards[0]
     assert card["name"] == "Husary"
+    assert card["name_ar"] is None
     assert card["riwayah"] is None
     assert card["style"] is None
     assert "Husary" in card["text"]

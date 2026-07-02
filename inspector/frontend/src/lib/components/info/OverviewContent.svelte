@@ -18,6 +18,11 @@
 
     $: indexAriaLabel = tr($localeStore, m.common_info_index_aria_label());
 
+    // Scoped RTL for the modal content + TOC while the app-wide layout stays LTR
+    // (the full RTL flip is a separate workflow): Arabic prose, bullets, and the
+    // section-index row read right-to-left within this subtree only.
+    $: dir = ($localeStore === 'ar' ? 'rtl' : 'ltr') as 'rtl' | 'ltr';
+
     // Locale-aware doc: re-selects the translated overview.md on a switch.
     $: overviewDoc = getOverviewDoc($localeStore);
 
@@ -160,7 +165,7 @@
 {#snippet inline(tokens: InlineToken[])}{#each tokens as t, i (i)}{#if t.href}<a href={t.href} target="_blank" rel="noopener noreferrer">{#if t.bold}<strong>{t.text}</strong>{:else}{t.text}{/if}</a>{:else if t.bold}<strong>{t.text}</strong>{:else}{t.text}{/if}{/each}{/snippet}
 
 {#if sections.length > 1}
-    <nav class="info-index" aria-label={indexAriaLabel} bind:this={navEl}>
+    <nav class="info-index" {dir} aria-label={indexAriaLabel} bind:this={navEl}>
         {#each sections as s, i (s.slug)}
             {#if i > 0}<span class="info-index-sep" aria-hidden="true">·</span>{/if}
             <button
@@ -173,7 +178,7 @@
     </nav>
 {/if}
 
-<div class="info-doc" bind:this={rootEl}>
+<div class="info-doc" {dir} bind:this={rootEl}>
     {#each overviewDoc.blocks as block, i (i)}
         {#if block.type === 'heading'}
             <h3 class="info-h" data-slug={headingSlugs.get(block) ?? ''}>{block.text}</h3>
@@ -268,7 +273,7 @@
     }
     .info-list {
         margin: 0 0 var(--s-3);
-        padding-left: var(--s-5);
+        padding-inline-start: var(--s-5);
         display: flex;
         flex-direction: column;
         gap: var(--s-2);

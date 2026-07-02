@@ -38,6 +38,7 @@ class PublicActivityCard(TypedDict, total=False):
     ts: str
     kind: PublicEventKind
     name: str
+    name_ar: str | None
     riwayah: str | None
     style: str | None
     text: str
@@ -73,14 +74,14 @@ def _iter_partitions(months: int) -> Iterable[dict]:
     yield from repo_transitions.since(_window_cutoff_iso(months))
 
 
-def _delivery_descriptor(slug: str) -> tuple[str, str, str] | None:
+def _delivery_descriptor(slug: str) -> tuple[str, str | None, str, str] | None:
     delivery = catalog_service.find_delivery(slug)
     if delivery is None:
         return None
     reciter = catalog_service.find_reciter(delivery.reciter_id)
     if reciter is None:
         return None
-    return reciter.name_en, delivery.riwayah, delivery.style
+    return reciter.name_en, reciter.name_ar, delivery.riwayah, delivery.style
 
 
 def _to_card(
@@ -99,11 +100,12 @@ def _to_card(
         return None
     descriptor = _delivery_descriptor(slug)
     if descriptor is not None:
-        name, riwayah, style = descriptor
+        name, name_ar, riwayah, style = descriptor
     else:
         name = catalog_service.display_name(slug)
         if name is None:
             return None
+        name_ar = None
         riwayah = None
         style = None
 
@@ -111,6 +113,7 @@ def _to_card(
         ts=ts,
         kind=kind,
         name=name,
+        name_ar=name_ar,
         riwayah=riwayah,
         style=style,
         text=_TEMPLATES.get(kind, "{name}").format(name=name),

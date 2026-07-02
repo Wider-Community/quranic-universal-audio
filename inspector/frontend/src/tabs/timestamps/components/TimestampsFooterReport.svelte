@@ -13,6 +13,8 @@
      * verse already carries open reports.
      */
     import { clickOutside } from '../../../lib/actions/click-outside';
+    import { i18n } from '../../../lib/i18n/locale.svelte';
+    import * as m from '../../../lib/paraglide/messages';
     import { can } from '../../../lib/stores/capabilities';
     import { playerContext } from '../../../lib/stores/player-context';
     import type { TsReport } from '../../../lib/types/generated/schemas';
@@ -43,6 +45,14 @@
     const curVerse = $derived($selectedVerse);
     const disabled = $derived(!curSlug || !curVerse);
     const isReported = $derived(!!curVerse && $openReportedVerseKeys.has(curVerse));
+
+    // Reading i18n.locale makes these re-run on switch.
+    const reportAriaLabel = $derived(
+        (i18n.locale,
+        curVerse ? m.ts_footer_report_aria_label({ verse: curVerse }) : m.ts_footer_report_aria_label_plain()),
+    );
+    const reportTitle = $derived((i18n.locale, m.ts_footer_report_title()));
+    const reportButtonLabel = $derived((i18n.locale, m.ts_footer_report_button()));
 
     // Keep the reciter-level reported-verse counts (button highlight) in sync
     // with the playing reciter.
@@ -143,11 +153,11 @@
             onpointerenter={prewarm}
             aria-haspopup="menu"
             aria-expanded={open}
-            aria-label={`Report a timestamps issue${curVerse ? ` on verse ${curVerse}` : ''}`}
-            title="Report a timestamps issue"
+            aria-label={reportAriaLabel}
+            title={reportTitle}
         >
             <ReportIcon name="flag" size={14} />
-            <span>Report</span>
+            <span>{reportButtonLabel}</span>
         </button>
 
         {#if open}

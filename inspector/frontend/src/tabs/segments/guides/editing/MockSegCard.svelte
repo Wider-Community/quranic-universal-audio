@@ -18,6 +18,8 @@
      * column for the narrower follow-up cards.
      */
     import WaveformCanvas from '../../../../lib/components/WaveformCanvas.svelte';
+    import { i18n } from '../../../../lib/i18n/locale.svelte';
+    import * as m from '../../../../lib/paraglide/messages';
     import type { PeakBucket } from '../../../../lib/types/peaks-transport';
 
     type Mode = 'default' | 'adjust' | 'split' | 'reference';
@@ -64,14 +66,43 @@
         placeholder = false,
         flagged = false,
         showFlagComment = false,
-        flagComment = 'The audio here is cutting out.',
+        flagComment = '',
     }: Props = $props();
 
+    // Locale-reactive labels. The six action buttons + "Go to" reuse the REAL
+    // editor's message keys so the illustration stays in lockstep with the live
+    // SegmentRow; reading i18n.locale re-runs each on a switch.
+    const L = $derived.by(() => {
+        void i18n.locale;
+        return {
+            goto: m.segments_row_goto_button(),
+            adjust: m.segments_row_adjust_button(),
+            mergeUp: m.segments_row_merge_up_button(),
+            del: m.segments_row_delete_button(),
+            split: m.segments_row_split_button(),
+            mergeDown: m.segments_row_merge_down_button(),
+            editRef: m.segments_row_edit_ref_button(),
+            cancel: m.segments_eg_mock_cancel(),
+            apply: m.segments_eg_mock_apply(),
+            splitConfirm: m.segments_eg_mock_split_confirm(),
+            flagAria: m.segments_eg_mock_flag_aria(),
+            timeAnatomy: m.segments_eg_mock_anatomy_time(),
+            flagAuthorContributor: m.segments_eg_mock_flag_author_contributor(),
+            flagAuthorMaintainer: m.segments_eg_mock_flag_author_maintainer(),
+            flagTimeHours: m.segments_eg_mock_flag_time_hours(),
+            flagTimeMinutes: m.segments_eg_mock_flag_time_minutes(),
+            flagReplyBody: m.segments_eg_mock_flag_reply_body(),
+            flagReplyPlaceholder: m.segments_eg_mock_flag_reply_placeholder(),
+            flagReplySend: m.segments_eg_mock_flag_reply_send(),
+        };
+    });
+
     // In placeholder (anatomy) mode each slot shows its own name.
-    const dIndex = $derived(placeholder ? 'Segment number' : index);
-    const dRef = $derived(placeholder ? 'Reference' : refText);
-    const dConf = $derived(placeholder ? 'Confidence' : conf);
-    const dArabic = $derived(placeholder ? 'Quran reference text' : arabic);
+    const dIndex = $derived(placeholder ? (i18n.locale, m.segments_eg_mock_anatomy_index()) : index);
+    const dRef = $derived(placeholder ? (i18n.locale, m.segments_eg_mock_anatomy_ref()) : refText);
+    const dConf = $derived(placeholder ? (i18n.locale, m.segments_eg_mock_anatomy_conf()) : conf);
+    const dArabic = $derived(placeholder ? (i18n.locale, m.segments_eg_mock_anatomy_text()) : arabic);
+    const dFlagComment = $derived(flagComment || (i18n.locale, m.segments_eg_mock_flag_default_comment()));
 
     const hasEmph = $derived(emphasize.length > 0);
 
@@ -83,7 +114,9 @@
     }
 </script>
 
-<div class="eg-mock-wrap" class:eg-mock-flagged={showFlagComment}>
+<!-- dir="ltr": the mock faithfully mirrors the real (LTR) editor card even inside
+     an RTL guide, so its waveform/controls keep the live editor's geometry. -->
+<div class="eg-mock-wrap" dir="ltr" class:eg-mock-flagged={showFlagComment}>
 <div class="seg-row eg-static" class:eg-compact={compact} aria-hidden="true">
     <div class="seg-left">
         <div class="eg-wave {ec('peak')}">
@@ -101,7 +134,7 @@
         {#if mode === 'adjust'}
             <div class="seg-edit-inline">
                 <div class="seg-edit-buttons">
-                    <button type="button" tabindex="-1" class="btn btn-sm btn-cancel">Cancel</button>
+                    <button type="button" tabindex="-1" class="btn btn-sm btn-cancel">{L.cancel}</button>
                     <div class="seg-nudge-pair seg-nudge-start">
                         <button type="button" tabindex="-1" class="seg-nudge">&lsaquo;</button>
                         <button type="button" tabindex="-1" class="seg-nudge">&rsaquo;</button>
@@ -111,31 +144,31 @@
                         <button type="button" tabindex="-1" class="seg-nudge">&lsaquo;</button>
                         <button type="button" tabindex="-1" class="seg-nudge">&rsaquo;</button>
                     </div>
-                    <button type="button" tabindex="-1" class="btn btn-sm btn-confirm">Apply</button>
+                    <button type="button" tabindex="-1" class="btn btn-sm btn-confirm">{L.apply}</button>
                 </div>
             </div>
         {:else if mode === 'split'}
             <div class="seg-edit-inline">
                 <div class="seg-edit-buttons">
-                    <button type="button" tabindex="-1" class="btn btn-sm btn-cancel">Cancel</button>
+                    <button type="button" tabindex="-1" class="btn btn-sm btn-cancel">{L.cancel}</button>
                     <button type="button" tabindex="-1" class="seg-side-pick">L</button>
                     <div class="seg-nudge-pair seg-nudge-split">
                         <button type="button" tabindex="-1" class="seg-nudge">&lsaquo;</button>
                         <button type="button" tabindex="-1" class="seg-nudge">&rsaquo;</button>
                     </div>
                     <button type="button" tabindex="-1" class="seg-side-pick active">R</button>
-                    <button type="button" tabindex="-1" class="btn btn-sm btn-confirm">Split</button>
+                    <button type="button" tabindex="-1" class="btn btn-sm btn-confirm">{L.splitConfirm}</button>
                 </div>
             </div>
         {:else}
             <div class="seg-row-controls">
                 <div class="seg-row-play-actions {ec('play')}">
                     <button type="button" tabindex="-1" class="btn btn-sm seg-card-play-btn">&#9654;</button>
-                    <button type="button" tabindex="-1" class="btn btn-sm seg-card-goto-btn">Go to</button>
+                    <button type="button" tabindex="-1" class="btn btn-sm seg-card-goto-btn">{L.goto}</button>
                     <button
                         type="button"
                         tabindex="-1"
-                        aria-label="Flag segment"
+                        aria-label={L.flagAria}
                         class="btn btn-sm seg-flag-btn eg-flag-btn {ec('flag')}"
                         class:is-flagged={flagged}
                     >
@@ -146,12 +179,12 @@
                     </button>
                 </div>
                 <div class="seg-actions">
-                    <button type="button" tabindex="-1" class="btn btn-sm btn-adjust {ec('adjust')}">Adjust</button>
-                    <button type="button" tabindex="-1" class="btn btn-sm btn-merge-prev {ec('merge-prev')}">Merge &uarr;</button>
-                    <button type="button" tabindex="-1" class="btn btn-sm btn-delete {ec('delete')}">Delete</button>
-                    <button type="button" tabindex="-1" class="btn btn-sm btn-split {ec('split')}">Split</button>
-                    <button type="button" tabindex="-1" class="btn btn-sm btn-merge-next {ec('merge-next')}">Merge &darr;</button>
-                    <button type="button" tabindex="-1" class="btn btn-sm btn-edit-ref {ec('editref')}">Edit Ref</button>
+                    <button type="button" tabindex="-1" class="btn btn-sm btn-adjust {ec('adjust')}">{L.adjust}</button>
+                    <button type="button" tabindex="-1" class="btn btn-sm btn-merge-prev {ec('merge-prev')}">{L.mergeUp}</button>
+                    <button type="button" tabindex="-1" class="btn btn-sm btn-delete {ec('delete')}">{L.del}</button>
+                    <button type="button" tabindex="-1" class="btn btn-sm btn-split {ec('split')}">{L.split}</button>
+                    <button type="button" tabindex="-1" class="btn btn-sm btn-merge-next {ec('merge-next')}">{L.mergeDown}</button>
+                    <button type="button" tabindex="-1" class="btn btn-sm btn-edit-ref {ec('editref')}">{L.editRef}</button>
                 </div>
             </div>
         {/if}
@@ -173,7 +206,7 @@
                 </div>
                 <div class="seg-text-times {ec('time')}" class:seg-text-time-editing={mode === 'adjust'}>
                     {#if placeholder}
-                        <span class="seg-text-duration eg-ph">Time from - Time to | duration</span>
+                        <span class="seg-text-duration eg-ph">{L.timeAnatomy}</span>
                     {:else}
                         <span class="seg-text-time-range">
                             <span class="seg-text-time">{timeFrom}</span>
@@ -194,21 +227,21 @@
     <div class="eg-flag-thread">
         <div class="eg-flag-comment">
             <div class="eg-flag-comment-head">
-                <span class="eg-flag-author">a contributor</span>
-                <span class="eg-flag-time">2 hours ago</span>
+                <span class="eg-flag-author">{L.flagAuthorContributor}</span>
+                <span class="eg-flag-time">{L.flagTimeHours}</span>
             </div>
-            <div class="eg-flag-body">{flagComment}</div>
+            <div class="eg-flag-body">{dFlagComment}</div>
         </div>
         <div class="eg-flag-comment eg-flag-reply-comment">
             <div class="eg-flag-comment-head">
-                <span class="eg-flag-author eg-flag-author-reply">a maintainer</span>
-                <span class="eg-flag-time">12 minutes ago</span>
+                <span class="eg-flag-author eg-flag-author-reply">{L.flagAuthorMaintainer}</span>
+                <span class="eg-flag-time">{L.flagTimeMinutes}</span>
             </div>
-            <div class="eg-flag-body">Good catch. It is a minor issue, so probably fine to leave as is.</div>
+            <div class="eg-flag-body">{L.flagReplyBody}</div>
         </div>
         <div class="eg-flag-reply">
-            <span class="eg-flag-reply-input">Add a reply…</span>
-            <span class="eg-flag-reply-send">Reply</span>
+            <span class="eg-flag-reply-input">{L.flagReplyPlaceholder}</span>
+            <span class="eg-flag-reply-send">{L.flagReplySend}</span>
         </div>
     </div>
 {/if}

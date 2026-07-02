@@ -340,5 +340,8 @@
   "common_delivery_category_surah": "Surah",
   "common_delivery_bitrate_cbr": "cbr",
   "common_delivery_bitrate_vbr": "vbr",
-  "common_delivery_bitrate_mixed": "mixed"
+  "common_delivery_bitrate_mixed": "mixed",
+  "common_filmstrip_not_recited": "Not recited",
+  "common_filmstrip_missing_words": "Missing words",
+  "common_filmstrip_missing_words_list": "Missing words: {indices}"
 }

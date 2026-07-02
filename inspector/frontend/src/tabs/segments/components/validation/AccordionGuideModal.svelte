@@ -10,8 +10,11 @@
     import { currentUser, loadCurrentUser, markGuideReadLocally } from '../../../../lib/stores/current-user';
     import type { HistoryBatch } from '../../../../lib/types/view-models';
     import EditingGuideContent from '../../guides/editing/EditingGuideContent.svelte';
+    import EditingGuideContentAr from '../../guides/editing/EditingGuideContent.ar.svelte';
     import FlaggingGuideContent from '../../guides/editing/FlaggingGuideContent.svelte';
+    import FlaggingGuideContentAr from '../../guides/editing/FlaggingGuideContent.ar.svelte';
     import { getGuideExample } from '../../guides/examples';
+    import { exampleContextLabel, exampleDescription, exampleTitle } from '../../guides/examples/example-labels';
     import { guideTitleFromBlocks, parseGuideSource } from '../../guides/parser';
     import { getAccordionGuide, guideViewKey, isGuideRead } from '../../guides/registry';
     import type { GuideExample } from '../../guides/types';
@@ -34,6 +37,17 @@
         'flagging-demo': FlaggingGuideContent,
         overview: OverviewContent,
     };
+
+    // Locale-aware body pick: the illustrated editing/flagging guides have Arabic
+    // sibling components (their prose is inline, not message-keyed). OverviewContent
+    // localizes itself (picks overview.ar.md), so it needs no sibling.
+    function guideComponent(name: string, locale: string): typeof EditingGuideContent | null {
+        if (locale === 'ar') {
+            if (name === 'editing-guide') return EditingGuideContentAr;
+            if (name === 'flagging-demo') return FlaggingGuideContentAr;
+        }
+        return GUIDE_COMPONENTS[name] ?? null;
+    }
 
     export let category: string;
     export let opener: HTMLElement | null = null;
@@ -137,6 +151,11 @@
         previewCtx.dispose();
     });
 
+    // Scoped RTL for the guide prose while the app layout stays LTR (full flip is
+    // a separate workflow). The time-directional visualizations inside an example
+    // (before→after diffs, waveforms, segment rows) stay LTR islands.
+    $: dir = ($localeStore === 'ar' ? 'rtl' : 'ltr') as 'rtl' | 'ltr';
+
     $: guideKicker = tr($localeStore, m.segments_validation_guide_modal_kicker());
     $: closeAriaLabel = tr($localeStore, m.segments_validation_guide_modal_close_aria_label());
     $: noGuideLabel = tr($localeStore, m.segments_validation_guide_modal_no_guide());
@@ -165,7 +184,7 @@
             >&times;</button>
         </header>
 
-        <div class="accordion-guide-body">
+        <div class="accordion-guide-body" {dir}>
             {#if !guideSource}
                 <p class="accordion-guide-muted">{noGuideLabel}</p>
             {:else}
@@ -186,8 +205,9 @@
                                 </div>
                             </div>
                         {:else if block.type === 'component'}
-                            {#if GUIDE_COMPONENTS[block.name]}
-                                <svelte:component this={GUIDE_COMPONENTS[block.name]} />
+                            {@const comp = guideComponent(block.name, $localeStore)}
+                            {#if comp}
+                                <svelte:component this={comp} />
                             {:else}
                                 <p class="accordion-guide-error">{m.segments_validation_guide_modal_unknown_component({ name: block.name })}</p>
                             {/if}
@@ -200,15 +220,16 @@
                             {:else}
                             <article class="accordion-guide-example">
                                 <header class="accordion-guide-example-header">
-                                    <h3>{example.title}</h3>
+                                    <h3>{tr($localeStore, exampleTitle(block.id))}</h3>
                                     {#if example.description}
-                                        <p>{example.description}</p>
+                                        <p>{tr($localeStore, exampleDescription(block.id))}</p>
                                     {/if}
                                 </header>
 
                                 {#each (example.context ?? []).filter((c) => c.position === 'before') as ctx}
                                     <div class="accordion-guide-context">
-                                        <div class="accordion-guide-context-label">{ctx.label}</div>
+                                        <div class="accordion-guide-context-label">{tr($localeStore, exampleContextLabel(block.id, ctx.label))}</div>
+                                        <div dir="ltr">
                                         {#each ctx.segments as snap}
                                             <SegmentRow
                                                 seg={snapToSeg(snap as HistorySnapshot, example.chapter)}
@@ -220,9 +241,11 @@
                                                 {previewCtx}
                                             />
                                         {/each}
+                                        </div>
                                     </div>
                                 {/each}
 
+                                <div dir="ltr">
                                 {#if example.render === 'edit_chain'}
                                     {@const chain = guideChain(example)}
                                     {#if chain}
@@ -237,10 +260,12 @@
                                         {previewCtx}
                                     />
                                 {/if}
+                                </div>
 
                                 {#each (example.context ?? []).filter((c) => c.position === 'after') as ctx}
                                     <div class="accordion-guide-context">
-                                        <div class="accordion-guide-context-label">{ctx.label}</div>
+                                        <div class="accordion-guide-context-label">{tr($localeStore, exampleContextLabel(block.id, ctx.label))}</div>
+                                        <div dir="ltr">
                                         {#each ctx.segments as snap}
                                             <SegmentRow
                                                 seg={snapToSeg(snap as HistorySnapshot, example.chapter)}
@@ -252,6 +277,7 @@
                                                 {previewCtx}
                                             />
                                         {/each}
+                                        </div>
                                     </div>
                                 {/each}
                             </article>
@@ -360,7 +386,7 @@
         margin: 14px 0 16px;
         padding: 13px 15px;
         border: 1px solid var(--goal-border);
-        border-left: 3px solid var(--goal-accent);
+        border-inline-start: 3px solid var(--goal-accent);
         border-radius: 8px;
         background: var(--goal-bg);
     }
@@ -428,7 +454,7 @@
         margin: 8px 0;
         padding: 8px 10px;
         border: 1px dashed var(--border-default);
-        border-left: 3px solid var(--border-strong);
+        border-inline-start: 3px solid var(--border-strong);
         border-radius: 6px;
         background: var(--surface-sunken);
         opacity: 0.85;
