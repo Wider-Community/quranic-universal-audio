@@ -201,5 +201,142 @@
   "common_picker_switch_reciter_title": "Switch reciter",
   "common_nav_tab_dashboard": "Dashboard",
   "common_nav_tab_timestamps": "Timestamps",
-  "common_nav_tab_segments": "Segments"
+  "common_nav_tab_segments": "Segments",
+  "common_theme_toggle_system_label": "Theme: following your device — click for light",
+  "common_theme_toggle_light_label": "Theme: light — click for dark",
+  "common_theme_toggle_dark_label": "Theme: dark — click to follow your device",
+  "common_locale_switcher_aria_label": "Language",
+  "common_player_preset_color_label": "Preset colour",
+  "common_player_hue_label": "Hue",
+  "common_player_saturation_label": "Saturation",
+  "common_player_filmstrip_scrubber_aria_label": "Ayah scrubber",
+  "common_claim_unclaim_first_toast": "Unclaim {existing} first to claim {target}.",
+  "common_relative_time_just_now": "just now",
+  "common_relative_time_yesterday": "yesterday",
+  "common_relative_time_minutes_ago": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} minute ago",
+        "countPlural=other": "{count} minutes ago"
+      }
+    }
+  ],
+  "common_relative_time_hours_ago": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} hour ago",
+        "countPlural=other": "{count} hours ago"
+      }
+    }
+  ],
+  "common_relative_time_days_ago": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} day ago",
+        "countPlural=other": "{count} days ago"
+      }
+    }
+  ],
+  "common_relative_time_weeks_ago": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} week ago",
+        "countPlural=other": "{count} weeks ago"
+      }
+    }
+  ],
+  "common_relative_time_months_ago": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} month ago",
+        "countPlural=other": "{count} months ago"
+      }
+    }
+  ],
+  "common_relative_time_years_ago": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} year ago",
+        "countPlural=other": "{count} years ago"
+      }
+    }
+  ],
+  "common_delivery_coverage_full": "Full",
+  "common_delivery_ayah_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} ayah",
+        "countPlural=other": "{count} ayahs"
+      }
+    }
+  ],
+  "common_delivery_surah_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} surah",
+        "countPlural=other": "{count} surahs"
+      }
+    }
+  ],
+  "common_delivery_category_ayah": "Ayah",
+  "common_delivery_category_surah": "Surah",
+  "common_delivery_bitrate_cbr": "cbr",
+  "common_delivery_bitrate_vbr": "vbr",
+  "common_delivery_bitrate_mixed": "mixed"
 }

@@ -13,12 +13,16 @@
      */
     import { get } from 'svelte/store';
 
+    import { i18n } from '$lib/i18n/locale.svelte';
+
     import { recordGuideViewed } from '../../api/guide-views';
     import { currentUser, markGuideReadLocally } from '../../stores/current-user';
     import { closeInfoModal, infoModalOpen } from '../../stores/info-modal';
     import Modal from '../Modal.svelte';
-    import { overviewDoc } from './overview';
+    import { getOverviewDoc } from './overview';
     import OverviewContent from './OverviewContent.svelte';
+
+    const overviewDoc = $derived(getOverviewDoc(i18n.locale));
 
     $effect(() => {
         if ($infoModalOpen) void recordOverviewRead();

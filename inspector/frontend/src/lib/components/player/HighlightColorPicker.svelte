@@ -13,6 +13,8 @@
      * OKLCh sliders whose tracks preview the actual landed colours). Used by
      * `NowReciting`'s control row.
      */
+    import * as m from '$lib/paraglide/messages';
+    import { i18n } from '$lib/i18n/locale.svelte';
     import { ControlIcon } from '../../recitation-animation';
     import { recitationConfigStore, setHighlight } from '../../recitation-animation/recitation-settings';
     import { oklchHex, parseOklch } from '../../utils/color-derive';
@@ -66,6 +68,11 @@
         open = !open;
     }
 
+    // Attribute labels gated on i18n.locale so they re-render on a locale switch.
+    const presetColorLabel = $derived((i18n.locale, m.common_player_preset_color_label()));
+    const hueLabel = $derived((i18n.locale, m.common_player_hue_label()));
+    const saturationLabel = $derived((i18n.locale, m.common_player_saturation_label()));
+
     $effect(() => {
         if (!open) return;
         const onDown = (e: PointerEvent): void => {
@@ -103,13 +110,13 @@
                         type="button"
                         class="sw"
                         style:background={landed(p)}
-                        aria-label="Preset colour"
+                        aria-label={presetColorLabel}
                         onclick={() => pick(p)}
                     ></button>
                 {/each}
             </div>
             <label class="ax">
-                <span>Hue</span>
+                <span>{hueLabel}</span>
                 <input
                     type="range"
                     min="0"
@@ -121,7 +128,7 @@
                 />
             </label>
             <label class="ax">
-                <span>Saturation</span>
+                <span>{saturationLabel}</span>
                 <input
                     type="range"
                     min="0"

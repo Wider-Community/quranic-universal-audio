@@ -1,0 +1,43 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "errors_auth_required": "يلزم تسجيل الدخول للمتابعة.",
+  "errors_forbidden_capability": "لا تملك إذنًا لهذا الإجراء.",
+  "errors_not_authorized": "لا تملك إذنًا لهذا الإجراء.",
+  "errors_not_editable_state_with_label": "لا يمكن تحرير هذا القارئ حاليًا (الحالة: {state_label}).",
+  "errors_not_editable_state": "هذا القارئ ليس في حالة قابلة للتحرير حاليًا.",
+  "errors_marked_ready_frozen": "هذا القارئ معلّم كجاهز للنشر ومقفل. اختر «متابعة التحرير» لإجراء تغييرات.",
+  "errors_visibility_blocked": "هذا القارئ غير متاح للتحرير.",
+  "errors_not_claim_holder": "تحتاج إلى مطالبة نشطة على هذا القارئ لتحريره.",
+  "errors_state_precondition_with_label": "هذا الإجراء غير متاح بينما القارئ في الحالة {state_label}.",
+  "errors_state_precondition": "هذا الإجراء غير متاح من الحالة الراهنة للقارئ.",
+  "errors_release_blocked_marked_ready": "أزِل تعليم الجاهزية قبل إصدار هذا القارئ، أو اطلب من مسؤول إعادته.",
+  "errors_reason_required_with_min": [
+    {
+      "declarations": ["input min_chars", "local countPlural = min_chars: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=zero": "أدخِل سببًا (بلا حروف).",
+        "countPlural=one": "أدخِل سببًا (حرف واحد على الأقل).",
+        "countPlural=two": "أدخِل سببًا (حرفان على الأقل).",
+        "countPlural=few": "أدخِل سببًا ({min_chars} حروف على الأقل).",
+        "countPlural=many": "أدخِل سببًا ({min_chars} حرفًا على الأقل).",
+        "countPlural=other": "أدخِل سببًا ({min_chars} حرف على الأقل)."
+      }
+    }
+  ],
+  "errors_reason_required": "أدخِل سببًا.",
+  "errors_mark_ready_checklist": "أكمِل كل عناصر قائمة التحقق قبل التعليم كجاهز.",
+  "errors_mark_ready_blocking_counts": "عالِج مشكلات التحقق المانعة المتبقية قبل التعليم كجاهز.",
+  "errors_mark_ready_payload": "طلب التعليم كجاهز غير مكتمل. راجِعه وأعِد الإرسال.",
+  "errors_mark_ready_no_segments": "تعذّر التعليم كجاهز — لا مقاطع محفوظة لهذا القارئ بعد.",
+  "errors_last_owner": "لا يمكنك إزالة آخر مالك — رقِّ مالكًا آخر أولًا.",
+  "errors_unknown_reciter": "تعذّر العثور على هذا القارئ.",
+  "errors_read_only": "هذه النسخة للقراءة فقط؛ لا تُحفظ التغييرات.",
+  "errors_status_401": "يلزم تسجيل الدخول للمتابعة.",
+  "errors_status_403": "لا تملك إذنًا لهذا الإجراء.",
+  "errors_status_404": "تعذّر العثور على ذلك.",
+  "errors_status_409": "هذا الإجراء يتعارض مع الحالة الراهنة.",
+  "errors_status_500": "حدث خطأ من جانبنا. أعِد المحاولة.",
+  "errors_generic_fallback": "حدث خطأ ما. أعِد المحاولة.",
+  "errors_claim_unclaim_first": "أزِل مطالبة {existing} أولًا للمطالبة بـ {target}."
+}

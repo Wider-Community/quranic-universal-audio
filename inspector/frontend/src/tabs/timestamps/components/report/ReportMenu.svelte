@@ -10,6 +10,8 @@
      * A category that already carries an open report on this verse gets the amber
      * "reported" highlight + a count.
      */
+    import * as m from '$lib/paraglide/messages';
+    import { i18n } from '$lib/i18n/locale.svelte';
     import type { TsReport } from '../../../../lib/types/generated/schemas';
     import type { SilenceSubtype, TajweedSubtype } from '../../stores/report-mode';
     import {
@@ -36,15 +38,15 @@
         ) => void;
     } = $props();
 
-    const TAJWEED_ENTRIES: { subtype: TajweedSubtype; icon: string; label: string; blurb: string }[] = [
-        { subtype: 'wrong_rule', icon: 'wrong_rule', label: 'Wrong rule', blurb: 'A rule shown is incorrect' },
-        { subtype: 'missing_rule', icon: 'missing_rule', label: 'Missing rule', blurb: 'A rule should apply but is absent' },
+    const TAJWEED_ENTRIES: { subtype: TajweedSubtype; icon: string; label: () => string; blurb: () => string }[] = [
+        { subtype: 'wrong_rule', icon: 'wrong_rule', label: m.ts_report_tajweed_wrong_rule_label, blurb: m.ts_report_menu_tajweed_wrong_rule_blurb },
+        { subtype: 'missing_rule', icon: 'missing_rule', label: m.ts_report_tajweed_missing_rule_label, blurb: m.ts_report_menu_tajweed_missing_rule_blurb },
     ];
 
-    const SILENCE_ENTRIES: { subtype: SilenceSubtype; icon: string; label: string; blurb: string }[] = [
-        { subtype: 'pause_boundary', icon: 'timing', label: 'Pause timing off', blurb: 'A pause starts or ends off' },
-        { subtype: 'pause_wasl', icon: 'wrong_rule', label: "Pause shouldn't be here", blurb: 'A detected pause should be connected (waṣl)' },
-        { subtype: 'pause_missed', icon: 'missing_rule', label: 'Missing pause', blurb: 'A pause is absent where the reciter stops' },
+    const SILENCE_ENTRIES: { subtype: SilenceSubtype; icon: string; label: () => string; blurb: () => string }[] = [
+        { subtype: 'pause_boundary', icon: 'timing', label: m.ts_report_silence_pause_boundary_label, blurb: m.ts_report_menu_silence_pause_boundary_blurb },
+        { subtype: 'pause_wasl', icon: 'wrong_rule', label: m.ts_report_silence_pause_wasl_label, blurb: m.ts_report_menu_silence_pause_wasl_blurb },
+        { subtype: 'pause_missed', icon: 'missing_rule', label: m.ts_report_silence_pause_missed_label, blurb: m.ts_report_menu_silence_pause_missed_blurb },
     ];
 
     /** Open-report count per category on this verse → drives the highlight. */
@@ -67,11 +69,14 @@
         // comment (audio/other inline composer) or tajweed/silence subtypes
         expandedId = expandedId === cat.id ? null : cat.id;
     }
+
+    // Attribute/text labels gated on i18n.locale so they re-render on a locale switch.
+    const menuTitle = $derived((i18n.locale, m.ts_report_menu_title()));
 </script>
 
 <div class="menu">
     <header class="menu-head">
-        <h4>Report an issue</h4>
+        <h4>{menuTitle}</h4>
         <span class="verse">{verseKey}</span>
     </header>
 
@@ -90,11 +95,11 @@
                 >
                     <span class="cat-ic"><ReportIcon name={cat.id} /></span>
                     <span class="cat-text">
-                        <span class="cat-label">{cat.label}</span>
-                        <span class="cat-blurb">{cat.blurb}</span>
+                        <span class="cat-label">{cat.label()}</span>
+                        <span class="cat-blurb">{cat.blurb()}</span>
                     </span>
                     {#if count > 0}
-                        <span class="count" title={`${count} open report${count === 1 ? '' : 's'}`}>{count}</span>
+                        <span class="count" title={m.ts_report_menu_open_reports_count_tooltip({ count })}>{count}</span>
                     {/if}
                     <span class="chev" class:open={expandable && open}><ReportIcon name="chevron" size={14} /></span>
                 </button>
@@ -115,8 +120,8 @@
                                 <button type="button" class="sub-row act" onclick={() => onenterMode('tajweed', e.subtype)}>
                                     <span class="sub-ic"><ReportIcon name={e.icon} size={14} /></span>
                                     <span class="sub-text">
-                                        <span class="sub-label">{e.label}</span>
-                                        <span class="sub-blurb">{e.blurb}</span>
+                                        <span class="sub-label">{e.label()}</span>
+                                        <span class="sub-blurb">{e.blurb()}</span>
                                     </span>
                                     <span class="chev"><ReportIcon name="chevron" size={13} /></span>
                                 </button>
@@ -126,8 +131,8 @@
                                 <button type="button" class="sub-row act" onclick={() => onenterMode('silence', e.subtype)}>
                                     <span class="sub-ic"><ReportIcon name={e.icon} size={14} /></span>
                                     <span class="sub-text">
-                                        <span class="sub-label">{e.label}</span>
-                                        <span class="sub-blurb">{e.blurb}</span>
+                                        <span class="sub-label">{e.label()}</span>
+                                        <span class="sub-blurb">{e.blurb()}</span>
                                     </span>
                                     <span class="chev"><ReportIcon name="chevron" size={13} /></span>
                                 </button>

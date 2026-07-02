@@ -47,6 +47,8 @@
               : m.ts_footer_toggle_phonemes_title()),
     );
     const guideTitle = $derived((i18n.locale, m.ts_footer_shortcuts_guide_title()));
+    const wipeTitle = $derived((i18n.locale, m.ts_footer_wipe_title()));
+    const tajweedSettingsTitle = $derived((i18n.locale, m.ts_footer_tajweed_settings_title()));
 
     function persist(key: string, v: boolean): void {
         try { localStorage.setItem(key, String(v)); } catch { /* ignore */ }
@@ -175,12 +177,12 @@
     ><ControlIcon name="phonemes" /></button>
     <button
         type="button" class="icon-btn" class:on={$highlightWipe}
-        aria-pressed={$highlightWipe} title="Continuous highlight (karaoke wipe)" onclick={toggleWipe}
+        aria-pressed={$highlightWipe} title={wipeTitle} onclick={toggleWipe}
     ><ControlIcon name="wipe" /></button>
 
     <div class="guide-wrap" use:clickOutside={() => (tajweedOpen = false)}>
         <button
-            type="button" class="icon-btn" class:on={tajweedOpen} title="Tajweed rules & colours"
+            type="button" class="icon-btn" class:on={tajweedOpen} title={tajweedSettingsTitle}
             aria-haspopup="dialog" aria-expanded={tajweedOpen}
             onclick={() => (tajweedOpen = !tajweedOpen)}
         ><ControlIcon name="tajweed" /></button>

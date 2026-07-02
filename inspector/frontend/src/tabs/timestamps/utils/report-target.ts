@@ -11,6 +11,7 @@
  * line up.
  */
 
+import * as m from '$lib/paraglide/messages';
 import type { TsReportTarget } from '../../../lib/types/generated/schemas';
 
 export type CellKey = string;
@@ -23,17 +24,17 @@ export type TimingDir = 'early' | 'late';
  *  Mirrors `qua_shared/schemas/wire/ts_reports.py::timing_label`. */
 export function timingLabel(onset: TimingDir | null, offset: TimingDir | null): string {
     const key = `${onset ?? ''}|${offset ?? ''}`;
-    const both: Record<string, string> = {
-        'early|late': 'Too long',
-        'late|early': 'Too short',
-        'early|early': 'Shifted earlier',
-        'late|late': 'Shifted later',
+    const both: Record<string, () => string> = {
+        'early|late': m.ts_report_timing_label_too_long,
+        'late|early': m.ts_report_timing_label_too_short,
+        'early|early': m.ts_report_timing_label_shifted_earlier,
+        'late|late': m.ts_report_timing_label_shifted_later,
     };
     const hit = both[key];
-    if (hit) return hit;
-    if (onset && !offset) return onset === 'early' ? 'Starts early' : 'Starts late';
-    if (offset && !onset) return offset === 'early' ? 'Finishes early' : 'Finishes late';
-    return 'Timing';
+    if (hit) return hit();
+    if (onset && !offset) return onset === 'early' ? m.ts_report_timing_label_starts_early() : m.ts_report_timing_label_starts_late();
+    if (offset && !onset) return offset === 'early' ? m.ts_report_timing_label_finishes_early() : m.ts_report_timing_label_finishes_late();
+    return m.ts_report_timing_label_default();
 }
 
 function intAttr(el: Element, name: string): number | null {

@@ -11,6 +11,8 @@
 
     import { createEventDispatcher, onDestroy, onMount } from 'svelte';
 
+    import { localeStore, tr } from '../../../../lib/i18n/locale-store';
+    import * as m from '../../../../lib/paraglide/messages';
     import type { SegActiveFilter } from '../../stores/filters';
     import { SEG_FILTER_OPS } from '../../utils/constants';
     import { SEG_FILTER_FIELDS } from '../../utils/data/filter-fields';
@@ -59,11 +61,14 @@
     onDestroy(() => {
         if (debounceTimer !== null) clearTimeout(debounceTimer);
     });
+
+    $: valuePlaceholder = tr($localeStore, m.segments_filter_value_placeholder());
+    $: fieldOptions = tr($localeStore, SEG_FILTER_FIELDS.map((f) => ({ value: f.value, label: f.label() })));
 </script>
 
 <div class="seg-filter-row">
     <select class="seg-filter-field" bind:value={filter.field} on:change={onFieldChange}>
-        {#each SEG_FILTER_FIELDS as f (f.value)}
+        {#each fieldOptions as f (f.value)}
             <option value={f.value}>{f.label}</option>
         {/each}
     </select>
@@ -77,7 +82,7 @@
         class="seg-filter-value"
         type="number"
         step="any"
-        placeholder="value"
+        placeholder={valuePlaceholder}
         value={filter.value != null ? String(filter.value) : ''}
         on:input={onValueInput}
     />

@@ -5,10 +5,13 @@
      * General drawer; here it is purely informational (claim mutation stays in
      * the Reviews tab / the Ready-to-generate row's Send-back).
      */
+    import { i18n } from '../../../../../lib/i18n/locale.svelte';
     import type { AdminReviewDetail } from '../../../../../lib/types/generated/schemas';
-    import { markReadyCopy } from '../../../../segments/copy/mark-ready';
+    import { getMarkReadyCopy } from '../../../../segments/copy/mark-ready';
 
     let { detail }: { detail: AdminReviewDetail } = $props();
+
+    const markReadyCopy = $derived(getMarkReadyCopy(i18n.locale));
 
     function initials(login: string | null | undefined): string {
         const t = (login ?? '').trim();

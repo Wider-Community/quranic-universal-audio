@@ -145,26 +145,26 @@ describe('tajweed-rules — tooltip names', () => {
     });
 
     it('uses the full second-pass tooltip spellings', () => {
-        expect(badgeForTag('madd_jaiz_munfasil')!.tooltip).toBe("Madd Ja'iz Munfassil");
-        expect(badgeForTag('madd_wajib_muttasil')!.tooltip).toBe('Madd Wajib Muttassil');
-        expect(badgeForTag('madd_arid_lissukun')!.tooltip).toBe("Madd 'Arid-lissukun");
-        expect(badgeForTag('madd_tabii')!.tooltip).toBe("Madd Tabi'i");
-        expect(badgeForTag('izhar_halqi')!.tooltip).toBe('Izhar Halqi');
-        expect(badgeForTag('idgham_mutamathilayn')!.tooltip).toBe('Idgham Mutamathilayn');
-        expect(badgeForTag('idgham_mutajanisayn_naqis')!.tooltip).toBe('Idgham Mutajanisayn Naqis');
+        expect(badgeForTag('madd_jaiz_munfasil')!.tooltip()).toBe("Madd Ja'iz Munfassil");
+        expect(badgeForTag('madd_wajib_muttasil')!.tooltip()).toBe('Madd Wajib Muttassil');
+        expect(badgeForTag('madd_arid_lissukun')!.tooltip()).toBe("Madd 'Arid-lissukun");
+        expect(badgeForTag('madd_tabii')!.tooltip()).toBe("Madd Tabi'i");
+        expect(badgeForTag('izhar_halqi')!.tooltip()).toBe('Izhar Halqi');
+        expect(badgeForTag('idgham_mutamathilayn')!.tooltip()).toBe('Idgham Mutamathilayn');
+        expect(badgeForTag('idgham_mutajanisayn_naqis')!.tooltip()).toBe('Idgham Mutajanisayn Naqis');
     });
 
-    it('legend labels drop the "Madd" prefix in the Madd column', () => {
+    it('legend labels use the full rule name in the Madd column', () => {
         const label = (k: string): string | undefined =>
-            LEGEND.flatMap((g) => legendRows(g)).find((r) => r.legendKey === k)?.label;
-        expect(label('madd_jaiz')).toBe("Ja'iz Munfassil");
-        expect(label('madd_wajib')).toBe('Wajib Muttassil');
-        expect(label('madd_arid')).toBe("'Arid-lissukun");
+            LEGEND.flatMap((g) => legendRows(g)).find((r) => r.legendKey === k)?.label();
+        expect(label('madd_jaiz')).toBe("Madd Ja'iz Munfassil");
+        expect(label('madd_wajib')).toBe('Madd Wajib Muttassil');
+        expect(label('madd_arid')).toBe("Madd 'Arid-lissukun");
         expect(label('izhar')).toBe('Izhar Halqi');
     });
 
     it('groups into Noon / Meem, Madd, Other rules with idgham bila under Noon', () => {
-        expect(LEGEND.map((g) => g.title)).toEqual(['Noon / Meem', 'Madd', 'Other rules']);
+        expect(LEGEND.map((g) => g.title())).toEqual(['Noon / Meem', 'Madd', 'Other rules']);
         const noonMeem = LEGEND.find((g) => g.category === 'noon_meem')!;
         const rows = legendRows(noonMeem);
         const bilaIdx = rows.findIndex((r) => r.legendKey === 'idgham_bila');
@@ -175,8 +175,8 @@ describe('tajweed-rules — tooltip names', () => {
 
     it('Noon / Meem splits into a Noon sub-section and a Meem (shafawi) sub-section', () => {
         const noonMeem = LEGEND.find((g) => g.category === 'noon_meem')!;
-        expect(noonMeem.subgroups?.map((s) => s.title)).toEqual(['Noon', 'Meem']);
-        const meem = noonMeem.subgroups!.find((s) => s.title === 'Meem')!;
+        expect(noonMeem.subgroups?.map((s) => s.title())).toEqual(['Noon', 'Meem']);
+        const meem = noonMeem.subgroups!.find((s) => s.title() === 'Meem')!;
         expect(meem.rows.map((r) => r.legendKey)).toEqual([
             'ghunnah',
             'ikhfaa_shafawi',
@@ -188,7 +188,7 @@ describe('tajweed-rules — tooltip names', () => {
     it('qalqala is two coupled rows sharing the qalqala key (one kubrā)', () => {
         const other = LEGEND.find((g) => g.category === 'other')!;
         const qalqala = legendRows(other).filter((r) => r.legendKey === 'qalqala');
-        expect(qalqala.map((r) => r.label)).toEqual(['Qalqala Sughra', 'Qalqala Kubra']);
+        expect(qalqala.map((r) => r.label())).toEqual(['Qalqala Sughra', 'Qalqala Kubra']);
         expect(qalqala.filter((r) => r.kubra)).toHaveLength(1);
     });
 });

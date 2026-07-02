@@ -31,8 +31,8 @@
   "ts_footer_shuffle_off_label": "العشوائية: متوقفة",
   "ts_footer_shuffle_ayah_label": "آية عشوائية (القارئ نفسه)",
   "ts_footer_shuffle_both_label": "قارئ وآية عشوائيان",
-  "ts_footer_picker_empty": "اختر قارئاً",
-  "ts_footer_picker_listbox_aria_label": "اختر قارئاً",
+  "ts_footer_picker_empty": "اختر قارئا",
+  "ts_footer_picker_listbox_aria_label": "اختر قارئا",
   "ts_footer_picker_search_placeholder": "ابحث في القرّاء",
   "ts_footer_picker_search_aria_label": "ابحث في القرّاء",
   "ts_footer_picker_no_results": "لا نتائج",
@@ -68,7 +68,7 @@
         "countPlural=one": "الانتقال إلى الآية المبلغ عنها {verse} (بلاغ واحد)",
         "countPlural=two": "الانتقال إلى الآية المبلغ عنها {verse} (بلاغان)",
         "countPlural=few": "الانتقال إلى الآية المبلغ عنها {verse} ({count} بلاغات)",
-        "countPlural=many": "الانتقال إلى الآية المبلغ عنها {verse} ({count} بلاغاً)",
+        "countPlural=many": "الانتقال إلى الآية المبلغ عنها {verse} ({count} بلاغا)",
         "countPlural=other": "الانتقال إلى الآية المبلغ عنها {verse} ({count} بلاغ)"
       }
     }
@@ -76,5 +76,214 @@
   "ts_validation_panel_summary": "آيات منخفضة الثقة",
   "ts_validation_panel_chip_aria_label": "الانتقال إلى الآية منخفضة الثقة {verse}",
   "ts_unified_pause_bridge_stop_title": "علامة وقف",
-  "ts_unified_pause_bridge_pause_title": "وقف مؤقت"
+  "ts_unified_pause_bridge_pause_title": "وقف مؤقت",
+  "ts_report_composer_back_aria_label": "العودة إلى الفئات",
+  "ts_report_composer_edit_button": "تعديل",
+  "ts_report_composer_remove_button": "إزالة",
+  "ts_report_composer_reported_note": "تم الإبلاغ. سيطّلع المراجعون على هذا.",
+  "ts_report_composer_field_aria_label": "صف مشكلة {category}",
+  "ts_report_composer_save_changes_button": "احفظ التغييرات",
+  "ts_report_composer_submit_button": "إرسال البلاغ",
+  "ts_report_composer_others_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=zero": "لا مستمعين آخرين أبلغوا عن هذا.",
+        "countPlural=one": "أبلغ عن هذا مستمع آخر واحد.",
+        "countPlural=two": "أبلغ عن هذا مستمعان آخران.",
+        "countPlural=few": "أبلغ عن هذا {count} مستمعين آخرين.",
+        "countPlural=many": "أبلغ عن هذا {count} مستمعا آخر.",
+        "countPlural=other": "أبلغ عن هذا {count} مستمع آخر."
+      }
+    }
+  ],
+  "ts_report_strip_group_aria_label": "أدوات الإبلاغ",
+  "ts_report_strip_gap_pause_label": "وقف بعد الكلمة {w}",
+  "ts_report_strip_word_label": "الكلمة {w}",
+  "ts_report_strip_cell_label": "ك{w}·خلية {cell}",
+  "ts_report_strip_remove_phoneme_title": "إزالة الصوت",
+  "ts_report_strip_remove_phoneme_aria_label": "إزالة الصوت {glyph}",
+  "ts_report_strip_start_boundary_aria_label": "حد البداية",
+  "ts_report_strip_end_boundary_aria_label": "حد النهاية",
+  "ts_report_strip_axis_start_label": "البداية",
+  "ts_report_strip_axis_end_label": "النهاية",
+  "ts_report_strip_axis_early_option": "مبكر",
+  "ts_report_strip_axis_late_option": "متأخر",
+  "ts_report_strip_existing_label": "الحالي:",
+  "ts_report_strip_comment_required_placeholder": "تعليق (مطلوب)…",
+  "ts_report_strip_note_optional_placeholder": "ملاحظة (اختياري)…",
+  "ts_report_strip_remove_aria_label": "إزالة",
+  "ts_report_strip_saving_label": "جارٍ الحفظ…",
+  "ts_report_strip_confirm_delete_label": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=zero": "تأكيد الحذف",
+        "countPlural=one": "تأكيد الحذف",
+        "countPlural=two": "تأكيد حذف {count}",
+        "countPlural=few": "تأكيد حذف {count}",
+        "countPlural=many": "تأكيد حذف {count}",
+        "countPlural=other": "تأكيد حذف {count}"
+      }
+    }
+  ],
+  "ts_report_strip_submit_label": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=zero": "إرسال",
+        "countPlural=one": "إرسال",
+        "countPlural=two": "إرسال {count}",
+        "countPlural=few": "إرسال {count}",
+        "countPlural=many": "إرسال {count}",
+        "countPlural=other": "إرسال {count}"
+      }
+    }
+  ],
+  "ts_report_silence_pause_boundary_label": "توقيت الوقف غير صحيح",
+  "ts_report_silence_pause_wasl_label": "لا ينبغي وجوده هنا",
+  "ts_report_silence_pause_missed_label": "وقف مفقود",
+  "ts_report_tajweed_wrong_rule_label": "قاعدة خاطئة",
+  "ts_report_tajweed_missing_rule_label": "قاعدة مفقودة",
+  "ts_report_strip_head_title_tajweed": "الإبلاغ عن مشكلة في التجويد",
+  "ts_report_strip_head_title_phonemes": "الإبلاغ عن مشكلة في الأصوات",
+  "ts_report_strip_head_title_silence": "الإبلاغ عن مشكلة في الوقف",
+  "ts_report_strip_head_title_timing": "الإبلاغ عن مشكلة في التوقيت",
+  "ts_report_strip_instruction_pause_boundary": "انقر على وقف مميّز، ثم حدّد كيف تكون بدايته و/أو نهايته غير صحيحة.",
+  "ts_report_strip_instruction_pause_wasl": "انقر على أي وقف لا ينبغي وجوده (ينبغي وصل الكلمات).",
+  "ts_report_strip_instruction_pause_missed": "انقر حيث يكون هناك وقف مفقود — موضع بين كلمتين يتوقف عنده القارئ.",
+  "ts_report_strip_instruction_timing": "انقر على حرف أو كلمة، ثم حدّد كيف تكون بدايته و/أو نهايته غير صحيحة.",
+  "ts_report_strip_instruction_phonemes": "انقر على أي أصوات خاطئة أو خاطئة التصنيف. انقر مجددا للإزالة.",
+  "ts_report_strip_instruction_tajweed_wrong_rule": "الخلايا المميّزة تحمل قاعدة — انقر على إحداها للإبلاغ عن القاعدة الخاطئة.",
+  "ts_report_strip_instruction_tajweed_missing_rule": "انقر على أي خلية ينبغي أن تنطبق عليها قاعدة لكنها مفقودة.",
+  "ts_report_strip_empty_phonemes": "لا أصوات مبلغ عنها بعد.",
+  "ts_report_strip_empty_silence": "لا وقفات مبلغ عنها بعد.",
+  "ts_report_strip_empty_default": "لا شيء مبلغ عنه بعد.",
+  "ts_report_thanks_toast": "شكرا على ملاحظاتك.",
+  "ts_report_thanks_subtext_timing": "يساعدنا هذا في تحسين نموذج التوقيت",
+  "ts_report_thanks_subtext_silence": "يساعدنا هذا في تحسين مسار كشف الوقف",
+  "ts_report_submit_failed_fallback": "تعذّر الإرسال",
+  "ts_report_menu_title": "الإبلاغ عن مشكلة",
+  "ts_report_menu_open_reports_count_tooltip": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=zero": "لا بلاغات مفتوحة",
+        "countPlural=one": "بلاغ مفتوح واحد",
+        "countPlural=two": "بلاغان مفتوحان",
+        "countPlural=few": "{count} بلاغات مفتوحة",
+        "countPlural=many": "{count} بلاغا مفتوحا",
+        "countPlural=other": "{count} بلاغ مفتوح"
+      }
+    }
+  ],
+  "ts_report_menu_tajweed_wrong_rule_blurb": "قاعدة معروضة غير صحيحة",
+  "ts_report_menu_tajweed_missing_rule_blurb": "قاعدة ينبغي أن تنطبق لكنها غائبة",
+  "ts_report_menu_silence_pause_boundary_blurb": "وقف يبدأ أو ينتهي بشكل غير صحيح",
+  "ts_report_menu_silence_pause_wasl_blurb": "وقف مكتشف ينبغي وصله",
+  "ts_report_menu_silence_pause_missed_blurb": "وقف غائب حيث يتوقف القارئ",
+  "ts_report_category_timing_label": "التوقيت",
+  "ts_report_category_timing_blurb": "حد يبدأ أو ينتهي بشكل غير صحيح",
+  "ts_report_category_tajweed_label": "التجويد",
+  "ts_report_category_tajweed_blurb": "قاعدة خاطئة أو مفقودة أو مطبقة بشكل غير صحيح",
+  "ts_report_category_phonemes_label": "الأصوات",
+  "ts_report_category_phonemes_blurb": "صوت خاطئ أو خاطئ التصنيف",
+  "ts_report_category_silence_label": "الوقف",
+  "ts_report_category_silence_blurb": "وقف خاطئ أو غير مرغوب فيه أو مفقود",
+  "ts_report_category_audio_label": "الصوت",
+  "ts_report_category_audio_blurb": "جودة التسجيل، أو صوت خاطئ / مفقود",
+  "ts_report_category_audio_placeholder": "ما الذي يبدو خاطئا في هذه الآية؟",
+  "ts_report_category_other_label": "أخرى",
+  "ts_report_category_other_blurb": "أي شيء آخر بخصوص هذه الآية",
+  "ts_report_category_other_placeholder": "صف المشكلة…",
+  "ts_report_timing_label_too_long": "طويل جدا",
+  "ts_report_timing_label_too_short": "قصير جدا",
+  "ts_report_timing_label_shifted_earlier": "مُزاح إلى الأمام",
+  "ts_report_timing_label_shifted_later": "مُزاح إلى الخلف",
+  "ts_report_timing_label_starts_early": "يبدأ مبكرا",
+  "ts_report_timing_label_starts_late": "يبدأ متأخرا",
+  "ts_report_timing_label_finishes_early": "ينتهي مبكرا",
+  "ts_report_timing_label_finishes_late": "ينتهي متأخرا",
+  "ts_report_timing_label_default": "التوقيت",
+  "ts_tajweed_panel_title": "أحكام التجويد",
+  "ts_tajweed_panel_subtitle": "(مرّر فوق خلية لتفاصيل الحكم)",
+  "ts_tajweed_panel_reset_all_button": "إعادة تعيين الكل",
+  "ts_tajweed_panel_change_colour_title": "تغيير اللون",
+  "ts_tajweed_panel_rule_state_aria_label": "{rule} {state}",
+  "ts_tajweed_panel_state_on": "مفعّل",
+  "ts_tajweed_panel_state_off": "موقوف",
+  "ts_tajweed_panel_group_toggle_aria_label": "تفعيل / إيقاف كل أحكام {title} {state}",
+  "ts_tajweed_panel_group_toggle_disable_title": "إيقاف الكل في المجموعة",
+  "ts_tajweed_panel_group_toggle_enable_title": "تفعيل الكل في المجموعة",
+  "ts_tajweed_panel_key_unwritten_caption": "منطوق لكن غير مكتوب/محوّل",
+  "ts_tajweed_panel_key_silent_caption": "مكتوب لكن غير منطوق",
+  "ts_tajweed_panel_waqf_section_title": "الوقف · علامات الوقف",
+  "ts_tajweed_panel_group_title_noon_meem": "النون / الميم",
+  "ts_tajweed_panel_group_title_noon": "النون",
+  "ts_tajweed_panel_group_title_meem": "الميم",
+  "ts_tajweed_panel_group_title_madd": "المد",
+  "ts_tajweed_panel_group_title_other": "أحكام أخرى",
+  "ts_tajweed_panel_waqf_stop_or_continue": "الوقف أو الوصل",
+  "ts_tajweed_panel_waqf_better_to_stop": "الوقف أولى",
+  "ts_tajweed_panel_waqf_better_to_continue": "الوصل أولى",
+  "ts_tajweed_panel_waqf_must_stop": "الوقف لازم",
+  "ts_tajweed_panel_waqf_should_not_stop": "الوقف ممنوع",
+  "ts_tajweed_panel_waqf_stop_at_one_only": "الوقف على أحدهما",
+  "ts_tajweed_rule_ghunnah": "غنّة",
+  "ts_tajweed_rule_ikhfaa": "إخفاء",
+  "ts_tajweed_rule_ikhfaa_shafawi": "إخفاء شفوي",
+  "ts_tajweed_rule_iqlab": "إقلاب",
+  "ts_tajweed_rule_idgham_ghunnah": "إدغام بغنّة",
+  "ts_tajweed_rule_idgham_shafawi": "إدغام شفوي",
+  "ts_tajweed_rule_madd_lazim": "مد لازم",
+  "ts_tajweed_rule_madd_wajib": "مد واجب متصل",
+  "ts_tajweed_rule_madd_jaiz": "مد جائز منفصل",
+  "ts_tajweed_rule_madd_arid": "مد عارض للسكون",
+  "ts_tajweed_rule_madd_leen": "مد لين",
+  "ts_tajweed_rule_madd_tabii": "مد طبيعي",
+  "ts_tajweed_rule_madd_iwad": "مد عوض",
+  "ts_tajweed_rule_tafkheem": "تفخيم",
+  "ts_tajweed_rule_qalqala_sughra": "قلقلة صغرى",
+  "ts_tajweed_rule_qalqala_kubra": "قلقلة كبرى",
+  "ts_tajweed_rule_idgham_bila_ghunnah": "إدغام بلا غنّة",
+  "ts_tajweed_rule_idgham_mutamathilayn": "إدغام متماثلين",
+  "ts_tajweed_rule_idgham_mutaqaribayn": "إدغام متقاربين",
+  "ts_tajweed_rule_idgham_mutajanisayn_kamil": "إدغام متجانسين كامل",
+  "ts_tajweed_rule_idgham_mutajanisayn_naqis": "إدغام متجانسين ناقص",
+  "ts_tajweed_rule_idgham_mutajanisayn": "إدغام متجانسين",
+  "ts_tajweed_rule_izhar_halqi": "إظهار حلقي",
+  "ts_tajweed_rule_izhar_shafawi": "إظهار شفوي",
+  "ts_tajweed_rule_silent_vowel": "حركة غير منطوقة",
+  "ts_tajweed_rule_silent_hamza_wasl": "همزة وصل (غير منطوقة)",
+  "ts_tajweed_rule_silent_lam_shamsiyah": "لام شمسية",
+  "ts_tajweed_rule_silent_iltiqaa": "التقاء الساكنين",
+  "ts_footer_wipe_title": "تظليل متواصل (تمرير كاريوكي)",
+  "ts_footer_tajweed_settings_title": "أحكام التجويد وألوانها",
+  "ts_footer_open_segments_aria_label_with_verse": "افتح الآية {verse} في محرر التقطيعات",
+  "ts_footer_open_segments_aria_label_plain": "افتح في محرر التقطيعات",
+  "ts_footer_open_segments_title": "افتح هذه الآية في محرر التقطيعات"
 }

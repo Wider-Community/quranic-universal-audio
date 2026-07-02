@@ -17,6 +17,8 @@
      */
 
     import { editGate } from '../../../../lib/actions/editGate';
+    import { localeStore, tr } from '../../../../lib/i18n/locale-store';
+    import * as m from '../../../../lib/paraglide/messages';
     import { editingMode } from '../../../../lib/stores/editing-mode';
     import type { EditOp } from '../../../../lib/types/view-models';
     import { surahOptionText } from '../../../../lib/utils/surah-info';
@@ -106,15 +108,21 @@
 
     // Dev-only guide flagging — typed view of the op group for GuideFlagButton.
     $: flagGroup = group as EditOp[];
+
+    $: revertedBadge = tr($localeStore, m.segments_history_reverted_badge());
+    $: discardButtonLabel = tr($localeStore, m.segments_history_discard_button());
+    $: undoButtonLabel = tr($localeStore, isUndoing ? m.segments_history_op_undoing_button() : m.segments_history_op_undo_button());
+    $: deletedPlaceholder = tr($localeStore, m.segments_history_deleted_placeholder());
+    $: batchDateLabel = tr($localeStore, formatHistDate(item.date || null));
 </script>
 
 <div class="seg-history-batch" class:is-revert={item.isRevert}>
     <div class="seg-history-batch-header">
         {#if item.type === 'strip-specials-card'}
-            <span class="seg-history-op-type-badge">Deletion &times;{group.length}</span>
+            <span class="seg-history-op-type-badge">{m.segments_history_deletion_badge({ n: group.length })}</span>
         {:else if item.type === 'multi-chapter-card'}
             <span class="seg-history-op-type-badge">
-                {EDIT_OP_LABELS[primary?.op_type ?? ''] || primary?.op_type || ''} &times;{group.length}
+                {m.segments_history_multi_chapter_badge({ opLabel: EDIT_OP_LABELS[primary?.op_type ?? ''] || primary?.op_type || '', n: group.length })}
             </span>
         {:else if item.type === 'revert-card'}
             <!-- no op badge -->
@@ -124,7 +132,7 @@
             </span>
             {#each Object.entries(followUp) as [t, count]}
                 <span class="seg-history-op-type-badge secondary">
-                    + {EDIT_OP_LABELS[t] || t}{count > 1 ? ` \u00d7${count}` : ''}
+                    {m.segments_history_followup_badge({ opLabel: EDIT_OP_LABELS[t] || t, countSuffix: count > 1 ? ` \u00d7${count}` : '' })}
                 </span>
             {/each}
         {/if}
@@ -143,14 +151,14 @@
         {/if}
 
         {#if item.isRevert}
-            <span class="seg-history-batch-revert-badge">Reverted</span>
+            <span class="seg-history-batch-revert-badge">{revertedBadge}</span>
         {/if}
 
         {#if item.chapter != null}
             <span class="seg-history-batch-chapter">{surahOptionText(item.chapter)}</span>
         {/if}
 
-        <span class="seg-history-batch-time">{formatHistDate(item.date || null)}</span>
+        <span class="seg-history-batch-time">{batchDateLabel}</span>
 
         {#if $editingMode.kind !== 'view'}
             {#if item.isPending}
@@ -158,14 +166,14 @@
                     class="btn btn-sm seg-history-undo-btn"
                     use:editGate
                     on:click|stopPropagation={handleDiscardClick}
-                >Discard</button>
+                >{discardButtonLabel}</button>
             {:else if mode === 'history' && item.batchId && !item.isRevert && primary?.op_type !== 'pipeline'}
                 <button
                     class="btn btn-sm seg-history-undo-btn"
                     use:editGate
                     on:click|stopPropagation={handleUndoClick}
                     disabled={isUndoing}
-                >{isUndoing ? 'Undoing…' : 'Undo'}</button>
+                >{undoButtonLabel}</button>
             {/if}
         {/if}
 
@@ -200,10 +208,10 @@
                                 aria-expanded={stripExpanded}
                                 on:click|stopPropagation={toggleStripExpanded}
                             >{stripExpanded
-                                ? `\u25be ${group.length} deletions`
-                                : `\u25b8 \u00d7${group.length} deleted`}</button>
+                                ? m.segments_history_deleted_toggle_expanded({ n: group.length })
+                                : m.segments_history_deleted_toggle_collapsed({ n: group.length })}</button>
                         {:else}
-                            <div class="seg-history-empty">(deleted)</div>
+                            <div class="seg-history-empty">{deletedPlaceholder}</div>
                         {/if}
                     </div>
                 </div>
@@ -228,7 +236,7 @@
                 {/if}
             {:else if item.type === 'multi-chapter-card'}
                 <div class="seg-history-chapter-list">
-                    Chapters: {(item.chapters || []).map((c) => surahOptionText(c)).join(', ')}
+                    {m.segments_history_chapters_list_prefix({ list: (item.chapters || []).map((c) => surahOptionText(c)).join(', ') })}
                 </div>
             {:else if group.length === 1 && primary}
                 <HistoryOp

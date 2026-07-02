@@ -12,6 +12,7 @@
  * surfaced UX (toast/modal) so the caller usually doesn't need to do more.
  */
 
+import * as m from '$lib/paraglide/messages';
 import { friendlyError } from '../errors/friendly';
 import { SIGN_IN_MESSAGES } from '../sign-in-messages';
 import { loadCurrentUser } from '../stores/current-user';
@@ -69,7 +70,7 @@ async function _post(
         const target = errBody.target_name || slug;
         pushToast({
             kind: 'warn',
-            text: `Unclaim ${existing} first to claim ${target}.`,
+            text: m.common_claim_unclaim_first_toast({ existing, target }),
             ttl: 6000,
         });
     } else {

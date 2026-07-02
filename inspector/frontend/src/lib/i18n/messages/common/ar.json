@@ -13,7 +13,7 @@
   "common_action_submit": "إرسال",
   "common_action_play": "تشغيل",
   "common_action_pause": "إيقاف مؤقت",
-  "common_action_ok": "حسناً",
+  "common_action_ok": "حسنا",
   "common_status_saving": "جارٍ الحفظ…",
   "common_status_submitting": "جارٍ الإرسال…",
   "common_state_loading": "جارٍ التحميل…",
@@ -27,11 +27,11 @@
   "common_player_filmstrip_controls_group": "عناصر تحكم شريط الآيات",
   "common_auth_continue_with_hf": "المتابعة عبر Hugging Face",
   "common_signin_edit_title": "سجّل الدخول للتعديل",
-  "common_signin_edit_body": "يتطلب تعديل المقاطع حساباً على Hugging Face. سجّل الدخول للمطالبة بهذا القارئ والبدء في المساهمة.",
+  "common_signin_edit_body": "يتطلب تعديل المقاطع حسابا على Hugging Face. سجّل الدخول للمطالبة بهذا القارئ والبدء في المساهمة.",
   "common_signin_claim_title": "سجّل الدخول للمطالبة",
-  "common_signin_claim_body": "تتطلب المطالبة بقارئ حساباً على Hugging Face. سجّل الدخول للبدء في المساهمة.",
+  "common_signin_claim_body": "تتطلب المطالبة بقارئ حسابا على Hugging Face. سجّل الدخول للبدء في المساهمة.",
   "common_signin_request_title": "سجّل الدخول لتقديم طلب",
-  "common_signin_request_body": "يتطلب تقديم طلب تلاوة حساباً على Hugging Face.",
+  "common_signin_request_body": "يتطلب تقديم طلب تلاوة حسابا على Hugging Face.",
   "common_signin_save_title": "انتهت الجلسة",
   "common_signin_save_body": "انتهت جلستك قبل حفظ التغييرات. سجّل الدخول مرة أخرى للمتابعة.",
   "common_signin_claim_expired_title": "سجّل الدخول للمتابعة",
@@ -58,7 +58,7 @@
   "common_player_upcoming_state_hidden": "مخفي",
   "common_player_upcoming_state_dim": "خافت",
   "common_player_granularity_toggle_label": "تبديل الكلمة / الحرف",
-  "common_player_granularity_char_title": "حرفاً بحرف",
+  "common_player_granularity_char_title": "حرفا بحرف",
   "common_player_granularity_word_title": "كلمة بكلمة",
   "common_player_motion_toggle_label": "تبديل حركة الشريط",
   "common_player_motion_snap_title": "الانتقال إلى الآية",
@@ -80,16 +80,16 @@
   "common_player_loading_audio_label": "جارٍ تحميل الصوت",
   "common_player_seek_forward_label": "للأمام 15 ثانية",
   "common_player_next_surah_label": "السورة التالية",
-  "common_player_pick_reciter_prompt": "اختر قارئاً للبدء",
+  "common_player_pick_reciter_prompt": "اختر قارئا للبدء",
   "common_player_switch_combination_label": "تبديل المجموعة",
   "common_player_progress_label": "موضع التشغيل",
   "common_player_surah_picker_label": "منتقي السور",
   "common_player_surah_filter_placeholder": "تصفية السور…",
   "common_player_surah_no_matches": "لا توجد نتائج",
-  "common_picker_default_title": "اختر قارئاً",
+  "common_picker_default_title": "اختر قارئا",
   "common_picker_search_placeholder": "ابحث عن القرّاء — الاسم بالعربية أو الإنجليزية",
   "common_picker_loading": "جارٍ التحميل…",
-  "common_picker_no_matches": "لا توجد نتائج. جرّب تصفية أو بحثاً مختلفاً.",
+  "common_picker_no_matches": "لا توجد نتائج. جرّب تصفية أو بحثا مختلفا.",
   "common_picker_section_your_active_claims": [
     {
       "declarations": [
@@ -120,24 +120,24 @@
   "common_picker_review_claimed_by_title": "مطالب به من قبل {login}",
   "common_picker_tab_all": "الكل",
   "common_picker_tabs_aria_label": "الحالة",
-  "common_claim_confirm_release_first_title": "حرّر مطالبتك الحالية أولاً",
+  "common_claim_confirm_release_first_title": "حرّر مطالبتك الحالية أولا",
   "common_claim_confirm_release_first_body": "لديك بالفعل مطالبة على {name}. يمكنك العمل على قارئ واحد في كل مرة — ألغِ المطالبة (أو علّمها كجاهزة) قبل المطالبة بآخر.",
   "common_claim_confirm_title": "المطالبة بهذه التلاوة للمراجعة؟",
-  "common_claim_confirm_body": "ستتيح لك المطالبة بهذه التلاوة تعديل مقاطعها وإصلاحها بشكل مستقل. يمكنك الاحتفاظ بمطالبة واحدة في كل مرة، تحرّر عند الانتهاء من التعديل وتعليمها كجاهزة. يمكنك أيضاً إلغاء المطالبة في أي وقت أو الانتقال إلى أخرى.",
+  "common_claim_confirm_body": "ستتيح لك المطالبة بهذه التلاوة تعديل مقاطعها وإصلاحها بشكل مستقل. يمكنك الاحتفاظ بمطالبة واحدة في كل مرة، تحرّر عند الانتهاء من التعديل وتعليمها كجاهزة. يمكنك أيضا إلغاء المطالبة في أي وقت أو الانتقال إلى أخرى.",
   "common_claim_confirm_busy": "جارٍ المطالبة…",
   "common_claim_confirm_cta": "تأكيد",
   "common_claim_button_label": "مطالبة بالمراجعة",
   "common_bookmarks_panel_aria_label": "العلامات المرجعية",
   "common_bookmarks_heading": "العلامات المرجعية",
-  "common_bookmarks_conn_dev_stub_title": "بديل تطوير محلي — ليس تسجيل دخول حقيقياً عبر Quran.Foundation. لا حساب ولا رمز معني.",
+  "common_bookmarks_conn_dev_stub_title": "بديل تطوير محلي — ليس تسجيل دخول حقيقيا عبر Quran.Foundation. لا حساب ولا رمز معني.",
   "common_bookmarks_conn_dev_stub_label": "⚙ بديل التطوير (محلي فقط)",
   "common_bookmarks_conn_synced_title": "متزامن مع Quran.Foundation",
   "common_bookmarks_conn_synced_label": "● متزامن",
   "common_bookmarks_disconnect": "قطع الاتصال",
   "common_bookmarks_connect_dev_stub": "اتصال (بديل تطوير)",
-  "common_bookmarks_conn_hint_dev": "محفوظ محلياً. اتصل للمزامنة عبر تطبيقات Quran.com.",
+  "common_bookmarks_conn_hint_dev": "محفوظ محليا. اتصل للمزامنة عبر تطبيقات Quran.com.",
   "common_bookmarks_connect_qf": "الاتصال بـ Quran.Foundation",
-  "common_bookmarks_conn_hint_anon": "يفتح علامة تبويب جديدة لتسجيل الدخول. تحفظ العلامات المرجعية محلياً حتى ذلك الحين.",
+  "common_bookmarks_conn_hint_anon": "يفتح علامة تبويب جديدة لتسجيل الدخول. تحفظ العلامات المرجعية محليا حتى ذلك الحين.",
   "common_bookmarks_empty": "لا توجد علامات مرجعية بعد. افتح آية في الطوابع الزمنية واضغط ☆ لحفظها.",
   "common_bookmarks_item_surah_fallback": "سورة {surah}",
   "common_bookmarks_item_ayah": "آية {ayah}",
@@ -196,7 +196,7 @@
         "countPlural=one": "أسلوب واحد",
         "countPlural=two": "أسلوبان",
         "countPlural=few": "{count} أساليب",
-        "countPlural=many": "{count} أسلوباً",
+        "countPlural=many": "{count} أسلوبا",
         "countPlural=other": "{count} أسلوب"
       }
     }
@@ -217,5 +217,174 @@
   "common_picker_switch_reciter_title": "تغيير القارئ",
   "common_nav_tab_dashboard": "لوحة التحكم",
   "common_nav_tab_timestamps": "الطوابع الزمنية",
-  "common_nav_tab_segments": "التقطيعات"
+  "common_nav_tab_segments": "التقطيعات",
+  "common_theme_toggle_system_label": "السمة: تتبع جهازك — انقر للفاتحة",
+  "common_theme_toggle_light_label": "السمة: فاتحة — انقر للداكنة",
+  "common_theme_toggle_dark_label": "السمة: داكنة — انقر لتتبع جهازك",
+  "common_locale_switcher_aria_label": "اللغة",
+  "common_player_preset_color_label": "لون جاهز",
+  "common_player_hue_label": "درجة اللون",
+  "common_player_saturation_label": "التشبّع",
+  "common_player_filmstrip_scrubber_aria_label": "مؤشر تمرير الآيات",
+  "common_claim_unclaim_first_toast": "ألغِ المطالبة بـ {existing} أولا للمطالبة بـ {target}.",
+  "common_relative_time_just_now": "الآن",
+  "common_relative_time_yesterday": "أمس",
+  "common_relative_time_minutes_ago": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=zero": "منذ أقل من دقيقة",
+        "countPlural=one": "منذ دقيقة واحدة",
+        "countPlural=two": "منذ دقيقتين",
+        "countPlural=few": "منذ {count} دقائق",
+        "countPlural=many": "منذ {count} دقيقة",
+        "countPlural=other": "منذ {count} دقيقة"
+      }
+    }
+  ],
+  "common_relative_time_hours_ago": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=zero": "منذ أقل من ساعة",
+        "countPlural=one": "منذ ساعة واحدة",
+        "countPlural=two": "منذ ساعتين",
+        "countPlural=few": "منذ {count} ساعات",
+        "countPlural=many": "منذ {count} ساعة",
+        "countPlural=other": "منذ {count} ساعة"
+      }
+    }
+  ],
+  "common_relative_time_days_ago": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=zero": "منذ أقل من يوم",
+        "countPlural=one": "منذ يوم واحد",
+        "countPlural=two": "منذ يومين",
+        "countPlural=few": "منذ {count} أيام",
+        "countPlural=many": "منذ {count} يوما",
+        "countPlural=other": "منذ {count} يوم"
+      }
+    }
+  ],
+  "common_relative_time_weeks_ago": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=zero": "منذ أقل من أسبوع",
+        "countPlural=one": "منذ أسبوع واحد",
+        "countPlural=two": "منذ أسبوعين",
+        "countPlural=few": "منذ {count} أسابيع",
+        "countPlural=many": "منذ {count} أسبوعا",
+        "countPlural=other": "منذ {count} أسبوع"
+      }
+    }
+  ],
+  "common_relative_time_months_ago": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=zero": "منذ أقل من شهر",
+        "countPlural=one": "منذ شهر واحد",
+        "countPlural=two": "منذ شهرين",
+        "countPlural=few": "منذ {count} أشهر",
+        "countPlural=many": "منذ {count} شهرا",
+        "countPlural=other": "منذ {count} شهر"
+      }
+    }
+  ],
+  "common_relative_time_years_ago": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=zero": "منذ أقل من سنة",
+        "countPlural=one": "منذ سنة واحدة",
+        "countPlural=two": "منذ سنتين",
+        "countPlural=few": "منذ {count} سنوات",
+        "countPlural=many": "منذ {count} سنة",
+        "countPlural=other": "منذ {count} سنة"
+      }
+    }
+  ],
+  "common_delivery_coverage_full": "كامل",
+  "common_delivery_ayah_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=zero": "لا آيات",
+        "countPlural=one": "آية واحدة",
+        "countPlural=two": "آيتان",
+        "countPlural=few": "{count} آيات",
+        "countPlural=many": "{count} آية",
+        "countPlural=other": "{count} آية"
+      }
+    }
+  ],
+  "common_delivery_surah_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=zero": "لا سور",
+        "countPlural=one": "سورة واحدة",
+        "countPlural=two": "سورتان",
+        "countPlural=few": "{count} سور",
+        "countPlural=many": "{count} سورة",
+        "countPlural=other": "{count} سورة"
+      }
+    }
+  ],
+  "common_delivery_category_ayah": "آية",
+  "common_delivery_category_surah": "سورة",
+  "common_delivery_bitrate_cbr": "cbr",
+  "common_delivery_bitrate_vbr": "vbr",
+  "common_delivery_bitrate_mixed": "مختلط"
 }

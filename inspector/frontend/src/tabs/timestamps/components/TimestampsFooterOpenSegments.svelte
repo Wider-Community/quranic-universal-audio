@@ -9,6 +9,8 @@
      * `gotoSegments` + a `focusVerse` deep-link that `SegmentsTab` consumes once
      * the chapter data lands. Disabled until a reciter + verse are loaded.
      */
+    import * as m from '$lib/paraglide/messages';
+    import { i18n } from '$lib/i18n/locale.svelte';
     import { playerContext } from '../../../lib/stores/player-context';
     import { gotoSegments } from '../../../lib/utils/goto-segments';
     import { selectedVerse } from '../stores/verse';
@@ -16,6 +18,15 @@
     const slug = $derived($playerContext.delivery?.slug ?? '');
     const verseRef = $derived($selectedVerse);
     const disabled = $derived(!slug || !verseRef);
+
+    // Attribute labels gated on i18n.locale so they re-render on a locale switch.
+    const ariaLabel = $derived(
+        (i18n.locale,
+        verseRef
+            ? m.ts_footer_open_segments_aria_label_with_verse({ verse: verseRef })
+            : m.ts_footer_open_segments_aria_label_plain()),
+    );
+    const openSegmentsTitle = $derived((i18n.locale, m.ts_footer_open_segments_title()));
 
     function openInSegments(): void {
         if (!slug || !verseRef) return;
@@ -32,8 +43,8 @@
     class="open-seg-btn"
     {disabled}
     onclick={openInSegments}
-    aria-label={verseRef ? `Open verse ${verseRef} in the Segments editor` : 'Open in Segments editor'}
-    title="Open this verse in the Segments editor"
+    aria-label={ariaLabel}
+    title={openSegmentsTitle}
 >
     <!-- External-link (box + arrow to top-right): "redirect out to Segments". -->
     <svg

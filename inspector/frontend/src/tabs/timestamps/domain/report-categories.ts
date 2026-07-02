@@ -12,6 +12,7 @@
  * Drop-up order is timing → tajweed → phonemes → silence → audio → other.
  */
 
+import * as m from '$lib/paraglide/messages';
 import type { TsReport } from '../../../lib/types/generated/schemas';
 
 /** Category literal union, sourced from the codegen'd wire model. */
@@ -21,12 +22,13 @@ export type ReportFlow = 'comment' | 'target';
 
 export interface ReportCategoryDef {
     id: ReportCategory;
-    label: string;
+    /** Message-function reference — call at the render site so a locale switch re-evaluates it. */
+    label: () => string;
     /** One-line descriptor under the label. */
-    blurb: string;
+    blurb: () => string;
     flow: ReportFlow;
     /** Composer placeholder (comment flow). */
-    placeholder?: string;
+    placeholder?: () => string;
     /** Target-flow categories that enter the in-grid report mode. `timing` /
      *  `phonemes` enter directly; `tajweed` + `silence` enter per subtype. */
     entersMode?: 'timing' | 'tajweed' | 'phonemes' | 'silence';
@@ -35,44 +37,44 @@ export interface ReportCategoryDef {
 export const REPORT_CATEGORIES: ReportCategoryDef[] = [
     {
         id: 'timing',
-        label: 'Timing',
-        blurb: 'A boundary starts or ends off',
+        label: m.ts_report_category_timing_label,
+        blurb: m.ts_report_category_timing_blurb,
         flow: 'target',
         entersMode: 'timing',
     },
     {
         id: 'tajweed',
-        label: 'Tajweed',
-        blurb: 'A rule is wrong, missing, or mis-applied',
+        label: m.ts_report_category_tajweed_label,
+        blurb: m.ts_report_category_tajweed_blurb,
         flow: 'target',
         entersMode: 'tajweed',
     },
     {
         id: 'phonemes',
-        label: 'Phonemes',
-        blurb: 'A phoneme is wrong or mislabeled',
+        label: m.ts_report_category_phonemes_label,
+        blurb: m.ts_report_category_phonemes_blurb,
         flow: 'target',
         entersMode: 'phonemes',
     },
     {
         id: 'silence',
-        label: 'Silence',
-        blurb: 'A pause is wrong, unwanted, or missing',
+        label: m.ts_report_category_silence_label,
+        blurb: m.ts_report_category_silence_blurb,
         flow: 'target',
         entersMode: 'silence',
     },
     {
         id: 'audio',
-        label: 'Audio',
-        blurb: 'Recording quality, or wrong / missing audio',
+        label: m.ts_report_category_audio_label,
+        blurb: m.ts_report_category_audio_blurb,
         flow: 'comment',
-        placeholder: 'What sounds wrong on this verse?',
+        placeholder: m.ts_report_category_audio_placeholder,
     },
     {
         id: 'other',
-        label: 'Other',
-        blurb: 'Anything else about this verse',
+        label: m.ts_report_category_other_label,
+        blurb: m.ts_report_category_other_blurb,
         flow: 'comment',
-        placeholder: 'Describe the issue…',
+        placeholder: m.ts_report_category_other_placeholder,
     },
 ];

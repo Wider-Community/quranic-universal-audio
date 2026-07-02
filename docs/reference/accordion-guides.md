@@ -6,8 +6,8 @@ Frontend-bundled guide templates for the validation-accordion help modal (`Accor
 
 | Path | Role |
 |---|---|
-| `inspector/frontend/src/tabs/segments/guides/accordion/<category>.guide.ts` | Markdown-like guide source (default-exports a string), one per validation category |
-| `inspector/frontend/src/tabs/segments/guides/registry.ts` | `getAccordionGuide(category)` → source string or `null`; frozen `category → source` map |
+| `inspector/frontend/src/tabs/segments/guides/accordion/<category>.guide.ts` | Markdown-like guide source (default-exports a string), one per validation category. Translations are sibling `<category>.<locale>.guide.ts` files (same source-string shape; only prose/headings translated, `::example`/`::component` directives byte-identical) |
+| `inspector/frontend/src/tabs/segments/guides/registry.ts` | `getAccordionGuide(category, locale?)` → source string or `null`; frozen `category → source` map for English + a locale-variant map discovered via `import.meta.glob('./accordion/*.*.guide.ts')`. Passing `locale` returns the translated sibling when one exists, else the English base (English fallback per missing translation). Call it reactively (resolve at open / gate a `$derived` on the current locale). |
 | `inspector/frontend/src/tabs/segments/guides/parser.ts` | `parseGuideSource(src)` → `GuideBlock[]`; `guideTitleFromBlocks(blocks, fallback)` |
 | `inspector/frontend/src/tabs/segments/guides/examples/index.ts` | `guideExamples` frozen `id → GuideExample`; `getGuideExample(id)` |
 | `inspector/frontend/src/tabs/segments/guides/types.ts` | `GuideBlock`, `GuideExample`, `GuidePeakRecord` types |

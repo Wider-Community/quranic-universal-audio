@@ -5,12 +5,15 @@
     every `m.*()` read app-wide plus <html dir/lang>.
 -->
 <script lang="ts">
+    import * as m from '$lib/paraglide/messages';
     import { i18n, type Locale } from '$lib/i18n/locale.svelte';
 
     const LABELS: Record<Locale, string> = { en: 'EN', ar: 'ع' };
+    // Reading i18n.locale makes this $derived re-run on switch.
+    const groupAriaLabel = $derived((i18n.locale, m.common_locale_switcher_aria_label()));
 </script>
 
-<div class="locale-switcher" role="group" aria-label="Language">
+<div class="locale-switcher" role="group" aria-label={groupAriaLabel}>
     {#each i18n.locales as loc (loc)}
         <button
             type="button"

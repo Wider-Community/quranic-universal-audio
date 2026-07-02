@@ -7,15 +7,18 @@
   it re-skins itself.
 -->
 <script lang="ts">
+    import * as m from '$lib/paraglide/messages';
+    import { i18n } from '$lib/i18n/locale.svelte';
     import { themeStore } from '../stores/theme.svelte';
 
     const mode = $derived(themeStore.mode);
     const label = $derived(
+        (i18n.locale,
         mode === 'system'
-            ? 'Theme: following your device — click for light'
+            ? m.common_theme_toggle_system_label()
             : mode === 'light'
-              ? 'Theme: light — click for dark'
-              : 'Theme: dark — click to follow your device',
+              ? m.common_theme_toggle_light_label()
+              : m.common_theme_toggle_dark_label()),
     );
 </script>
 

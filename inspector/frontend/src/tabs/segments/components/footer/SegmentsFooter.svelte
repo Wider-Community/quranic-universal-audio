@@ -22,6 +22,7 @@
 
     import * as m from '$lib/paraglide/messages';
     import { clickOutside } from '../../../../lib/actions/click-outside';
+    import { localeStore, tr } from '../../../../lib/i18n/locale-store';
     import { markReadyBypass } from '../../../../lib/api/claims-client';
     import type { ReciterTask } from '../../../../lib/api/reciter-task';
     import ClaimButton from '../../../../lib/components/ClaimButton.svelte';
@@ -269,11 +270,11 @@
         ? $verseOptions.filter((v) => String(v).startsWith(ayahQuery.trim()))
         : $verseOptions;
 
-    $: historyButtonLabel = $historyVisible
-        ? 'Back'
+    $: historyButtonLabel = tr($localeStore, $historyVisible
+        ? m.segments_footer_history_back()
         : $historyLoadState === 'loading'
-          ? 'History…'
-          : 'History';
+          ? m.segments_footer_history_loading()
+          : m.segments_footer_history_label());
 
     // ---- Progress bar -----------------------------------------------
     // % through the currently-loaded CHAPTER audio. Under chapter-continuous
@@ -461,11 +462,11 @@
     $: writeable = $editingMode.kind !== 'view';
     $: showSavePreview = $savePreviewVisible;
     $: saveDisabled = $autoSaveEnabled || !$isDirtyStore;
-    $: saveLabel = $isDirtyStore
+    $: saveLabel = tr($localeStore, $isDirtyStore
         ? $autoSaveEnabled && get(saveButtonLabel) === 'Save'
-            ? 'Saving…'
+            ? m.segments_footer_save_saving()
             : $saveButtonLabel
-        : 'Saved';
+        : m.segments_footer_save_saved());
 
     // Play button glyph: pause when normal-mode audio is playing OR an
     // edit-mode preview loop is in its "play" state. `editPreviewPlaying`
@@ -475,6 +476,43 @@
     $: playGlyph = ($isMainAudioPlaying || $editPreviewPlaying ? 'pause' : 'play') as IconName;
 
     $: canPlay = $segPortReady && !!($segData?.audio_url || $playingSegmentIndex);
+
+    $: identityTitle = tr($localeStore, hasReciter ? m.segments_footer_switch_reciter_title() : m.segments_footer_pick_reciter_title());
+    $: pickReciterLabel = tr($localeStore, m.segments_footer_pick_reciter_title());
+    $: awaitingAdminTitle = tr($localeStore, m.segments_footer_awaiting_admin_title());
+    $: markedReadyPill = tr($localeStore, m.segments_footer_marked_ready_pill());
+    $: markedReadyHint = tr($localeStore, m.segments_footer_marked_ready_hint());
+    $: markReadyTitle = tr($localeStore, reciterTask?.predicates.can_skip_mark_ready_gates
+        ? m.segments_footer_mark_ready_owner_title()
+        : m.segments_footer_mark_ready_review_title());
+    $: markReadyButtonLabel = tr($localeStore, m.segments_footer_mark_ready_button());
+    $: unclaimButtonLabel = tr($localeStore, m.segments_footer_unclaim_button());
+    $: speedTitle = tr($localeStore, m.segments_footer_speed_title());
+    $: speedAriaLabel = tr($localeStore, m.segments_footer_speed_aria_label({ speed: $playbackSpeed }));
+    $: autoplayTitle = tr($localeStore, m.segments_footer_autoplay_title());
+    $: autoscrollTitle = tr($localeStore, m.segments_footer_autoscroll_title());
+    $: playPauseAriaLabel = tr($localeStore, $segAudioBuffering
+        ? m.segments_footer_loading_audio_aria_label()
+        : playGlyph === 'pause' ? m.segments_footer_pause_aria_label() : m.segments_footer_play_aria_label());
+    $: surahEmptyLabel = tr($localeStore, m.segments_footer_surah_label());
+    $: ayahLabel = tr($localeStore, m.segments_footer_ayah_label());
+    $: ayahAllLabel = tr($localeStore, m.segments_footer_ayah_all());
+    $: ayahSearchPlaceholder = tr($localeStore, m.segments_footer_ayah_search_placeholder());
+    $: ayahPickerAriaLabel = tr($localeStore, m.segments_footer_ayah_picker_aria_label());
+    $: ayahNoMatchesLabel = tr($localeStore, m.segments_footer_ayah_no_matches());
+    $: progressAriaLabel = tr($localeStore, m.segments_footer_progress_aria_label());
+    $: historyToggleTitle = tr($localeStore, $historyVisible
+        ? m.segments_footer_history_back_title()
+        : m.segments_footer_history_label());
+    $: historyBackLabel = tr($localeStore, m.segments_footer_history_back());
+    $: historyLabel = tr($localeStore, m.segments_footer_history_label());
+    $: autosaveTitle = tr($localeStore, $autoSaveEnabled
+        ? m.segments_footer_autosave_on_title()
+        : m.segments_footer_autosave_off_title());
+    $: autosaveLabel = tr($localeStore, m.segments_footer_autosave_label());
+    $: savedGlyphLabel = tr($localeStore, m.segments_footer_save_saved());
+    $: autosavingLabel = tr($localeStore, m.segments_footer_save_autosaving());
+    $: saveConfirmLabel = tr($localeStore, m.segments_footer_save_confirm());
 
     // Time display for the progress row.
     function fmt(ms: number): string {
@@ -498,7 +536,7 @@
             on:keydown={onProgressKey}
             role="slider"
             tabindex="0"
-            aria-label="Segment playback progress"
+            aria-label={progressAriaLabel}
             aria-valuemin="0"
             aria-valuemax="100"
             aria-valuenow={Math.round(progressPct)}
@@ -519,7 +557,7 @@
                 class:placeholder={!hasReciter}
                 on:click={() => (pickerOpen = true)}
                 aria-haspopup="dialog"
-                title={hasReciter ? 'Switch reciter' : 'Pick a reciter'}
+                title={identityTitle}
             >
                 {#if hasReciter && contextName}
                     <ReciterChip
@@ -531,7 +569,7 @@
                         switchable={true}
                     />
                 {:else}
-                    <span class="identity-placeholder-label">Pick a reciter</span>
+                    <span class="identity-placeholder-label">{pickReciterLabel}</span>
                     <span class="identity-switch" aria-hidden="true">⇄</span>
                 {/if}
             </button>
@@ -539,9 +577,9 @@
             {#if hasReciter && !showSavePreview}
                 <div class="reciter-actions">
                     {#if reciterTask?.row.marked_ready}
-                        <span class="status-pill marked-ready" title="Awaiting admin review">
-                            <span class="pill-main">Marked ready · awaiting admin</span>
-                            <span class="pill-hint">You can claim a different reciter</span>
+                        <span class="status-pill marked-ready" title={awaitingAdminTitle}>
+                            <span class="pill-main">{markedReadyPill}</span>
+                            <span class="pill-hint">{markedReadyHint}</span>
                         </span>
                     {:else}
                         <ClaimButton slug={$selectedReciter || ''} task={reciterTask} {onClaimed} />
@@ -550,10 +588,8 @@
                                 type="button"
                                 class="action ghost-accent"
                                 disabled={chipActionBusy !== ''}
-                                title={reciterTask?.predicates.can_skip_mark_ready_gates
-                                    ? 'Mark ready as owner — skips the checklist and validation gates'
-                                    : 'Submit the mark-ready form for an admin to review'}
-                                on:click={onMarkReady}>Mark ready</button
+                                title={markReadyTitle}
+                                on:click={onMarkReady}>{markReadyButtonLabel}</button
                             >
                         {/if}
                         {#if reciterTask?.predicates.can_release}
@@ -561,7 +597,7 @@
                                 type="button"
                                 class="action ghost"
                                 disabled={chipActionBusy !== ''}
-                                on:click={onUnclaim}>Unclaim</button
+                                on:click={onUnclaim}>{unclaimButtonLabel}</button
                             >
                         {/if}
                     {/if}
@@ -582,15 +618,15 @@
                             class="speed-cell"
                             class:boosted={$playbackSpeed !== 1}
                             on:click={cyclePlaybackSpeed}
-                            title="Playback speed (click to cycle)"
-                            aria-label="Playback speed {$playbackSpeed}×">{$playbackSpeed}×</button
+                            title={speedTitle}
+                            aria-label={speedAriaLabel}>{$playbackSpeed}×</button
                         >
                         <button
                             type="button"
                             class="pref-cell"
                             class:on={$autoPlayEnabled}
                             aria-pressed={$autoPlayEnabled}
-                            title="Autoplay — when ON, play continues through the whole chapter (or advances card-to-card inside an open accordion); when OFF, stops at the end of each segment"
+                            title={autoplayTitle}
                             on:click={handleAutoPlayToggle}
                         ><Icon name="autoplay" size={16} /></button>
                         <button
@@ -598,7 +634,7 @@
                             class="pref-cell"
                             class:on={$autoScrollEnabled}
                             aria-pressed={$autoScrollEnabled}
-                            title="Auto-scroll the list to follow the playing segment"
+                            title={autoscrollTitle}
                             on:click={handleAutoScrollToggle}
                         ><Icon name="autoscroll" size={16} /></button>
                     </div>
@@ -610,7 +646,7 @@
                         disabled={!canPlay}
                         on:click={handlePlayClick}
                         aria-busy={$segAudioBuffering}
-                        aria-label={$segAudioBuffering ? 'Loading audio' : playGlyph === 'pause' ? 'Pause' : 'Play'}
+                        aria-label={playPauseAriaLabel}
                     >{#if $segAudioBuffering}<LoadingSpinner color="var(--accent-fg)" />{:else}<Icon name={playGlyph} size={18} />{/if}</button>
 
                     <div class="transport-right">
@@ -624,7 +660,7 @@
                             aria-expanded={surahOpen}
                         >
                             {#if displaySurahNum}<span class="loc-value">{displaySurahName ?? displaySurahNum}</span
-                            >{:else}<span class="loc-empty">Surah</span>{/if}
+                            >{:else}<span class="loc-empty">{surahEmptyLabel}</span>{/if}
                             <Icon name="caret-down" size={10} />
                         </button>
                         <button
@@ -637,9 +673,9 @@
                             aria-haspopup="dialog"
                             aria-expanded={ayahOpen}
                         >
-                            <span class="loc-label">Ayah</span>
+                            <span class="loc-label">{ayahLabel}</span>
                             {#if $selectedVerse}<span class="loc-value">{$selectedVerse}</span
-                            >{:else}<span class="loc-empty">all</span>{/if}
+                            >{:else}<span class="loc-empty">{ayahAllLabel}</span>{/if}
                             <Icon name="caret-down" size={10} />
                         </button>
 
@@ -649,7 +685,7 @@
                             </div>
                         {/if}
                         {#if ayahOpen}
-                            <div class="pop pop-ayah" role="dialog" aria-label="Ayah picker">
+                            <div class="pop pop-ayah" role="dialog" aria-label={ayahPickerAriaLabel}>
                                 <input
                                     bind:this={ayahFilterInput}
                                     bind:value={ayahQuery}
@@ -657,7 +693,7 @@
                                     class="ayah-search"
                                     type="text"
                                     inputmode="numeric"
-                                    placeholder="Jump to ayah…"
+                                    placeholder={ayahSearchPlaceholder}
                                     autocomplete="off"
                                 />
                                 <div class="ayah-grid" role="listbox">
@@ -667,7 +703,7 @@
                                             role="option" aria-selected={String(v) === $selectedVerse}
                                             on:click={() => onAyahPick(v)}>{v}</button>
                                     {:else}
-                                        <div class="empty">No matches</div>
+                                        <div class="empty">{ayahNoMatchesLabel}</div>
                                     {/each}
                                 </div>
                             </div>
@@ -683,22 +719,22 @@
                 {#if hasReciter}
                     {#if showSavePreview}
                         <button class="action ghost" on:click={() => hideSavePreview()}>Cancel</button>
-                        <button class="action primary" on:click={confirmSaveFromPreview}>Confirm save</button>
+                        <button class="action primary" on:click={confirmSaveFromPreview}>{saveConfirmLabel}</button>
                     {:else}
                         <button
                             type="button"
                             class="utility"
                             class:on={$historyVisible}
-                            title={$historyVisible ? 'Back to segments' : 'History'}
+                            title={historyToggleTitle}
                             aria-label={historyButtonLabel}
                             on:click={toggleHistory}
                         >
                             {#if $historyVisible}
                                 <Icon name="arrow-left" size={14} />
-                                <span class="util-label">Back</span>
+                                <span class="util-label">{historyBackLabel}</span>
                             {:else}
                                 <Icon name="history" size={14} />
-                                <span class="util-label">History</span>
+                                <span class="util-label">{historyLabel}</span>
                             {/if}
                         </button>
 
@@ -709,13 +745,11 @@
                                     class="autosave-toggle"
                                     class:on={$autoSaveEnabled}
                                     aria-pressed={$autoSaveEnabled}
-                                    title={$autoSaveEnabled
-                                        ? 'Auto-save on — click to disable'
-                                        : 'Auto-save off — click to enable'}
+                                    title={autosaveTitle}
                                     on:click={() => toggleAutoSave(!$autoSaveEnabled)}
                                 >
                                     <Icon name="bolt" size={12} />
-                                    <span>Auto</span>
+                                    <span>{autosaveLabel}</span>
                                 </button>
 
                                 <button
@@ -729,10 +763,10 @@
                                 >
                                     {#if !$isDirtyStore}
                                         <span class="save-glyph" aria-hidden="true">✓</span>
-                                        <span>Saved</span>
+                                        <span>{savedGlyphLabel}</span>
                                     {:else if $autoSaveEnabled}
                                         <span class="save-pulse" aria-hidden="true"></span>
-                                        <span>Auto-saving…</span>
+                                        <span>{autosavingLabel}</span>
                                     {:else}
                                         <span>{saveLabel}</span>
                                     {/if}

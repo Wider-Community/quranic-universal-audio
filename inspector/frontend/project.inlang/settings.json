@@ -10,6 +10,9 @@
       "./src/tabs/dashboard/messages/{locale}.json",
       "./src/tabs/timestamps/messages/{locale}.json",
       "./src/tabs/segments/messages/{locale}.json",
+      "./src/lib/i18n/messages/errors/{locale}.json",
+      "./src/lib/i18n/messages/vocab/{locale}.json",
+      "./src/lib/i18n/messages/docs/{locale}.json",
       "./src/lib/i18n/messages/common/{locale}.json"
     ]
   }

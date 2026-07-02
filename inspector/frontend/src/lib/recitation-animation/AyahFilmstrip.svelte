@@ -40,6 +40,8 @@
      * Surface-agnostic: fed `units` + a prebuilt `FilmstripModel` + a time
      * accessor + an onSeek cb.
      */
+    import * as m from '$lib/paraglide/messages';
+    import { i18n } from '$lib/i18n/locale.svelte';
     import { type RecitationAnimConfig } from './config';
     import { createStripScroller, GLIDE_MIN_MS, glideDur } from './filmstrip-scroll.svelte';
     import type { ActiveCellInfo, CellMissing, FilmstripModel } from './filmstrip-model';
@@ -103,6 +105,9 @@
     let containerEl = $state<HTMLDivElement | undefined>(undefined);
     let cw = $state(0); // container width
     let dragging = $state(false);
+
+    // Reading i18n.locale makes this $derived re-run on switch.
+    const scrubberAriaLabel = $derived((i18n.locale, m.common_player_filmstrip_scrubber_aria_label()));
 
     // Recitation-driven playback state (written by the rAF driver / refresh).
     let activeIdx = $state(-1); // cell of the recited word; holds during silence
@@ -771,7 +776,7 @@
         style:height="{config.filmstripHeightPx}px"
         role="slider"
         tabindex="0"
-        aria-label="Ayah scrubber"
+        aria-label={scrubberAriaLabel}
         aria-valuemin={cells[0]!.ayah}
         aria-valuemax={cells[cells.length - 1]!.ayah}
         aria-valuenow={cells[activeIdx]?.ayah ?? cells[0]!.ayah}

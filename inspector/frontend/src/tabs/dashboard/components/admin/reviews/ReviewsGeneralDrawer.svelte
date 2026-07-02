@@ -7,16 +7,19 @@
      * remove, full reviewer history, fully expanded chronological timeline,
      * and the flagged-issue count. Whole payload is one GET.
      */
+    import { i18n } from '../../../../../lib/i18n/locale.svelte';
     import { fetchAdminReviewDetail } from '../../../../../lib/api/admin-reviews';
     import { isOwner } from '../../../../../lib/stores/current-user';
     import type { AdminReviewDetail } from '../../../../../lib/types/generated/schemas';
     import {
         CHECKLIST_ORDER,
         type ChecklistKey,
-        markReadyCopy,
+        getMarkReadyCopy,
     } from '../../../../segments/copy/mark-ready';
     import ExpandedTimeline from './ExpandedTimeline.svelte';
     import ReviewerActionsPopover from './ReviewerActionsPopover.svelte';
+
+    const markReadyCopy = $derived(getMarkReadyCopy(i18n.locale));
 
     /** Read a checklist-item label from the same copy module the reviewer
      *  saw. Single source of truth for human-facing strings. */

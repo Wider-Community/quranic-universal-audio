@@ -14,9 +14,12 @@
 
     import StatePill from '../StatePill.svelte';
     import type { InlineToken } from './info-doc';
-    import { overviewDoc } from './overview';
+    import { getOverviewDoc } from './overview';
 
     $: indexAriaLabel = tr($localeStore, m.common_info_index_aria_label());
+
+    // Locale-aware doc: re-selects the translated overview.md on a switch.
+    $: overviewDoc = getOverviewDoc($localeStore);
 
     let rootEl: HTMLDivElement | undefined;
     let navEl: HTMLElement | undefined;
@@ -25,13 +28,15 @@
     const slugify = (s: string): string =>
         s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
-    // Jump index built from the `##` section headings.
-    const sections = overviewDoc.blocks.flatMap((b) =>
+    // Jump index built from the `##` section headings (re-derives on locale switch).
+    $: sections = overviewDoc.blocks.flatMap((b) =>
         b.type === 'heading' ? [{ title: b.text, slug: slugify(b.text) }] : [],
     );
 
     // Scroll-spy: the section whose heading currently sits under the pinned index.
-    let activeSlug = sections[0]?.slug ?? '';
+    let activeSlug = '';
+    // Seed the highlight to the first section once sections resolve.
+    $: if (!activeSlug && sections[0]) activeSlug = sections[0].slug;
     // A click holds its section highlighted until the next manual scroll, so the
     // highlight never sweeps past it (released by cancelLock in onMount).
     let lockedSlug: string | null = null;

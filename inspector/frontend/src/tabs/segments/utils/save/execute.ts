@@ -6,6 +6,7 @@
 import { get as storeGet } from 'svelte/store';
 
 import { type ApiErrorBody,friendlyError } from '../../../../lib/errors/friendly';
+import * as m from '../../../../lib/paraglide/messages';
 import { SIGN_IN_MESSAGES } from '../../../../lib/sign-in-messages';
 import { openSignInModal } from '../../../../lib/stores/sign-in-modal';
 import { pushToast } from '../../../../lib/stores/toast';
@@ -225,7 +226,7 @@ export async function executeSave(isAutoSave = false): Promise<void> {
                 console.error(`Save network error (ch ${ch}):`, e);
                 pushToast({
                     kind: 'error',
-                    text: `Save failed (network). Check your connection and try again.`,
+                    text: m.segments_save_network_error_toast(),
                     ttl: 6000,
                 });
                 allOk = false;
@@ -252,7 +253,7 @@ export async function executeSave(isAutoSave = false): Promise<void> {
             } catch {
                 pushToast({
                     kind: 'error',
-                    text: 'Save returned a malformed response.',
+                    text: m.segments_save_malformed_response_toast(),
                     ttl: 6000,
                 });
                 allOk = false;
@@ -262,7 +263,7 @@ export async function executeSave(isAutoSave = false): Promise<void> {
                 console.error(`Save error (ch ${ch}):`, result.error);
                 pushToast({
                     kind: 'error',
-                    text: result.error || 'Save failed (unknown error).',
+                    text: result.error || m.segments_save_unknown_error_toast(),
                     ttl: 6000,
                 });
                 allOk = false;
@@ -282,8 +283,8 @@ export async function executeSave(isAutoSave = false): Promise<void> {
         if (savedChapters > 0) {
             if (allOk) {
                 const msg = savedChapters > 1
-                    ? `Saved ${savedChanges} changes across ${savedChapters} chapters`
-                    : `Saved ${savedChanges} change${savedChanges !== 1 ? 's' : ''}`;
+                    ? m.segments_save_success_multi_chapter({ changes: savedChanges, chapters: savedChapters })
+                    : m.segments_save_success_single_chapter({ count: savedChanges });
                 saveButtonLabel.set(msg);
                 setTimeout(() => { saveButtonLabel.set('Save'); }, 2500);
             } else {

@@ -13,6 +13,8 @@
      */
 
     import { editGate } from '../../../../lib/actions/editGate';
+    import { localeStore, tr } from '../../../../lib/i18n/locale-store';
+    import * as m from '../../../../lib/paraglide/messages';
     import type { Segment } from '../../../../lib/types/view-models';
     import { surahOptionText } from '../../../../lib/utils/surah-info';
     import {
@@ -184,9 +186,9 @@
     let arrowsAfter: HTMLElement[] = [];
 
     $: chainBadgeText = (() => {
-        if (chainOpType === 'split_segment') return `Split \u2192 ${leafSnaps.length}`;
-        if (chainOpType === 'merge_segments') return `Merge \u2192 ${leafSnaps.length}`;
-        return `Multiple Edits \u2192 ${leafSnaps.length}`;
+        if (chainOpType === 'split_segment') return m.segments_history_chain_split_badge({ n: leafSnaps.length });
+        if (chainOpType === 'merge_segments') return m.segments_history_chain_merge_badge({ n: leafSnaps.length });
+        return m.segments_history_chain_multi_badge({ n: leafSnaps.length });
     })();
 
     $: {
@@ -205,12 +207,19 @@
         const btn = e.currentTarget as HTMLButtonElement;
         onPendingOpsDiscard(chapter, pendingOpIds, btn);
     }
+
+    $: chainUndoButtonLabel = tr($localeStore, isChainUndoing ? m.segments_history_op_undoing_button() : m.segments_history_op_undo_button());
+    $: discardButtonLabel = tr($localeStore, m.segments_history_discard_button());
+    $: allDeletedPlaceholder = tr($localeStore, m.segments_history_all_deleted_placeholder());
+    $: waslTagLabel = tr($localeStore, m.segments_history_wasl_tag());
+    $: waqfTagLabel = tr($localeStore, m.segments_history_waqf_tag());
+    $: chainDateLabel = tr($localeStore, formatHistDate(chain.latestDate));
 </script>
 
 <div class="seg-history-batch seg-history-split-chain">
     <div class="seg-history-batch-header">
         {#if variant !== 'guide'}
-            <span class="seg-history-batch-time">{formatHistDate(chain.latestDate)}</span>
+            <span class="seg-history-batch-time">{chainDateLabel}</span>
         {/if}
         {#if chapter != null}
             <span class="seg-history-batch-chapter">{surahOptionText(chapter)}</span>
@@ -228,14 +237,14 @@
                 use:editGate
                 on:click|stopPropagation={handleChainUndoClick}
                 disabled={isChainUndoing}
-            >{isChainUndoing ? 'Undoing…' : 'Undo'}</button>
+            >{chainUndoButtonLabel}</button>
         {/if}
         {#if variant !== 'guide' && pendingOpIds.length > 0 && chapter != null}
             <button
                 class="btn btn-sm seg-history-undo-btn"
                 use:editGate
                 on:click|stopPropagation={handleChainDiscardClick}
-            >Discard</button>
+            >{discardButtonLabel}</button>
         {/if}
         {#if variant !== 'guide' && mode === 'history' && chainBatchIds.length > 0}
             <GuideFlagButton {chapter} batchId={chainBatchIds[0] ?? null} group={chainOps} />
@@ -272,7 +281,7 @@
 
             <div class="seg-history-after">
                 {#if leafSnaps.length === 0}
-                    <div class="seg-history-empty">(all segments deleted)</div>
+                    <div class="seg-history-empty">{allDeletedPlaceholder}</div>
                 {:else}
                     {#each leafSnaps as leaf, i (leaf.segment_uid ?? i)}
                         <div bind:this={afterCardEls[i]}>
@@ -297,7 +306,7 @@
                                      Only the LAST leaf has no following boundary,
                                      so we elide it. -->
                                 <span class="seg-history-wasl-tag" class:on={(leaf as { is_wasl?: boolean }).is_wasl}>
-                                    {(leaf as { is_wasl?: boolean }).is_wasl ? 'wasl' : 'waqf'}
+                                    {(leaf as { is_wasl?: boolean }).is_wasl ? waslTagLabel : waqfTagLabel}
                                 </span>
                             {/if}
                         </div>

@@ -17,6 +17,8 @@
      * the `tajweed-settings` store; colours apply via `--tj-*` overrides, toggles
      * drive the per-cell underline.
      */
+    import * as m from '$lib/paraglide/messages';
+    import { i18n } from '$lib/i18n/locale.svelte';
     import { themeStore } from '../../../lib/stores/theme.svelte';
     import { harakaRenderStyle } from '../utils/haraka-render';
     import { LEGEND, type LegendRow } from '../utils/tajweed-rules';
@@ -44,13 +46,13 @@
     // the most permissive (stop or continue) to the prohibition, closing with the
     // muʿānaqah pair (`pair` → two marks in one cell) where exactly one of the two
     // is a stop.
-    const WAQF_KEYS: { mark: string; label: string; pair?: boolean }[] = [
-        { mark: 'ۚ', label: 'Stop or Continue' }, // ۚ jīm (jāʾiz)
-        { mark: 'ۗ', label: 'Better to Stop' }, // ۗ qila (al-waqf awlā)
-        { mark: 'ۖ', label: 'Better to Continue' }, // ۖ ṣala (al-waṣl awlā)
-        { mark: 'ۘ', label: 'Must Stop' }, // ۘ mīm (lāzim)
-        { mark: 'ۙ', label: 'Should Not Stop' }, // ۙ lā
-        { mark: 'ۛ', label: 'Stop at one only', pair: true }, // ۛ muʿānaqah
+    const WAQF_KEYS: { mark: string; label: () => string; pair?: boolean }[] = [
+        { mark: 'ۚ', label: m.ts_tajweed_panel_waqf_stop_or_continue }, // ۚ jīm (jāʾiz)
+        { mark: 'ۗ', label: m.ts_tajweed_panel_waqf_better_to_stop }, // ۗ qila (al-waqf awlā)
+        { mark: 'ۖ', label: m.ts_tajweed_panel_waqf_better_to_continue }, // ۖ ṣala (al-waṣl awlā)
+        { mark: 'ۘ', label: m.ts_tajweed_panel_waqf_must_stop }, // ۘ mīm (lāzim)
+        { mark: 'ۙ', label: m.ts_tajweed_panel_waqf_should_not_stop }, // ۙ lā
+        { mark: 'ۛ', label: m.ts_tajweed_panel_waqf_stop_at_one_only, pair: true }, // ۛ muʿānaqah
     ];
 
     // 2×2 placement: Noon/Meem + Other rules on top, Madd + Waqf on the bottom.
@@ -101,18 +103,30 @@
         const raw = rootStyle?.getPropertyValue(row.colorVar) ?? '';
         return cssColorToHex(raw || '#888888');
     }
+
+    // Attribute/text labels gated on i18n.locale so they re-render on a locale switch.
+    const panelTitle = $derived((i18n.locale, m.ts_tajweed_panel_title()));
+    const panelSubtitle = $derived((i18n.locale, m.ts_tajweed_panel_subtitle()));
+    const resetAllLabel = $derived((i18n.locale, m.ts_tajweed_panel_reset_all_button()));
+    const changeColourTitle = $derived((i18n.locale, m.ts_tajweed_panel_change_colour_title()));
+    const stateOn = $derived((i18n.locale, m.ts_tajweed_panel_state_on()));
+    const stateOff = $derived((i18n.locale, m.ts_tajweed_panel_state_off()));
+    const keyUnwrittenCaption = $derived((i18n.locale, m.ts_tajweed_panel_key_unwritten_caption()));
+    const keySilentCaption = $derived((i18n.locale, m.ts_tajweed_panel_key_silent_caption()));
+    const waqfSectionTitle = $derived((i18n.locale, m.ts_tajweed_panel_waqf_section_title()));
 </script>
 
 <div class="tjs">
     <div class="tjs-head">
         <span class="tjs-title"
-            >Tajweed rules <span class="tjs-sub">(hover a cell for rule details)</span></span
+            >{panelTitle} <span class="tjs-sub">{panelSubtitle}</span></span
         >
-        <button type="button" class="tjs-reset" onclick={() => resetAllTajweed()}>Reset all</button>
+        <button type="button" class="tjs-reset" onclick={() => resetAllTajweed()}>{resetAllLabel}</button>
     </div>
 
     {#snippet ruleRow(row: LegendRow)}
         {@const on = $tajweedSettings[row.legendKey]?.enabled ?? true}
+        {@const label = row.label()}
         <div class="tjs-row" class:off={!on}>
             <div class="tjs-control">
                 <button
@@ -120,8 +134,8 @@
                     class="tjs-swatch"
                     class:kubra={row.kubra}
                     style:--sw={`var(${row.colorVar})`}
-                    title="Change colour"
-                    onclick={() => inputs[row.label]?.click()}
+                    title={changeColourTitle}
+                    onclick={() => inputs[label]?.click()}
                 >
                     {#if row.kubra}
                         <span class="kl"></span><span class="kr"></span>
@@ -136,7 +150,7 @@
                     </span>
                 </button>
                 <input
-                    bind:this={inputs[row.label]}
+                    bind:this={inputs[label]}
                     type="color"
                     class="tjs-color-input"
                     value={effectiveHex(row)}
@@ -150,17 +164,18 @@
                     class:on
                     role="switch"
                     aria-checked={on}
-                    aria-label={`${row.label} ${on ? 'on' : 'off'}`}
+                    aria-label={m.ts_tajweed_panel_rule_state_aria_label({ rule: label, state: on ? stateOn : stateOff })}
                     onclick={() => setRuleEnabled(row.legendKey, !on)}
                 ><span class="knob"></span></button>
             </div>
-            <span class="tjs-label">{row.label}</span>
+            <span class="tjs-label">{label}</span>
             {#if row.duration}<span class="tjs-dur">[{row.duration}]</span>{/if}
         </div>
     {/snippet}
 
-    {#snippet groupHead(title: string, keys: string[])}
+    {#snippet groupHead(titleFn: () => string, keys: string[])}
         {@const on = isGroupEnabled($tajweedSettings, keys)}
+        {@const title = titleFn()}
         <h4 class="tjs-h4">
             <span>{title}</span>
             <button
@@ -169,8 +184,8 @@
                 class:on
                 role="switch"
                 aria-checked={on}
-                aria-label={`Turn all ${title} rules ${on ? 'off' : 'on'}`}
-                title={on ? 'Disable all in group' : 'Enable all in group'}
+                aria-label={m.ts_tajweed_panel_group_toggle_aria_label({ title, state: on ? m.ts_tajweed_panel_state_off() : m.ts_tajweed_panel_state_on() })}
+                title={on ? m.ts_tajweed_panel_group_toggle_disable_title() : m.ts_tajweed_panel_group_toggle_enable_title()}
                 onclick={() => setGroupEnabled(title, keys, !on)}
             ><span class="knob"></span></button>
         </h4>
@@ -224,13 +239,13 @@
                                     </span>
                                 </span>
                             </span>
-                            <span class="kcap">Pronounced but unwritten/transformed</span>
+                            <span class="kcap">{keyUnwrittenCaption}</span>
                         </div>
                         <div class="tjs-key-row">
                             <span class="tjs-key-cells">
                                 <span class="kcell big silent">ٱ</span>
                             </span>
-                            <span class="kcap">Written but silent</span>
+                            <span class="kcap">{keySilentCaption}</span>
                         </div>
                     </div>
                 {/if}
@@ -238,7 +253,7 @@
         {/each}
 
         <section class="tjs-group tjs-waqf fill">
-            <h4>Waqf · stop signs</h4>
+            <h4>{waqfSectionTitle}</h4>
             <div class="waqf-body rows-6">
                 {#each WAQF_KEYS as wk (wk.label)}
                     <div class="waqf-row">
@@ -248,7 +263,7 @@
                                 <span class="waqf-mark" style={waqfRenderStyle(wk.mark)}>{wk.mark}</span>
                             {/if}
                         </span>
-                        <span class="waqf-cap">{wk.label}</span>
+                        <span class="waqf-cap">{wk.label()}</span>
                     </div>
                 {/each}
             </div>

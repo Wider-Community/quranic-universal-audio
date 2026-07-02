@@ -1,0 +1,39 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "errors_auth_required": "Please sign in to continue.",
+  "errors_forbidden_capability": "You don't have permission for this action.",
+  "errors_not_authorized": "You don't have permission for this action.",
+  "errors_not_editable_state_with_label": "This reciter isn't editable right now (it's {state_label}).",
+  "errors_not_editable_state": "This reciter isn't in an editable state right now.",
+  "errors_marked_ready_frozen": "This reciter is marked ready for publish and is locked. Choose “Continue editing” to make changes.",
+  "errors_visibility_blocked": "This reciter isn't available for editing.",
+  "errors_not_claim_holder": "You need an active claim on this reciter to edit it.",
+  "errors_state_precondition_with_label": "That action isn't available while the reciter is {state_label}.",
+  "errors_state_precondition": "That action isn't available from the reciter's current state.",
+  "errors_release_blocked_marked_ready": "Unmark ready before releasing this reciter, or ask an admin to send it back.",
+  "errors_reason_required_with_min": [
+    {
+      "declarations": ["input min_chars", "local countPlural = min_chars: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "Please provide a reason (at least {min_chars} character).",
+        "countPlural=other": "Please provide a reason (at least {min_chars} characters)."
+      }
+    }
+  ],
+  "errors_reason_required": "Please provide a reason.",
+  "errors_mark_ready_checklist": "Complete every checklist item before marking ready.",
+  "errors_mark_ready_blocking_counts": "Resolve the remaining blocking validation issues before marking ready.",
+  "errors_mark_ready_payload": "Your mark-ready submission was incomplete. Please review and resubmit.",
+  "errors_mark_ready_no_segments": "Can't mark ready — this reciter has no saved segments yet.",
+  "errors_last_owner": "You can't remove the last owner — promote another owner first.",
+  "errors_unknown_reciter": "That reciter couldn't be found.",
+  "errors_read_only": "This instance is read-only; changes aren't saved.",
+  "errors_status_401": "Please sign in to continue.",
+  "errors_status_403": "You don't have permission for this action.",
+  "errors_status_404": "That couldn't be found.",
+  "errors_status_409": "That action conflicts with the current state.",
+  "errors_status_500": "Something went wrong on our end. Please try again.",
+  "errors_generic_fallback": "Something went wrong. Please try again.",
+  "errors_claim_unclaim_first": "Unclaim {existing} first to claim {target}."
+}

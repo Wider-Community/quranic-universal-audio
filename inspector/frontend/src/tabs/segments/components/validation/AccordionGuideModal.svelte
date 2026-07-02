@@ -4,7 +4,9 @@
 
     import { recordGuideViewed } from '../../../../lib/api/guide-views';
     import AudioElement from '../../../../lib/components/AudioElement.svelte';
+    import { localeStore, tr } from '../../../../lib/i18n/locale-store';
     import OverviewContent from '../../../../lib/components/info/OverviewContent.svelte';
+    import * as m from '../../../../lib/paraglide/messages';
     import { currentUser, loadCurrentUser, markGuideReadLocally } from '../../../../lib/stores/current-user';
     import type { HistoryBatch } from '../../../../lib/types/view-models';
     import EditingGuideContent from '../../guides/editing/EditingGuideContent.svelte';
@@ -69,7 +71,7 @@
         if (!ok) void loadCurrentUser();             // failure → resync truth from /api/me
     }
 
-    $: guideSource = getAccordionGuide(category);
+    $: guideSource = getAccordionGuide(category, $localeStore);
     $: blocks = guideSource ? parseGuideSource(guideSource) : [];
     $: title = guideTitleFromBlocks(blocks, category);
     $: {
@@ -134,6 +136,11 @@
         document.removeEventListener('keydown', onKeydown);
         previewCtx.dispose();
     });
+
+    $: guideKicker = tr($localeStore, m.segments_validation_guide_modal_kicker());
+    $: closeAriaLabel = tr($localeStore, m.segments_validation_guide_modal_close_aria_label());
+    $: noGuideLabel = tr($localeStore, m.segments_validation_guide_modal_no_guide());
+    $: goalLabel = tr($localeStore, m.segments_validation_guide_modal_goal_label());
 </script>
 
 <div class="accordion-guide-backdrop" role="presentation" on:click={onBackdropClick}>
@@ -147,20 +154,20 @@
     >
         <header class="accordion-guide-header">
             <div>
-                <div class="accordion-guide-kicker">Accordion guide</div>
+                <div class="accordion-guide-kicker">{guideKicker}</div>
                 <h2 id="accordion-guide-title">{title}</h2>
             </div>
             <button
                 type="button"
                 class="accordion-guide-close"
-                aria-label="Close accordion guide"
+                aria-label={closeAriaLabel}
                 on:click={close}
             >&times;</button>
         </header>
 
         <div class="accordion-guide-body">
             {#if !guideSource}
-                <p class="accordion-guide-muted">No guide yet.</p>
+                <p class="accordion-guide-muted">{noGuideLabel}</p>
             {:else}
                 <div class="accordion-guide-flow">
                     {#each blocks as block, i (`${block.type}:${i}`)}
@@ -174,7 +181,7 @@
                             <div class="accordion-guide-callout" role="note">
                                 <span class="accordion-guide-callout-icon" aria-hidden="true">🎯</span>
                                 <div class="accordion-guide-callout-body">
-                                    <div class="accordion-guide-callout-label">Goal</div>
+                                    <div class="accordion-guide-callout-label">{goalLabel}</div>
                                     <p class="accordion-guide-callout-text">{block.text}</p>
                                 </div>
                             </div>
@@ -182,14 +189,14 @@
                             {#if GUIDE_COMPONENTS[block.name]}
                                 <svelte:component this={GUIDE_COMPONENTS[block.name]} />
                             {:else}
-                                <p class="accordion-guide-error">Unknown guide component: {block.name}</p>
+                                <p class="accordion-guide-error">{m.segments_validation_guide_modal_unknown_component({ name: block.name })}</p>
                             {/if}
                         {:else if block.type === 'missing'}
                             <p class="accordion-guide-error">{block.message}</p>
                         {:else if block.type === 'example'}
                             {@const example = exampleFor(block.id)}
                             {#if !example}
-                                <p class="accordion-guide-error">Missing guide example: {block.id}</p>
+                                <p class="accordion-guide-error">{m.segments_validation_guide_modal_missing_example({ id: block.id })}</p>
                             {:else}
                             <article class="accordion-guide-example">
                                 <header class="accordion-guide-example-header">

@@ -2,6 +2,7 @@
  * Display-name helpers for catalog vocab slugs.
  * Centralized so slugs never leak to the UI.
  */
+import * as m from '$lib/paraglide/messages';
 import type { PublicDelivery } from '../types/generated/schemas';
 
 const TITLE_CASE_OVERRIDES: Record<string, string> = {
@@ -24,11 +25,11 @@ export function titleCaseSlug(slug: string | null | undefined): string {
         .join(' ');
 }
 
-const BITRATE_MODE_LABEL: Record<string, string> = {
-    cbr: 'cbr',
-    vbr: 'vbr',
-    mixed: 'mixed',
-    unknown: '',
+const BITRATE_MODE_LABEL: Record<string, () => string> = {
+    cbr: m.common_delivery_bitrate_cbr,
+    vbr: m.common_delivery_bitrate_vbr,
+    mixed: m.common_delivery_bitrate_mixed,
+    unknown: () => '',
 };
 
 /** Field separator used across all combination display surfaces. */
@@ -37,7 +38,7 @@ export const SEP = ' · ';
 export function bitrateLabel(d: PublicDelivery): string {
     const mode = (d.bitrate_mode || '').toLowerCase();
     const kbps = d.bitrate_kbps_nominal;
-    const modeText = BITRATE_MODE_LABEL[mode] ?? mode.replace(/_/g, ' ');
+    const modeText = BITRATE_MODE_LABEL[mode]?.() ?? mode.replace(/_/g, ' ');
     if (kbps == null) return modeText || '—';
     if (!modeText) return `${kbps} kbps`;
     return `${kbps} kbps${SEP}${modeText}`;
@@ -45,7 +46,7 @@ export function bitrateLabel(d: PublicDelivery): string {
 
 /** Compact coverage badge for the picker — "Full" or "47/114". */
 export function compactCoverageLabel(d: PublicDelivery): string {
-    if (d.coverage_kind === 'full') return 'Full';
+    if (d.coverage_kind === 'full') return m.common_delivery_coverage_full();
     return `${d.chapter_count}/114`;
 }
 
@@ -59,16 +60,14 @@ export function compactHoursLabel(d: PublicDelivery): string {
 
 /** "x ayahs" if by_ayah, "x surahs" if by_surah. */
 export function coverageLabel(d: PublicDelivery): string {
-    if (d.audio_category === 'by_ayah') {
-        const n = d.chapter_count;
-        return `${n} ${n === 1 ? 'ayah' : 'ayahs'}`;
-    }
     const n = d.chapter_count;
-    return `${n} ${n === 1 ? 'surah' : 'surahs'}`;
+    return d.audio_category === 'by_ayah'
+        ? m.common_delivery_ayah_count({ count: n })
+        : m.common_delivery_surah_count({ count: n });
 }
 
 export function categoryLabel(d: PublicDelivery): string {
-    return d.audio_category === 'by_ayah' ? 'Ayah' : 'Surah';
+    return d.audio_category === 'by_ayah' ? m.common_delivery_category_ayah() : m.common_delivery_category_surah();
 }
 
 export function channelDisplay(d: PublicDelivery): string {
