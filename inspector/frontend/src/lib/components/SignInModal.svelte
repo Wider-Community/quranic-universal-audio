@@ -4,20 +4,20 @@
     contribution action (claim, save, etc.).
 
     Standalone tab: the CTA kicks off the plain redirect sign-in.
-    Embedded HF iframe: the CTA runs the popup + Storage Access flow
-    (`embedded-auth.ts`) and this modal renders its phases (waiting for the
-    popup, a one-click "finish", and an own-tab fallback if storage access is
-    denied). See `embedded-auth.ts` for why the redirect can't work in-frame.
+    Embedded HF iframe: the CTA runs the silent in-iframe flow
+    (`embedded-auth.ts`); if the browser won't complete it in-frame, the modal
+    offers a single "continue in a new tab" link (a click is required — browsers
+    block auto-opening tabs). See `embedded-auth.ts` for the constraints.
 -->
 <script lang="ts">
     import { signIn } from '../api/auth-client';
     import {
         beginEmbeddedSignIn,
-        continueWithStorageAccess,
+        continueInTab,
         embeddedAuth,
         isEmbedded,
+        recheckSession,
         resetEmbeddedAuth,
-        standaloneUrl,
     } from '../api/embedded-auth';
     import { closeSignInModal, signInModal } from '../stores/sign-in-modal';
 
@@ -32,25 +32,11 @@
 
     function _onContinue() {
         if (embedded) {
-            // Runs the popup within this click gesture (popup-blocker safe).
-            beginEmbeddedSignIn(returnPath);
+            void beginEmbeddedSignIn(returnPath);
         } else {
             closeSignInModal();
             signIn(returnPath);
         }
-    }
-
-    function _onReopen() {
-        beginEmbeddedSignIn(returnPath);
-    }
-
-    function _onFinish() {
-        void continueWithStorageAccess();
-    }
-
-    function _onOpenTab() {
-        window.open(standaloneUrl(returnPath), '_blank', 'noopener');
-        _close();
     }
 
     function _close() {
@@ -65,8 +51,6 @@
     function _onKeydown(e: KeyboardEvent) {
         if (e.key === 'Escape') _close();
     }
-
-    const _busy = ['finishing'];
 </script>
 
 <svelte:window on:keydown={_onKeydown} />
@@ -79,39 +63,31 @@
             aria-modal="true"
             aria-labelledby="sign-in-title"
         >
-            {#if embedded && phase === 'awaiting'}
-                <h2 id="sign-in-title" class="sign-in-title">Continue in the sign-in window</h2>
+            {#if embedded && phase === 'trying'}
+                <h2 id="sign-in-title" class="sign-in-title">Signing you in…</h2>
+                <p class="sign-in-body">Connecting to your Hugging Face account.</p>
+            {:else if embedded && phase === 'need-tab'}
+                <h2 id="sign-in-title" class="sign-in-title">One more step</h2>
                 <p class="sign-in-body">
-                    A Hugging Face sign-in window has opened. Complete sign-in
-                    there and this will update automatically.
+                    Your browser won't let sign-in finish inside this embedded
+                    view. Continue in a new tab — you'll come right back here,
+                    signed in.
                 </p>
                 <div class="sign-in-actions">
-                    <button type="button" class="sign-in-cta" on:click={_onReopen}>
-                        Reopen sign-in window
+                    <button type="button" class="sign-in-cta" on:click={continueInTab}>
+                        Continue in a new tab
                     </button>
                     <button type="button" class="sign-in-dismiss" on:click={_close}>Cancel</button>
                 </div>
-            {:else if embedded && phase === 'finishing'}
-                <h2 id="sign-in-title" class="sign-in-title">Finishing sign-in…</h2>
-                <p class="sign-in-body">One moment.</p>
-            {:else if embedded && phase === 'needs-continue'}
-                <h2 id="sign-in-title" class="sign-in-title">Almost there</h2>
+            {:else if embedded && phase === 'awaiting-tab'}
+                <h2 id="sign-in-title" class="sign-in-title">Finish in the new tab</h2>
                 <p class="sign-in-body">
-                    Click continue to finish signing in inside this embedded view.
+                    Complete sign-in in the tab that just opened, then return
+                    here. This updates automatically.
                 </p>
                 <div class="sign-in-actions">
-                    <button type="button" class="sign-in-cta" on:click={_onFinish}>Continue</button>
-                    <button type="button" class="sign-in-dismiss" on:click={_close}>Cancel</button>
-                </div>
-            {:else if embedded && phase === 'fallback'}
-                <h2 id="sign-in-title" class="sign-in-title">Open in its own tab</h2>
-                <p class="sign-in-body">
-                    This browser blocks sign-in inside the embedded view. Open the
-                    app in its own tab to sign in there — everything works the same.
-                </p>
-                <div class="sign-in-actions">
-                    <button type="button" class="sign-in-cta" on:click={_onOpenTab}>
-                        Open app in a new tab
+                    <button type="button" class="sign-in-cta" on:click={() => void recheckSession()}>
+                        I've signed in
                     </button>
                     <button type="button" class="sign-in-dismiss" on:click={_close}>Cancel</button>
                 </div>
@@ -119,12 +95,7 @@
                 <h2 id="sign-in-title" class="sign-in-title">{title}</h2>
                 <p class="sign-in-body">{body}</p>
                 <div class="sign-in-actions">
-                    <button
-                        type="button"
-                        class="sign-in-cta"
-                        disabled={_busy.includes(phase)}
-                        on:click={_onContinue}
-                    >
+                    <button type="button" class="sign-in-cta" on:click={_onContinue}>
                         Continue with Hugging Face
                     </button>
                     <button type="button" class="sign-in-dismiss" on:click={_close}>Cancel</button>
@@ -183,10 +154,6 @@
     }
     .sign-in-cta:hover {
         background: #ffba2c;
-    }
-    .sign-in-cta:disabled {
-        opacity: 0.6;
-        cursor: default;
     }
     .sign-in-dismiss {
         background: transparent;

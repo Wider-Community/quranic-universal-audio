@@ -1,24 +1,27 @@
 /**
  * Embedded (HF-iframe) sign-in flow.
  *
- * When the app runs inside the cross-site `huggingface.co` iframe, the plain
- * redirect sign-in (`auth-client.signIn` → `window.location.assign`) breaks two
- * ways:
- *   1. HF's `/login` + `/oauth/authorize` send `X-Frame-Options: SAMEORIGIN`, so
- *      navigating the iframe to them renders nothing in Firefox/Safari (they
- *      check every ancestor; the immediate parent `*.hf.space` ≠ HF).
- *   2. The identity cookie is third-party in the iframe, so even a completed
- *      login isn't sent on later requests under 3p-cookie blocking.
+ * The app runs inside the cross-site `huggingface.co` iframe on a different
+ * domain (`*.hf.space`). Two browser constraints shape this (per HF's own docs,
+ * https://huggingface.co/docs/hub/spaces-cookie-limitations and
+ * https://huggingface.co/docs/hub/spaces-oauth):
+ *   - HF's login/consent page can't render inside the iframe (X-Frame-Options),
+ *     and the iframe can't navigate the top window (sandbox). So a user who
+ *     isn't already logged into HF must authenticate in a separate tab.
+ *   - The identity cookie is third-party in the iframe, so it needs the Storage
+ *     Access API to be readable.
  *
- * The iframe sandbox forbids top navigation but allows popups and the Storage
- * Access API, so this module:
- *   - opens the sign-in in a popup (top-level, first-party HF → renders + sets
- *     the cookie first-party on the popup's `*.hf.space` origin),
- *   - then requests storage access so the iframe's own same-origin `/api/me`
- *     carries the now-unpartitioned cookie.
+ * Strategy (no popup):
+ *   1. Silent attempt — request storage access, then run the OAuth in a hidden
+ *      iframe. For a user already logged into HF this completes as pure
+ *      redirects (no page renders) and the cookie becomes readable → signed in
+ *      without ever leaving the embedded view.
+ *   2. Fallback — if the silent attempt can't complete (not logged into HF, or
+ *      the browser blocks the third-party cookie outright), surface a single
+ *      "continue in a new tab" link. It has to be a click: browsers block
+ *      programmatically opening a tab that isn't tied to a user gesture.
  *
- * If storage access is denied or the popup is blocked, the caller surfaces a
- * "open in its own tab" fallback (fully first-party). Drives `SignInModal`.
+ * Drives `SignInModal`.
  */
 
 import { writable } from 'svelte/store';
@@ -26,31 +29,29 @@ import { writable } from 'svelte/store';
 import { loadCurrentUser } from '../stores/current-user';
 
 /**
- * - `idle`         — no flow in progress (modal shows the CTA).
- * - `awaiting`     — popup open; waiting for the user to finish sign-in there.
- * - `finishing`    — popup done; resolving identity (+ storage access).
- * - `needs-continue` — signed in in the popup but the iframe still can't read the
- *                    cookie; needs one more click to request storage access with
- *                    a fresh user gesture.
- * - `done`         — signed in and the iframe can see it.
- * - `fallback`     — couldn't complete embedded; offer the own-tab escape hatch.
+ * - `idle`         — nothing in progress.
+ * - `trying`       — silent in-iframe attempt running (brief).
+ * - `need-tab`     — silent attempt failed; offer the new-tab link.
+ * - `awaiting-tab` — a sign-in tab is open; waiting for the user to return.
+ * - `done`         — signed in; the iframe can see the session.
  */
-export type EmbeddedAuthPhase =
-    | 'idle'
-    | 'awaiting'
-    | 'finishing'
-    | 'needs-continue'
-    | 'done'
-    | 'fallback';
+export type EmbeddedAuthPhase = 'idle' | 'trying' | 'need-tab' | 'awaiting-tab' | 'done';
 
-interface EmbeddedAuthState {
-    phase: EmbeddedAuthPhase;
+export const embeddedAuth = writable<{ phase: EmbeddedAuthPhase }>({ phase: 'idle' });
+
+const SILENT_TIMEOUT_MS = 6000;
+const SILENT_POLL_MS = 800;
+const RETURN_POLL_MS = 1500;
+
+let _returnPath = '/';
+let _stopWatch: (() => void) | null = null;
+
+function _setPhase(phase: EmbeddedAuthPhase): void {
+    embeddedAuth.set({ phase });
 }
 
-export const embeddedAuth = writable<EmbeddedAuthState>({ phase: 'idle' });
-
-/** True when the app is running inside another document's frame. A cross-origin
- *  parent makes `window.top` access throw — that itself means we're embedded. */
+/** True when running inside another document's frame. A cross-origin parent
+ *  makes `window.top` access throw — which itself means we're embedded. */
 export function isEmbedded(): boolean {
     try {
         return window.self !== window.top;
@@ -59,115 +60,134 @@ export function isEmbedded(): boolean {
     }
 }
 
-/** First-party URL of this Space in its own tab — the guaranteed fallback. */
+/** First-party URL of this Space in its own tab. */
 export function standaloneUrl(returnPath: string): string {
     const path = returnPath && returnPath.startsWith('/') ? returnPath : '/';
     return window.location.origin + path;
 }
 
-let _popup: Window | null = null;
-let _cleanup: (() => void) | null = null;
-
-function _setPhase(phase: EmbeddedAuthPhase): void {
-    embeddedAuth.set({ phase });
+/** Best-effort Storage Access API grant so the iframe can use its own cookie. */
+async function _tryStorageAccess(): Promise<void> {
+    try {
+        if (typeof document.requestStorageAccess === 'function') {
+            await document.requestStorageAccess();
+        }
+    } catch {
+        /* denied — the silent attempt will simply not resolve; we fall back */
+    }
 }
 
-/** Best-effort Storage Access API grant. Resolves true only if access is held. */
-async function _tryRequestStorageAccess(): Promise<boolean> {
+async function _meLogin(): Promise<string | null> {
     try {
-        if (typeof document.requestStorageAccess !== 'function') return false;
-        await document.requestStorageAccess();
-        return true;
+        const me = await fetch('/api/me', { credentials: 'same-origin' }).then((r) => r.json());
+        return me && me.hf_user_id ? me.login : null;
     } catch {
-        return false;
+        return null;
     }
 }
 
 /**
- * Open the sign-in popup. MUST be called synchronously from a user gesture
- * (click) or the browser's popup blocker kills it. Sets phase to `awaiting`,
- * or `fallback` if the popup couldn't open.
+ * Run the OAuth in a hidden iframe and poll `/api/me`. Resolves true if the
+ * session becomes readable (already-logged-in HF user + cookie access), false
+ * on timeout (not logged into HF, or third-party cookie blocked).
  */
-export function beginEmbeddedSignIn(returnPath: string): void {
-    _teardown();
-    const url = `/api/auth/login?popup=1&return=${encodeURIComponent(returnPath)}`;
-    _popup = window.open(url, 'hf_login', 'width=520,height=720,menubar=no,toolbar=no');
-    if (!_popup) {
-        _setPhase('fallback');
-        return;
-    }
-    _setPhase('awaiting');
-    // Returning users (prior first-party interaction with this origin) get the
-    // grant on this gesture; the cookie the popup sets is then already readable.
-    // New users are handled by the `needs-continue` step below.
-    void _tryRequestStorageAccess();
-    _watchPopup();
+function _attemptSilent(): Promise<boolean> {
+    return new Promise((resolve) => {
+        const frame = document.createElement('iframe');
+        frame.setAttribute('aria-hidden', 'true');
+        frame.tabIndex = -1;
+        frame.style.cssText = 'position:absolute;width:0;height:0;border:0;left:-9999px;top:-9999px';
+        // popup=1 → the callback serves a self-closing page; harmless (and
+        // invisible) here, and avoids booting the whole SPA in the hidden frame.
+        frame.src = '/api/auth/login?popup=1&return=%2F';
+        let settled = false;
+        const cleanup = (val: boolean): void => {
+            if (settled) return;
+            settled = true;
+            window.clearInterval(poll);
+            window.clearTimeout(timer);
+            frame.remove();
+            resolve(val);
+        };
+        const poll = window.setInterval(async () => {
+            if (await _meLogin()) cleanup(true);
+        }, SILENT_POLL_MS);
+        const timer = window.setTimeout(() => cleanup(false), SILENT_TIMEOUT_MS);
+        document.body.appendChild(frame);
+    });
 }
 
-/** Listen for the popup's success postMessage; also poll for it being closed. */
-function _watchPopup(): void {
-    const onMessage = (e: MessageEvent): void => {
-        if (e.origin !== window.location.origin) return;
-        if (e.data && e.data.source === 'inspector-auth' && e.data.ok) {
-            void _finish();
+/**
+ * Start the embedded sign-in. Call synchronously from the user's click so the
+ * storage-access request keeps its user activation.
+ */
+export async function beginEmbeddedSignIn(returnPath: string): Promise<void> {
+    _returnPath = returnPath || '/';
+    _setPhase('trying');
+    await _tryStorageAccess();
+    const ok = await _attemptSilent();
+    if (ok) {
+        await loadCurrentUser();
+        _setPhase('done');
+        return;
+    }
+    _setPhase('need-tab');
+}
+
+/**
+ * Fallback: open HF sign-in in a new tab. MUST be called from a user click —
+ * browsers block programmatically opening a tab without a fresh gesture, which
+ * is why this can't be fully automatic.
+ */
+export function continueInTab(): void {
+    window.open(`/api/auth/login?return=${encodeURIComponent(_returnPath)}`, '_blank');
+    _setPhase('awaiting-tab');
+    _watchForReturn();
+}
+
+/** After the tab login, pick up the session when the user returns to this view. */
+function _watchForReturn(): void {
+    _clearWatch();
+    const check = async (): Promise<void> => {
+        await _tryStorageAccess();
+        if (await _meLogin()) {
+            _clearWatch();
+            await loadCurrentUser();
+            _setPhase('done');
         }
     };
-    window.addEventListener('message', onMessage);
-    const poll = window.setInterval(() => {
-        if (_popup && _popup.closed) void _finish();
-    }, 700);
-    _cleanup = () => {
-        window.removeEventListener('message', onMessage);
+    const onVisible = (): void => {
+        if (document.visibilityState === 'visible') void check();
+    };
+    window.addEventListener('focus', check);
+    document.addEventListener('visibilitychange', onVisible);
+    const poll = window.setInterval(check, RETURN_POLL_MS);
+    _stopWatch = () => {
+        window.removeEventListener('focus', check);
+        document.removeEventListener('visibilitychange', onVisible);
         window.clearInterval(poll);
     };
 }
 
-function _delay(ms: number): Promise<void> {
-    return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
-
-/** Popup finished: resolve identity. If the iframe still can't see the session,
- *  ask for one more click to grant storage access with a fresh gesture. */
-async function _finish(): Promise<void> {
-    _teardown();
-    _setPhase('finishing');
-    // Where third-party cookies are allowed the popup's cookie is readable
-    // straight away; a couple of short retries absorb the set-cookie/postMessage
-    // race so those users skip the extra click. Browsers that block third-party
-    // cookies never resolve here and fall through to the storage-access step.
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-        const me = await loadCurrentUser();
-        if (me.hf_user_id) {
-            _setPhase('done');
-            return;
-        }
-        if (attempt < 2) await _delay(500);
-    }
-    _setPhase('needs-continue');
-}
-
-/**
- * Finish sign-in from a fresh user gesture: request storage access, then
- * re-resolve identity. Falls back to the own-tab escape hatch if the iframe
- * still can't read the session.
- */
-export async function continueWithStorageAccess(): Promise<void> {
-    _setPhase('finishing');
-    await _tryRequestStorageAccess();
-    const me = await loadCurrentUser();
-    _setPhase(me.hf_user_id ? 'done' : 'fallback');
-}
-
-function _teardown(): void {
-    if (_cleanup) {
-        _cleanup();
-        _cleanup = null;
+function _clearWatch(): void {
+    if (_stopWatch) {
+        _stopWatch();
+        _stopWatch = null;
     }
 }
 
-/** Reset to idle and drop any popup/listener state (on modal close). */
+/** Manually re-check (the "I've signed in" button on the awaiting-tab step). */
+export async function recheckSession(): Promise<void> {
+    await _tryStorageAccess();
+    if (await _meLogin()) {
+        _clearWatch();
+        await loadCurrentUser();
+        _setPhase('done');
+    }
+}
+
+/** Reset to idle and drop any watchers (on modal close). */
 export function resetEmbeddedAuth(): void {
-    _teardown();
-    _popup = null;
+    _clearWatch();
     _setPhase('idle');
 }
