@@ -223,6 +223,10 @@
         opacity: 0;
     }
     .shuffle-img.active { opacity: 1; }
+    /* The reciter glyphs are white monochrome SVGs (built for the dark button).
+       On light the button surface is near-white, so invert them to a dark mark
+       — the button chrome still carries the muted/accent state via `color`. */
+    :global(html[data-theme='light']) .shuffle-img { filter: invert(1); }
 
     .picker-wrap { position: relative; min-width: 0; }
     .picker-trigger {

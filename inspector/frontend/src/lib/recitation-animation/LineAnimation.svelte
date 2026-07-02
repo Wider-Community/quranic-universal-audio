@@ -6,7 +6,14 @@
      * highlighting word-by-word (or char-by-char) in sync with playback. The
      * line clears + re-pages when:
      *   - the active word would overflow the line ("out of space"), or
-     *   - the ayah finishes (restart from the new ayah's first word).
+     *   - the chain finishes (restart from the new chain's first word).
+     *
+     * A cross-verse waṣl chains the line PAST a verse end: when verse N recites
+     * into N+1 without a stop, the page extends to the whole chain (`wasl-chains`)
+     * so N+1's words flow onto the same line and the `۝` marker sits inline
+     * between them; the line clears only when the active verse leaves the chain.
+     * The `۝` marker silence-colours on a real waqf stop at a (non-bridging)
+     * verse end.
      *
      * The reveal engine (`engine/*`) is shared with the timestamps tab; the
      * paging + measurement is the line-specific layer here. All styling is
@@ -15,8 +22,9 @@
      */
     import { toArabicNumeral, ZWSP } from '../utils/arabic-text';
     import { ayahUnitRanges } from './chapter-words';
+    import { themeStore } from '../stores/theme.svelte';
     import { cssVarText, type RecitationAnimConfig } from './config';
-    import { buildAnimStructure, type AnimSourceWord } from './engine/build-structure';
+    import { buildAnimStructure, stampCharTimes, type AnimSourceWord } from './engine/build-structure';
     import {
         clearHighlights,
         indexCache,
@@ -24,7 +32,8 @@
     } from './engine/index-cache';
     import { fittedPrefixLength } from './line-window';
     import { type ActiveHit, buildSortedIntervals, findActiveAt } from './recitation-active';
-    import type { AnimUnit } from './types';
+    import type { AnimUnit, TimeSpan } from './types';
+    import { buildWaslChains } from './wasl-chains';
 
     /** U+06DD ARABIC END OF AYAH — the same glyph segment cards use. */
     const AYAH_END = '۝';
@@ -65,12 +74,20 @@
 
     const ayahRanges = $derived(ayahUnitRanges(units));
 
+    // Cross-verse waṣl chains: which verses recite into the next without a stop.
+    // A page spans a whole chain so the line flows across the boundary.
+    const waslChains = $derived(buildWaslChains(units));
+    const pageChainKey = $derived(waslChains.chainStartOf.get(pageAyahKey) ?? pageAyahKey);
+
     // Flat sorted-by-start list of every occurrence interval across all units,
     // for binary-search active lookup on fast-path miss. Built once per chapter.
     const sortedIntervals = $derived(buildSortedIntervals(units));
+    // The page runs to the end of the active CHAIN (a single verse when not in a
+    // waṣl chain), so a bridged N»N+1 flows onto one line instead of clearing.
     const ayahEndIdx = $derived(
         config.clearOnAyahEnd
-            ? (ayahRanges.get(pageAyahKey)?.[1] ?? units.length)
+            ? (waslChains.chainEndIdxOf.get(pageChainKey)
+                ?? ayahRanges.get(pageAyahKey)?.[1] ?? units.length)
             : units.length,
     );
     // While measuring (pageCount null) render the whole remainder so the fit
@@ -80,8 +97,8 @@
         pageCount === null ? ayahEndIdx : Math.min(pageStart + pageCount, ayahEndIdx),
     );
     const pageUnits = $derived(units.slice(pageStart, pageEnd));
-    const structure = $derived(
-        buildAnimStructure(
+    const structure = $derived.by(() => {
+        const s = buildAnimStructure(
             pageUnits.map(
                 (u): AnimSourceWord => ({
                     text: u.text,
@@ -95,8 +112,27 @@
                     letters: u.letters,
                 }),
             ),
-        ),
-    );
+        );
+        // Attach each cluster's per-occurrence [start,end] from the take's OWN
+        // letters, so `sweepChar` reveals a repeat at its real pace rather than
+        // linearly stretching take 1 (the cause of "future letters lit on take 2").
+        for (let wi = 0; wi < s.length; wi++) {
+            const u = pageUnits[wi];
+            const occLetters = u?.occurrenceLetters;
+            const chars = s[wi]!.chars;
+            if (!u || !occLetters || u.intervals.length < 2) continue; // single take → canonical is enough
+            const perChar: (TimeSpan | undefined)[][] = chars.map(() => []);
+            u.intervals.forEach((span, oi) => {
+                const lts = occLetters[oi];
+                const times = lts && lts.length
+                    ? stampCharTimes(chars, lts, span.start, span.end)
+                    : null;
+                chars.forEach((_, di) => perChar[di]!.push(times ? times[di] : undefined));
+            });
+            chars.forEach((ch, di) => { ch.occIntervals = perChar[di]; });
+        }
+        return s;
+    });
 
     // Reset paging whenever the chapter (units identity) changes.
     $effect(() => {
@@ -201,6 +237,23 @@
             sweepWord(h);
         }
         sweepDecorators(h);
+        sweepMarker(h);
+    }
+
+    /** Silence-colour the `۝` marker when a pause holds at its verse end — a real
+     *  waqf stop. A waṣl boundary has no stop (recitation flows on), so its marker
+     *  never lights; the `bridgesNext` guard also suppresses any one-frame gap. */
+    function sweepMarker(hit: ActiveHit | null): void {
+        if (!rootEl) return;
+        const inPause = hit === null && lastActive >= 0;
+        const markers = rootEl.querySelectorAll<HTMLElement>('.ra-ayah-marker');
+        for (const mk of markers) {
+            const after = parseInt(mk.dataset.afterWord ?? '-1', 10);
+            const ayahKey = pageUnits[after]?.ayahKey;
+            const pausing = inPause && after === lastActive
+                && !!ayahKey && !waslChains.bridgesNext.has(ayahKey);
+            mk.classList.toggle('marker-pause', pausing);
+        }
     }
 
     /** Drive each word's dynamic decorator marks. Only the waqf (stop) sign is
@@ -274,8 +327,10 @@
      *  [start,end]; on a repeat / look-back the audio time is past every letter
      *  of the repeated word, so the whole word read `reached` and the active
      *  letter never travelled back. Instead we locate the active word's CURRENT
-     *  occurrence interval and remap `t` onto the word's canonical letter
-     *  timeline, so repeats re-reveal letter-by-letter.
+     *  occurrence and reveal letter-by-letter against THAT take's own letter
+     *  timings (`ch.occIntervals[occIdx]`, raw playback time) — so a re-recitation
+     *  tracks its own (often slower / melodic) pace. When a take carries no
+     *  per-letter data we fall back to remapping `t` onto the canonical timeline.
      *
      *  Walk order matches the DOM: `.ra-char` spans exist only for words with
      *  `hasChars`, in `structure` order, so the flat `charCache` index advances
@@ -290,11 +345,22 @@
         const occEnd = hit?.ivEnd ?? 0;
         if (active >= 0) lastActive = active;
 
-        // Remap playback time into the active word's canonical letter timeline.
-        // The letters are anchored to the FIRST occurrence (`intervals[0]`), so
-        // we map the CURRENT occurrence's progress onto that span. (Using the
-        // unit's start/end is wrong for repeats: they expand to cover every
-        // occurrence, overshooting all letters → nothing animates on a repeat.)
+        // Which take of the active word is being recited — its index in the unit's
+        // ascending `intervals`. Drives the per-occurrence letter timings, so a
+        // repeat reveals at ITS pace rather than a stretched take 1.
+        let occIdx = -1;
+        if (active >= 0 && hit) {
+            occIdx = pageUnits[active]!.intervals.findIndex(
+                (iv) => iv.start === occStart && iv.end === occEnd,
+            );
+        }
+
+        // Remap playback time into the active word's canonical letter timeline —
+        // the FALLBACK for a take with no per-letter data. The letters are anchored
+        // to the FIRST occurrence (`intervals[0]`), so we map the CURRENT
+        // occurrence's progress onto that span. (Using the unit's start/end is
+        // wrong for repeats: they expand to cover every occurrence, overshooting
+        // all letters → nothing animates on a repeat.)
         let localT = -1;
         if (active >= 0) {
             const canon = pageUnits[active]!.intervals[0] ?? { start: occStart, end: occEnd };
@@ -324,7 +390,14 @@
                 let isActive = false;
                 let isReached = wordReached;
                 const ch = chars[k]!;
-                if (wi === active && localT >= 0) {
+                // Prefer the active take's OWN letter timing (raw playback time);
+                // fall back to the canonical remap when that take lacks per-letter
+                // data (or the unit was built without `occurrenceLetters`).
+                const occIv = wi === active && occIdx >= 0 ? ch.occIntervals?.[occIdx] : undefined;
+                if (wi === active && occIv) {
+                    isActive = t >= occIv.start && t < occIv.end;
+                    isReached = !isActive && t >= occIv.end;
+                } else if (wi === active && localT >= 0) {
                     isActive = localT >= ch.start && localT < ch.end;
                     isReached = !isActive && localT >= ch.end;
                 } else if (active >= 0 && localT >= 0 && sw && (ch.start !== sw.start || ch.end !== sw.end)) {
@@ -369,9 +442,12 @@
         const ga = hit?.unitIdx ?? -1;
         if (ga >= 0) {
             const activeAyah = units[ga]!.ayahKey;
+            const activeChain = waslChains.chainStartOf.get(activeAyah) ?? activeAyah;
 
-            // Ayah finished → restart from the new ayah's first word.
-            if (config.clearOnAyahEnd && activeAyah !== pageAyahKey) {
+            // Chain finished → restart from the new chain's entered ayah. A waṣl
+            // boundary stays in the SAME chain, so a forward crossing N»N+1 never
+            // clears (the line flows on; overflow re-pages within the chain).
+            if (config.clearOnAyahEnd && activeChain !== pageChainKey) {
                 const range = ayahRanges.get(activeAyah);
                 repaginate(range ? range[0] : ga, activeAyah);
                 globalActive = ga;
@@ -411,7 +487,7 @@
     class="ra-line"
     class:ra-chars={config.granularity === 'char'}
     class:ra-no-transition={suppressTransition}
-    style={cssVarText(config)}
+    style={cssVarText(config, themeStore.current)}
     style:text-align={pageCount === null ? 'right' : null}
 >
     {#each structure as w, i (pageStart + '-' + i)}
@@ -438,7 +514,7 @@
                 >{ch.text}</span>{/each}{:else}{w.clean}{/if}{#each w.trailing as d, di (di)}<span
                     class="ra-decorator ra-decorator--{d.role}"
                     aria-hidden="true"
-                >{ZWSP}{d.glyph}</span>{/each}</span>{#if config.showAyahMarker && u && ayahRanges.get(u.ayahKey)?.[1] === pageStart + i + 1}{' '}<span class="ra-ayah-marker">{AYAH_END}{toArabicNumeral(u.ayah)}</span>{/if}
+                >{ZWSP}{d.glyph}</span>{/each}</span>{#if config.showAyahMarker && u && ayahRanges.get(u.ayahKey)?.[1] === pageStart + i + 1}{' '}<span class="ra-ayah-marker" data-after-word={i}>{AYAH_END}{toArabicNumeral(u.ayah)}</span>{/if}
     {/each}
 </div>
 
@@ -477,6 +553,11 @@
         display: inline-block;
         color: var(--ra-base-color);
         text-shadow: var(--ra-word-shadow);
+        transition: color var(--ra-active-emphasis) var(--ra-easing);
+    }
+    /* Lit while a pause holds at this (non-bridging) verse end — a waqf stop. */
+    .ra-ayah-marker:global(.marker-pause) {
+        color: var(--ra-highlight);
     }
 
     /* Word granularity: the word is the animated unit. Word mode renders the
@@ -616,7 +697,8 @@
     @media (prefers-reduced-motion: reduce) {
         .ra-word,
         .ra-line.ra-chars .ra-char,
-        .ra-line .ra-word .ra-decorator {
+        .ra-line .ra-word .ra-decorator,
+        .ra-ayah-marker {
             transition: none;
         }
     }

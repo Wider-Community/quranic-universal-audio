@@ -20,8 +20,9 @@ from __future__ import annotations
 import logging
 import os
 from datetime import UTC, datetime
+from typing import cast
 
-from qua_shared.schemas import Actor
+from qua_shared.schemas import Actor, Role
 from services.db import repo_releases
 from services.db.sync import durable_transaction
 from services.state import audit
@@ -39,7 +40,7 @@ JOB_TIMEOUT = os.environ.get("INSPECTOR_HF_JOB_TIMEOUT", "30m")
 
 def launch(slug: str, *, webhook_base: str | None = None) -> dict:
     """Launch a publish-hf job for ``slug``. Returns ``{job_id, url}``."""
-    from huggingface_hub import Volume, get_token, run_job
+    from huggingface_hub import SpaceHardware, Volume, get_token, run_job
 
     # Cross-kind single-flight on the slug — TS or HF publish in flight blocks
     # this launch (and vice versa).
@@ -88,7 +89,7 @@ def launch(slug: str, *, webhook_base: str | None = None) -> dict:
     job = run_job(
         image=base.JOB_IMAGE,
         command=command,
-        flavor=JOB_FLAVOR,
+        flavor=cast(SpaceHardware, JOB_FLAVOR),
         timeout=JOB_TIMEOUT,
         env=env,
         secrets=secrets,
@@ -123,6 +124,9 @@ def complete(
 
     Inserts a new ``per_recitation_releases(track='hf')`` row, supersedes any
     prior current row for the slug, and fires ``released({track:'hf', ...})``.
+    When the slug has no current ``ts`` row (timestamps ingested offline, never
+    through an in-app TS job), it first registers one (``version='offline-ingest'``)
+    so the published reciter isn't orphaned from staleness / GH-cut eligibility.
 
     ``version`` is the HF revision SHA the publish landed at; pulled from the
     webhook payload OR from a fallback that reads the just-pushed dataset.
@@ -152,7 +156,7 @@ def complete(
     actor = Actor(
         hf_user_id="SYSTEM_ACTOR",
         login_at_time=launched_by or "system",
-        role="owner",
+        role=Role.OWNER,
     )
     with durable_transaction() as _:
         # Re-read inside the txn as the atomic guard: webhook + poll can
@@ -162,6 +166,19 @@ def complete(
         # superseded_at IS NULL only blocks two CURRENT rows.
         if repo_releases.release_by_version("hf", slug, version) is not None:
             return {"ok": True, "skipped": "duplicate"}
+        # Invariant: an HF dataset release rests on a TS production. A reciter
+        # whose timestamps were ingested offline (bucket upload, never an in-app
+        # TS job) has no ts release row, so publishing it here would leave it
+        # orphaned — invisible to staleness / GH-cut eligibility / ts-refresh.
+        # Register the production now so the published reciter is tracked.
+        if repo_releases.current_release("ts", slug) is None:
+            repo_releases.insert_per_recitation_release(
+                track="ts",
+                slug=slug,
+                version="offline-ingest",
+                produced_at=now,
+                produced_by="SYSTEM_ACTOR",
+            )
         # Supersede prior current row FIRST — the partial-unique blocks two
         # current rows for (hf, slug) so we can't insert before clearing.
         repo_releases.supersede_current("hf", slug, except_id=-1, at=now)
@@ -204,4 +221,7 @@ def complete(
 
 
 def register() -> None:
-    base.register_handler(KIND, lambda slug, jid: complete(slug, jid))
+    def _handler(slug: str | None, jid: str) -> None:
+        complete(slug, jid)
+
+    base.register_handler(KIND, _handler)

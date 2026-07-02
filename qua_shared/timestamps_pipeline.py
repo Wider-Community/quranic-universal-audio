@@ -31,6 +31,7 @@ from qua_shared.timestamps_shards import build_segment_shards, gzip_shard
 
 if TYPE_CHECKING:
     import numpy as np
+    from qua_sdk.components.timing.runtimes.mfa_local import MfaLocalAligner
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -269,7 +270,7 @@ class LocalMfaBackend:
 # ---------------------------------------------------------------------------
 
 # Per-worker globals populated by the executor's initializer.
-_WORKER = {"aligner": None}
+_WORKER: dict[str, MfaLocalAligner | None] = {"aligner": None}
 
 
 def _init_worker(model_path: str, dictionary_path: str):
@@ -673,7 +674,11 @@ def mfa_wait_result(event_id, headers, base_url, timeout=DEFAULT_TIMEOUT):
 
     result_data = None
     current_event = None
-    for line in sse_resp.iter_lines(decode_unicode=True):
+    for raw_line in sse_resp.iter_lines(decode_unicode=True):
+        # requests types iter_lines as bytes even under decode_unicode=True
+        # (which yields str at runtime); normalize so the str ops below are
+        # both correct and type-clean.
+        line = raw_line.decode() if isinstance(raw_line, bytes) else raw_line
         if line and line.startswith("event: "):
             current_event = line[7:]
         elif line and line.startswith("data: "):
@@ -767,6 +772,9 @@ def _normalize_from_results(chapters, results_by_ch, audio_category):
                     "time_end": seg_end_ms,
                     "words_by_verse": words_by_verse,
                     "segment_uid": seg.get("segment_uid"),
+                    # Per-occurrence waṣl flag (whole-verse path only): this
+                    # occurrence continues into the next via waṣl (no stop).
+                    "wasl": bool(result.get("wasl", False)),
                 }
             )
         if ch_occ:
@@ -800,6 +808,383 @@ def _merge_ts_validation(path: Path, fresh: dict, refresh_chapters: set[int]) ->
     return fresh
 
 
+def _shift_word_times(w: dict, delta_sec: float) -> dict:
+    """Shift a recovered word (+ its letters/phones) by ``delta`` seconds, so a
+    verse-local time becomes the segment-local time ``_normalize_from_results``
+    re-bases by ``seg.time_start``. Null letter start/end (degraded) stay null."""
+
+    def _s(v):
+        return None if v is None else round(v + delta_sec, 4)
+
+    nw = dict(w)
+    nw["start"], nw["end"] = _s(w.get("start")), _s(w.get("end"))
+    if w.get("letters"):
+        nw["letters"] = [
+            {**lt, "start": _s(lt.get("start")), "end": _s(lt.get("end"))} for lt in w["letters"]
+        ]
+    if w.get("phones"):
+        nw["phones"] = [
+            {**p, "start": _s(p.get("start")), "end": _s(p.get("end"))} for p in w["phones"]
+        ]
+    return nw
+
+
+def _group_verse_items(segments: list, refresh_ayahs: set | None = None) -> list[dict]:
+    """Group a chapter's KEPT segments into recitation ITEMS, raw + faithful.
+
+    Walk kept segments in TIME order. A maximal run of consecutive segments is ONE
+    item when each adjacent pair is *continuous* — either the same output verse-key
+    (mid-verse / partial repeats, concatenated) OR the earlier segment carries
+    ``is_wasl`` (a cross-verse waṣl: the reciter continued into the next verse
+    without stopping). A verse revisited later with a stop between (a RETAKE)
+    starts a separate item. No dedup — that is a publish-only concern.
+
+    Returns ``[{"vk", "seg_idxs":[...], "wasl_after":[bool,...]}, ...]`` where
+    ``wasl_after[k]`` is the boundary type between ``seg_idxs[k]`` and
+    ``seg_idxs[k+1]`` — True = waṣl (continuous phonemes, no psil), False =
+    silence (psil). Indices are into ``segments``.
+    """
+    kept = [
+        si
+        for si, seg in enumerate(segments)
+        if build_mfa_ref(seg) is not None
+        and (
+            refresh_ayahs is None
+            or (_seg_covered_ayahs(seg.get("matched_ref", "")) & refresh_ayahs)
+        )
+    ]
+    kept.sort(key=lambda si: segments[si].get("time_start", 0))
+    items: list[dict] = []
+    cur: dict | None = None
+    last_vk: str | None = None
+    prev_si: int | None = None
+    for si in kept:
+        vk = _matched_ref_to_output_key(segments[si].get("matched_ref", ""))
+        if vk is None:
+            continue
+        prev_wasl = bool(segments[prev_si].get("is_wasl")) if prev_si is not None else False
+        if cur and (last_vk == vk or prev_wasl):
+            cur["seg_idxs"].append(si)
+            cur["wasl_after"].append(prev_wasl)
+        else:
+            if cur:
+                items.append(cur)
+            cur = {"vk": vk, "seg_idxs": [si], "wasl_after": []}
+        last_vk = vk
+        prev_si = si
+    if cur:
+        items.append(cur)
+    return items
+
+
+def _align_chapter_whole_verse(
+    aligner,
+    chapter: dict,
+    beams: list[int],
+    *,
+    padding: str,
+    wb,
+    refresh_ayahs: set | None,
+    sample_rate: int = 16000,
+) -> dict[int, list]:
+    """Whole-verse align ONE chapter → ``{beam: [(seg_idx, result), ...]}``.
+
+    Pure given an aligner: used by both the serial fallback and the per-chapter
+    process pool. Each verse item is ONE ``align_verse`` pass over its contiguous
+    audio span (psil seeded at every segment boundary, split back per-segment);
+    each segment's words are shifted to segment-local time so the seg-offset
+    rebase in ``_normalize_from_results`` lands them back at chapter time.
+    """
+    import numpy as _np
+
+    out: dict[int, list] = {b: [] for b in beams}
+    ch_ref = str(chapter.get("ref", ""))
+    audio_src = chapter.get("audio", "")
+    if not audio_src:
+        log.warning("ch%s: no audio source, skipping", ch_ref)
+        return out
+    try:
+        audio_file = download_audio(audio_src) if _is_url(audio_src) else Path(audio_src)
+        audio_i16 = load_audio_int16(audio_file)
+        if _is_url(audio_src):
+            audio_file.unlink()
+    except Exception as e:
+        log.warning("ch%s: audio download/convert failed: %s", ch_ref, e)
+        return out
+    audio_f = audio_i16.astype(_np.float32) / 32768.0
+    segments = chapter.get("segments", [])
+    items = _group_verse_items(segments, refresh_ayahs)
+    log.info("ch%s: %d whole-verse items from %d segments", ch_ref, len(items), len(segments))
+
+    for it in items:
+        sidx = it["seg_idxs"]
+        wasl_after = it.get("wasl_after") or [False] * (len(sidx) - 1)
+        n_sidx = len(sidx)
+
+        # Per-segment occurrence flag: does this segment continue into the next
+        # via waṣl? (the last segment of an item never does). Stamped on the
+        # shard so the FE reconstructs waṣl groups per-occurrence (retake-safe).
+        def _wasl_of(j, _wa=wasl_after, _n=n_sidx):
+            return bool(_wa[j]) if j < _n - 1 else False
+
+        t0 = int(segments[sidx[0]].get("time_start", 0))
+        t1 = int(segments[sidx[-1]].get("time_end", t0))
+        span = audio_f[int(t0 * sample_rate / 1000) : int(t1 * sample_rate / 1000)]
+        refs = [build_mfa_ref(segments[si]) for si in sidx]
+        too_short = len(span) < sample_rate // 50
+        for b in beams:
+            if too_short:
+                rows = [
+                    (si, {"status": "error", "error": "empty span", "wasl": _wasl_of(j)})
+                    for j, si in enumerate(sidx)
+                ]
+            else:
+                try:
+                    vres = aligner.align_verse(
+                        refs,
+                        span,
+                        sample_rate,
+                        beam=b,
+                        retry_beam=b,
+                        include_letters=True,
+                        padding=padding,
+                        wasl_after=wasl_after,
+                        wb_allocation_resolved=wb,
+                    )
+                except Exception as e:
+                    rows = [
+                        (
+                            si,
+                            {
+                                "status": "error",
+                                "error": f"{type(e).__name__}: {e}",
+                                "wasl": _wasl_of(j),
+                            },
+                        )
+                        for j, si in enumerate(sidx)
+                    ]
+                else:
+                    rows = []
+                    for j, si in enumerate(sidx):
+                        words = vres[j]["words"] if j < len(vres) else []
+                        delta = (t0 - int(segments[si].get("time_start", 0))) / 1000.0
+                        shifted = [_shift_word_times(w, delta) for w in words]
+                        rows.append(
+                            (
+                                si,
+                                {
+                                    "status": "ok" if shifted else "error",
+                                    "words": shifted,
+                                    "wasl": _wasl_of(j),
+                                    **({} if shifted else {"error": "no words"}),
+                                },
+                            )
+                        )
+            out[b].extend(rows)
+    return out
+
+
+def _worker_align_chapter(
+    chapter, beams, padding, word_boundary_allocation, refresh_ayahs, sample_rate
+):
+    """ProcessPoolExecutor task: whole-verse align one chapter on the worker's
+    own aligner (built once by ``_init_worker``)."""
+    from qua_sdk.components.timing.lib import resolve_word_boundary_allocation
+
+    aligner = _WORKER["aligner"]
+    if aligner is None:
+        raise RuntimeError("Worker not initialized; missing MFA aligner.")
+    wb = resolve_word_boundary_allocation(word_boundary_allocation)
+    return _align_chapter_whole_verse(
+        aligner,
+        chapter,
+        beams,
+        padding=padding,
+        wb=wb,
+        refresh_ayahs=refresh_ayahs,
+        sample_rate=sample_rate,
+    )
+
+
+def _align_whole_verse(
+    chapters_to_process: list,
+    beams: list[int],
+    *,
+    mfa_model_path,
+    mfa_dictionary_path,
+    padding: str,
+    word_boundary_allocation: dict | None,
+    refresh_ayahs: set | None = None,
+    sample_rate: int = 16000,
+    workers: int = 1,
+) -> dict:
+    """Whole-verse alignment → the same ``results_by_beam`` the per-segment path
+    builds, so all downstream (``build_raw_v2`` → shards, ``ts_validation``)
+    is unchanged.
+
+    Chapters are independent (waṣl never crosses a chapter boundary), so with
+    ``workers > 1`` they fan out across a ProcessPoolExecutor — each worker
+    builds its own ``MfaLocalAligner`` via the shared ``_init_worker``. Serial
+    (single in-process aligner) when ``workers <= 1``.
+    """
+    from qua_sdk.components.timing.lib import resolve_word_boundary_allocation
+    from qua_sdk.components.timing.runtimes.mfa_local import MfaLocalAligner
+
+    results_by_beam: dict[int, dict[int, list]] = {b: {} for b in beams}
+    n_workers = max(1, min(int(workers), len(chapters_to_process)))
+
+    if n_workers <= 1:
+        aligner = MfaLocalAligner(
+            str(mfa_model_path), str(mfa_dictionary_path), num_threads=1, use_pool=False
+        )
+        log.info(
+            "whole-verse aligner (serial): supports_psil=%s keep_q=%s",
+            aligner.supports_psil,
+            aligner.keep_q,
+        )
+        wb = resolve_word_boundary_allocation(word_boundary_allocation)
+        for ch_idx, chapter in chapters_to_process:
+            out = _align_chapter_whole_verse(
+                aligner,
+                chapter,
+                beams,
+                padding=padding,
+                wb=wb,
+                refresh_ayahs=refresh_ayahs,
+                sample_rate=sample_rate,
+            )
+            for b in beams:
+                if out[b]:
+                    results_by_beam[b].setdefault(ch_idx, []).extend(out[b])
+        return results_by_beam
+
+    log.info(
+        "whole-verse aligner (parallel): %d workers over %d chapters",
+        n_workers,
+        len(chapters_to_process),
+    )
+    with ProcessPoolExecutor(
+        max_workers=n_workers,
+        initializer=_init_worker,
+        initargs=(str(mfa_model_path), str(mfa_dictionary_path)),
+    ) as pool:
+        futs = {
+            pool.submit(
+                _worker_align_chapter,
+                chapter,
+                beams,
+                padding,
+                word_boundary_allocation,
+                refresh_ayahs,
+                sample_rate,
+            ): ch_idx
+            for ch_idx, chapter in chapters_to_process
+        }
+        for fut in as_completed(futs):
+            ch_idx = futs[fut]
+            out = fut.result()
+            for b in beams:
+                if out[b]:
+                    results_by_beam[b].setdefault(ch_idx, []).extend(out[b])
+    return results_by_beam
+
+
+def _finalize_shards(
+    results_by_beam: dict,
+    *,
+    chapters: list,
+    canonical_beam: int,
+    beams: list[int],
+    output_dir: Path,
+    audio_category: str,
+    audio_source: str,
+    method: str,
+    shared_cmvn: bool,
+    padding: str,
+    reciter: str,
+    refresh_chapters: set | None,
+    existing_data: dict,
+    tmp_dir: Path,
+) -> Path | None:
+    """Write per-chapter segment-array shards + the ts_validation sidecar from
+    ``results_by_beam`` — shared by the per-segment and whole-verse paths.
+
+    ``canonical_results`` carries every aligned segment, so build_raw_v2 keeps
+    all occurrences and build_segment_shards emits each one RAW (no dedup at
+    write); the narrower beams feed the verse-level ts_validation sidecar.
+    """
+    canonical_results = results_by_beam[canonical_beam]
+    if not canonical_results and not existing_data:
+        log.info("No segments processed (all skipped or failed)")
+        _cleanup([], tmp_dir)
+        return None
+
+    from qua_sdk.components.timing.lib.cells import (
+        annotate_v2_doc,  # lazy: keep phonemizer off the inspector import path
+    )
+
+    from qua_shared.timestamps_dedup import build_raw_v2  # lazy: avoid import cycle
+
+    ts_dir = output_dir / "timestamps"
+    ts_dir.mkdir(parents=True, exist_ok=True)
+
+    shard_provenance = {
+        "created_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "audio_source": audio_source,
+        "aligner_model": DEFAULT_ALIGNER_MODEL,
+        "method": method,
+        "beam": canonical_beam,
+        "shared_cmvn": shared_cmvn,
+        "padding": padding,
+    }
+
+    def _emit_segment_shards(results_by_ch, suffix=""):
+        v2_doc = build_raw_v2(chapters, results_by_ch, audio_category)
+        # Tag cross-word tajweed bridges AND stamp per-letter silent flags + folded
+        # silence marks + per-character cells (annotate_v2_doc → annotate_segment_words
+        # → _stamp_silent_flags / _stamp_cells) — the same SDK path the backfills run;
+        # build_segment_shards then stamps schema v9. Shared by the per-segment and
+        # whole-verse paths, so whole-verse occurrences land v9 cells identically.
+        n_bridges = annotate_v2_doc(v2_doc)
+        log.info("Tagged %d cross-word bridge phone(s)", n_bridges)
+        shards = build_segment_shards(
+            v2_doc, audio_category=audio_category, src_meta=shard_provenance
+        )
+        for ch_num, shard_doc in shards.items():
+            (ts_dir / f"{ch_num}{suffix}.json.gz").write_bytes(gzip_shard(shard_doc))
+        fails = len((v2_doc.get("_meta") or {}).get("mfa_failures", []))
+        return len(shards), fails
+
+    n_shards, n_fail = _emit_segment_shards(canonical_results)
+    if n_fail:
+        log.warning("Canonical beam %d: %d MFA failures", canonical_beam, n_fail)
+    log.info(
+        "Wrote %d segment-array timestamps shard(s) (beam=%d) -> %s",
+        n_shards,
+        canonical_beam,
+        ts_dir,
+    )
+
+    ts_validation = build_ts_validation(
+        chapters, results_by_beam, beams, reciter=reciter, method=method
+    )
+    if refresh_chapters:
+        ts_validation = _merge_ts_validation(
+            output_dir / "ts_validation.json", ts_validation, refresh_chapters
+        )
+    (output_dir / "ts_validation.json").write_text(
+        json.dumps(ts_validation, ensure_ascii=False), encoding="utf-8"
+    )
+    log.info(
+        "Wrote ts_validation.json: %d flagged verse(s) across beams %s",
+        len(ts_validation["verses"]),
+        ts_validation["_meta"]["beams"],
+    )
+
+    _cleanup([], tmp_dir)
+    return output_dir
+
+
 def process(
     input_dir: Path,
     backend: MfaBackend | None,
@@ -818,6 +1203,7 @@ def process(
     mfa_dictionary_path: str | Path | None = None,
     mfa_app_path: str | Path | None = None,
     word_boundary_allocation: dict | None = None,
+    whole_verse: bool = False,
 ) -> Path | None:
     """Process all chapters from detailed.json through MFA alignment.
 
@@ -852,7 +1238,7 @@ def process(
     if mfa_app_path is not None and not (mfa_model_path and mfa_dictionary_path):
         mfa_model_path, mfa_dictionary_path = _paths_from_app_path(mfa_app_path)
     use_pool = bool(mfa_model_path and mfa_dictionary_path) and workers > 1
-    if not use_pool and backend is None:
+    if not use_pool and backend is None and not whole_verse:
         raise ValueError("backend is required when not using the process pool")
 
     detailed_path = input_dir / "detailed.json"
@@ -959,11 +1345,14 @@ def process(
             if str(chapter.get("ref", "")).split(":")[0] in refresh_chapter_strs
         ]
     elif refresh_verses:
-        # Refresh: process only surahs containing target verses
+        # Refresh: process only surahs containing target verses. ``refresh_surahs``
+        # is None when there was no existing data to refresh against — nothing
+        # to reprocess in that case.
+        target_surahs = refresh_surahs or set()
         chapters_to_process = [
             (ch_idx, chapter)
             for ch_idx, chapter in enumerate(chapters)
-            if str(chapter.get("ref", "")).split(":")[0] in refresh_surahs
+            if str(chapter.get("ref", "")).split(":")[0] in target_surahs
         ]
     elif audio_category == "by_surah_audio":
         # For by-surah: skip entire surahs that have any output
@@ -985,6 +1374,40 @@ def process(
         # written (single canonical format).
         log.info("No segments to process (all complete or skipped)")
         return output_dir
+
+    # Whole-verse path: one align_verse pass per verse occurrence (psil seeded
+    # at every segment boundary), raw + faithful, producing the same
+    # results_by_beam the per-segment streaming path does. Early-returns through
+    # the shared shard writer, leaving the per-segment producer block untouched.
+    if whole_verse:
+        if not (mfa_model_path and mfa_dictionary_path):
+            raise ValueError("whole_verse requires mfa_model_path + mfa_dictionary_path")
+        results_by_beam = _align_whole_verse(
+            chapters_to_process,
+            beams,
+            mfa_model_path=mfa_model_path,
+            mfa_dictionary_path=mfa_dictionary_path,
+            padding=padding,
+            word_boundary_allocation=word_boundary_allocation,
+            refresh_ayahs=refresh_ayahs,
+            workers=workers,
+        )
+        return _finalize_shards(
+            results_by_beam,
+            chapters=chapters,
+            canonical_beam=canonical_beam,
+            beams=beams,
+            output_dir=output_dir,
+            audio_category=audio_category,
+            audio_source=audio_source,
+            method=method,
+            shared_cmvn=shared_cmvn,
+            padding=padding,
+            reciter=reciter,
+            refresh_chapters=refresh_chapters,
+            existing_data=existing_data,
+            tmp_dir=tmp_dir,
+        )
 
     # --- Producer-consumer pipeline ---
     # Bounded queue prevents unbounded WAV accumulation on disk.
@@ -1216,7 +1639,9 @@ def process(
                     del batch_state[bid]
     else:
         # Serial path (HF Space backend). Loop over beams sequentially per
-        # batch — the Space already ThreadPools internally per call.
+        # batch — the Space already ThreadPools internally per call. The
+        # ``not use_pool`` guard above guarantees ``backend`` is set here.
+        assert backend is not None
         producer = threading.Thread(target=_producer_loop, daemon=True)
         producer.start()
 
@@ -1294,96 +1719,22 @@ def process(
                 except OSError:
                     pass
 
-    canonical_results = results_by_beam[canonical_beam]
-    if not canonical_results and not existing_data:
-        log.info("No segments processed (all skipped or failed)")
-        _cleanup([], tmp_dir)
-        return None
-
-    # Per-chapter temporal segment-array shards at
-    # ``<output_dir>/timestamps/<chapter>.json.gz``. ``canonical_results``
-    # carries every aligned segment, so build_raw_v2 keeps all occurrences and
-    # build_segment_shards emits each one RAW as a recitation-ordered segment
-    # entry ({ref, t, words}) — no dedup at write. Consumers derive whatever
-    # projection they need; the inspector read-path is a byte pass-through.
-    from quranic_phonemizer import Phonemizer
-
-    from qua_shared.timestamps_bridges import (
-        tag_v2_doc,  # lazy: keep phonemizer off the inspector import path
+    return _finalize_shards(
+        results_by_beam,
+        chapters=chapters,
+        canonical_beam=canonical_beam,
+        beams=beams,
+        output_dir=output_dir,
+        audio_category=audio_category,
+        audio_source=audio_source,
+        method=method,
+        shared_cmvn=shared_cmvn,
+        padding=padding,
+        reciter=reciter,
+        refresh_chapters=refresh_chapters,
+        existing_data=existing_data,
+        tmp_dir=tmp_dir,
     )
-    from qua_shared.timestamps_dedup import build_raw_v2  # lazy: avoid import cycle
-
-    ts_dir = output_dir / "timestamps"
-    ts_dir.mkdir(parents=True, exist_ok=True)
-
-    # One phonemizer for cross-word bridge tagging across all chapters.
-    bridge_pm = Phonemizer()
-
-    # Slim aligner provenance stamped into each shard's ``_meta`` (reciter,
-    # url_template and audio_urls are excluded — slug is the path, manifest is
-    # the audio ground truth).
-    shard_provenance = {
-        "created_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "audio_source": audio_source,
-        "aligner_model": DEFAULT_ALIGNER_MODEL,
-        "method": method,
-        "beam": canonical_beam,
-        "shared_cmvn": shared_cmvn,
-        "padding": padding,
-    }
-
-    def _emit_segment_shards(results_by_ch, suffix=""):
-        v2_doc = build_raw_v2(chapters, results_by_ch, audio_category)
-        # Tag cross-word tajweed bridges AND stamp per-letter silent flags + folded
-        # silence marks (tag_v2_doc → tag_segment_words → _stamp_silent_flags) — the
-        # same path the silent-flags backfill runs. build_segment_shards then stamps
-        # schema v4. Correctness tracks the phonemizer version this job runs.
-        n_bridges = tag_v2_doc(bridge_pm, v2_doc)
-        log.info("Tagged %d cross-word bridge phone(s)", n_bridges)
-        shards = build_segment_shards(
-            v2_doc, audio_category=audio_category, src_meta=shard_provenance
-        )
-        for ch_num, shard_doc in shards.items():
-            (ts_dir / f"{ch_num}{suffix}.json.gz").write_bytes(gzip_shard(shard_doc))
-        fails = len((v2_doc.get("_meta") or {}).get("mfa_failures", []))
-        return len(shards), fails
-
-    n_shards, n_fail = _emit_segment_shards(canonical_results)
-    if n_fail:
-        log.warning("Canonical beam %d: %d MFA failures", canonical_beam, n_fail)
-    log.info(
-        "Wrote %d segment-array timestamps shard(s) (beam=%d) -> %s",
-        n_shards,
-        canonical_beam,
-        ts_dir,
-    )
-
-    # Probe beams → ONE verse-level ``ts_validation.json`` sidecar (the
-    # verse-level analogue of low_confidence_v2.json) instead of per-beam
-    # shard files. Flags verses whose alignment disagrees under tighter beams;
-    # served owner-gated to the Timestamps-tab "ts-validation" accordion.
-    ts_validation = build_ts_validation(
-        chapters, results_by_beam, beams, reciter=reciter, method=method
-    )
-    # ts_validation.json is a WHOLE-RECITER sidecar but a partial run only
-    # produced flags for the processed chapters. Merge: drop the existing flags
-    # for the refreshed chapters (they're rebuilt) and keep every other chapter's,
-    # so an affected-only regen never clobbers untouched chapters' flags.
-    if refresh_chapters:
-        ts_validation = _merge_ts_validation(
-            output_dir / "ts_validation.json", ts_validation, refresh_chapters
-        )
-    (output_dir / "ts_validation.json").write_text(
-        json.dumps(ts_validation, ensure_ascii=False), encoding="utf-8"
-    )
-    log.info(
-        "Wrote ts_validation.json: %d flagged verse(s) across beams %s",
-        len(ts_validation["verses"]),
-        ts_validation["_meta"]["beams"],
-    )
-
-    _cleanup([], tmp_dir)
-    return output_dir
 
 
 def _submit_with_retry(

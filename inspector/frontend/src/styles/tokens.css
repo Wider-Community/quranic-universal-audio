@@ -86,6 +86,189 @@
     --state-missing-border:      oklch(0.66 0.180 25 / 0.45);
     --state-missing-border-strong: oklch(0.66 0.180 25 / 0.85);
 
+    /* ====================================================================
+       EXTENDED SEMANTIC TOKENS  (drift consolidation for theming)
+       --------------------------------------------------------------------
+       Every value below is the shipped DARK literal verbatim, so the dark
+       theme is byte-for-byte unchanged. styles/theme-light.css redefines
+       each under :root[data-theme="light"]. Canvas-painted tokens (--wf-*,
+       --chart-*) are ALSO read from JS via getComputedStyle
+       (lib/utils/canvas-theme.ts), the one path a CSS attribute flip can't
+       reach — a 2D-canvas fillStyle.
+       ==================================================================== */
+
+    /* ink that sits ON a saturated fill (white glyph on accent/state/button) */
+    --ink-on-color:        #ffffff;
+
+    /* form controls + extra surfaces */
+    --input-bg:            #1a1a3e;
+    --input-hover-bg:      #16213e;
+    --surface-sunken:      #101a33;   /* deepest wells, cache insets */
+    --popover-bg:          #1f2230;   /* floating edit-affordance popover */
+    --panel-sidebar:       #0f1530;   /* bookmarks slide-over */
+
+    /* accent — extra derivations used across chrome */
+    --accent-tint-strong:  oklch(0.785 0.130 220 / 0.30);
+    --accent-tint-hover:   oklch(0.785 0.130 220 / 0.18);
+    --accent-border:       oklch(0.785 0.130 220 / 0.45);
+    --accent-border-soft:  oklch(0.785 0.130 220 / 0.35);
+    --accent-soft:         oklch(0.785 0.130 220 / 0.65);
+    --accent-banner-fg:    #eaf6ff;   /* ink on an accent-tint info banner */
+
+    /* owner-role / info blue */
+    --role-blue:           #8ab4f8;
+
+    /* CTA amber (mark-ready bypass) — the one warm CTA */
+    --cta-bg:              #f0a500;
+    --cta-bg-hover:        #ffba2c;
+    --cta-fg:              #1a1a1a;
+
+    /* Sign-in with HF button — warm amber here; the light layer recolours it to
+       the app accent so it sits calmly on paper. */
+    --signin-bg:           #f0a500;
+    --signin-bg-hover:     #ffba2c;
+    --signin-fg:           #1a1a1a;
+
+    /* status semantics (fg + tint + solid) — green/amber/red/blue/grey.
+       Shared by validation confidence, toasts, charts, segment chips. Dark
+       keeps each shipped literal; the light layer unifies near-duplicates
+       onto one calm hue per status. */
+    --ok-fg:               #4caf50;
+    --ok-tint:             rgba(76, 175, 80, 0.10);
+    --ok-solid:            #2e7d32;
+    --ok-solid-hover:      #1b5e20;
+    --warn-fg:             #ff9800;
+    --warn-tint:           rgba(255, 152, 0, 0.10);
+    --bad-fg:              #f44336;
+    --bad-tint:            rgba(244, 67, 54, 0.10);
+    --bad-tint-strong:     rgba(244, 67, 54, 0.15);
+    --bad-solid:           #b71c1c;
+    --bad-solid-hover:     #8e1616;
+    --info-fg:             #4361ee;
+    --info-solid:          #4361ee;
+    --info-solid-hover:    #5a7bff;
+    --neutral-solid:       #616161;
+    --neutral-solid-hover: #424242;
+    --neutral-tint:        rgba(100, 100, 100, 0.08);
+
+    /* editor action buttons whose hue encodes a distinct action */
+    --btn-history-bg:        #1a237e;
+    --btn-history-bg-hover:  #283593;
+    --btn-preview-bg:        #6a1b9a;
+    --btn-preview-bg-hover:  #4a148c;
+    --btn-merge-bg:          #1565c0;
+    --btn-merge-bg-hover:    #0d47a1;
+    --btn-slate-bg:          #37474f;
+    --btn-slate-bg-hover:    #455a64;
+    --btn-disabled-bg:       #555555;
+
+    /* secondary marker accents (validation/segment) */
+    --bleed-orange:        #e07c3a;
+    --bleed-orange-tint:   rgba(224, 124, 58, 0.15);
+    --repeat-violet:       #a882ff;
+    --repeat-violet-tint:  rgba(168, 130, 255, 0.20);
+    --split-yellow:        #ffeb3b;
+
+    /* waveform + edit-mode cursors — also resolved in JS (canvas-theme.ts) */
+    --wf-bg:               #0f0f23;
+    --wf-fill:             rgba(67, 97, 238, 0.30);
+    --wf-stroke:           #4361ee;
+    --wf-dim-overlay:      rgba(0, 0, 0, 0.45);
+    --wf-preview-playhead: #f72585;
+    --wf-delta-add:        rgba(76, 175, 80, 0.30);
+    --wf-delta-remove:     rgba(244, 67, 54, 0.30);
+    --wf-handle-start:     #4caf50;
+    --wf-handle-end:       #f44336;
+    --wf-split-cursor:     #ffeb3b;
+    --wf-merge-cursor:     #eab308;
+    --wf-region-tint:      rgba(255, 152, 0, 0.15);
+
+    /* stats charts — resolved in JS when building the Chart config */
+    --chart-bar:           #4cc9f0;
+    --chart-bar-muted:     #666666;
+    --chart-bar-warn:      #ff9800;
+    --chart-bar-bad:       #f44336;
+    --chart-bar-good:      #4caf50;
+    --chart-refline:       #f44336;
+    --chart-refline-floor: #9c27b0;
+    --chart-median:        #e0e040;
+    --chart-label-bg:      rgba(15, 15, 35, 0.70);
+
+    /* analysis-cell idle / silent / inserted / translation chrome */
+    --ts-inserted-border:  #6a6f8c;
+    --ts-silent-fg:        #777777;
+    --ts-idle-fg:          #aaaaaa;
+    --ts-waqf-fg:          #cfd3e6;
+    /* Fade for every muted cell (silent grapheme, dropped diacritic, dropped
+       implicit madd) — theme-aware: light deepens it so the wash reads as muted
+       on near-white paper instead of vanishing. */
+    --ts-mute-opacity:     0.5;
+    --ts-translation-bg:   oklch(0.205 0.014 274);
+    --ts-translation-fg:   oklch(0.79 0.022 80);
+
+    /* segments edit-toolbar cool-neutral chrome ramp */
+    --chrome-ink:          oklch(0.82 0.010 250);
+    --chrome-ink-muted:    oklch(0.74 0.012 250);
+    --chrome-ink-strong:   oklch(0.94 0.005 250);
+    --chrome-border:       oklch(0.32 0.012 250);
+    --chrome-hover-bg:     oklch(0.24 0.012 250);
+    --chrome-hover-border: oklch(0.32 0.012 250);
+    --chrome-active-bg:    oklch(0.20 0.012 250);
+
+    /* split-cursor active pill (segments) */
+    --split-active-bg:     oklch(0.30 0.08 95 / 0.55);
+    --split-active-border: oklch(0.65 0.16 95);
+    --split-active-fg:     oklch(0.94 0.10 95);
+    --split-muted:         oklch(0.45 0.03 95 / 0.40);
+
+    /* guide goal callout (green) */
+    --goal-fg:             #6ee7b7;
+    --goal-text:           #d9f5e8;
+    --goal-accent:         #34d399;
+    --goal-bg:             rgba(16, 185, 129, 0.10);
+    --goal-border:         rgba(52, 211, 153, 0.32);
+
+    /* sticky info banner */
+    --banner-info-bg:      #1b3a4b;
+    --banner-info-border:  #4361ee;
+
+    /* external-link brand marks (hover) + the muted resting rail colour */
+    --brand-gh:            #e6edf3;
+    --brand-hf:            #ffd21e;
+    --brand-discord:       #5865f2;
+    --brand-rel:           #f0a500;
+    --brand-rail-fg:       oklch(0.560 0.010 268);   /* = text-muted on dark */
+
+    /* dev-only chrome (DevRoleSwitcher) */
+    --state-dev-fg:        #d8a13a;
+    --state-dev-bg:        rgba(240, 165, 0, 0.06);
+    --dev-select-fg:       #f0e0c0;
+
+    /* control knobs (toggle thumb, colour-picker slider thumb) */
+    --knob-shadow:         0 1px 2px oklch(0 0 0 / 0.35);
+    --knob-ring:           oklch(0 0 0 / 0.50);
+
+    /* subtle confirm / discard buttons (segment cache panel) — dark fill +
+       light-tint ink, distinct from the bold --ok-solid / --bad-solid */
+    --btn-confirm-bg:      #1a5c2a;
+    --btn-confirm-bg-hover:#237a35;
+    --btn-confirm-border:  #2a8c3a;
+    --btn-confirm-fg:      #88ff88;
+    --btn-discard-bg:      #3a1515;
+    --btn-discard-bg-hover:#5a2020;
+    --btn-discard-border:  #5a2020;
+    --btn-discard-fg:      #ee8888;
+
+    /* scrims + elevation. Dark is flat (the system's flat-by-default rule);
+       the light layer redefines --shadow-* to soft shadows for floating
+       surfaces, where near-white leaves no lightness headroom for depth. */
+    --scrim:               oklch(0.06 0.005 268 / 0.72);
+    --scrim-strong:        rgba(8, 10, 16, 0.65);
+    --hairline-on-color:   oklch(1 0 0 / 0.18);
+    --shadow-card:         none;
+    --shadow-pop:          0 8px 28px oklch(0 0 0 / 0.45);
+    --shadow-modal:        0 32px 80px oklch(0 0 0 / 0.45), 0 2px 8px oklch(0 0 0 / 0.30);
+
     /* ---------- type ---------- */
     --font-sans:  -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
                   "Helvetica Neue", Arial, sans-serif;

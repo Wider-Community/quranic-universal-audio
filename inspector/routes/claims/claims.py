@@ -50,6 +50,7 @@ def claim(slug: str):
     user, err = _require_user_or_401()
     if err is not None:
         return err
+    assert user is not None  # err is None ⟺ user is non-None (helper invariant)
 
     # One-claim-per-user policy (application-level; state.py doesn't enforce).
     # Owners are exempt — they may hold multiple simultaneous claims.

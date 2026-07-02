@@ -1087,7 +1087,7 @@ import type { Segment } from '../../../../lib/types/view-models';
         background: var(--elevated);
         border: 1px solid var(--state-warn-border);
         border-radius: var(--r-2);
-        box-shadow: 0 6px 20px oklch(0.13 0.034 285 / 0.55);
+        box-shadow: var(--shadow-pop);
         opacity: 0;
         transform: translateY(3px);
         pointer-events: none;

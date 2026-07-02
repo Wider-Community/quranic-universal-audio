@@ -98,7 +98,7 @@ def test_dev_mode_anonymous_cookie_yields_null_user(dev_mode_client):
         "capabilities": [
             "view.catalog",
             "view.public_activity",
-            "timestamps.flag",
+            "timestamps.report",
             "notify.email_subscriptions",
         ],
         "guides_read": [],

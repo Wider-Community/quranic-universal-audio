@@ -9,17 +9,17 @@ case, dedup, and flag-reply self-suppression.
 
 from __future__ import annotations
 
-from qua_shared.schemas import Actor, AuditRecord, ReciterRow, ReciterState
+from qua_shared.schemas import Actor, AuditRecord, ReciterRow, ReciterState, Role
 from services.db import _serde, repo_notifications, repo_requests
 from services.db import sync as _sync
 from services.notifications import emit
 
-_OWNER = Actor(hf_user_id="owner-1", login_at_time="owner", role="owner")
-_SYSTEM = Actor(hf_user_id="system", login_at_time="system", role="owner")
-_REQUESTER = Actor(hf_user_id="req-1", login_at_time="req", role="contributor")
+_OWNER = Actor(hf_user_id="owner-1", login_at_time="owner", role=Role.OWNER)
+_SYSTEM = Actor(hf_user_id="system", login_at_time="system", role=Role.OWNER)
+_REQUESTER = Actor(hf_user_id="req-1", login_at_time="req", role=Role.CONTRIBUTOR)
 
 
-def _record(event, *, actor, slug="r_test", payload=None, reason=None) -> AuditRecord:
+def _record(event, *, actor, slug: str | None = "r_test", payload=None, reason=None) -> AuditRecord:
     return AuditRecord(
         ts=_serde.now(),
         event=event,
@@ -241,7 +241,7 @@ def test_new_request_notifies_owners_self_suppressed(seed_role):
     requester (even if an owner) isn't notified about their own request."""
     seed_role("owner-1", role="owner")
     seed_role("owner-2", role="owner")
-    requester_owner = Actor(hf_user_id="owner-1", login_at_time="owner", role="owner")
+    requester_owner = Actor(hf_user_id="owner-1", login_at_time="owner", role=Role.OWNER)
     emit.notify_owners_new_request(
         kind="existing_combo_edit",
         requester=requester_owner,

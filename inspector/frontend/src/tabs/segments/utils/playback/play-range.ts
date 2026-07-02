@@ -19,6 +19,7 @@
 
 import { get, writable } from 'svelte/store';
 
+import { themeColor } from '../../../../lib/utils/canvas-theme';
 import { PREVIEW_PLAYHEAD_COLOR } from '../../../../lib/utils/constants';
 import { editCanvas } from '../../stores/edit';
 import { playbackSpeed, segPort } from '../../stores/playback';
@@ -219,9 +220,10 @@ function _setupPreviewLoop(startMs: number, endMs: number, coldSeek: boolean): v
             if (!ctx) { _playRangeRAF = requestAnimationFrame(animatePlayhead); return; }
             const w = canvas.width, h = canvas.height;
             const x = ((curMs - liveStart) / (liveEnd - liveStart)) * w;
-            ctx.strokeStyle = PREVIEW_PLAYHEAD_COLOR; ctx.lineWidth = 2;
+            const playheadColor = themeColor('--wf-preview-playhead', PREVIEW_PLAYHEAD_COLOR);
+            ctx.strokeStyle = playheadColor; ctx.lineWidth = 2;
             ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
-            ctx.fillStyle = PREVIEW_PLAYHEAD_COLOR;
+            ctx.fillStyle = playheadColor;
             ctx.beginPath(); ctx.moveTo(x - 4, 0); ctx.lineTo(x + 4, 0); ctx.lineTo(x, 6); ctx.closePath(); ctx.fill();
         }
         _playRangeRAF = requestAnimationFrame(animatePlayhead);

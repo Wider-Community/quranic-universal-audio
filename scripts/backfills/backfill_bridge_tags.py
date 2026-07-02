@@ -2,8 +2,8 @@
 
 Stamps the per-phone bridge rule (slot 5 of each phone tuple) onto every
 segment-array shard already on the bucket and bumps ``_meta.schema_version``
-2 → 3, using the same ``qua_shared.timestamps_bridges`` logic the live pipeline
-now runs. No MFA / audio — the merger phone is located by re-phonemizing each
+2 → 3, using the same ``qua_sdk.components.timing.lib.cells`` logic the live
+pipeline now runs. No MFA / audio — the merger phone is located by re-phonemizing each
 segment's word range, which reproduces the stored *indexable* phone sequence
 (render-only qalqala ``Q`` markers in the shard ride along with their anchor and
 do not skew the index). Use it to re-tag shards generated before a fix to that
@@ -36,11 +36,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "bucket"))
 import _bootstrap as bs  # noqa: E402
-
-from qua_shared.timestamps_bridges import (  # noqa: E402
+from qua_sdk.components.timing.lib.cells import (  # noqa: E402
     _looks_like_merger,
-    tag_segment_words,
+    annotate_segment_words,
 )
+
 from qua_shared.timestamps_shards import (  # noqa: E402
     SEGMENT_SCHEMA_VERSION,
     gzip_shard,
@@ -66,11 +66,6 @@ def _rl(fn, *args, **kwargs):
     raise RuntimeError("rate-limit retries exhausted")
 
 
-def _write_shard(fs, path: str, blob: bytes) -> None:
-    with fs.open(path, "wb") as fh:
-        fh.write(blob)
-
-
 def _list_reciters(fs, bucket: str) -> list[str]:
     base = bs.abs_path(bucket, "reciters")
     return sorted(p.split("/")[-1] for p in _rl(fs.ls, base, detail=False))
@@ -90,7 +85,7 @@ def _shard_paths(fs, bucket: str, slug: str) -> list[tuple[int, str]]:
     return sorted(out)
 
 
-def _tag_shard(pm, data: dict) -> tuple[int, int, list]:
+def _tag_shard(data: dict) -> tuple[int, int, list]:
     """Tag every segment in a shard doc (in place). Returns
     ``(n_tagged, n_repeat_segments, violations)``."""
     tagged = 0
@@ -101,7 +96,7 @@ def _tag_shard(pm, data: dict) -> tuple[int, int, list]:
         if wns != sorted(set(wns)):
             repeats += 1
             continue
-        tagged += tag_segment_words(pm, seg["ref"], seg["words"])
+        tagged += annotate_segment_words(seg["ref"], seg["words"])
     # Anti-drift: every stamped phone must look like a merger.
     for seg in data.get("segments", []):
         for word in seg["words"]:
@@ -115,17 +110,14 @@ def process_reciter(fs, bucket: str, slug: str, *, write: bool, log) -> dict:
     shards = _shard_paths(fs, bucket, slug)
     if not shards:
         return {}
-    from quranic_phonemizer import Phonemizer  # lazy
-
-    pm = _PM[0] or Phonemizer()
-    _PM[0] = pm
 
     dist = Counter()
     total_tagged = total_repeat = 0
     violations = []
+    to_write: dict[str, bytes] = {}
     for _ch, path in shards:
         data = json.loads(gzip.decompress(_rl(fs.read_bytes, path)))
-        n, rep, viol = _tag_shard(pm, data)
+        n, rep, viol = _tag_shard(data)
         total_tagged += n
         total_repeat += rep
         violations += viol
@@ -136,17 +128,23 @@ def process_reciter(fs, bucket: str, slug: str, *, write: bool, log) -> dict:
                         dist[phn[5]] += 1
         if write:
             data.setdefault("_meta", {})["schema_version"] = SEGMENT_SCHEMA_VERSION
-            _rl(_write_shard, fs, path, gzip_shard(data))
+            to_write[f"reciters/{slug}/timestamps/{_ch}.json.gz"] = gzip_shard(data)
+    # One Xet batch per reciter (paths, not bytes) — far faster than a commit/file.
+    if to_write:
+        bs.batch_write(bucket, to_write)
+    written_chapters = sorted(int(p.rsplit("/", 1)[-1].split(".")[0]) for p in to_write)
     log(
         f"{slug:44} shards={len(shards):3} tagged={total_tagged:6} "
         f"repeat_segs={total_repeat:4} violations={len(violations)}"
         + ("" if not violations else f"  !! {violations[:3]}")
         + ("  [WROTE]" if write else "")
     )
-    return {"dist": dist, "violations": violations, "tagged": total_tagged}
-
-
-_PM = [None]
+    return {
+        "dist": dist,
+        "violations": violations,
+        "tagged": total_tagged,
+        "written_chapters": written_chapters,
+    }
 
 
 def main() -> int:
@@ -160,6 +158,7 @@ def main() -> int:
         "--write", action="store_true", help="upload re-tagged shards (default: dry-run)"
     )
     bs.add_bucket_args(ap)
+    bs.add_notify_args(ap)
     args = ap.parse_args()
     if args.write:
         bs.confirm_mutation(args, "backfill bridge tags")
@@ -177,6 +176,11 @@ def main() -> int:
         if res:
             grand.update(res["dist"])
             grand_viol += len(res["violations"])
+            # Record the bucket-direct write so staleness re-evaluates. Best-effort.
+            if args.write and res["written_chapters"]:
+                bs.notify_ts_refreshed(
+                    args, slug, chapters=res["written_chapters"], reason="backfill_bridge_tags"
+                )
 
     log("\n=== corpus bridge distribution ===")
     for rule, c in grand.most_common():

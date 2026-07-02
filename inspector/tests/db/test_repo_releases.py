@@ -111,6 +111,7 @@ def test_supersede_current_marks_zero_prior_rows(fresh_db):
     # nothing more (id1 already superseded).
     assert n == 0
     cur = repo_releases.current_release("ts", slug)
+    assert cur is not None
     assert cur["id"] == id2
 
 
@@ -155,6 +156,7 @@ def test_stamp_stale_marks_hf_with_reason(fresh_db):
         n = repo_releases.stamp_stale(slug, at=now, reason=StaleReason.TS_REGEN)
     assert n == 1
     hf_row = repo_releases.current_release("hf", slug)
+    assert hf_row is not None
     assert hf_row["stale_since"] is not None
     assert hf_row["stale_reason"] == "ts_regen"
 
@@ -169,9 +171,12 @@ def test_stamp_stale_catalog_edit_then_ts_regen_upgrades_reason(fresh_db):
             track="hf", slug=slug, version="abc123", produced_at=now, produced_by="a"
         )
         repo_releases.stamp_stale(slug, at=now, reason=StaleReason.CATALOG_EDIT)
-        first = repo_releases.current_release("hf", slug)["stale_since"]
+        first_row = repo_releases.current_release("hf", slug)
+        assert first_row is not None
+        first = first_row["stale_since"]
         repo_releases.stamp_stale(slug, at=now, reason=StaleReason.TS_REGEN)
     hf_row = repo_releases.current_release("hf", slug)
+    assert hf_row is not None
     assert hf_row["stale_reason"] == "ts_regen"
     # stale_since records FIRST stale time — preserved across the upgrade.
     assert hf_row["stale_since"] == first
@@ -188,7 +193,57 @@ def test_stamp_stale_ts_regen_not_downgraded_by_catalog_edit(fresh_db):
         repo_releases.stamp_stale(slug, at=now, reason=StaleReason.TS_REGEN)
         n = repo_releases.stamp_stale(slug, at=now, reason=StaleReason.CATALOG_EDIT)
     assert n == 0  # nothing changed
-    assert repo_releases.current_release("hf", slug)["stale_reason"] == "ts_regen"
+    hf_row = repo_releases.current_release("hf", slug)
+    assert hf_row is not None
+    assert hf_row["stale_reason"] == "ts_regen"
+
+
+def test_mark_ts_refreshed_advances_produced_at_and_stamps_stale(fresh_db):
+    """An out-of-band refresh advances the current ts ``produced_at``, stamps the
+    HF row stale, audits ``reciter.ts_refreshed``, and clears computed staleness."""
+    from services.db import repo_transitions
+
+    old = datetime(2020, 1, 1, tzinfo=UTC)
+    new = datetime(2026, 6, 29, tzinfo=UTC)
+    with db.transaction():
+        slug = _seed_minimal_delivery()
+        repo_releases.insert_per_recitation_release(
+            track="ts", slug=slug, version="job-1", produced_at=old, produced_by="a"
+        )
+        repo_releases.insert_per_recitation_release(
+            track="hf", slug=slug, version="abc123", produced_at=old, produced_by="a"
+        )
+        refreshed = repo_releases.mark_ts_refreshed(
+            slug, at=new, chapters=[1, 114], reason="backfill_cells"
+        )
+    assert refreshed is True
+    ts_row = repo_releases.current_release("ts", slug)
+    assert ts_row is not None
+    # produced_at advanced to the refresh watermark.
+    assert ts_row["produced_at"].startswith("2026-06-29")
+    # HF row stamped stale (the published dataset is now behind the refreshed shards).
+    hf_row = repo_releases.current_release("hf", slug)
+    assert hf_row is not None and hf_row["stale_reason"] == "ts_regen"
+    # The audit event was appended with the chapters/reason payload.
+    events = [t for t in repo_transitions.for_slug(slug) if t["event"] == "reciter.ts_refreshed"]
+    assert len(events) == 1
+    assert events[0]["payload"]["chapters"] == [1, 114]
+    assert events[0]["payload"]["reason"] == "backfill_cells"
+
+
+def test_mark_ts_refreshed_no_ts_row_returns_false(fresh_db):
+    """A refresh callback for a reciter with no current ts release is a clean
+    no-op (a backfill on a never-generated reciter), returning ``False``."""
+    from services.db import repo_transitions
+
+    now = _now()
+    with db.transaction():
+        slug = _seed_minimal_delivery()
+        refreshed = repo_releases.mark_ts_refreshed(slug, at=now)
+    assert refreshed is False
+    assert [
+        t for t in repo_transitions.for_slug(slug) if t["event"] == "reciter.ts_refreshed"
+    ] == []
 
 
 def test_stamp_stale_no_hf_row_does_not_error(fresh_db):
@@ -223,9 +278,13 @@ def test_clear_catalog_stale_hf_clears_only_catalog_edit(fresh_db):
         repo_releases.stamp_stale(ts, at=now, reason=StaleReason.TS_REGEN)
         cleared = repo_releases.clear_catalog_stale_hf()
     assert cleared == 1
-    assert repo_releases.current_release("hf", cat)["stale_since"] is None
-    assert repo_releases.current_release("hf", cat)["stale_reason"] is None
-    assert repo_releases.current_release("hf", ts)["stale_since"] is not None
+    cat_hf = repo_releases.current_release("hf", cat)
+    ts_hf = repo_releases.current_release("hf", ts)
+    assert cat_hf is not None
+    assert ts_hf is not None
+    assert cat_hf["stale_since"] is None
+    assert cat_hf["stale_reason"] is None
+    assert ts_hf["stale_since"] is not None
 
 
 def test_stamp_stale_for_reciter_fans_out_to_all_deliveries(fresh_db):
@@ -243,8 +302,12 @@ def test_stamp_stale_for_reciter_fans_out_to_all_deliveries(fresh_db):
             "minshawy", at=now, reason=StaleReason.CATALOG_EDIT
         )
     assert n == 2
-    assert repo_releases.current_release("hf", a)["stale_reason"] == "catalog_edit"
-    assert repo_releases.current_release("hf", b)["stale_reason"] == "catalog_edit"
+    a_hf = repo_releases.current_release("hf", a)
+    b_hf = repo_releases.current_release("hf", b)
+    assert a_hf is not None
+    assert b_hf is not None
+    assert a_hf["stale_reason"] == "catalog_edit"
+    assert b_hf["stale_reason"] == "catalog_edit"
 
 
 def test_insert_persists_regen_provenance(fresh_db):
@@ -263,6 +326,7 @@ def test_insert_persists_regen_provenance(fresh_db):
             prior_ts_version="g1",
         )
     row = repo_releases.current_release("ts", slug)
+    assert row is not None
     assert json.loads(row["affected_chapters"]) == [5, 12]
     assert row["prior_ts_version"] == "g1"
 
@@ -276,6 +340,7 @@ def test_insert_without_provenance_leaves_nulls(fresh_db):
             track="ts", slug=slug, version="g1", produced_at=now, produced_by="a"
         )
     row = repo_releases.current_release("ts", slug)
+    assert row is not None
     assert row["affected_chapters"] is None
     assert row["prior_ts_version"] is None
 
@@ -448,6 +513,7 @@ def test_gh_release_supersede(fresh_db):
         n = repo_releases.supersede_prior_gh_releases(except_id=id2, at=now)
     assert n == 1
     latest = repo_releases.latest_gh_release()
+    assert latest is not None
     assert latest["id"] == id2
 
 

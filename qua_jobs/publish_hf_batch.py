@@ -144,8 +144,13 @@ def _publish_worker(slug: str, job_id: str, out_path: str) -> None:
     accumulated across reciters and OOM-killed the container. spawn (not fork)
     also gives a clean interpreter so torch/datasets import fresh per reciter.
     """
+    pad_start = int(os.environ.get("PUBLISH_PAD_START", "").strip() or 100)
+    pad_end = int(os.environ.get("PUBLISH_PAD_END", "").strip() or 300)
+    min_gap = int(os.environ.get("PUBLISH_MIN_GAP", "").strip() or 100)
     try:
-        res = publish_slug(slug, job_id, sync_card=False)
+        res = publish_slug(
+            slug, job_id, sync_card=False, pad_start=pad_start, pad_end=pad_end, min_gap=min_gap
+        )
     except Exception as exc:
         res = {"slug": slug, "status": "failed", "error": f"{type(exc).__name__}: {exc}"}
     try:

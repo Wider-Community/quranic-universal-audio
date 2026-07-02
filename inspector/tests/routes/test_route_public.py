@@ -63,6 +63,7 @@ def _reciter(reciter_id: str, name_en: str):
 def _install(reciters, deliveries, rows):
     """Seed the supplied catalog + state fixtures into the SQLite substrate."""
     from qua_shared.schemas import (
+        AudioCategory,
         Channel,
         Riwayah,
         Source,
@@ -80,7 +81,7 @@ def _install(reciters, deliveries, rows):
                 slug="mp3quran",
                 name="mp3quran",
                 url="https://mp3quran.net",
-                audio_categories=["by_surah"],
+                audio_categories=[AudioCategory.BY_SURAH],
             ),
         ],
         channels=[

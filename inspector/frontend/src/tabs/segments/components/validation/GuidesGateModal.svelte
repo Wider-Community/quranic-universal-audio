@@ -166,7 +166,7 @@
         align-items: center;
         justify-content: center;
         padding: 24px;
-        background: rgba(4, 8, 18, 0.62);
+        background: var(--scrim);
         backdrop-filter: blur(2px);
     }
 
@@ -175,11 +175,11 @@
         max-height: min(84vh, 720px);
         display: flex;
         flex-direction: column;
-        background: #131a2c;
-        border: 1px solid #28344f;
+        background: var(--panel);
+        border: 1px solid var(--border-default);
         border-radius: 12px;
-        box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
-        color: #dfe6f5;
+        box-shadow: var(--shadow-modal);
+        color: var(--text-primary);
         overflow: hidden;
     }
 
@@ -189,7 +189,7 @@
         justify-content: space-between;
         gap: 12px;
         padding: 16px 18px;
-        border-bottom: 1px solid #232f49;
+        border-bottom: 1px solid var(--border-default);
     }
 
     .guides-gate-kicker {
@@ -203,7 +203,7 @@
     .guides-gate-header h2 {
         margin: 0;
         font-size: 1.05rem;
-        color: #f2f5fc;
+        color: var(--text-primary);
     }
 
     .guides-gate-close {
@@ -213,12 +213,12 @@
         border: none;
         border-radius: 8px;
         background: transparent;
-        color: #97a2bd;
+        color: var(--text-muted);
         font-size: 1.3rem;
         line-height: 1;
         cursor: pointer;
     }
-    .guides-gate-close:hover { background: #1d2740; color: #fff; }
+    .guides-gate-close:hover { background: var(--panel-2); color: var(--text-primary); }
 
     .guides-gate-body {
         padding: 16px 18px;
@@ -229,13 +229,13 @@
         margin: 0 0 14px;
         font-size: 0.88rem;
         line-height: 1.5;
-        color: #aeb9d4;
+        color: var(--text-secondary);
     }
 
     .guides-gate-progress {
         height: 6px;
         border-radius: 999px;
-        background: #1c2740;
+        background: var(--surface-sunken);
         overflow: hidden;
     }
     .guides-gate-progress-fill {
@@ -246,7 +246,7 @@
     .guides-gate-progress-label {
         margin: 6px 0 14px;
         font-size: 0.74rem;
-        color: #8b97b4;
+        color: var(--text-muted);
     }
 
     .guides-gate-list {
@@ -263,13 +263,13 @@
         align-items: center;
         gap: 10px;
         padding: 8px 10px;
-        border: 1px solid #243049;
+        border: 1px solid var(--border-default);
         border-radius: 8px;
-        background: #101829;
+        background: var(--surface-sunken);
     }
     .guides-gate-row.read {
-        border-color: #21364a;
-        background: #0e1726;
+        border-color: var(--border-default);
+        background: var(--surface-sunken);
     }
 
     .guides-gate-mark {
@@ -286,19 +286,19 @@
         min-width: 0;
         font-size: 0.9rem;
     }
-    .guides-gate-row.read .guides-gate-title { color: #9aa6c2; }
+    .guides-gate-row.read .guides-gate-title { color: var(--text-muted); }
 
     .guides-gate-open {
         flex: 0 0 auto;
         padding: 5px 12px;
-        border: 1px solid #36456a;
+        border: 1px solid var(--border-strong);
         border-radius: 6px;
-        background: #16203a;
-        color: #cdd6ee;
+        background: var(--panel-2);
+        color: var(--text-secondary);
         font-size: 0.8rem;
         cursor: pointer;
     }
-    .guides-gate-open:hover { background: #1d2b4c; }
+    .guides-gate-open:hover { background: var(--elevated); }
     .guides-gate-open.primary {
         border-color: var(--accent);
         color: var(--accent);
@@ -311,7 +311,7 @@
         justify-content: flex-end;
         gap: 12px;
         padding: 14px 18px;
-        border-top: 1px solid #232f49;
+        border-top: 1px solid var(--border-default);
     }
 
     .guides-gate-done {
@@ -322,10 +322,10 @@
 
     .guides-gate-dismiss {
         padding: 7px 16px;
-        border: 1px solid #36456a;
+        border: 1px solid var(--border-strong);
         border-radius: 7px;
-        background: #16203a;
-        color: #cdd6ee;
+        background: var(--panel-2);
+        color: var(--text-secondary);
         font-size: 0.85rem;
         cursor: pointer;
     }

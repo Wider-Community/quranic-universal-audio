@@ -20,6 +20,7 @@ committed to git so CI can ``git diff --exit-code`` it.
 
 from __future__ import annotations
 
+from .bucket.cell_vocab import CellRole, CellStatus
 from .bucket.edit_history import EditHistoryBatch, EditOperation, EditOpPatch
 from .bucket.jobs import JobMember, JobRecord, JobsListResponse
 from .bucket.peaks_history import PeaksRecord
@@ -31,8 +32,9 @@ from .bucket.segment import (
     FlagFollowUp,
     SegmentFlag,
 )
+from .bucket.tajweed_vocab import TajweedRule
 from .bucket.ts_job_record import TsJobRecord, TsJobSettings
-from .bucket.ts_shard import TsShardDoc, TsShardMeta, TsShardSegment, TsShardWord
+from .bucket.ts_shard import TsShardCell, TsShardDoc, TsShardMeta, TsShardSegment, TsShardWord
 from .bucket.ts_validation import TsValidationDoc, TsValidationMeta, TsValidationVerse
 from .config.automation import (
     AutoGenTsConfig,
@@ -43,6 +45,7 @@ from .config.automation import (
     HfPublishConfig,
     StaleMetadataConfig,
     StaleTsRegenConfig,
+    TsGenerationDefaults,
 )
 from .wire._envelopes import ErrorEnvelope, OkAck
 from .wire.admin_permissions import (
@@ -144,13 +147,19 @@ from .wire.seg import (
     SegValidateResponse,
 )
 from .wire.timestamps import TsConfigResponse, TsManifestResponse
-from .wire.ts_flags import (
-    TsFlagAuthor,
-    TsFlagComment,
-    TsFlagCreateRequest,
-    TsFlagVerseCount,
-    TsReciterFlags,
-    TsVerseFlags,
+from .wire.ts_reports import (
+    TsReciterReports,
+    TsReport,
+    TsReportAuthor,
+    TsReportBatchCreateRequest,
+    TsReportBatchItem,
+    TsReportBatchResult,
+    TsReportCreateRequest,
+    TsReportResolveRequest,
+    TsReportSnapshot,
+    TsReportTarget,
+    TsReportVerseCount,
+    TsVerseReports,
 )
 
 __all__ = [
@@ -182,12 +191,18 @@ __all__ = [
     "SegmentsChapterSummary",
     "TsConfigResponse",
     "TsManifestResponse",
-    "TsFlagAuthor",
-    "TsFlagComment",
-    "TsFlagCreateRequest",
-    "TsFlagVerseCount",
-    "TsReciterFlags",
-    "TsVerseFlags",
+    "TsReciterReports",
+    "TsReport",
+    "TsReportAuthor",
+    "TsReportBatchCreateRequest",
+    "TsReportBatchItem",
+    "TsReportBatchResult",
+    "TsReportCreateRequest",
+    "TsReportResolveRequest",
+    "TsReportSnapshot",
+    "TsReportTarget",
+    "TsReportVerseCount",
+    "TsVerseReports",
     "AutoGenTsConfig",
     "AutomationConfig",
     "AutomationResponse",
@@ -196,6 +211,7 @@ __all__ = [
     "HfPublishConfig",
     "StaleMetadataConfig",
     "StaleTsRegenConfig",
+    "TsGenerationDefaults",
     "AdminActiveClaim",
     "AdminActivityEvent",
     "AdminCapabilityRow",
@@ -268,10 +284,14 @@ __all__ = [
     "SuggestedAction",
     "TsJobRecord",
     "TsJobSettings",
+    "TsShardCell",
     "TsShardDoc",
     "TsShardMeta",
     "TsShardSegment",
     "TsShardWord",
+    "CellRole",
+    "CellStatus",
+    "TajweedRule",
     "TsValidationDoc",
     "TsValidationMeta",
     "TsValidationVerse",

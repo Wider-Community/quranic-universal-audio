@@ -15,6 +15,7 @@ No Flask imports — callable from any thread.
 from __future__ import annotations
 
 import logging
+import os
 
 from services.storage import storage_paths
 from services.storage.hf_bucket import get_backend
@@ -23,6 +24,29 @@ from . import audio_meta
 from .peaks_slim import unpack_slim_envelope
 
 logger = logging.getLogger(__name__)
+
+
+# ----------------------------------------------------------------------
+# Per-content read-source gates (granular bucket-read control)
+# ----------------------------------------------------------------------
+# The bucket isn't the fastest source for every content type when running
+# locally (no FUSE mount → hffs reads). These let a caller exclude a content
+# type from the bucket so it uses a faster fallback instead. Default ON so
+# deployed/hand-run behaviour is unchanged; `launch.py` flips them per mode.
+
+
+def _audio_from_bucket() -> bool:
+    """Read chapter audio from the bucket? Off ⇒ ``resolve()`` skips the bucket
+    (mount path + hffs full-MP3 read) and streams from the CDN — faster locally.
+    The launcher sets this off for local ``dev``/``prod``; deployed defaults on."""
+    return os.environ.get("INSPECTOR_AUDIO_FROM_BUCKET", "1") != "0"
+
+
+def _peaks_from_bucket() -> bool:
+    """Read slim chapter peaks from the bucket? Off ⇒ every chapter misses and
+    the FE falls through to per-segment ffmpeg compute (the manual peaks). On by
+    default; the launcher exposes ``--ffmpeg-peaks`` to turn it off."""
+    return os.environ.get("INSPECTOR_PEAKS_FROM_BUCKET", "1") != "0"
 
 
 # ----------------------------------------------------------------------
@@ -37,6 +61,8 @@ def read_prefetched_audio_bytes(slug: str, url: str) -> bytes | None:
     when either the URL isn't in this delivery's sidecar or the chapter file
     isn't on the bucket — the caller then falls back to a CDN redirect.
     """
+    if not _audio_from_bucket():
+        return None
     chapter = audio_meta.chapter_for_url(slug, url)
     if chapter is None:
         return None
@@ -57,6 +83,8 @@ def read_prefetched_audio_local_path(slug: str, url: str):
     whole 4–5 MB MP3 into Flask memory on every surah switch. Returns
     ``None`` for local-dev no-mount (callers fall back to bytes or CDN).
     """
+    if not _audio_from_bucket():
+        return None
     chapter = audio_meta.chapter_for_url(slug, url)
     if chapter is None:
         return None
@@ -87,6 +115,8 @@ def read_prefetched_peaks(slug: str, url: str) -> dict | None:
     ``peaks_slim.py`` for the offline extraction history-JSONL writer.
     Runtime inspector code uses only this envelope reader.
     """
+    if not _peaks_from_bucket():
+        return None
     chapter = audio_meta.chapter_for_url(slug, url)
     if chapter is None:
         return None

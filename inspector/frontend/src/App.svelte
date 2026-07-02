@@ -1,16 +1,13 @@
 <script lang="ts">
     import { onMount } from 'svelte';
 
-    import { signIn, signOut } from './lib/api/auth-client';
-    import { common_auth_sign_in_with_hf } from './lib/paraglide/messages/common_auth_sign_in_with_hf';
-    import { common_auth_sign_out } from './lib/paraglide/messages/common_auth_sign_out';
     import { common_nav_tab_dashboard } from './lib/paraglide/messages/common_nav_tab_dashboard';
     import { common_nav_tab_segments } from './lib/paraglide/messages/common_nav_tab_segments';
     import { common_nav_tab_timestamps } from './lib/paraglide/messages/common_nav_tab_timestamps';
     import { localeStore, tr } from './lib/i18n/locale-store';
+    import AuthControls from './lib/components/AuthControls.svelte';
     import BookmarksPanel from './lib/components/BookmarksPanel.svelte';
     import ClaimConfirmModal from './lib/components/ClaimConfirmModal.svelte';
-    import DevRoleSwitcher from './lib/components/DevRoleSwitcher.svelte';
     import EditAffordancePopover from './lib/components/EditAffordancePopover.svelte';
     import ExternalLinks from './lib/components/ExternalLinks.svelte';
     import InfoModal from './lib/components/info/InfoModal.svelte';
@@ -19,9 +16,10 @@
     import NowReciting from './lib/components/player/NowReciting.svelte';
     import PlayerMetaChip from './lib/components/player/PlayerMetaChip.svelte';
     import SignInModal from './lib/components/SignInModal.svelte';
+    import ThemeToggle from './lib/components/ThemeToggle.svelte';
     import ToastHost from './lib/components/ToastHost.svelte';
     import { dashPort } from './lib/playback/dash-port';
-    import { currentUser, isSignedIn, loadCurrentUser } from './lib/stores/current-user';
+    import { loadCurrentUser } from './lib/stores/current-user';
     import { playerContext } from './lib/stores/player-context';
     import type { PublicDelivery } from './lib/types/generated/schemas';
     import { activeTab as activeTabStore, getActiveTab, setActiveTab } from './lib/utils/active-tab';
@@ -30,8 +28,9 @@
     import SegmentsTab from './tabs/segments/SegmentsTab.svelte';
     import { segPort } from './tabs/segments/stores/playback';
     import TimestampsFooterAnalysis from './tabs/timestamps/components/TimestampsFooterAnalysis.svelte';
-    import TimestampsFooterFlags from './tabs/timestamps/components/TimestampsFooterFlags.svelte';
     import TimestampsFooterLeft from './tabs/timestamps/components/TimestampsFooterLeft.svelte';
+    import TimestampsFooterOpenSegments from './tabs/timestamps/components/TimestampsFooterOpenSegments.svelte';
+    import TimestampsFooterReport from './tabs/timestamps/components/TimestampsFooterReport.svelte';
     import TimestampsTab from './tabs/timestamps/TimestampsTab.svelte';
 
     // `activeTab` follows the shared store so external navigation (e.g. the
@@ -52,12 +51,10 @@
     // of the tabs being left (pause is a no-op when nothing's playing).
     $: applyTabSideEffects(activeTab);
 
-    // Localized auth labels. Gating the message reads on `$localeStore` is the
+    // Localized tab labels. Gating the message reads on `$localeStore` is the
     // legacy Svelte-4 reactivity idiom (mirrors `$: activeTab = $activeTabStore`
     // above): `tr` makes the statement depend on the store so the copy
     // re-evaluates when the locale switches in-place.
-    $: signInLabel = tr($localeStore, common_auth_sign_in_with_hf());
-    $: signOutLabel = tr($localeStore, common_auth_sign_out());
     $: dashboardTabLabel = tr($localeStore, common_nav_tab_dashboard());
     $: timestampsTabLabel = tr($localeStore, common_nav_tab_timestamps());
     $: segmentsTabLabel = tr($localeStore, common_nav_tab_segments());
@@ -77,14 +74,6 @@
     function onCombinationSelect(ev: CustomEvent<PublicDelivery>): void {
         const d = ev.detail;
         playerContext.update((s) => ({ ...s, delivery: d, positionMs: 0, isPlaying: true }));
-    }
-
-    function _onSignIn() {
-        signIn();
-    }
-
-    function _onSignOut() {
-        void signOut();
     }
 
     function cleanupLegacyAudioKeys(): void {
@@ -129,7 +118,7 @@
 </script>
 
 <div class="container">
-    <header>
+    <header class:rail-aligned={activeTab === TAB_NAMES.DASHBOARD}>
         <ExternalLinks />
         <div class="tab-bar">
             <button class="tab-btn" class:active={activeTab === TAB_NAMES.DASHBOARD} data-tab={TAB_NAMES.DASHBOARD} on:click={() => setActiveTab(TAB_NAMES.DASHBOARD)}>{dashboardTabLabel}</button>
@@ -138,22 +127,8 @@
         </div>
         <div class="auth-controls">
             <LocaleSwitcher />
-            {#if $currentUser.dev_mode}
-                <!-- Local dev only — never rendered on the deployed Space. -->
-                <DevRoleSwitcher />
-            {:else if isSignedIn($currentUser)}
-                <span class="auth-login" title="Signed in as {$currentUser.login}">
-                    {$currentUser.login}
-                    {#if $currentUser.role && $currentUser.role !== 'contributor'}
-                        <span class="auth-role">·{$currentUser.role}</span>
-                    {/if}
-                </span>
-                <button type="button" class="auth-btn" on:click={_onSignOut}>{signOutLabel}</button>
-            {:else}
-                <button type="button" class="auth-btn auth-btn--cta" on:click={_onSignIn}>
-                    {signInLabel}
-                </button>
-            {/if}
+            <ThemeToggle />
+            <AuthControls />
         </div>
     </header>
 
@@ -201,12 +176,17 @@
             </svelte:fragment>
             <svelte:fragment slot="loc-lead">
                 {#if activeTab === TAB_NAMES.TIMESTAMPS}
-                    <TimestampsFooterFlags />
+                    <TimestampsFooterReport />
                 {/if}
             </svelte:fragment>
             <svelte:fragment slot="center-trail">
                 {#if activeTab === TAB_NAMES.TIMESTAMPS}
                     <TimestampsFooterAnalysis />
+                {/if}
+            </svelte:fragment>
+            <svelte:fragment slot="download-lead">
+                {#if activeTab === TAB_NAMES.TIMESTAMPS}
+                    <TimestampsFooterOpenSegments />
                 {/if}
             </svelte:fragment>
         </BottomPlayer>
@@ -247,44 +227,20 @@
     .auth-controls {
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 8px;
         grid-column: 3;
         justify-self: end;
     }
-    .auth-login {
-        font-size: 0.92rem;
-        color: #ccc;
+    /* Dashboard lays its content out as two 320px rails inset one --gutter from
+       the page edge. Match that in the header (Dashboard only, since the other
+       tabs are full-bleed): the project-link icons line up with the left rail's
+       text column, and the auth/theme cluster with the right rail's edge. */
+    header.rail-aligned :global(.link-rail) {
+        /* the rail's labels (e.g. "Status") sit 16px inside the rail box and the
+           icon carries 8px of inner padding, so glyph offset = gutter + 16 - 8 */
+        padding-left: calc(var(--gutter) + 8px);
     }
-    .auth-role {
-        margin-left: 4px;
-        font-weight: 600;
-        color: #8ab4f8;
-        text-transform: capitalize;
-    }
-    .auth-btn {
-        border: 1px solid #333;
-        background: #16213e;
-        color: #ccc;
-        padding: 6px 12px;
-        border-radius: 6px;
-        cursor: pointer;
-        font-size: 0.9rem;
-        transition: background 0.2s, border-color 0.2s, color 0.2s;
-    }
-    .auth-btn:hover {
-        background: #1a2a4e;
-        border-color: #4cc9f0;
-        color: #4cc9f0;
-    }
-    .auth-btn--cta {
-        background: #f0a500;
-        color: #1a1a1a;
-        border: 0;
-        font-weight: 600;
-    }
-    .auth-btn--cta:hover {
-        background: #ffba2c;
-        border-color: transparent;
-        color: #1a1a1a;
+    header.rail-aligned .auth-controls {
+        padding-right: var(--gutter);
     }
 </style>

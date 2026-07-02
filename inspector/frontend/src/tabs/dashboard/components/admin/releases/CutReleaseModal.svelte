@@ -19,6 +19,7 @@
     import Modal from '../../../../../lib/components/Modal.svelte';
     import {
         type ReleasePreviewResponse,
+        type ReleaseSettings,
         cutRelease,
         fetchReleasePreview,
     } from '../../../../../lib/api/admin-releases';
@@ -26,8 +27,10 @@
     interface Props {
         onclose: () => void;
         onsuccess: () => void;
+        /** Shared release settings (also used by the HF publish). Bindable. */
+        settings: ReleaseSettings;
     }
-    let { onclose, onsuccess }: Props = $props();
+    let { onclose, onsuccess, settings = $bindable() }: Props = $props();
 
     let preview = $state<ReleasePreviewResponse | null>(null);
     let loading = $state(true);
@@ -72,6 +75,7 @@
             await cutRelease({
                 version: manualVersion.trim() || undefined,
                 expected_version_at_preview: preview.expected_version_at_preview,
+                settings,
             });
             onsuccess();
         } catch (e) {
@@ -158,6 +162,28 @@
                         <div class="hint">
                             MAJOR bumps are manual-only (schema or model change).
                             Auto only bumps MINOR / PATCH.
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <span class="field-label">Release settings (ms)</span>
+                        <div class="pad-row">
+                            <label class="pad-field">
+                                <span class="pad-lbl">pad start</span>
+                                <input type="number" min="0" bind:value={settings.pad_start} />
+                            </label>
+                            <label class="pad-field">
+                                <span class="pad-lbl">pad end</span>
+                                <input type="number" min="0" bind:value={settings.pad_end} />
+                            </label>
+                            <label class="pad-field">
+                                <span class="pad-lbl">min gap</span>
+                                <input type="number" min="0" bind:value={settings.min_gap} />
+                            </label>
+                        </div>
+                        <div class="hint">
+                            Clip-edge headroom + anti-leak silence. The SAME knobs the HF
+                            dataset publish uses, so the release verse bounds match the dataset.
                         </div>
                     </div>
                 </section>
@@ -350,6 +376,37 @@
         color: var(--text-faint);
         line-height: 1.5;
     }
+    .pad-row {
+        display: flex;
+        gap: var(--s-4);
+        flex-wrap: wrap;
+        padding: 4px 0 2px;
+    }
+    .pad-field {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .pad-lbl {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--text-faint);
+        white-space: nowrap;
+    }
+    .pad-field input {
+        border: 1px solid var(--border-quiet);
+        border-radius: var(--r-1);
+        padding: 4px 6px;
+        background: var(--panel);
+        color: var(--text-primary);
+        font: inherit;
+        font-family: var(--font-mono);
+        font-size: var(--fs-meta);
+        width: 64px;
+    }
+    .pad-field input:focus { outline: none; border-color: var(--accent); }
 
     /* ---------- Zone 5 — footer ---------- */
     .footer-stack {

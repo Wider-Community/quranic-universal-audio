@@ -86,6 +86,7 @@ def test_generate_ts_scopes_to_affected_chapters(signed_in_client, monkeypatch, 
     captured: dict = {}
 
     def _capture(slug, settings=None, webhook_base=None):
+        assert settings is not None
         captured["chapters"] = settings.chapters
         return {"job_id": "j_test", "url": None}
 

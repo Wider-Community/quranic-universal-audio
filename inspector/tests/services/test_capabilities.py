@@ -124,7 +124,7 @@ def test_capabilities_for_anonymous_is_anon_defaults():
     assert set(caps.capabilities_for(None)) == {
         "view.catalog",
         "view.public_activity",
-        "timestamps.flag",
+        "timestamps.report",
         "notify.email_subscriptions",
     }
 

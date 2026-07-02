@@ -182,6 +182,14 @@ def emit_for_event(
         extra = extra or {}
         name = _reciter_name(record, extra)
         actor_id = record.actor.hf_user_id if record.actor else None
+        # Stable per-transition dedup key: a request-scoped id when present
+        # (so request alerts archive together), else the transition's own
+        # identity (event:slug:ts) so a re-driven transaction can't double-insert.
+        source_key = (
+            f"request:{record.request_id}"
+            if record.request_id
+            else f"event:{record.event}:{record.slug}:{record.ts.isoformat()}"
+        )
         if resolver is not None:
             for t in resolver(record, before, extra, name):
                 if not t.hf_user_id:
@@ -195,7 +203,7 @@ def emit_for_event(
                     title=t.title,
                     body=t.body,
                     payload=t.payload,
-                    source_key=record.request_id,
+                    source_key=source_key,
                 )
 
         # Auto-archive the "new request" alerts once the reciter reaches review:
@@ -304,29 +312,34 @@ def notify_owners_new_request(
         )
 
 
-def notify_owners_ts_flag(
+def notify_owners_ts_report(
     *,
     slug: str,
     verse_key: str,
-    comment: str | None,
+    category: str,
     author_id: str | None,
     author_login: str | None,
+    report_id: int,
     at_utc: str,
+    source_key: str | None = None,
 ) -> None:
-    """Fan a new Timestamps-tab verse flag out to the review-alert recipients.
+    """Fan a new Timestamps-tab report out to the review-alert recipients.
 
-    Fires once per NEW comment (re-edits of an existing comment don't re-notify).
-    Anonymous flags have ``author_id``/``author_login`` ``None``. ``author_login``
-    rides in the payload so the rail can show it to identity-capable owners; the
-    body stays identity-free. Opens its own ``durable_transaction``;
-    self-suppressed for a signed-in flagger. Best-effort. Clicking the card
-    deep-links to the Timestamps tab at this reciter + verse.
+    Fires once per NEW report (re-submits of the same category+target don't
+    re-notify). Anonymous reports have ``author_id``/``author_login`` ``None``.
+    ``author_login`` rides in the payload so the rail can show it to
+    identity-capable owners; the body stays identity-free. ``source_key``
+    defaults to a per-report key; a batch submit passes a word-group key so the
+    cells flagged in one timing word coalesce into a single owner alert. Opens
+    its own ``durable_transaction``; self-suppressed for a signed-in reporter.
+    Best-effort. Clicking the card deep-links to the Timestamps tab at this
+    reciter + verse.
     """
     try:
         from services.state import catalog
 
         name = catalog.display_name(slug) or slug
-        body = f"{verse_key} — {comment}" if comment else verse_key
+        body = f"{verse_key} · {category}"
         from services.db import sync as _sync
 
         with _sync.durable_transaction():
@@ -335,20 +348,127 @@ def notify_owners_ts_flag(
                     continue
                 repo_notifications.create(
                     hf_user_id=uid,
-                    event="ts_flag.created",
+                    event="ts_report.created",
                     slug=slug,
-                    title=copy.ts_flag_reported(name),
+                    title=copy.ts_report_reported(name),
                     body=body,
                     payload={
                         "verse_key": verse_key,
+                        "category": category,
+                        "report_id": report_id,
                         "author_id": author_id,
                         "author_login": author_login,
                     },
-                    source_key=f"tsflag:{slug}:{verse_key}:{at_utc}",
+                    source_key=source_key or f"tsreport:{slug}:{report_id}",
                 )
-    except Exception:  # noqa: BLE001 — best-effort; never break the flag write
+    except Exception:  # noqa: BLE001 — best-effort; never break the report write
         logger.exception(
-            "notifications.notify_owners_ts_flag failed for slug=%s verse=%s", slug, verse_key
+            "notifications.notify_owners_ts_report failed for slug=%s verse=%s", slug, verse_key
+        )
+
+
+def notify_reporter_ts_report_resolved(
+    *,
+    reporter_id: str | None,
+    slug: str,
+    verse_key: str,
+    resolver_comment: str | None,
+    report_id: int,
+    at_utc: str,
+) -> None:
+    """Notify the reporter that an owner resolved their Timestamps report.
+
+    Anonymous reports (``reporter_id`` ``None``) have no one to notify and are
+    skipped. Opens its own ``durable_transaction`` (resolve happens outside a
+    state transition). Generic "thank you" body, plus the owner's optional
+    comment when present. Best-effort. Clicking the card deep-links to the
+    Timestamps tab at this reciter + verse.
+    """
+    try:
+        if not reporter_id:
+            return
+        from services.state import catalog
+
+        name = catalog.display_name(slug) or slug
+        body = "Thanks for reporting — this issue has been resolved."
+        if resolver_comment:
+            body = f"{body} {resolver_comment}"
+        from services.db import sync as _sync
+
+        with _sync.durable_transaction():
+            repo_notifications.create(
+                hf_user_id=reporter_id,
+                event="ts_report.resolved",
+                slug=slug,
+                title=copy.ts_report_resolved(name),
+                body=body,
+                payload={"verse_key": verse_key, "report_id": report_id},
+                source_key=f"tsreportresolved:{slug}:{report_id}",
+            )
+    except Exception:  # noqa: BLE001 — best-effort; never break the resolve write
+        logger.exception(
+            "notifications.notify_reporter_ts_report_resolved failed for slug=%s report=%s",
+            slug,
+            report_id,
+        )
+
+
+def notify_ts_report_auto_resolved(
+    *,
+    slug: str,
+    verse_key: str,
+    category: str,
+    reporter_id: str | None,
+    author_login: str | None,
+    report_id: int,
+    reason: str,
+) -> None:
+    """Tell BOTH the reporter and the review-alert owners that an open report
+    auto-resolved on a timestamp regeneration (a silence gap appeared/disappeared,
+    so the data itself confirmed the report). The reporter learns their flag was
+    vindicated; owners learn it closed without their action. Anonymous reporters
+    (``reporter_id`` ``None``) just skip the reporter card. Opens its own
+    ``durable_transaction`` (nesting-safe under the regen txn). Best-effort.
+    """
+    try:
+        from services.state import catalog
+
+        name = catalog.display_name(slug) or slug
+        from services.db import sync as _sync
+
+        with _sync.durable_transaction():
+            if reporter_id:
+                repo_notifications.create(
+                    hf_user_id=reporter_id,
+                    event="ts_report.resolved",
+                    slug=slug,
+                    title=copy.ts_report_resolved(name),
+                    body=f"Thanks for reporting — {reason}",
+                    payload={"verse_key": verse_key, "report_id": report_id},
+                    source_key=f"tsreportresolved:{slug}:{report_id}",
+                )
+            for uid in _review_alert_recipients():
+                if reporter_id and uid == reporter_id:
+                    continue
+                repo_notifications.create(
+                    hf_user_id=uid,
+                    event="ts_report.auto_resolved",
+                    slug=slug,
+                    title=copy.ts_report_auto_resolved(name),
+                    body=f"{verse_key} · {category} · {reason}",
+                    payload={
+                        "verse_key": verse_key,
+                        "category": category,
+                        "report_id": report_id,
+                        "author_login": author_login,
+                    },
+                    source_key=f"tsreportauto:{slug}:{report_id}",
+                )
+    except Exception:  # noqa: BLE001 — best-effort; never break the regen write
+        logger.exception(
+            "notifications.notify_ts_report_auto_resolved failed for slug=%s report=%s",
+            slug,
+            report_id,
         )
 
 

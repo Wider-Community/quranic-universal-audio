@@ -4,6 +4,7 @@ import { fetchJson } from '../../../../lib/api';
 import type { SegmentEntry, TsShardResponse, TsShardWord } from '../../../../lib/types/ts-client';
 import {
     assembleOccasion,
+    assembleWaslGroup,
     chapterVerseRefs,
     resolveVbrChaptersForReciter,
     shardOccasions,
@@ -311,5 +312,86 @@ describe('VBR chapter metadata', () => {
 
         await expect(resolveVbrChaptersForReciter('r', manifest)).resolves.toEqual([1, 4]);
         expect(fetchJson).toHaveBeenCalledWith('/api/ts/vbr/r');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// assembleWaslGroup — cross-verse context merge
+//
+// A chain of occasions recited into each other is merged into one TsVerseData:
+// words concatenated in recitation order keeping per-verse locations, share_group
+// ids running across members (no collision), one span / by_surah 0-anchor.
+// ---------------------------------------------------------------------------
+
+describe('assembleWaslGroup', () => {
+    /** A word with one indexable phone + one cell carrying `shareGroup` (the cell
+     *  row's index-6 slot), so we can assert cross-member share_group offsetting. */
+    function wordCell(idx: number, start: number, end: number, phone: string, sg: number): TsShardWord {
+        return [
+            idx, start, end,
+            [[phone, start, end]],
+            [[phone, start, end]],
+            [[[phone], 'base', 'present', [0], 0, null, sg]],
+        ] as unknown as TsShardWord;
+    }
+
+    /** Two adjacent verses as separate occasions (a waṣl chain), by_surah. Each
+     *  verse's cells restart share_group at 0 (per-segment numbering). */
+    function groupShard(): TsShardResponse {
+        return {
+            _meta: { schema_version: 2, chapter: 1, audio_category: 'by_surah' },
+            segments: [
+                seg('1:1', 5000, 7000, [
+                    wordCell(1, 5000, 6000, 'a', 0),
+                    wordCell(2, 6000, 7000, 'b', 0),
+                ]),
+                seg('1:2', 7000, 8000, [wordCell(1, 7000, 8000, 'c', 0)]),
+            ],
+        };
+    }
+
+    const fakeQpcG = {
+        '1:1:1': { text: 'و1' }, '1:1:2': { text: 'و2' }, '1:2:1': { text: 'و3' },
+    };
+
+    function members() {
+        const shard = groupShard();
+        const occs = shardOccasions(shard);
+        return [occasionFor(shard, '1:1'), occasionFor(shard, '1:2'), occs] as const;
+    }
+
+    it('concatenates members keeping each word its own verse location', () => {
+        const [o1, o2] = members();
+        const g = assembleWaslGroup('r', [o1, o2], '1:1', fakeQpcG, {}, RA_SURAH, CH_URL);
+        expect(g.words.map((w) => w.location)).toEqual(['1:1:1', '1:1:2', '1:2:1']);
+        expect(g.verse_ref).toBe('1:1');
+        // Intervals flat across both verses; each word indexes into them.
+        expect(g.intervals.map((iv) => iv.phone)).toEqual(['a', 'b', 'c']);
+        expect(g.words[2]!.phoneme_indices).toEqual([2]);
+    });
+
+    it('runs share_group ids across members so the two verses do not collide', () => {
+        const [o1, o2] = members();
+        const g = assembleWaslGroup('r', [o1, o2], '1:1', fakeQpcG, {}, RA_SURAH, CH_URL);
+        // Verse 1:1 (one segment) → base 0; verse 1:2 (next segment) → base 1.
+        expect(g.words[0]!.cells![0]!.shareGroup).toBe(0);
+        expect(g.words[1]!.cells![0]!.shareGroup).toBe(0);
+        expect(g.words[2]!.cells![0]!.shareGroup).toBe(1);
+    });
+
+    it('spans the whole group and 0-anchors by_surah times to the group start', () => {
+        const [o1, o2] = members();
+        const g = assembleWaslGroup('r', [o1, o2], '1:1', fakeQpcG, {}, RA_SURAH, CH_URL);
+        expect(g.time_start_ms).toBe(5000);
+        expect(g.time_end_ms).toBe(8000);
+        expect(g.words[0]!.start).toBeCloseTo(0); // 5000 - 5000
+        expect(g.words[2]!.end).toBeCloseTo(3.0); // 8000 - 5000
+    });
+
+    it('is identical to assembleOccasion for a single member', () => {
+        const [o1] = members();
+        const group = assembleWaslGroup('r', [o1], '1:1', fakeQpcG, {}, RA_SURAH, CH_URL);
+        const occ = assembleOccasion('r', o1, fakeQpcG, {}, RA_SURAH, CH_URL);
+        expect(group).toEqual(occ);
     });
 });

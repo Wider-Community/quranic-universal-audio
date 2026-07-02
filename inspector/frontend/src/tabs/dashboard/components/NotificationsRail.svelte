@@ -33,7 +33,7 @@
 
     const signedIn = $derived(isSignedIn($currentUser));
     const canEmail = can('notify.email_subscriptions');
-    const canSeeReporter = can('timestamps.see_flagger_identity');
+    const canSeeReporter = can('timestamps.see_reporter_identity');
     // The rail is the email-subscribe entry point for everyone (incl. anonymous),
     // so it shows whenever email is available — not only for signed-in users or
     // when an announcement is active.
@@ -129,7 +129,9 @@
                     go: () => gotoSegments(slug, { openFlagged: true, focusFlaggedUid: uid }),
                 };
             }
-            case 'ts_flag.created': {
+            case 'ts_report.created':
+            case 'ts_report.resolved':
+            case 'ts_report.auto_resolved': {
                 const verseKey =
                     typeof n.payload?.verse_key === 'string' ? n.payload.verse_key : '';
                 if (!slug || !verseKey) return null;
@@ -170,18 +172,21 @@
                 return m.dashboard_notifs_badge_flag_comment();
             case 'flag.replied':
                 return m.dashboard_notifs_badge_flag_reply();
-            case 'ts_flag.created':
+            case 'ts_report.created':
                 return m.dashboard_notifs_badge_timestamps_report();
+            case 'ts_report.resolved':
+            case 'ts_report.auto_resolved':
+                return m.dashboard_notifs_badge_timestamps_resolved();
             default:
                 return null;
         }
     }
 
-    /** Card body — for a timestamps-flag report, identity-capable owners also
-     *  see who reported it (appended from the payload). Everyone else sees the
-     *  verse + comment only. */
+    /** Card body — for a timestamps report, identity-capable owners also see who
+     *  reported it (appended from the payload). Everyone else sees the verse +
+     *  category only. */
     function cardBody(n: UserNotification, showReporter: boolean): string | null {
-        if (n.event === 'ts_flag.created' && showReporter) {
+        if (n.event === 'ts_report.created' && showReporter) {
             const login =
                 typeof n.payload?.author_login === 'string' ? n.payload.author_login : null;
             const who = login ?? m.dashboard_notifs_reporter_anonymous();
@@ -364,7 +369,9 @@
         margin-bottom: var(--s-4);
     }
     header h2 {
-        font-size: var(--fs-h3);
+        /* One notch below the rail's other headings so the title + Email button
+           + Active/Archive toggle fit the 320px column without overflowing. */
+        font-size: var(--fs-row);
         color: var(--text-primary);
         font-weight: 500;
         margin: 0;
@@ -401,7 +408,7 @@
         padding: 2px 6px;
         border-radius: 999px;
         background: var(--state-requested-fg);
-        color: var(--surface-base, #fff);
+        color: var(--ink-on-color);
     }
     .toggle {
         margin-left: auto;

@@ -65,8 +65,22 @@ def _normalize(obj):
 def test_shard_doc_parses_and_round_trips():
     doc = _sample_doc()
     m = TsShardDoc.model_validate(doc)
-    out = m.model_dump(by_alias=True)
+    # exclude_defaults mirrors the writer: optional additive fields (the v10
+    # ``wasl`` flag) are emitted only when set, so a pre-v10 shard round-trips
+    # byte-stable instead of gaining ``wasl: False`` on every segment.
+    out = m.model_dump(by_alias=True, exclude_defaults=True)
     assert _normalize(out) == _normalize(doc)
+
+
+def test_shard_segment_wasl_flag_round_trips():
+    doc = _sample_doc()
+    doc["_meta"]["schema_version"] = 10
+    doc["segments"][0]["wasl"] = True  # this occurrence continues into the next
+    m = TsShardDoc.model_validate(doc)
+    out = m.model_dump(by_alias=True, exclude_defaults=True)
+    assert _normalize(out) == _normalize(doc)
+    assert out["segments"][0]["wasl"] is True
+    assert "wasl" not in out["segments"][1]  # default False stays omitted
 
 
 def test_shard_word_tuple_round_trips():

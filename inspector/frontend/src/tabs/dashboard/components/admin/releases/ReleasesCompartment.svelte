@@ -28,6 +28,7 @@
         publishHfBatch,
         refreshHfCatalog,
         type InFlightJob,
+        type ReleaseSettings,
         type ReleasePreviewResponse,
         type ReleaseStatusRow,
         type ReleasesStatusResponse,
@@ -41,6 +42,7 @@
     import ReleasesRow, { type ReleasesBucket } from './ReleasesRow.svelte';
     import type { RowExpandMode } from './ReleasesRowExpansion.svelte';
     import ReleasesSummaryCard from './ReleasesSummaryCard.svelte';
+    import TsGenerationSettingsSection from './TsGenerationSettingsSection.svelte';
 
     let resp = $state<ReleasesStatusResponse | null>(null);
     let loading = $state(true);
@@ -48,6 +50,9 @@
     let preview = $state<ReleasePreviewResponse | null>(null);
 
     let cutModalOpen = $state(false);
+    // Shared release settings (clip-edge pads) — one source of truth for BOTH
+    // the HF publish (action bar) and the GH cut (modal), mirrors server defaults.
+    let releaseSettings = $state<ReleaseSettings>({ pad_start: 100, pad_end: 300, min_gap: 100 });
     let rowError = $state<{ slug: string; message: string } | null>(null);
     let sendBackBusySlug = $state<string | null>(null);
 
@@ -386,7 +391,7 @@
         batchBusy = true;
         batchError = null;
         try {
-            await publishHfBatch([...selected]);
+            await publishHfBatch([...selected], releaseSettings);
             clearSelection();
             refetch();   // the server cache is already busted; this gets the new in_flight
         } catch (e) {
@@ -503,7 +508,7 @@
 
         {#if allRows.length === 0}
             <div class="list-area" bind:this={listAreaEl}>
-                {#if $canManageAutomation}<AutomationSection />{/if}
+                {#if $canManageAutomation}<TsGenerationSettingsSection /><AutomationSection />{/if}
                 <div class="zero-state">
                     <h3>No reciters in the release pipeline yet</h3>
                     <p>
@@ -517,7 +522,7 @@
             </div>
         {:else}
         <div class="list-area" bind:this={listAreaEl}>
-            {#if $canManageAutomation}<AutomationSection />{/if}
+            {#if $canManageAutomation}<TsGenerationSettingsSection /><AutomationSection />{/if}
             <!-- Filter bar -->
         <div class="filter-bar">
             <span class="search">
@@ -665,6 +670,7 @@
             selectableCount={selectableCount}
             busy={batchBusy}
             error={batchError}
+            bind:settings={releaseSettings}
             onPublish={onPublishBatch}
             onSelectAll={selectAll}
             onClear={clearSelection}
@@ -673,7 +679,11 @@
     {/if}
 
     {#if cutModalOpen}
-        <CutReleaseModal onclose={() => (cutModalOpen = false)} onsuccess={onCutComplete} />
+        <CutReleaseModal
+            bind:settings={releaseSettings}
+            onclose={() => (cutModalOpen = false)}
+            onsuccess={onCutComplete}
+        />
     {/if}
 </div>
 

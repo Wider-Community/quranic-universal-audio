@@ -48,8 +48,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from qua_shared.letter_vocab import VOCAB_FILENAME, to_external_char, vocab_csv_bytes  # noqa: E402
-from qua_shared.ts_shard_letters import iter_letters  # noqa: E402
+from qua_shared.letter_vocab import VOCAB_FILENAME, vocab_csv_bytes  # noqa: E402
 from qua_shared.schemas import (  # noqa: E402
     FileDigest,
     LetterTimestampsDoc,
@@ -62,6 +61,12 @@ from qua_shared.schemas import (  # noqa: E402
     ReleaseRecitationCatalog,
     VerseTimestampsDoc,
     WordTimestampsDoc,
+)
+from qua_shared.verse_layout import (  # noqa: E402
+    build_verse_layouts,
+    load_canonical_verses,
+    pad_params_from_env,
+    reshape_canonical,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
@@ -175,33 +180,12 @@ def _prior_release_members(conn: sqlite3.Connection) -> tuple[str | None, dict[s
 
 
 def _load_canonical_verses(slug: str) -> dict[str, dict]:
-    """Read every ``reciters/<slug>/timestamps/<ch>.json.gz`` segment-array shard,
-    project each to the canonical verse map (completion-based occasion dedup, the
-    EARLIEST completing occasion), and merge.
-    """
-    from qua_shared.timestamps_dedup import project_segment_shard
-
-    ts_dir = _bucket_root() / "reciters" / slug / "timestamps"
-    if not ts_dir.exists():
-        return {}
-    out: dict[str, dict] = {}
-    for path in sorted(
-        ts_dir.iterdir(),
-        key=lambda p: int(p.name.split(".", 1)[0]) if p.name.split(".", 1)[0].isdigit() else 0,
-    ):
-        name = path.name
-        if not (name.endswith(".json") or name.endswith(".json.gz")):
-            continue
-        raw = path.read_bytes()
-        if name.endswith(".gz"):
-            raw = gzip.decompress(raw)
-        shard = json.loads(raw)
-        out.update(project_segment_shard(shard))
-    return out
+    """Canonical verse map for ``slug`` (shared loader: project + dedup + merge)."""
+    return load_canonical_verses(_bucket_root() / "reciters" / slug / "timestamps")
 
 
 def _build_tier_files(
-    slug: str, verses: dict[str, dict], *, delivery_meta: dict
+    slug: str, layouts: dict[str, dict], *, delivery_meta: dict
 ) -> dict[str, bytes]:
     """Build the three tier files (letter → word → verse, top-down projection).
 
@@ -209,41 +193,30 @@ def _build_tier_files(
                "word_timestamps.json.gz":  bytes,
                "letter_timestamps.json.gz": bytes}``.
 
-    All times are source-relative milliseconds. Positional arrays for
-    compactness. ``_meta`` describes the layout.
+    All times are source-relative milliseconds. ``layouts`` is the shared
+    ``build_verse_layouts`` output, so the per-verse bound is the padded clip
+    window ``[clip_start, clip_end]`` — IDENTICAL to the HF dataset's clip span
+    (a consumer slicing the source by this window gets the dataset's clip). The
+    words/letters are the same psil-filtered, byte-exact alignment the dataset
+    publishes; the GH release just keeps them source-relative and does not emit a
+    segment tier. Positional arrays for compactness; ``_meta`` describes layout.
     """
-    sorted_keys = sorted(verses.keys(), key=_verse_sort_key)
+    sorted_keys = sorted(layouts.keys(), key=_verse_sort_key)
 
     letter_body: dict = {}
     word_body: dict = {}
     verse_body: dict = {}
     for key in sorted_keys:
-        v = verses[key]
-        words = v.get("words") if isinstance(v, dict) else v
-        if not words:
+        layout = layouts[key]
+        if not layout.get("words"):
             continue
-        vs = v.get("verse_start_ms") if isinstance(v, dict) else None
-        ve = v.get("verse_end_ms") if isinstance(v, dict) else None
-        if vs is None or ve is None:
-            vs = int(words[0][1])
-            ve = max(int(w[2]) for w in words)
-        verse_pos = [int(vs), int(ve)]
+        # Verse bound = the padded clip window (consistent with the HF dataset),
+        # not the raw word-span. The true word-span is still recoverable from
+        # words[0].start / words[-1].end.
+        verse_pos = [int(layout["clip_start"]), int(layout["clip_end"])]
 
-        word_array: list[list[int]] = []
-        letter_array: list[list] = []
-        for w in words:
-            widx = int(w[0])
-            ws = int(w[1])
-            we = int(w[2])
-            word_array.append([widx, ws, we])
-            letters = w[3] if len(w) > 3 else []
-            # Read letters by name; the accessor ignores the shard's trailing
-            # ``silent`` flag (and any future slot), which the GH letter tier
-            # doesn't expose.
-            for lt in iter_letters(letters):
-                # Map the internal 57-token alphabet to the published 42-token
-                # external set (drops the maddah mark; fail-loud on unknown).
-                letter_array.append([widx, to_external_char(lt.char), int(lt.start_ms), int(lt.end_ms)])
+        word_array = [[int(w[0]), int(w[1]), int(w[2])] for w in layout["words"]]
+        letter_array = [[int(lt[0]), lt[1], int(lt[2]), int(lt[3])] for lt in layout["letters"]]
 
         verse_body[key] = verse_pos
         word_body[key] = [verse_pos, word_array]
@@ -286,25 +259,22 @@ def _build_tier_files(
     }
 
 
-def _verse_for_validate(v: dict, segments: list) -> dict:
-    """Project one canonical verse to the boundary-validator's input shape.
+def _verse_for_validate(layout: dict) -> dict:
+    """Project one shared verse layout to the boundary-validator's input shape.
 
-    ``verse_start_ms`` / ``verse_end_ms`` fall back to the word bounds when the
-    verse doesn't carry them (the common projection case). ``duration_ms`` is
-    derived from the SAME resolved bounds — so the duration-arithmetic check
-    (``duration == end - start``) can't fire spuriously on the fallback path.
+    Validates the SAME invariants the HF dataset does, against the SAME byte-
+    exact segments (gapless within a segment, gaps only across boundaries) — not
+    the VAD segment windows the release used to validate against. Bounds are the
+    padded clip window; all times source-relative ms.
     """
-    words = v.get("words") or []
-    vs = v.get("verse_start_ms")
-    vs = int(vs if vs is not None else (words[0][1] if words else 0))
-    ve = v.get("verse_end_ms")
-    ve = int(ve if ve is not None else (max(w[2] for w in words) if words else 0))
+    cs = int(layout["clip_start"])
+    ce = int(layout["clip_end"])
     return {
-        "verse_start_ms": vs,
-        "verse_end_ms": ve,
-        "duration_ms": ve - vs,
-        "words": [(int(w[0]), int(w[1]), int(w[2])) for w in words],
-        "segments": segments,
+        "verse_start_ms": cs,
+        "verse_end_ms": ce,
+        "duration_ms": ce - cs,
+        "words": [(int(w[0]), int(w[1]), int(w[2])) for w in layout["words"]],
+        "segments": [(int(s[0]), int(s[1]), int(s[2]), int(s[3])) for s in layout["segments"]],
     }
 
 
@@ -849,6 +819,9 @@ def main() -> int:
     job_id = os.environ.get("JOB_ID", "").strip() or "unknown"
     launched_by = os.environ.get("LAUNCHED_BY") or None
     version_override = os.environ.get("RELEASE_VERSION", "").strip() or None
+    # Clip-edge knobs — the SAME "Release settings" the HF publish reads, so the
+    # verse bounds the release ships match the dataset's clip windows.
+    pads = pad_params_from_env()
 
     rc = _preflight()
     if rc != 0:
@@ -930,16 +903,17 @@ def main() -> int:
                 dropped_incomplete,
             )
 
-        # Load detailed.json so the intra-segment gapless check has segments
-        # to validate (plan §"Boundary enforcement" — the four checks include
-        # intra-segment gapless, which needs segment word-ranges).
-        detailed_segments = _segments_per_verse_from_detailed(slug)
+        # Shared geometry: clip windows (padded, identical to the HF dataset's
+        # clip span) + byte-exact psil segments. The release publishes the verse/
+        # word/letter tiers from these; the dataset publishes the clip-relative
+        # view of the SAME layouts. One source of truth, no drift.
+        layouts = build_verse_layouts(reshape_canonical(verses), **pads)
 
-        # Boundary validate (source-relative ms — verses dict already in that frame).
+        # Boundary validate the SAME invariants the dataset does, against the
+        # byte-exact segments (gapless within a segment, gaps only across
+        # boundaries) — source-relative ms.
         for_validate = {
-            k: _verse_for_validate(v, detailed_segments.get(k, []))
-            for k, v in verses.items()
-            if not k.startswith("_") and isinstance(v, dict)
+            k: _verse_for_validate(layout) for k, layout in layouts.items() if not k.startswith("_")
         }
         rec_summary = validate_dataset(for_validate, surah_info=surah_info)
         fatal = fatal_violations(rec_summary["violations"])
@@ -963,8 +937,8 @@ def main() -> int:
                 validation_summary_total["by_kind"].get(k, 0) + c
             )
 
-        # Tier files.
-        tier_files = _build_tier_files(slug, verses, delivery_meta=rec)
+        # Tier files (from the shared layouts: verse bound = padded clip window).
+        tier_files = _build_tier_files(slug, layouts, delivery_meta=rec)
 
         # catalog.json.
         audio_manifest_path = _bucket_root() / "catalog" / "audio_manifest" / f"{slug}.json"
@@ -978,9 +952,7 @@ def main() -> int:
         # the changelog Missing column — whole missing surahs vs within-surah
         # verse gaps, split so even a partial recitation stays short.
         present_refs = {
-            (int(k.split(":")[0]), int(k.split(":")[1]))
-            for k in verses
-            if not k.startswith("_")
+            (int(k.split(":")[0]), int(k.split(":")[1])) for k in verses if not k.startswith("_")
         }
         missing_surahs, missing_verses = missing_coverage(present_refs, surah_verse_counts)
         catalog_bytes = _build_catalog_json(
@@ -1196,53 +1168,6 @@ def _fetch_url_json(url: str) -> dict | None:
         # network/JSON error should be loud enough to investigate later.
         log.warning("could not fetch %s: %s", url, exc)
         return None
-
-
-def _segments_per_verse_from_detailed(slug: str) -> dict[str, list]:
-    """Return ``{"surah:ayah": [(word_from, word_to, time_start, time_end), ...]}``
-    extracted from the slug's ``detailed.json``.
-
-    Used to feed the boundary validator's intra-segment gapless check at cut
-    time. Returns an empty dict if detailed.json is missing/malformed —
-    publish_hf already enforced the invariants upstream and we don't want a
-    missing detailed.json to block the cut.
-    """
-    path = _bucket_root() / "reciters" / slug / "detailed.json"
-    if not path.exists():
-        log.warning("  %s: detailed.json missing — intra-segment check degraded", slug)
-        return {}
-    try:
-        doc = json.loads(path.read_bytes())
-    except (json.JSONDecodeError, OSError) as exc:
-        log.warning("  %s: detailed.json unparseable (%s)", slug, exc)
-        return {}
-    out: dict[str, list] = {}
-    for entry in doc.get("entries", []):
-        ref = entry.get("ref")
-        if not ref:
-            continue
-        # by_ayah → ref is "surah:ayah"; by_surah → ref is chapter number.
-        # Fan-out via segments' matched_ref to align with the timestamps shape.
-        for seg in entry.get("segments", []) or []:
-            mref = seg.get("matched_ref", "")
-            if not mref:
-                continue
-            sp = mref.split("-", 1)[0].split(":")
-            ep = mref.split("-", 1)[1].split(":") if "-" in mref else sp
-            try:
-                s_surah = int(sp[0])
-                s_ayah = int(sp[1])
-                e_ayah = int(ep[1])
-            except (ValueError, IndexError):
-                continue
-            w_from = seg.get("word_from", seg.get("start_word", 1))
-            w_to = seg.get("word_to", seg.get("end_word", w_from))
-            t_start = int(seg.get("time_start", 0))
-            t_end = int(seg.get("time_end", 0))
-            for a in range(s_ayah, e_ayah + 1):
-                vref = f"{s_surah}:{a}"
-                out.setdefault(vref, []).append((int(w_from), int(w_to), t_start, t_end))
-    return out
 
 
 if __name__ == "__main__":

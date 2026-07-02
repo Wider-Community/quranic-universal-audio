@@ -44,18 +44,22 @@
     import { playerContext, setIsLoading, setIsPlaying } from '../../lib/stores/player-context';
     import type { TsConfigResponse } from '../../lib/types/generated/schemas';
     import { getActiveTab, activeTab as activeTabStore } from '../../lib/utils/active-tab';
-    import { analogousTriad } from '../../lib/utils/color-derive';
+    import { modelForTheme, resolveHighlightVars } from '../../lib/utils/highlight-model';
+    import { themeStore, THEME_CHANGE_EVENT } from '../../lib/stores/theme.svelte';
     import { LS_KEYS, TAB_NAMES } from '../../lib/utils/constants';
     import { shouldHandleKey } from '../../lib/utils/keyboard-guard';
     import { prewarmVersePeaks } from '../../lib/utils/peaks-fetch';
     import { wordBoundaryScan } from '../../lib/utils/word-boundary';
     import { loadCatalog as loadPublicCatalog, catalogData } from '../dashboard/stores/catalog-data';
     import TimestampsWaveform from './components/TimestampsWaveform.svelte';
-    import TsFlaggedAccordion from './components/TsFlaggedAccordion.svelte';
+    import ReportControlStrip from './components/report/ReportControlStrip.svelte';
+    import { exitReportMode, reportContext, reportModeActive } from './stores/report-mode';
+    import { loadVerseReports } from './stores/ts-reports';
     import TsValidationPanel from './components/TsValidationPanel.svelte';
     import UnifiedDisplay from './components/UnifiedDisplay.svelte';
     import {
         assembleOccasion,
+        assembleWaslGroup,
         chapterVerseRefs,
         getRandomTarget,
         loadChapterShard,
@@ -68,7 +72,10 @@
         loadVerseTranslations,
         reciterAudioFromManifest,
         shardOccasions,
+        type TsReciterAudio,
     } from './services/ts_client';
+    import type { ChapterOccasion } from '../../lib/recitation-data/occasions';
+    import { isInWaslGroup, waslGroupOf } from '../../lib/recitation-data/wasl';
     import { findTsEntryBySlug, isTsCapable, resolveTsDeliveries } from './services/ts-published';
     import {
         showLetters,
@@ -79,15 +86,17 @@
         verseTranslations,
     } from './stores/display';
     import { tsLoading } from './stores/loading';
-    import { loadTsFlags, tsFlaggedVerses } from './stores/ts-flags';
+    import { initTajweedSettings } from './stores/tajweed-settings';
     import { exitLoop, loopTarget } from './stores/playback';
     import { manualShuffleRequest, shuffleAyah, shuffleMode } from './stores/shuffle';
     import { tsValidation } from './stores/validation';
     import {
+        focusWaslGroup,
         loadedVerse,
         selectedChapter,
         selectedReciter,
         selectedVerse,
+        type TsFocusWaslGroup,
         type TsLoadedVerse,
     } from './stores/verse';
     import { occasionIndexAt, resolveShuffleTick, shouldFireShuffle } from './utils/shuffle-tick';
@@ -113,6 +122,11 @@
         startMs: number;
         endMs: number;
         lv: TsLoadedVerse;
+        /** The raw occasion (carries `bridgesOutTo` + segments) for waṣl grouping. */
+        occ: ChapterOccasion;
+        /** The cross-verse waṣl group this occasion belongs to (by_surah only),
+         *  precomputed at chapter load; null/undefined when standalone. */
+        waslGroup?: TsFocusWaslGroup;
     }
     /** Every occasion in the chapter, in audio order (a verse ref may repeat). */
     let chapterOccasions: ChapOccasion[] = [];
@@ -124,7 +138,6 @@
     let loadedChapterKey = ''; // `${slug}:${chapter}` currently assembled
     let focusIdx = -1; // index into `chapterOccasions` of the focused occasion
     let focusRef = ''; // ref of the focused occasion (for display / verse nav)
-    let lastFlagsSlug = ''; // reciter whose user-reported flags are loaded
     let manifestSlugs = new Set<string>();
     /** Set when a context switch should seek to a specific verse once the new
      *  chapter's data + audio are ready (shuffle / validation jump / entry). */
@@ -140,11 +153,20 @@
     let loopAnchorIdx = -1;
 
     // ---------------------------------------------------------------------
-    // Colors (shared accent → analysis triad)
+    // Colors (shared accent → analysis highlight vars)
     // ---------------------------------------------------------------------
+    // One resolve owns every highlight CSS var (idle/active cells, both modes,
+    // the karaoke track, light/dark) so the surfaces can't drift. See
+    // `lib/utils/highlight-model.ts`.
     $: cfg = $tsConfig;
-    $: triad = analogousTriad($recitationConfigStore.highlightColor);
-    $: highlightColor = triad.word;
+    // The highlight model is theme-conditional (light gets a darker legible band
+    // + auto ink). Mirror the runes theme store into a legacy-reactive local so
+    // the `$:` below recomputes the analysis vars on a theme flip.
+    let curTheme = themeStore.current;
+    $: hlVars = resolveHighlightVars($recitationConfigStore.highlightColor, modelForTheme(curTheme));
+    $: hlVarsText = Object.entries(hlVars)
+        .map(([k, v]) => `${k}: ${v}`)
+        .join('; ');
     $: wordDur =
         cfg && cfg.anim_transition_easing !== TS_EASING_NONE
             ? `${cfg.anim_word_transition_duration}s`
@@ -178,6 +200,7 @@
         if (sP !== null) showPhonemes.set(sP === 'true');
         if (sT !== null) showTranslations.set(sT === 'true');
         if (sLang) translationLanguage.set(sLang);
+        initTajweedSettings();
 
         try {
             const [, manifest] = await Promise.all([loadPublicCatalog(), loadManifest()]);
@@ -276,6 +299,31 @@
     // ---------------------------------------------------------------------
     $: void syncChapter($playerContext.delivery?.slug ?? '', $playerContext.surahNum ?? 0);
 
+    // Load the focus verse's reports (in-grid public flags + report-mode seeds)
+    // on every verse change, and discard an active report session if the verse
+    // moves out from under it (report mode is verse-scoped).
+    let _verseReportsKey = '';
+    $: void _syncVerseReports($playerContext.delivery?.slug ?? '', $selectedVerse);
+    function _syncVerseReports(slug: string, verseKey: string): void {
+        const key = `${slug}|${verseKey}`;
+        if (key === _verseReportsKey) return;
+        _verseReportsKey = key;
+        const ctx = get(reportContext);
+        if (ctx && (ctx.slug !== slug || ctx.verseKey !== verseKey)) exitReportMode();
+        void loadVerseReports(slug, verseKey);
+    }
+
+    // Arm the whole-verse playback lock when a report session starts (exit clears
+    // the loop itself). With the playhead pinned, the focus verse only changes on a
+    // genuine manual nav — which _syncVerseReports above turns into exit + discard.
+    let _reportLockArmed = false;
+    $: _syncReportLock($reportModeActive);
+    function _syncReportLock(active: boolean): void {
+        if (active === _reportLockArmed) return;
+        _reportLockArmed = active;
+        if (active) armVerseLock();
+    }
+
     async function syncChapter(slug: string, chapter: number): Promise<void> {
         if (!slug || !chapter) return;
         if (!manifestSlugs.has(slug)) return; // non-published reciter on dashboard
@@ -322,10 +370,20 @@
                     startMs: data.time_start_ms,
                     endMs: data.time_end_ms,
                     lv: { data, tsSegOffset: data.time_start_ms / 1000, tsSegEnd: data.time_end_ms / 1000 },
+                    occ,
                 });
             }
             occasions.sort((a, b) => a.startMs - b.startMs);
+            attachWaslGroups(occasions, slug, qpc, dk, reciterAudio, chapterUrl);
             chapterOccasions = occasions;
+            // New chapter's occasions just replaced the array — invalidate the
+            // focus cursor so the focus pass below ALWAYS re-points `loadedVerse`.
+            // Without this, `focusAt` no-ops when the new target lands on the same
+            // index as the previous chapter's focus (e.g. surah A:1 → surah B:1,
+            // both occasion 0), leaving the analysis view pinned to the old verse
+            // while audio + teleprompter (driven off playerContext) move on.
+            focusIdx = -1;
+            focusRef = '';
             // First-occasion start per distinct verse (ascending) feeds the
             // prev/next-ayah keyboard nav via `adjacentAyahStartMs` (which trusts
             // sorted input) — stepping verses, not occasions.
@@ -351,13 +409,6 @@
                 });
             } else {
                 tsValidation.set(null);
-            }
-
-            // Public user-reported verse flags — reciter-scoped, so only reload
-            // when the reciter actually changes (not on every chapter switch).
-            if (slug !== lastFlagsSlug) {
-                lastFlagsSlug = slug;
-                void loadTsFlags(slug);
             }
 
             // Apply a queued seek (entry / shuffle / validation jump), else focus
@@ -388,6 +439,37 @@
         }
     }
 
+    /** Precompute the cross-verse waṣl group for each member occasion (by_surah
+     *  only) so focusing any member shows the whole continuous span. The merged
+     *  `TsVerseData` is built once per group and shared across its members (only
+     *  the focus ref differs); a standalone occasion gets no `waslGroup`. Group
+     *  members stay adjacent after the start-ms sort (a waṣl is gapless), so the
+     *  walk over the sorted raw occasions matches `bridgesOutTo` adjacency. */
+    function attachWaslGroups(
+        occasions: ChapOccasion[],
+        reciter: string,
+        qpc: Record<string, { text?: string }>,
+        dk: Record<string, { text?: string }>,
+        reciterAudio: TsReciterAudio,
+        chapterUrl: string,
+    ): void {
+        if (reciterAudio.audio_category !== 'by_surah') return; // span needs one chapter file
+        const raw = occasions.map((o) => o.occ);
+        for (let i = 0; i < occasions.length; i++) {
+            if (!isInWaslGroup(raw, i)) continue;
+            const grp = waslGroupOf(raw, i);
+            // The merged cells are 0-anchored to the group start; the analysis +
+            // waveform key off `span[0]` as the display offset.
+            const data = assembleWaslGroup(
+                reciter, raw.slice(grp.fromIdx, grp.toIdx + 1),
+                occasions[i]!.ref, qpc, dk, reciterAudio, chapterUrl,
+            );
+            occasions[i]!.waslGroup = {
+                data, span: [grp.startMs, grp.endMs], refs: grp.refs, focusRef: occasions[i]!.ref,
+            };
+        }
+    }
+
     /** Focus the occasion at index `i` in `chapterOccasions`. */
     function setFocusByIndex(i: number): void {
         const v = chapterOccasions[i];
@@ -395,6 +477,9 @@
         focusIdx = i;
         focusRef = v.ref;
         loadedVerse.set(v.lv);
+        // The whole continuous waṣl span (read-only context) when the focus is a
+        // group member; null for a standalone verse.
+        focusWaslGroup.set(v.waslGroup ?? null);
         selectedVerse.set(v.ref);
         // Publish to the shell-level focus store so NowReciting's filmstrip
         // bookmark button can mirror the focus without running its own rAF.
@@ -417,6 +502,17 @@
     function focusAt(ms: number): void {
         const i = occasionIndexAt(chapterOccasions, ms);
         if (i >= 0 && i !== focusIdx) setFocusByIndex(i);
+    }
+
+    /** Lock playback to the focused occasion for a report session: a whole-verse
+     *  loop covering its trailing silence up to the next verse's start. Pins the
+     *  playhead inside the verse so free play can't auto-advance (or fire shuffle)
+     *  out of the session; selecting a timing cell narrows this to the cell loop. */
+    function armVerseLock(): void {
+        const occ = chapterOccasions[focusIdx];
+        if (!occ) return;
+        exitLoop(); // drop any prior loop so the anchor re-captures this verse
+        loopTarget.set({ kind: 'word', startSec: 0, endSec: (occ.endMs - occ.startMs) / 1000, wordIndex: -1 });
     }
 
     /** True while a cross-source jump is mid-swap: the shared player already points
@@ -453,6 +549,12 @@
     function tick(): void {
         const ms = dashPort.currentTimeMs();
 
+        // While a report session is active the focus verse must stay looped so
+        // playback can't advance out of the session. Re-arm the whole-verse loop
+        // whenever it's missing — covers an entry-time no-op (occasions not yet
+        // loaded) and any cleared narrowed cell/gap loop.
+        if (get(reportModeActive) && !get(loopTarget)) armVerseLock();
+
         // rAF seek-back loop (no kill-switch on the shared port; ≤1 frame
         // overshoot). The loop window is computed against the CAPTURED loop
         // anchor offset, never the live focus verse — a boundary-frame
@@ -461,7 +563,10 @@
         // focus stays PINNED to the loop verse (no focusAt advance).
         const loop = get(loopTarget);
         if (loop && loopAnchor) {
-            const offsetSec = loopAnchor.startMs / 1000;
+            // The loop target's start/end are relative to the DISPLAY base — the
+            // waṣl group start when the anchor is a group member, else its own
+            // occasion start (matches UnifiedDisplay's `displayOffsetSec`).
+            const offsetSec = (loopAnchor.waslGroup ? loopAnchor.waslGroup.span[0] : loopAnchor.startMs) / 1000;
             const startAbs = (loop.startSec + offsetSec) * 1000;
             const endAbs = (loop.endSec + offsetSec) * 1000;
             if (ms >= endAbs) {
@@ -487,7 +592,7 @@
             occasions: chapterOccasions,
             ms,
             swapInFlight: chapterSwapInFlight(),
-            armed: getActiveTab() === TAB_NAMES.TIMESTAMPS && !get(loopTarget) && get(shuffleAyah),
+            armed: getActiveTab() === TAB_NAMES.TIMESTAMPS && !get(loopTarget) && get(shuffleAyah) && !get(reportModeActive),
             focusEndMs: fv ? fv.tsSegEnd * 1000 : null,
             guardMs: SHUFFLE_END_GUARD_MS,
             firedForCurrentFocus: shuffleFiredForIdx === focusIdx,
@@ -512,6 +617,7 @@
     // Dashboard playback (its own gapless advance owns dashPort.onEnded when active).
     function maybeFireShuffle(ms: number): boolean {
         if (getActiveTab() !== TAB_NAMES.TIMESTAMPS) return false;
+        if (get(reportModeActive)) return false; // verse is locked during a report session
         // Mid-swap the timeupdate clock is the NEW chapter's but loadedVerse is the
         // OLD one — measuring against it would fire against the wrong ayah. tick()
         // also freezes focus here, so this is belt-and-braces, not the sole guard.
@@ -657,22 +763,30 @@
                 loadQpc(), loadDk(), loadManifest(),
             ]);
             const ra = reciterAudioFromManifest(manifest, target.reciter);
-            const occ = ra
-                ? shardOccasions(shard).find((o) => o.ref === target.verseRef)
-                : undefined;
+            const occs = ra ? shardOccasions(shard) : [];
+            const idx = occs.findIndex((o) => o.ref === target.verseRef);
+            const occ = idx >= 0 ? occs[idx] : undefined;
             const data = ra && occ
                 ? assembleOccasion(target.reciter, occ, qpc, dk, ra, rawUrl)
                 : null;
-            if (data) {
+            if (data && ra) {
                 seekSec = data.time_start_ms / 1000;
-                // Warm the target verse's peaks (baked tier or ffmpeg/CDN
-                // fallback) + glosses so both render instantly on the jump.
+                // Warm the whole waṣl group span when the target is in one
+                // (by_surah) so the merged waveform + analysis land ready; else
+                // just the target verse. Baked tier or ffmpeg/CDN fallback.
+                let warmStartMs = Math.max(0, Math.round(data.time_start_ms));
+                let warmEndMs = Math.round(data.time_end_ms);
+                if (ra.audio_category === 'by_surah' && isInWaslGroup(occs, idx)) {
+                    const grp = waslGroupOf(occs, idx);
+                    warmStartMs = Math.max(0, Math.round(grp.startMs));
+                    warmEndMs = Math.round(grp.endMs);
+                }
                 void prewarmVersePeaks(
                     target.reciter,
                     target.chapter,
                     data.audio_url ?? rawUrl,
-                    Math.max(0, Math.round(data.time_start_ms)),
-                    Math.round(data.time_end_ms),
+                    warmStartMs,
+                    warmEndMs,
                 );
                 if (get(showTranslations) && data.words.length) {
                     void loadVerseTranslations(data.words, get(translationLanguage)).catch(() => {});
@@ -974,10 +1088,14 @@
         // by the once-per-verse guard.
         const offTimeUpdate = dashPort.onTimeUpdate((fileMs) => maybeFireShuffle(fileMs));
         const offEnded = dashPort.onEnded(() => maybeFireShuffle(Number.POSITIVE_INFINITY));
+        // Recompute the analysis highlight vars when the theme flips.
+        const onTheme = (): void => { curTheme = themeStore.current; };
+        window.addEventListener(THEME_CHANGE_EVENT, onTheme);
         _primedOnce = true;
         return () => {
             unsubTab(); unsubShuf(); unsubManualShuffle(); unsubLoop();
             offTimeUpdate(); offEnded();
+            window.removeEventListener(THEME_CHANGE_EVENT, onTheme);
         };
     });
 
@@ -993,10 +1111,8 @@
 
 <div
     id="timestamps-panel"
+    style={hlVarsText}
     style:--unified-display-max-height="{cfg?.unified_display_max_height ?? TS_UNIFIED_DISPLAY_MAX_HEIGHT_PX}px"
-    style:--anim-highlight-color={highlightColor}
-    style:--ts-letter-color={triad.letter}
-    style:--ts-phoneme-color={triad.phoneme}
     style:--anim-word-transition={wordTransition}
     style:--anim-char-transition={charTransition}
     style:--anim-word-spacing={cfg?.anim_word_spacing ?? ''}
@@ -1006,17 +1122,10 @@
     style:--analysis-letter-font-size={cfg?.analysis_letter_font_size ?? ''}
 >
     <main>
-        {#if $tsValidation || $tsFlaggedVerses.length}
+        {#if $tsValidation}
             <div class="ts-validation-row">
-                {#if $tsValidation}
-                    <TsValidationPanel
-                        doc={$tsValidation}
-                        activeVerse={$selectedVerse}
-                        onselect={jumpToFlaggedVerse}
-                    />
-                {/if}
-                <TsFlaggedAccordion
-                    flags={$tsFlaggedVerses}
+                <TsValidationPanel
+                    doc={$tsValidation}
                     activeVerse={$selectedVerse}
                     onselect={jumpToFlaggedVerse}
                 />
@@ -1024,7 +1133,11 @@
         {/if}
 
         <div class="waveform-words-row" class:ts-region-loading={$tsLoading}>
-            <TimestampsWaveform bind:this={waveformTabEl} />
+            {#if $reportModeActive}
+                <ReportControlStrip />
+            {:else}
+                <TimestampsWaveform bind:this={waveformTabEl} />
+            {/if}
             <UnifiedDisplay bind:this={unifiedEl} />
         </div>
     </main>

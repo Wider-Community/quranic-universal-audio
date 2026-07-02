@@ -174,6 +174,10 @@ SERVER_HOST = os.environ.get("INSPECTOR_HOST", "0.0.0.0")
 # Timestamps validation (routes/timestamps.py)
 TS_RANDOM_MAX_RETRIES = 10  # max attempts to find a non-empty verse in /ts/random
 TS_BOUNDARY_TOLERANCE_MS = 500  # default boundary tolerance when not in result metadata
+# A timing report flags a boundary (onset/offset) as off. When a re-stamp shifts
+# that flagged boundary by more than this, the open report is marked stale for
+# owner re-check (ts_reports staleness; services/ts_reports/ts_target_snapshot.py).
+TS_REPORT_BOUNDARY_STALE_MS = int(os.environ.get("TS_REPORT_BOUNDARY_STALE_MS", "100"))
 # Sort-order weight for missing-word issues: one missing word adds this many ms to diff_ms.
 # This is NOT a unit conversion — it is purely a sort-order heuristic.
 MISSING_WORD_DIFF_MS_WEIGHT = 1000
@@ -251,7 +255,9 @@ EMAIL_APP_BASE_URL = (
 # window. Not cross-event — the two never merge. The flush daemon sweeps the
 # buffer on this interval; opt out with INSPECTOR_EMAIL_DIGEST_FLUSH=0.
 EMAIL_DIGEST_WINDOW_MINUTES = int(os.getenv("INSPECTOR_EMAIL_DIGEST_WINDOW_MINUTES", "60"))
-EMAIL_DIGEST_FLUSH_INTERVAL_SECONDS = int(os.getenv("INSPECTOR_EMAIL_DIGEST_FLUSH_INTERVAL_S", "60"))
+EMAIL_DIGEST_FLUSH_INTERVAL_SECONDS = int(
+    os.getenv("INSPECTOR_EMAIL_DIGEST_FLUSH_INTERVAL_S", "60")
+)
 
 # Audio MIME types (shared between app.py and audio_proxy)
 AUDIO_MIME_TYPES = {

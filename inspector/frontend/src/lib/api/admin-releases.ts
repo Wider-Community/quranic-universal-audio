@@ -28,6 +28,7 @@ import type {
     AutomationResponse,
     AutomationStateRow,
     SuggestedAction,
+    TsGenerationDefaults,
 } from '../types/generated/schemas';
 
 export type ReleaseRow = AdminReleaseRow;
@@ -47,6 +48,7 @@ export type StaleSuggestion = SuggestedAction;
 export type AutomationConfigBody = AutomationConfig;
 export type AutomationPayload = AutomationResponse;
 export type AutomationState = AutomationStateRow;
+export type TsGenerationDefaultsBody = TsGenerationDefaults;
 
 async function _unwrap<T>(resp: Response): Promise<T> {
     if (resp.ok) return (await resp.json()) as T;
@@ -70,14 +72,22 @@ export async function fetchReleasePreview(signal?: AbortSignal): Promise<Release
     return _unwrap<ReleasePreviewResponse>(resp);
 }
 
+/** Clip-edge knobs applied to BOTH release channels (HF publish + GH cut). */
+export interface ReleaseSettings {
+    pad_start: number;
+    pad_end: number;
+    min_gap: number;
+}
+
 /** Launch ONE HF Job that publishes a batch of slugs. A single slug is just a
  *  batch of one. Returns the launched job id; throws the server error verbatim
- *  (e.g. the 409 "a cut_release is in flight" / "a job is already running"). */
-export async function publishHfBatch(slugs: string[]): Promise<LaunchResponse> {
+ *  (e.g. the 409 "a cut_release is in flight" / "a job is already running").
+ *  Optional ``settings`` overrides the server-side pad/gap defaults. */
+export async function publishHfBatch(slugs: string[], settings?: ReleaseSettings): Promise<LaunchResponse> {
     const resp = await fetch('/api/admin/publish-hf-batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slugs }),
+        body: JSON.stringify({ slugs, ...(settings ? { settings } : {}) }),
     });
     return _unwrap<LaunchResponse>(resp);
 }
@@ -142,4 +152,27 @@ export async function saveAutomation(config: AutomationConfigBody): Promise<Auto
         body: JSON.stringify(config),
     });
     return _unwrap<AutomationPayload>(resp);
+}
+
+/** Owner-only: the shared timestamps-generation default knobs — the single
+ *  source the manual launch form + the automations + the HF job read from.
+ *  Gated by ``release.manage_automation``. */
+export async function fetchTsGenerationDefaults(
+    signal?: AbortSignal,
+): Promise<TsGenerationDefaultsBody> {
+    const resp = await fetch('/api/admin/releases/ts-generation-defaults', { signal });
+    return _unwrap<TsGenerationDefaultsBody>(resp);
+}
+
+/** Owner-only: replace the shared timestamps-generation defaults. Returns the
+ *  fresh defaults blob so the caller re-renders from the server. */
+export async function saveTsGenerationDefaults(
+    defaults: TsGenerationDefaultsBody,
+): Promise<TsGenerationDefaultsBody> {
+    const resp = await fetch('/api/admin/releases/ts-generation-defaults', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(defaults),
+    });
+    return _unwrap<TsGenerationDefaultsBody>(resp);
 }

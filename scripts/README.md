@@ -35,6 +35,8 @@ no-op-or-error by design. Idempotent `backfill_*`/`purge_*`/`convert_*` stay in
 
 ### `devenv/`
 - `setup.sh` — first-time local setup: install FE (`npm ci`) + BE (`pip`) deps so tests/build/lint run (`frontend`/`backend` to scope). Idempotent.
+- `setup_worktree.py` — fast bootstrap for a linked git worktree: mirror `.env` + `node_modules` (root + `inspector/frontend`) from the main checkout instead of a full `npm ci`; falls back to `setup.sh frontend` if main has none. Used by the `wt` skill. Idempotent.
+- `launch.py` — run the app any mode (dev bucket / offline fixtures / live dev|prod Space), any worktree, conflict-free: free ports, per-worktree SQLite isolation, readiness wait, `list`/`down`/`doctor`, and a Dashboard+Timestamps smoke. The `/launch` skill wraps it; `launch_smoke.mjs` is its headless-chromium check.
 - `bootstrap_dev_env.py` — provision a contributor's personal bucket + Space
 - `seed_fixtures.py` — download the public fixtures → `.fixtures` (offline tier-0)
 - `make_fixtures_dataset.py` — maintainer: (re)build the PII-free public fixtures dataset
@@ -58,6 +60,7 @@ no-op-or-error by design. Idempotent `backfill_*`/`purge_*`/`convert_*` stay in
 ### `diagnostics/`
 - `bench_storage.py` — benchmark backend read/write hot paths
 - `check_eligibility_parity.py` — assert DB-backed eligibility == legacy git-tracked set
+- `ts_cell_drift.py` — scan a bucket's TS shards for the FE cell-snap precondition (stored phones ≠ phonemizer), classify each divergence (waqf / ibtidāʾ-waṣl / merger / domain), and flag structurally-broken re-stamps
 
 ### `migrations/`
 Frozen, completed one-shot schema moves — see [`migrations/README.md`](migrations/README.md).

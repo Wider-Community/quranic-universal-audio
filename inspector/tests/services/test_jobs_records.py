@@ -69,6 +69,7 @@ def test_launch_then_terminal_merges(store):
         "hf_publish", "reciter_x", "jid1", status="succeeded", version="v1", external_uri="e://ds"
     )
     rec2 = records.read("hf_publish", "reciter_x", "jid1")
+    assert rec2 is not None
     assert rec2.status == "succeeded"
     assert rec2.version == "v1"
     assert rec2.external_uri == "e://ds"
@@ -95,6 +96,7 @@ def test_read_injects_kind_and_normalizes_legacy_ts(store):
         {"job_id": "jidTS", "slug": "reciter_x", "type": "ts", "status": "timed-out"}
     ).encode()
     rec = records.read("timestamps", "reciter_x", "jidTS")
+    assert rec is not None
     assert rec.kind == "timestamps"
     assert rec.status == "failed"  # timed-out → failed
 

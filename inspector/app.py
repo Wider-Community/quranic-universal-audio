@@ -97,6 +97,7 @@ from services.errors import Codes, error_body
 # scripts/backfills/backfill_boundary_adj.py (the only remaining consumer).
 from services.secrets_guard import MissingSecret, get_session_secret
 from services.state.state import InvalidTransition, NotAuthorizedForTransition, UnknownReciter
+from services.storage.hf_bucket import StorageReadOnly
 from utils.json_response import orjson_response
 
 # ---------------------------------------------------------------------------
@@ -384,6 +385,13 @@ def _boot_substrate() -> None:
     from services import db as _db
     from services.db import sync as _sync
 
+    # Read-only escape hatch: INSPECTOR_DB_SYNC=0 disarms the per-commit bucket
+    # upload so a local process can read a bucket (e.g. prod) without any write
+    # ever syncing back. Boot still pulls the DB; nothing is ever pushed.
+    if os.environ.get("INSPECTOR_DB_SYNC") == "0":
+        _sync.set_sync_enabled(False)
+        logger.info("db substrate: bucket write-back DISABLED (read-only mode)")
+
     deployed = bool(os.environ.get("INSPECTOR_BUCKET_MOUNT"))
     try:
         _sync.pull()  # bucket DB → local path (fresh init if the bucket has none)
@@ -480,7 +488,7 @@ _boot_substrate()
 @app.errorhandler(HTTPException)
 def _handle_http_exception(e: HTTPException):
     """Return the canonical ``{error: <description>}`` envelope with the HTTP status."""
-    return jsonify({"error": e.description}), e.code
+    return jsonify({"error": e.description}), e.code or 500
 
 
 @app.errorhandler(UnknownReciter)
@@ -512,6 +520,18 @@ def _handle_not_authorized_transition(e: NotAuthorizedForTransition):
                 code=getattr(e, "code", None) or Codes.NOT_AUTHORIZED,
                 context=getattr(e, "context", None),
             )
+        ),
+        403,
+    )
+
+
+@app.errorhandler(StorageReadOnly)
+def _handle_read_only(e: StorageReadOnly):
+    """A write was attempted while INSPECTOR_READ_ONLY=1 (e.g. `launch --mode
+    prod`). Fail clean with 403 instead of a generic 500 so the FE can say so."""
+    return (
+        jsonify(
+            error_body("This instance is read-only; changes aren't saved.", code=Codes.READ_ONLY)
         ),
         403,
     )

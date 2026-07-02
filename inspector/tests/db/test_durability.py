@@ -42,7 +42,7 @@ def test_service_mutation_uploads_db_to_bucket(synced_bucket):
 
     # The DB blob + seq sidecar landed on the bucket.
     assert len(sync._read_direct(sync.DB_BUCKET_PATH)) > 0
-    meta = sync._serde.json_loads(sync._read_direct(sync.SEQ_BUCKET_PATH))
+    meta = sync._serde.json_loads(sync._read_direct(sync.SEQ_BUCKET_PATH).decode("utf-8"))
     assert meta["seq"] >= 1 and meta["nonce"] == sync._NONCE
     st = sync.status()
     assert st["last_bucket_upload_ts"] is not None

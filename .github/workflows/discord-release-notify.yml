@@ -1,0 +1,79 @@
+name: Discord release notify
+
+# Posts a Discord embed to the community webhook whenever a GitHub Release is
+# published. The webhook URL lives in the DISCORD_RELEASE_WEBHOOK repo secret.
+# Manually re-postable for any tag via the workflow_dispatch input.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to announce (e.g. v2.1.0)
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve release
+        id: rel
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          tag="${EVENT_TAG:-$INPUT_TAG}"
+          gh release view "$tag" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json tagName,name,body,url,author \
+            > release.json
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Build and send Discord message
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
+          REPO: ${{ github.repository }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re, urllib.request
+
+          rel = json.load(open("release.json"))
+          name = rel.get("name") or rel["tagName"]
+          tag = rel["tagName"]
+          url = rel["url"]
+          body = rel.get("body") or ""
+          repo = os.environ["REPO"]
+
+          # Pull the one-line "Adds X, refreshes Y over vZ." summary if present.
+          m = re.search(r"Adds [^\n\r]*", body)
+          summary = m.group(0).strip() if m else "A new dataset release is available."
+
+          description = f"{summary}\n\n[View release notes & downloads]({url})"
+
+          payload = {
+              "username": "QUA Releases",
+              "embeds": [{
+                  "title": f"\U0001F389 {name}",
+                  "url": url,
+                  "description": description,
+                  "color": 0x2ECC71,
+                  "footer": {"text": repo},
+              }],
+          }
+
+          req = urllib.request.Request(
+              os.environ["WEBHOOK"],
+              data=json.dumps(payload).encode(),
+              headers={
+                  "Content-Type": "application/json",
+                  "User-Agent": "qua-release-bot (github-actions, 1.0)",
+              },
+          )
+          with urllib.request.urlopen(req) as r:
+              print("Discord responded", r.status)
+          PY

@@ -53,17 +53,53 @@ export type SegValAnyItem =
   | SegValQalqalaItem
   | SegValBasmalaAminItem;
 export type AudioCategory = "by_surah" | "by_ayah";
+export type CellRole = "base" | "haraka" | "tanween" | "madd";
+export type CellStatus = "present" | "inserted" | "dropped" | "replaced" | "shortened";
+export type TajweedRule =
+  | "noon_ghunnah"
+  | "meem_ghunnah"
+  | "ikhfaa_noon"
+  | "ikhfaa_tanween"
+  | "ikhfaa_shafawi"
+  | "iqlab_noon"
+  | "iqlab_tanween"
+  | "idgham_ghunnah_noon"
+  | "idgham_ghunnah_tanween"
+  | "idgham_shafawi"
+  | "vowel_silent"
+  | "hamza_wasl_silent"
+  | "lam_shamsiyah"
+  | "idgham_bila_ghunnah_noon"
+  | "idgham_bila_ghunnah_tanween"
+  | "idgham_mutamathilayn"
+  | "idgham_mutaqaribayn"
+  | "idgham_mutajanisayn_kamil"
+  | "silent_iltiqaa_sakinayn"
+  | "tafkheem"
+  | "qalqala_sughra"
+  | "qalqala_kubra"
+  | "hamza_wasl_fatha"
+  | "hamza_wasl_kasra"
+  | "hamza_wasl_damma"
+  | "iltiqaa_sakinayn_tanween"
+  | "idgham_mutajanisayn_naqis"
+  | "madd_tabii"
+  | "madd_wajib_muttasil"
+  | "madd_jaiz_munfasil"
+  | "madd_lazim"
+  | "madd_arid_lissukun"
+  | "madd_leen";
 /**
  * One encoded word inside a segment — a flat positional tuple.
  *
- * Slots: ``[word_idx, start_ms, end_ms, letters, phones]``. Modelled as a
- * ``RootModel`` over a 5-tuple so the FE codegen emits a positional TS tuple
- * (mirrors ``TsShardWord`` in ``ts-client.ts``) rather than an object.
- *
- * @minItems 5
- * @maxItems 5
+ * Slots: ``[word_idx, start_ms, end_ms, letters, phones(, cells)]``. Modelled as
+ * a ``RootModel`` over a 5- **or** 6-tuple (the 6th ``cells`` slot is schema v5)
+ * so the FE codegen emits a positional TS tuple (mirrors ``TsShardWord`` in
+ * ``ts-client.ts``) rather than an object, and v3/v4 shards still validate.
  */
-export type TsShardWord = [unknown, unknown, unknown, unknown, unknown];
+export type TsShardWord =
+  | [unknown, unknown, unknown, unknown, unknown]
+  | [unknown, unknown, unknown, unknown, unknown, unknown];
 
 export interface AdminActiveClaim {
   slug: string;
@@ -108,6 +144,15 @@ export interface AdminClaimEvent {
 export interface AdminCutReleaseRequest {
   version?: string | null;
   expected_version_at_preview?: string | null;
+  settings?: ReleaseSettings | null;
+}
+/**
+ * Clip-edge padding for both release channels (all in milliseconds).
+ */
+export interface ReleaseSettings {
+  pad_start?: number;
+  pad_end?: number;
+  min_gap?: number;
 }
 /**
  * A discarded combo surfaced in the admin reciter view.
@@ -208,6 +253,7 @@ export interface AdminPublishBatchRequest {
    * @minItems 1
    */
   slugs: [string, ...string[]];
+  settings?: ReleaseSettings | null;
 }
 /**
  * A reciter's failure in the most recent batch publish. Surfaced on the
@@ -644,14 +690,16 @@ export interface AudioSurahsResponse {
  * gates mirror the reviewer's mark-ready submission: skip when they left a
  * written comment (``gate_by_comments``) or flagged any segment
  * (``gate_by_flags``). A checklist-bypass submission is always skipped.
+ *
+ * The TS tunables (beam/probe/model/…) come from the shared
+ * ``ts_generation_defaults``; ``extra="allow"`` tolerates older saved blobs that
+ * still carry the retired per-automation ``beam`` / ``aligner_model`` keys.
  */
 export interface AutoGenTsConfig {
   enabled?: boolean;
   gate_by_comments?: boolean;
   gate_by_flags?: boolean;
-  beam?: number;
-  probe_beams?: number;
-  aligner_model?: string | null;
+  [k: string]: unknown;
 }
 /**
  * The owner's full automation configuration (one persisted blob).
@@ -660,6 +708,7 @@ export interface AutoGenTsConfig {
  * being dropped when an older server re-serializes the blob (forward-compat).
  */
 export interface AutomationConfig {
+  ts_generation_defaults?: TsGenerationDefaults;
   auto_gen_ts?: AutoGenTsConfig;
   gh_cut?: GhCutConfig;
   hf_publish?: HfPublishConfig;
@@ -667,6 +716,31 @@ export interface AutomationConfig {
   stale_metadata?: StaleMetadataConfig;
   auto_release_inactive?: AutoReleaseInactiveConfig;
   [k: string]: unknown;
+}
+/**
+ * Owner-wide default knobs for every timestamps-generation surface.
+ *
+ * The single shared source the Releases-tab "Timestamps generation" accordion
+ * edits. It is the sole source of the TS tunables for every TS launch — the
+ * manual form (``routes/admin/reviews.py::_parse_ts_settings``), the auto-gen /
+ * stale-regen automations (``services/admin/automation/evaluators.py``) and,
+ * through them, the HF job (``qua_jobs/generate_timestamps.py``). Every TS
+ * tunable comes from here; the only per-launch input is the manual form's
+ * ``chapters`` scope. A field unset here cedes to the job's ``DEFAULT_*``.
+ *
+ * ``beam`` + ``probe_beams`` resolve to the ``[beam, probe]`` list passed to the
+ * aligner. ``padding`` / ``method`` are the pipeline tunables (``None`` → the
+ * job's ``DEFAULT_PADDING`` / ``DEFAULT_METHOD``).
+ */
+export interface TsGenerationDefaults {
+  beam?: number;
+  probe_beams?: number;
+  aligner_model?: string | null;
+  workers?: number | null;
+  batch_size?: number | null;
+  download_workers?: number | null;
+  padding?: string | null;
+  method?: string | null;
 }
 /**
  * Cut a global GH release on a fixed cadence (owner timezone).
@@ -703,13 +777,16 @@ export interface HfPublishConfig {
  * only when the latest timestamp-affecting edit is older than the guard, so
  * consecutive edits coalesce into one regen. ``scope`` picks full-reciter vs
  * just the affected chapters.
+ *
+ * The TS tunables (beam/probe/…) come from the shared
+ * ``ts_generation_defaults``; ``extra="allow"`` tolerates older saved blobs that
+ * still carry the retired per-automation ``beam`` / ``probe_beams`` keys.
  */
 export interface StaleTsRegenConfig {
   enabled?: boolean;
   guard_minutes?: number;
   scope?: "full" | "affected";
-  beam?: number;
-  probe_beams?: number;
+  [k: string]: unknown;
 }
 /**
  * Refresh the HF catalog once a catalog-metadata edit has settled.
@@ -1230,6 +1307,8 @@ export interface TsJobSettings {
   timeout?: string | null;
   batch_size?: number | null;
   download_workers?: number | null;
+  padding?: string | null;
+  method?: string | null;
 }
 /**
  * Payload for ``GET /api/admin/jobs`` — the unified list + a running tally.
@@ -1885,39 +1964,6 @@ export interface TsConfigResponse {
   analysis_letter_font_size: string;
 }
 /**
- * Comment author identity — only disclosed to identity-capable callers.
- */
-export interface TsFlagAuthor {
-  hf_user_id?: string | null;
-  login?: string | null;
-  role?: string | null;
-}
-/**
- * One user's comment on a flagged verse (modal list item / POST echo).
- */
-export interface TsFlagComment {
-  comment?: string | null;
-  created_at: string;
-  updated_at: string;
-  mine?: boolean;
-  author?: TsFlagAuthor | null;
-}
-/**
- * Create/update the caller's flag on a verse (``POST .../flags``).
- */
-export interface TsFlagCreateRequest {
-  verse_key: string;
-  comment?: string | null;
-  anon_token?: string | null;
-}
-/**
- * A flagged verse + how many comments it carries (accordion pill).
- */
-export interface TsFlagVerseCount {
-  verse_key: string;
-  count: number;
-}
-/**
  * One job run's durable record (settings + status + logs).
  *
  * ``status`` mirrors HF's lowercased stage (``running`` / ``succeeded`` /
@@ -1982,10 +2028,169 @@ export interface TsManifestReciter {
   vbr_chapters?: number[];
 }
 /**
- * Every flagged verse for a reciter (``GET .../flags``).
+ * Every reported verse for a reciter (``GET .../reports``).
  */
-export interface TsReciterFlags {
-  flags?: TsFlagVerseCount[];
+export interface TsReciterReports {
+  reports?: TsReportVerseCount[];
+}
+/**
+ * A reported verse + its open / resolved counts (accordion pill).
+ */
+export interface TsReportVerseCount {
+  verse_key: string;
+  open_count: number;
+  resolved_count: number;
+}
+/**
+ * One report (verse list item / POST echo).
+ */
+export interface TsReport {
+  id: number;
+  verse_key: string;
+  category: "audio" | "timing" | "tajweed" | "phonemes" | "silence" | "other";
+  subtype?: ("wrong_rule" | "missing_rule" | "pause_boundary" | "pause_wasl" | "pause_missed") | null;
+  onset?: ("early" | "late") | null;
+  offset?: ("early" | "late") | null;
+  target: TsReportTarget;
+  snapshot?: TsReportSnapshot | null;
+  comment?: string | null;
+  selected_rule_tags?: string[];
+  status: "open" | "resolved";
+  stale?: boolean;
+  resolver_comment?: string | null;
+  resolved_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  mine?: boolean;
+  author?: TsReportAuthor | null;
+}
+/**
+ * What a report points at within a verse.
+ *
+ * Indices are word-scoped (``word_index`` 0-based in the verse;
+ * ``source_letter_index`` the anchoring letter; ``cell_index`` into the word's
+ * ``cells[]``; ``phoneme_flat_index`` a word-local indexable-phone index;
+ * ``share_group`` a co-timed cell-group id). A ``gap`` target (silence reports)
+ * addresses the word-boundary between ``word_index`` and ``word_index + 1`` and
+ * needs only ``word_index``. Required fields per ``kind`` are enforced below — a
+ * ``verse`` target leaves them all unset.
+ */
+export interface TsReportTarget {
+  kind: "verse" | "word" | "cell" | "phoneme" | "cell_group" | "gap";
+  word_index?: number | null;
+  source_letter_index?: number | null;
+  cell_index?: number | null;
+  phoneme_flat_index?: number | null;
+  share_group?: number | null;
+}
+/**
+ * Denormalized snapshot of the targeted shard content at create time.
+ *
+ * Informational + the drift fingerprint used to detect staleness on a
+ * re-stamp. ``rule_tags`` collapses the cell ``tag`` + ``secondary_tags``;
+ * ``phoneme_rule_tags`` parallels the cell's phoneme indices; ``phones`` is the
+ * mapped phone list.
+ */
+export interface TsReportSnapshot {
+  chars?: string | null;
+  role?: string | null;
+  status?: string | null;
+  rule_tags?: string[];
+  phoneme_rule_tags?: (string | null)[];
+  phones?: string[];
+  share_group?: number | null;
+  word_text?: string | null;
+  verse_text?: string | null;
+  schema_version?: number | null;
+}
+/**
+ * Report author identity — only disclosed to identity-capable callers.
+ */
+export interface TsReportAuthor {
+  hf_user_id?: string | null;
+  login?: string | null;
+  role?: string | null;
+}
+/**
+ * Submit many staged annotations on ONE verse in a single transaction
+ * (``POST .../reports/batch``). Items may mix categories (timing + tajweed).
+ */
+export interface TsReportBatchCreateRequest {
+  verse_key: string;
+  /**
+   * @minItems 1
+   * @maxItems 200
+   */
+  items: [TsReportBatchItem, ...TsReportBatchItem[]];
+  anon_token?: string | null;
+}
+/**
+ * One staged cell-annotation in a batch submit. Verse + identity are
+ * batch-level, so an item carries only its own category/subtype/target/comment
+ * (+ ``selected_rule_tags`` for tajweed wrong_rule). Same per-category rules as
+ * a single create (shared ``_validate_report_item``).
+ */
+export interface TsReportBatchItem {
+  category: "audio" | "timing" | "tajweed" | "phonemes" | "silence" | "other";
+  subtype?: ("wrong_rule" | "missing_rule" | "pause_boundary" | "pause_wasl" | "pause_missed") | null;
+  onset?: ("early" | "late") | null;
+  offset?: ("early" | "late") | null;
+  target: TsReportTarget;
+  comment?: string | null;
+  selected_rule_tags?: string[];
+}
+/**
+ * Echo of a batch submit: the created/updated reports in input order, plus
+ * insert vs upsert counts.
+ */
+export interface TsReportBatchResult {
+  verse_key: string;
+  reports?: TsReport[];
+  created_count: number;
+  updated_count: number;
+}
+/**
+ * Create the caller's report on a verse (``POST .../reports``).
+ */
+export interface TsReportCreateRequest {
+  verse_key: string;
+  category: "audio" | "timing" | "tajweed" | "phonemes" | "silence" | "other";
+  subtype?: ("wrong_rule" | "missing_rule" | "pause_boundary" | "pause_wasl" | "pause_missed") | null;
+  onset?: ("early" | "late") | null;
+  offset?: ("early" | "late") | null;
+  target: TsReportTarget;
+  comment?: string | null;
+  selected_rule_tags?: string[];
+  anon_token?: string | null;
+}
+/**
+ * Resolve a report (``POST .../reports/<id>/resolve``, or a timing
+ * word-group via ``.../word/<word_index>/<category>/resolve``). Owner-gated.
+ */
+export interface TsReportResolveRequest {
+  comment?: string | null;
+}
+/**
+ * Named (object) view of a positional ``CellTiming`` row.
+ *
+ * The shard stores cells positionally (``CellTiming``) and they are read via
+ * ``ts_shard_cells.parse_cell`` — this model is the codegen vehicle that emits
+ * ``CellRole`` / ``CellStatus`` / ``TajweedRule`` as TS string unions for the FE
+ * (json2ts drops enums referenced only inside a positional tuple), and documents
+ * the row's fields by name. It is never validated against real shard data (the
+ * positional ``CellTiming`` is), so typing the rule slots as ``TajweedRule`` is a
+ * codegen convenience that does not constrain the byte-pass-through read.
+ */
+export interface TsShardCell {
+  chars: string;
+  role: CellRole;
+  status: CellStatus;
+  phoneme_indices: number[];
+  source_letter_index: number;
+  tag?: TajweedRule | null;
+  share_group?: number | null;
+  phoneme_rule_tags?: (TajweedRule | null)[] | null;
+  secondary_tags?: TajweedRule[] | null;
 }
 /**
  * The decompressed body of one chapter shard: ``_meta`` + ``segments[]``.
@@ -2021,6 +2226,11 @@ export interface TsShardMeta {
  * ``[start_ms, end_ms]`` span. A verse may recur across several entries
  * (loopbacks / re-dos) — every accepted occurrence is one entry, emitted in
  * recitation order.
+ *
+ * ``wasl`` (v10, optional) marks an occurrence that continued into the *next*
+ * occurrence without a stop: its junction word carries waṣl (not waqf)
+ * phonemes, and the FE walks consecutive flagged occurrences to reconstruct a
+ * waṣl group. Absent (= False) on a stop/waqf occurrence.
  */
 export interface TsShardSegment {
   ref: string;
@@ -2030,6 +2240,7 @@ export interface TsShardSegment {
    */
   t: [unknown, unknown];
   words?: TsShardWord[];
+  wasl?: boolean;
 }
 /**
  * The ``ts_validation.json`` document — meta + verse-keyed flags.
@@ -2062,9 +2273,9 @@ export interface TsValidationVerse {
   [k: string]: unknown;
 }
 /**
- * All comments on a single verse (``GET .../flags/<verse_key>``).
+ * All reports on a single verse (``GET .../reports/<verse_key>``).
  */
-export interface TsVerseFlags {
+export interface TsVerseReports {
   verse_key: string;
-  comments?: TsFlagComment[];
+  reports?: TsReport[];
 }

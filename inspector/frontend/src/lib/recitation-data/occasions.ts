@@ -24,6 +24,11 @@ export interface ChapterOccasion {
     segments: SegmentEntry[];
     /** Chapter-absolute start (ms) of the occasion's first segment. */
     firstStartMs: number;
+    /** Next occasion's ref ("surah:ayah") when THIS occasion's last segment
+     *  continues into it without a stop (cross-verse waṣl); `null` otherwise.
+     *  A cross-verse waṣl is, by construction, an occasion's last segment
+     *  bridging into the next occasion (occasions split on ref change). */
+    bridgesOutTo: string | null;
 }
 
 /**
@@ -31,6 +36,10 @@ export interface ChapterOccasion {
  * by start; a new occasion begins whenever the verse ref differs from the
  * previous segment — so consecutive same-ref segments group together and a
  * foreign verse between two takes of one verse splits them.
+ *
+ * A cheap post-pass annotates the cross-verse waṣl structure: `bridgesOutTo` is
+ * back-stamped when a finished occasion's last segment carries `wasl` (it
+ * continues into the next, different-ref occasion).
  */
 export function chapterOccasions(segments: SegmentEntry[]): ChapterOccasion[] {
     const ordered = [...segments].filter((s) => s.ref).sort((a, b) => a.t[0] - b.t[0]);
@@ -40,9 +49,13 @@ export function chapterOccasions(segments: SegmentEntry[]): ChapterOccasion[] {
         if (cur && cur.ref === seg.ref) {
             cur.segments.push(seg);
         } else {
-            cur = { ref: seg.ref, segments: [seg], firstStartMs: seg.t[0] };
+            // A finished occasion bridges out iff its last segment carries `wasl`
+            // (it continues into this new, different-ref occasion).
+            if (cur && cur.segments[cur.segments.length - 1]?.wasl) cur.bridgesOutTo = seg.ref;
+            cur = { ref: seg.ref, segments: [seg], firstStartMs: seg.t[0], bridgesOutTo: null };
             occasions.push(cur);
         }
     }
+    // The final occasion has no following occasion → never bridges out (left null).
     return occasions;
 }

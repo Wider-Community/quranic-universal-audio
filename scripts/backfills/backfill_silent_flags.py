@@ -3,7 +3,7 @@
 Stamps the schema-v4 silent data onto every segment-array shard already on the
 bucket — a 4th ``silent`` bool on each letter and the silence combining mark
 (``۟`` / ``۠``) folded onto its char — using the same
-``qua_shared.timestamps_bridges._stamp_silent_flags`` the live pipeline runs.
+``qua_sdk.components.timing.lib.cells._stamp_silent_flags`` the live pipeline runs.
 **Letters only**: phones / cross-word bridge tags are left untouched, so this is a
 minimal, additive change to shards that were already bridge-tagged. No MFA / audio
 — each gap-bounded run is re-phonemized to derive its silent flags (any timing gap
@@ -43,8 +43,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "bucket"))
 import _bootstrap as bs  # noqa: E402
+from qua_sdk.components.timing.lib.cells import _stamp_silent_flags  # noqa: E402
 
-from qua_shared.timestamps_bridges import _stamp_silent_flags  # noqa: E402
 from qua_shared.timestamps_shards import (  # noqa: E402
     SEGMENT_SCHEMA_VERSION,
     gzip_shard,
@@ -100,17 +100,18 @@ def _unstamp_words(words) -> None:
             del lt[3:]
 
 
-def _stamp_shard(pm, data: dict, *, restamp: bool = False) -> Counter:
+def _stamp_shard(data: dict, *, restamp: bool = False) -> Counter:
     """Stamp every segment's letters in place. Returns a coverage Counter.
 
     ``restamp`` first resets already-stamped letters to bare so the silent flags
     are re-derived (use after a silent-logic change); otherwise stamping no-ops on
-    a folded shard."""
+    a folded shard. The SDK annotator owns the phonemizer (reached via the SDK
+    domain layer), so no handle is passed."""
     cov = Counter()
     for seg in data.get("segments", []):
         if restamp:
             _unstamp_words(seg["words"])
-        _stamp_silent_flags(pm, seg["ref"], seg["words"])
+        _stamp_silent_flags(seg["ref"], seg["words"])
     for seg in data.get("segments", []):
         for word in seg["words"]:
             for lt in word[3]:
@@ -127,11 +128,11 @@ def _stamp_shard(pm, data: dict, *, restamp: bool = False) -> Counter:
 
 
 def process_reciter(
-    fs, pm, bucket: str, slug: str, *, write: bool, backup_dir: str | None, restamp: bool = False
-) -> tuple[Counter, str]:
+    fs, bucket: str, slug: str, *, write: bool, backup_dir: str | None, restamp: bool = False
+) -> tuple[Counter, str, list[int]]:
     shards = _shard_paths(fs, bucket, slug)
     if not shards:
-        return Counter(), ""
+        return Counter(), "", []
     cov = Counter()
     adds: list[tuple[str, str]] = []
     tmpdir = tempfile.mkdtemp(prefix="silentbf_") if write else None
@@ -142,36 +143,39 @@ def process_reciter(
             dst.parent.mkdir(parents=True, exist_ok=True)
             dst.write_bytes(raw)
         data = json.loads(gzip.decompress(raw))
-        cov += _stamp_shard(pm, data, restamp=restamp)
+        cov += _stamp_shard(data, restamp=restamp)
         cov["shards"] += 1
         if write:
             data.setdefault("_meta", {})["schema_version"] = SEGMENT_SCHEMA_VERSION
             local = os.path.join(tmpdir, f"{ch}.json.gz")
             Path(local).write_bytes(gzip_shard(data))
             adds.append((local, f"reciters/{slug}/timestamps/{ch}.json.gz"))
+    written_chapters: list[int] = []
     if write and adds:
         from huggingface_hub import batch_bucket_files
 
         _rl(batch_bucket_files, bucket, add=adds)  # batched parallel Xet upload
+        written_chapters = sorted(ch for ch, _ in shards)
     line = (
         f"{slug:44} shards={cov['shards']:3} letters={cov['letters']:6} "
         f"stamped={cov['stamped']:6} silent={cov['silent']:6} marked={cov['marked']:5} "
         f"NO-SLOT={cov['noslot']:4}" + ("  [WROTE]" if write else "")
     )
-    return cov, line
+    return cov, line, written_chapters
 
 
-def _mp_worker(task: tuple) -> tuple[dict, str]:
-    """ProcessPool entrypoint — builds its own fs + phonemizer per process."""
+def _mp_worker(task: tuple) -> tuple[dict, str, str, list[int]]:
+    """ProcessPool entrypoint — builds its own fs per process. The SDK annotator
+    owns the phonemizer (reached via the SDK domain layer). Returns the slug too
+    so the parent can fire the ts-refreshed callback after the pool drains."""
     slug, bucket, write, backup_dir, restamp = task
     from huggingface_hub import HfFileSystem
-    from quranic_phonemizer import Phonemizer
 
     fs = HfFileSystem(token=os.environ.get("HF_TOKEN"))
-    cov, line = process_reciter(
-        fs, Phonemizer(), bucket, slug, write=write, backup_dir=backup_dir, restamp=restamp
+    cov, line, written = process_reciter(
+        fs, bucket, slug, write=write, backup_dir=backup_dir, restamp=restamp
     )
-    return dict(cov), line
+    return dict(cov), line, slug, written
 
 
 def main() -> int:
@@ -190,6 +194,7 @@ def main() -> int:
         help="reset already-stamped letters to bare and re-derive (after a silent-logic change)",
     )
     bs.add_bucket_args(ap)
+    bs.add_notify_args(ap)
     args = ap.parse_args()
     if args.write:
         bs.confirm_mutation(args, "backfill silent flags")
@@ -207,24 +212,27 @@ def main() -> int:
 
         tasks = [(s, bucket, args.write, args.backup_dir, args.restamp) for s in slugs]
         with ProcessPoolExecutor(max_workers=args.workers) as ex:
-            for cov, line in ex.map(_mp_worker, tasks):
+            for cov, line, slug, written in ex.map(_mp_worker, tasks):
                 if line:
                     log(line)
                 grand += Counter(cov)
+                # Record the bucket-direct write so staleness re-evaluates. Best-effort.
+                if args.write and written:
+                    bs.notify_ts_refreshed(
+                        args, slug, chapters=written, reason="backfill_silent_flags"
+                    )
     else:
-        from quranic_phonemizer import Phonemizer
-
-        pm = Phonemizer()
         for slug in slugs:
-            cov, line = process_reciter(
+            cov, line, written = process_reciter(
                 fs,
-                pm,
                 bucket,
                 slug,
                 write=args.write,
                 backup_dir=args.backup_dir,
                 restamp=args.restamp,
             )
+            if args.write and written:
+                bs.notify_ts_refreshed(args, slug, chapters=written, reason="backfill_silent_flags")
             if line:
                 log(line)
             grand += cov

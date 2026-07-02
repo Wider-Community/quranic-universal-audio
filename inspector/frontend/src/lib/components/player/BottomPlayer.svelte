@@ -41,7 +41,10 @@
         recitationAyahAt,
         recitationAyahs,
         recitationAyahStarts,
+        recitationConfigStore,
     } from '../../recitation-animation/recitation-settings';
+    import { accentVarText } from '../../utils/accent-override';
+    import { theme$ } from '../../stores/theme.svelte';
     import { loadVbrChapters } from '../../recitation-data/ts-source';
     import {
         loadPersistedSlice,
@@ -59,6 +62,7 @@
     import { TAB_NAMES } from '../../utils/constants';
     import { DASHBOARD_SPEEDS } from '../../utils/speed-control';
     import { getSurahInfo, surahInfoReady } from '../../utils/surah-info';
+    import HighlightColorPicker from './HighlightColorPicker.svelte';
     import PlayerControls from './PlayerControls.svelte';
     import PlayerMetaChip from './PlayerMetaChip.svelte';
     import PlayerProgress from './PlayerProgress.svelte';
@@ -599,7 +603,11 @@
     $: downloadLabel = tr(lang, m.common_player_download_label());
 </script>
 
-<div class="player" class:has-reciter={$playerContext.reciter !== null}>
+<div
+    class="player"
+    class:has-reciter={$playerContext.reciter !== null}
+    style={accentVarText($recitationConfigStore.highlightColor, $theme$)}
+>
     <PlayerProgress
         positionMs={$playerContext.positionMs}
         durationMs={$playerContext.durationMs}
@@ -686,34 +694,44 @@
                     title={speedTitle}
                 >{$playerContext.speed}×</button>
 
+                <!-- Highlight accent picker (the droplet), right of speed. -->
+                <HighlightColorPicker />
+
                 <!-- Tab-specific cluster (Timestamps: analysis row). -->
                 <slot name="center-trail"></slot>
             </div>
 
-            <button
-                type="button"
-                class="download-btn"
-                on:click={downloadSurah}
-                disabled={!canDownload}
-                aria-label={downloadLabel}
-                title={downloadLabel}
-            >
-                <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    aria-hidden="true"
+            <!-- Far-right cluster: a tab-specific lead affordance (Timestamps
+                 fills it with the "open in Segments" redirect) sits directly
+                 left of the always-present download button. -->
+            <div class="right-edge">
+                <slot name="download-lead" />
+
+                <button
+                    type="button"
+                    class="download-btn"
+                    on:click={downloadSurah}
+                    disabled={!canDownload}
+                    aria-label={downloadLabel}
+                    title={downloadLabel}
                 >
-                    <path d="M12 3v12" />
-                    <path d="m7 10 5 5 5-5" />
-                    <path d="M5 21h14" />
-                </svg>
-            </button>
+                    <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                    >
+                        <path d="M12 3v12" />
+                        <path d="m7 10 5 5 5-5" />
+                        <path d="M5 21h14" />
+                    </svg>
+                </button>
+            </div>
         </div>
     </div>
 
@@ -758,6 +776,14 @@
         align-items: center;
         gap: var(--s-4);
         min-width: 0;
+    }
+    /* Download + its optional tab-specific lead, kept together at the outer
+       edge while `right-inner` stays pinned to the transport via space-between. */
+    .right-edge {
+        display: flex;
+        align-items: center;
+        gap: var(--s-2);
+        flex: 0 0 auto;
     }
     .controls {
         display: flex;
@@ -809,6 +835,7 @@
         z-index: 50;
     }
     .speed-btn {
+        box-sizing: border-box;
         padding: 4px var(--s-2);
         font-family: var(--font-mono);
         font-size: 11px;
@@ -818,7 +845,9 @@
         border-radius: var(--r-2);
         cursor: pointer;
         transition: border-color var(--t-fast), color var(--t-fast);
-        min-width: 36px;
+        /* Static width sized to the widest label ("1.25×" = 5 mono chars) so
+           cycling speeds never reflows the analysis cluster beside it. */
+        min-width: calc(5ch + var(--s-2) * 2 + 2px);
         text-align: center;
     }
     .speed-btn:hover {

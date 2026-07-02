@@ -70,8 +70,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      # pull-requests: write lets reviewdog post ruff --fix review suggestions.
-      pull-requests: write
     defaults:
       run:
         working-directory: inspector
@@ -101,49 +99,9 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/inspector
         run: python -m pytest qua_shared/tests --cov=qua_shared --cov-report=term-missing:skip-covered --no-cov-on-fail
 
-      - name: Install ruff
-        # Pinned so CI matches the version landed alongside the ruleset.
-        working-directory: ${{ github.workspace }}
-        run: python -m pip install ruff==0.15.12
-
-      - name: Autofix ruff (lint + format)
-        # Apply ruff's auto-fixes in-place so the diff can be surfaced as PR
-        # suggestions below. We NEVER commit/push back to the branch — on
-        # pull_request events the diff becomes reviewdog review suggestions;
-        # on branch pushes it is simply discarded (mirrors the frontend job).
-        working-directory: ${{ github.workspace }}
-        run: |
-          ruff check --fix inspector qua_shared qua_jobs scripts || true
-          ruff format inspector qua_shared qua_jobs scripts || true
-
-      - name: Suggest ruff --fix changes (PR only)
-        if: github.event_name == 'pull_request'
-        # Advisory only — surfaces ruff autofixes as one-click PR suggestions. A
-        # reviewdog infra hiccup must never gate the build; the non-blocking
-        # checks below still annotate anything not auto-fixable.
-        continue-on-error: true
-        uses: reviewdog/action-suggester@v1
-        with:
-          tool_name: ruff
-          filter_mode: diff_context
-
-      - name: Discard autofix diff before checks
-        # The checks below run against the committed sources, so the annotations
-        # reflect the real tree (not the locally-fixed one).
-        working-directory: ${{ github.workspace }}
-        run: git checkout -- inspector qua_shared qua_jobs scripts || true
-
-      - name: Ruff lint (non-blocking)
-        # Advisory — surfaces lint findings as GitHub annotations but never gates
-        # the build. The real gates in this job are the test steps above.
-        continue-on-error: true
-        working-directory: ${{ github.workspace }}
-        run: ruff check --output-format=github inspector qua_shared qua_jobs scripts
-
-      - name: Ruff format check (non-blocking)
-        continue-on-error: true
-        working-directory: ${{ github.workspace }}
-        run: ruff format --check inspector qua_shared qua_jobs scripts
+      # Ruff (lint + format) is enforced locally by the pre-commit + pre-push
+      # git hooks (see .husky/ + scripts/devenv/setup.sh), not in CI — it never
+      # gated the build here and the reviewdog PR suggestions were noise.
 
   schema-codegen-check:
     # Verifies inspector/frontend/src/lib/types/generated/schemas.ts is in
@@ -189,11 +147,11 @@ jobs:
           fi
 
   type-check:
-    # Blocking pyright gate for the Pydantic typed core (qua_shared/schemas/).
-    # Run via `npx pyright` — no Python type-checker dep added, node 24 is
-    # available. To widen coverage follow the runbook in pyrightconfig.json:
-    # add one package to `include` at a time, never widen to the whole repo
-    # in one step.
+    # Blocking pyright gate for the whole backend (inspector, qua_jobs,
+    # qua_shared). Runtime + dev deps are installed first so pyright resolves
+    # real third-party types — without them, imports collapse to Unknown and the
+    # gate both misses real errors and reports spurious None-union ones. Pyright
+    # itself is run via `npx`, so no type-checker dep is added to the image.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -201,17 +159,24 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: pip
+          cache-dependency-path: |
+            inspector/requirements.txt
+            inspector/requirements-dev.txt
 
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
 
-      - name: Pyright (basic, qua_shared/schemas only)
+      - name: Install backend deps (for type resolution)
+        run: pip install -r inspector/requirements.txt -r inspector/requirements-dev.txt
+
+      - name: Pyright (basic, whole backend)
         run: >-
           npx -y pyright
           --pythonversion 3.11
           --level error
-          qua_shared/schemas
+          inspector qua_jobs qua_shared
 
   scripts-layout-guard:
     # Stops the old scattered-scripts layout from creeping back. Imported-at-runtime

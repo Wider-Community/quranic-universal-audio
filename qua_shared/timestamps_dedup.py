@@ -178,6 +178,16 @@ def _canonical_verse(words: list, segs: list[dict]) -> dict:
     past its segment's ``t`` bound, so the clip must reach the furthest word/letter
     end or it would truncate the final word's tail (and verse_end < a word's end
     violates the "all times within [verse_start, verse_end]" invariant).
+
+    Also carries ``segments``: the kept segments as half-open occurrence ranges
+    into the flat ``words`` list (``words == concat(seg["words"] for seg in
+    segs)``), so a downstream consumer recovers the exact word OCCURRENCE that
+    belongs to each segment. This is the only faithful source for a segment's
+    boundary when its first/last word index is repeated elsewhere in the verse
+    (a look-back) — an index-keyed lookup would collapse to the wrong occurrence
+    and overlap adjacent segments. Each entry is ``{ref, w_from, w_to, occ_start,
+    occ_end, start_ms, end_ms}`` (ms are source-relative; word-less no-match
+    segments are omitted, they contribute nothing to ``words``).
     """
     starts = [int(s["t"][0]) for s in segs]
     ends = [int(s["t"][1]) for s in segs]
@@ -189,10 +199,29 @@ def _canonical_verse(words: list, segs: list[dict]) -> dict:
                 starts.append(int(lt[1]))
             if lt[2] is not None:
                 ends.append(int(lt[2]))
+    seg_spans: list[dict] = []
+    cursor = 0
+    for s in segs:
+        sw = s.get("words") or []
+        n = len(sw)
+        if n:
+            seg_spans.append(
+                {
+                    "ref": s.get("ref"),
+                    "w_from": int(sw[0][0]),
+                    "w_to": int(sw[-1][0]),
+                    "occ_start": cursor,
+                    "occ_end": cursor + n,
+                    "start_ms": int(sw[0][1]),
+                    "end_ms": int(sw[-1][2]),
+                }
+            )
+        cursor += n
     return {
         "words": words,
         "verse_start_ms": min(starts),
         "verse_end_ms": max(ends),
+        "segments": seg_spans,
     }
 
 

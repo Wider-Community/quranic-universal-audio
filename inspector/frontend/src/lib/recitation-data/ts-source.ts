@@ -29,11 +29,19 @@ import type {
     Letter,
     PhonemeInterval,
     SegmentEntry,
+    TsCell,
     TsShardResponse,
     TsVbrResponse,
     TsVerseData,
     TsWord,
 } from '../types/ts-client';
+import { parseShardCell } from '../types/ts-client';
+
+// Render-only phone markers — NOT letter-derived, so excluded from the indexable
+// phone sequence the cell `phoneme_indices` count against. Mirrors the
+// phonemizer's `is_render_only` (the qalqala echo `Q`); the phonemizer test pins
+// the value, keep the two in lockstep.
+const RENDER_ONLY_PHONES = new Set(['Q']);
 
 import { type ChapterOccasion, chapterOccasions } from './occasions';
 
@@ -436,9 +444,10 @@ export function shardOccasions(shard: TsShardResponse): ChapterOccasion[] {
 
 /**
  * Build the `TsVerseData` for one OCCASION — a contiguous recitation of a verse
- * (`occasions.ts`). Every recited word across the occasion's segments is kept, in
- * audio order: no dedup, so leading/trailing repeats and mid-verse lookbacks all
- * render and stay seekable. Words carry QPC / DK text; `by_surah_audio` words are
+ * (`occasions.ts`). Thin wrapper over {@link assembleMembers} with a single
+ * member. Every recited word across the occasion's segments is kept, in audio
+ * order: no dedup, so leading/trailing repeats and mid-verse lookbacks all render
+ * and stay seekable. Words carry QPC / DK text; `by_surah_audio` words are
  * 0-anchored by subtracting the occasion's start so the audio element starts at
  * zero. The clip span (`[time_start_ms, time_end_ms]`) covers every segment /
  * word / letter time — the segmenter's natural lead-in + trailing silence
@@ -459,28 +468,166 @@ export function assembleOccasion(
     reciterAudio: TsReciterAudio,
     chapterAudioUrl: string,
 ): TsVerseData {
-    const verseRef = occasion.ref;
+    return assembleMembers(reciter, [occasion], occasion.ref, qpc, dk, reciterAudio, chapterAudioUrl);
+}
+
+/**
+ * Build one `TsVerseData` for a cross-verse waṣl GROUP — a chain of occasions
+ * recited into each other without a stop (`wasl.ts::waslGroupOf`). Display-only
+ * context merge: every member verse's words/cells are concatenated in recitation
+ * order so the analysis view shows the whole continuous span and junction tajweed
+ * renders across each boundary; each word keeps its true `surah:ayah:word`
+ * location so consumers can still scope editing/loop/validation to the focus
+ * verse. `verseRef` labels the result (the focused verse). by_surah only — the
+ * group span lives in one chapter file (the caller gates by_ayah out).
+ */
+export function assembleWaslGroup(
+    reciter: string,
+    members: ChapterOccasion[],
+    verseRef: string,
+    qpc: Record<string, { text?: string }>,
+    dk: Record<string, { text?: string }>,
+    reciterAudio: TsReciterAudio,
+    chapterAudioUrl: string,
+): TsVerseData {
+    return assembleMembers(reciter, members, verseRef, qpc, dk, reciterAudio, chapterAudioUrl);
+}
+
+/**
+ * Reconstruct the per-letter `Letter[]` from a word's cell row when the shard
+ * omits the raw `letters` slot. Re-stamped shards consolidate per-letter facts
+ * into cells + phonemes (the analysis letter row renders straight from those),
+ * leaving the legacy `letters` slot empty — but the teleprompter / filmstrip
+ * still drive their reveal off `Letter[]`. Groups cells by `sourceLetterIndex`
+ * (one orthographic letter per group), takes the group's base glyph, and spans
+ * its phoneme intervals; a group with no audible phoneme is `silent` with null
+ * timing (the char-time stamper inherits a neighbour). `phonemeIndices` are
+ * already verse-flat, so they index `intervals` directly.
+ *
+ * A long vowel's phoneme is referenced by BOTH the consonant's `haraka` cell and
+ * the following `madd` carrier cell (one `shareGroup`) — e.g. `قَا`'s `aˤ:` rides
+ * the fatha on `ق` and the alef on `ا`. Letting both claim it stretches the
+ * consonant's span across the whole vowel, so it co-highlights with the carrier
+ * (and any later same-time letter). Each phoneme is therefore assigned to exactly
+ * ONE letter — the carrier (`madd`) wins over the consonant's `haraka` — so spans
+ * stay disjoint and ordered, matching the original slot-3 timings.
+ */
+function lettersFromCells(cells: TsCell[], intervals: PhonemeInterval[]): Letter[] {
+    // One letter per sourceLetterIndex, in cell (reading) order; remember each
+    // letter's ordinal so phoneme ownership can pick a single winner.
+    const out: Letter[] = [];
+    const ordOf = new Map<number, number>();
+    let curLi = -1;
+    let cur: Letter | null = null;
+    for (const c of cells) {
+        const li = c.sourceLetterIndex;
+        if (li < 0) continue; // implicit cell — carries no orthographic letter
+        if (li !== curLi || !cur) {
+            cur = { char: c.chars, start: null, end: null, silent: true };
+            ordOf.set(li, out.length);
+            out.push(cur);
+            curLi = li;
+        } else if (!cur.char && c.chars) {
+            cur.char = c.chars;
+        }
+    }
+
+    // Assign each phoneme to a single owning letter. A `madd` carrier owns the
+    // long vowel it shares with the preceding consonant's `haraka`; otherwise the
+    // first claimant wins (no real contention).
+    const ownerOrd = new Map<number, number>();
+    const ownerIsMadd = new Map<number, boolean>();
+    for (const c of cells) {
+        const li = c.sourceLetterIndex;
+        if (li < 0) continue;
+        const ord = ordOf.get(li);
+        if (ord === undefined) continue;
+        const isMadd = c.role === 'madd';
+        for (const pi of c.phonemeIndices) {
+            if (!ownerOrd.has(pi) || (isMadd && !ownerIsMadd.get(pi))) {
+                ownerOrd.set(pi, ord);
+                ownerIsMadd.set(pi, isMadd);
+            }
+        }
+    }
+
+    for (const [pi, ord] of ownerOrd) {
+        const iv = intervals[pi];
+        const lt = out[ord];
+        if (!iv || !lt) continue;
+        lt.silent = false;
+        if (lt.start === null || iv.start < lt.start) lt.start = iv.start;
+        if (lt.end === null || iv.end > lt.end) lt.end = iv.end;
+    }
+    return out;
+}
+
+/**
+ * Core assembler shared by {@link assembleOccasion} (one member) and
+ * {@link assembleWaslGroup} (a chain). Flattens every word across all member
+ * occasions' segments in audio order; each word's `location` uses ITS OWN
+ * member's ref, and the `share_group` base runs across the WHOLE list so co-light
+ * ids stay unique across segments and verses. `verseRef` labels the result
+ * (`verse_ref` + chapter); the by_surah 0-anchor + clip span cover all members,
+ * so the merged times are relative to the group start (consumers in group mode
+ * key off the group offset, not the focus verse's).
+ */
+function assembleMembers(
+    reciter: string,
+    members: ChapterOccasion[],
+    verseRef: string,
+    qpc: Record<string, { text?: string }>,
+    dk: Record<string, { text?: string }>,
+    reciterAudio: TsReciterAudio,
+    chapterAudioUrl: string,
+): TsVerseData {
     const chapter = parseInt(verseRef.split(':')[0] ?? '0', 10);
 
-    // Every recited word across the occasion's segments, in audio order.
+    // Every recited word across all members' segments, in audio order (no dedup
+    // — repeats/lookbacks stay seekable). `cells[].share_group` ids are numbered
+    // per source SEGMENT (each restarts at 0), so offset each segment's ids by a
+    // running base to keep them unique across every segment AND member verse —
+    // else a consumer keying co-light by id would merge unrelated groups.
+    // `wordRefs[i]` is the owning verse ref of word `wordsRaw[i]` (its location).
     const wordsRaw: SegmentEntry['words'] = [];
-    for (const seg of occasion.segments) wordsRaw.push(...seg.words);
+    const wordRefs: string[] = [];
+    const sgOffsets: number[] = [];
+    let sgBase = 0;
+    for (const member of members) {
+        for (const seg of member.segments) {
+            let maxSg = -1;
+            for (const w of seg.words) {
+                wordsRaw.push(w);
+                wordRefs.push(member.ref);
+                sgOffsets.push(sgBase);
+                for (const c of w[5] ?? []) {
+                    const sg = c[6];
+                    if (sg != null && sg > maxSg) maxSg = sg;
+                }
+            }
+            sgBase += maxSg + 1;
+        }
+    }
 
     const intervals: PhonemeInterval[] = [];
     const wordsOut: TsWord[] = [];
 
-    for (const w of wordsRaw) {
+    for (let wi = 0; wi < wordsRaw.length; wi++) {
+        const w = wordsRaw[wi]!;
+        // Per-segment base so cross-segment share_group ids don't collide.
+        const sgOffset = sgOffsets[wi] ?? 0;
+        const memberRef = wordRefs[wi] ?? verseRef;
         const wordIdx = w[0];
         const wStart = w[1] / 1000;
         const wEnd = w[2] / 1000;
         const lettersRaw = (w[3] ?? []) as Array<[string, number | null, number | null, boolean?]>;
         const phonesRaw = (w[4] ?? []) as Array<(string | number | boolean)[]>;
 
-        const location = `${verseRef}:${wordIdx}`;
+        const location = `${memberRef}:${wordIdx}`;
         const text = qpc[location]?.text ?? '';
         const displayText = dk[location]?.text ?? text;
 
-        const letters: Letter[] = lettersRaw.map((lt) => ({
+        const rawLetters: Letter[] = lettersRaw.map((lt) => ({
             char: lt[0],
             start: lt[1] === null ? null : lt[1] / 1000,
             end: lt[2] === null ? null : lt[2] / 1000,
@@ -504,9 +651,48 @@ export function assembleOccasion(
             (_, i) => phoneStartIdx + i,
         );
 
+        // Verse-flat indices of this word's INDEXABLE phones (render-only markers
+        // excluded) — maps a cell's word-local indexable index to the flat list.
+        const indexableFlat: number[] = [];
+        for (let i = 0; i < phonesRaw.length; i++) {
+            const p = phonesRaw[i]?.[0] as string | undefined;
+            if (p && !RENDER_ONLY_PHONES.has(p)) indexableFlat.push(phoneStartIdx + i);
+        }
+        // All cells flow through unchanged — including `base` cells (the ordered
+        // anchors the letter row groups on). Read each row by name (parseShardCell)
+        // then map its word-local indexable indices to the verse-flat list; the
+        // share_group carries the per-segment offset so cross-segment ids don't collide.
+        // `phonemeRuleTags` (v8 muqattaat) is parallel to `phonemeIndices`, so it
+        // rides the SAME filter — an index that maps to nothing drops its tag too,
+        // keeping the two lists element-aligned after the remap.
+        const cells: TsCell[] = (w[5] ?? []).map((row) => {
+            const c = parseShardCell(row);
+            const ruleTags = c.phonemeRuleTags;
+            const mapped: number[] = [];
+            const mappedTags: (string | null)[] = [];
+            c.phonemeIndices.forEach((k, i) => {
+                const flat = indexableFlat[k];
+                if (flat === undefined) return;
+                mapped.push(flat);
+                if (ruleTags) mappedTags.push(ruleTags[i] ?? null);
+            });
+            return {
+                ...c,
+                phonemeIndices: mapped,
+                phonemeRuleTags: ruleTags ? mappedTags : null,
+                shareGroup: c.shareGroup == null ? null : c.shareGroup + sgOffset,
+            };
+        });
+
+        // Prefer the shard's raw `letters`; fall back to cell-derived timing when
+        // a re-stamped shard left the slot empty (cells own the per-letter facts).
+        const letters = rawLetters.length > 0 || cells.length === 0
+            ? rawLetters
+            : lettersFromCells(cells, intervals);
+
         wordsOut.push({
             location, text, display_text: displayText,
-            start: wStart, end: wEnd, phoneme_indices: phonemeIndices, letters,
+            start: wStart, end: wEnd, phoneme_indices: phonemeIndices, letters, cells,
         });
     }
 
@@ -519,19 +705,22 @@ export function assembleOccasion(
     const audioCategory: 'by_ayah_audio' | 'by_surah_audio' =
         reciterAudio.audio_category === 'by_surah' ? 'by_surah_audio' : 'by_ayah_audio';
 
-    // Occasion span: the contiguous `[start, end]` covering every segment, word
-    // and letter time (a word/letter can bleed a few ms past its segment `t`).
-    let spanStart = occasion.segments[0]?.t[0] ?? 0;
-    let spanEnd = occasion.segments[0]?.t[1] ?? 0;
-    for (const seg of occasion.segments) {
-        if (seg.t[0] < spanStart) spanStart = seg.t[0];
-        if (seg.t[1] > spanEnd) spanEnd = seg.t[1];
-        for (const w of seg.words) {
-            if (w[1] < spanStart) spanStart = w[1];
-            if (w[2] > spanEnd) spanEnd = w[2];
-            for (const lt of w[3] ?? []) {
-                if (lt[1] != null && lt[1] < spanStart) spanStart = lt[1];
-                if (lt[2] != null && lt[2] > spanEnd) spanEnd = lt[2];
+    // Span: the contiguous `[start, end]` covering every member's segments,
+    // words and letters (a word/letter can bleed a few ms past its segment `t`).
+    const firstSeg = members[0]?.segments[0];
+    let spanStart = firstSeg?.t[0] ?? 0;
+    let spanEnd = firstSeg?.t[1] ?? 0;
+    for (const member of members) {
+        for (const seg of member.segments) {
+            if (seg.t[0] < spanStart) spanStart = seg.t[0];
+            if (seg.t[1] > spanEnd) spanEnd = seg.t[1];
+            for (const w of seg.words) {
+                if (w[1] < spanStart) spanStart = w[1];
+                if (w[2] > spanEnd) spanEnd = w[2];
+                for (const lt of w[3] ?? []) {
+                    if (lt[1] != null && lt[1] < spanStart) spanStart = lt[1];
+                    if (lt[2] != null && lt[2] > spanEnd) spanEnd = lt[2];
+                }
             }
         }
     }

@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="ar">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>analysis render harness</title>
+    <style>
+      html, body { margin: 0; }
+      #app { display: inline-block; padding: 28px; }
+      /* Hide the dev-only `import.meta.env.DEV` perf A/B HUD — noise in a shot. */
+      .perf-ab { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="./analysis.ts"></script>
+  </body>
+</html>

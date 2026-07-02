@@ -12,6 +12,10 @@
      * `fullscreenDist` + `fullscreenCfg`; ChartFullscreen.svelte renders
      * the overlay.
      */
+    import { onMount } from 'svelte';
+
+    import { THEME_CHANGE_EVENT } from '../../../../lib/stores/theme.svelte';
+    import { themeColor } from '../../../../lib/utils/canvas-theme';
     import { selectedReciter } from '../../stores/chapter';
     import { segStats } from '../../stores/stats';
     import type { ChartCfg,Distribution } from '../../types/stats';
@@ -51,14 +55,42 @@
     $: data = $segStats;
     $: reciter = $selectedReciter;
 
-    $: charts = data
-        ? buildCharts(data.vad_params ?? { min_silence_ms: VAD_MIN_SILENCE_FALLBACK_MS })
-        : [];
+    // Bumped on each theme flip so `charts` recomputes — rebuilds the chart
+    // cfgs (incl. the eagerly-resolved floor refline colour) with fresh tokens.
+    let themeTick = 0;
+    onMount(() => {
+        const onThemeChange = (): void => { themeTick += 1; };
+        window.addEventListener(THEME_CHANGE_EVENT, onThemeChange);
+        return () => window.removeEventListener(THEME_CHANGE_EVENT, onThemeChange);
+    });
+
+    $: charts = buildChartsForTheme(data, themeTick);
+
+    function buildChartsForTheme(
+        d: typeof data,
+        _themeTick: number,
+    ): ChartCfg[] {
+        // `_themeTick` is an explicit dep so a theme flip rebuilds the cfgs
+        // (incl. the eagerly-resolved floor refline colour) with fresh tokens.
+        return d
+            ? buildCharts(d.vad_params ?? { min_silence_ms: VAD_MIN_SILENCE_FALLBACK_MS })
+            : [];
+    }
 
     function buildCharts(vad: {
         min_silence_ms: number;
         min_silence_floor_ms?: number;
     }): ChartCfg[] {
+        // Bar/refline colours resolve their --chart-* tokens lazily — these
+        // callbacks run at chart-build time (drawBarChart), and StatsChart/
+        // ChartFullscreen rebuild on `themechange`, so each build picks up the
+        // active theme. The hex fallbacks match the dark token values.
+        const bar      = (): string => themeColor('--chart-bar', '#4cc9f0');
+        const barMuted = (): string => themeColor('--chart-bar-muted', '#666666');
+        const barWarn  = (): string => themeColor('--chart-bar-warn', '#ff9800');
+        const barBad   = (): string => themeColor('--chart-bar-bad', '#f44336');
+        const barGood  = (): string => themeColor('--chart-bar-good', '#4caf50');
+
         const refLines = [
             { value: vad.min_silence_ms, label: 'threshold' },
         ];
@@ -66,7 +98,7 @@
             refLines.push({
                 value: vad.min_silence_floor_ms,
                 label: 'floor',
-                color: '#9c27b0',
+                color: themeColor('--chart-refline-floor', '#9c27b0'),
                 dash: [2, 4],
             } as never);
         }
@@ -75,33 +107,33 @@
                 key: 'pause_duration_ms',
                 title: 'Pause Duration (ms)',
                 refLines,
-                barColor: (bin) => bin < vad.min_silence_ms ? '#666' : '#4cc9f0',
+                barColor: (bin) => bin < vad.min_silence_ms ? barMuted() : bar(),
                 formatBin: v => v >= 3000 ? '3000+' : String(v),
             },
             {
                 key: 'seg_duration_ms',
                 title: 'Segment Duration (ms)',
-                barColor: (bin) => bin < SHORT_SEG_WARN_MS ? '#ff9800' : '#4cc9f0',
+                barColor: (bin) => bin < SHORT_SEG_WARN_MS ? barWarn() : bar(),
                 formatBin: v => (v / 1000).toFixed(1) + 's',
                 showAllLabels: true,
             },
             {
                 key: 'words_per_seg',
                 title: 'Words Per Segment',
-                barColor: (bin) => bin === 1 ? '#f44336' : '#4cc9f0',
+                barColor: (bin) => bin === 1 ? barBad() : bar(),
                 formatBin: v => String(v),
                 showAllLabels: true,
             },
             {
                 key: 'segs_per_verse',
                 title: 'Segments Per Verse',
-                barColor: () => '#4cc9f0',
+                barColor: () => bar(),
                 formatBin: v => v >= 8 ? '8+' : String(v),
             },
             {
                 key: 'confidence',
                 title: 'Confidence (%)',
-                barColor: (bin) => bin < CONF_MID_THRESHOLD * 100 ? '#f44336' : bin < CONF_HIGH_THRESHOLD * 100 ? '#ff9800' : '#4caf50',
+                barColor: (bin) => bin < CONF_MID_THRESHOLD * 100 ? barBad() : bin < CONF_HIGH_THRESHOLD * 100 ? barWarn() : barGood(),
                 formatBin: v => v >= 100 ? '100' : String(v),
             },
         ];

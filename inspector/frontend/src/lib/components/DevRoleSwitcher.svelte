@@ -55,11 +55,11 @@
         align-items: center;
         gap: 6px;
         padding: 4px 8px;
-        border: 1px dashed #f0a500;
+        border: 1px dashed var(--state-dev-fg);
         border-radius: 6px;
-        background: rgba(240, 165, 0, 0.06);
+        background: var(--state-dev-bg);
         font-size: 0.85rem;
-        color: #f0a500;
+        color: var(--state-dev-fg);
     }
     .dev-role__label {
         text-transform: uppercase;
@@ -69,9 +69,9 @@
         opacity: 0.85;
     }
     .dev-role__select {
-        background: #1a1a1a;
-        color: #f0e0c0;
-        border: 1px solid #444;
+        background: var(--input-bg);
+        color: var(--dev-select-fg);
+        border: 1px solid var(--border-strong);
         border-radius: 4px;
         padding: 3px 6px;
         font-size: 0.85rem;
@@ -79,14 +79,14 @@
         text-transform: capitalize;
     }
     .dev-role__select:hover:not(:disabled) {
-        border-color: #f0a500;
+        border-color: var(--state-dev-fg);
     }
     .dev-role__select:disabled {
         opacity: 0.6;
         cursor: progress;
     }
     .dev-role__error {
-        color: #ff6b6b;
+        color: var(--bad-fg);
         font-weight: 700;
     }
 </style>

@@ -11,6 +11,18 @@
  * `--t-*`) so the section blends with the live dark theme.
  */
 
+import { inkFor, legibleAccent, legibleAccentCfg } from '../utils/color-derive';
+import type { Theme } from '../utils/highlight-model';
+
+// Light-theme legible band for the line-animation accent — darker than the
+// dark-on-page band so the active word reads as ink on near-white paper.
+const LIGHT_BAND_MIN_L = 0.46;
+const LIGHT_BAND_MAX_L = 0.70;
+// The non-active (reached/unreached) line text on light paper — a calm cool
+// dark grey, dimmed further by reached/unreached opacity. On dark it stays the
+// configured light grey (cfg.baseColor).
+const LIGHT_BASE_COLOR = '#3e4350';
+
 export type Granularity = 'word' | 'char';
 export type FilmstripMotion = 'hybrid' | 'tuner' | 'snap';
 
@@ -179,13 +191,29 @@ function outlineShadow(px: number, color: string): string {
 /** Project the line-animation slice of config to CSS custom properties.
  *  The active-unit effects (emphasis/scale/glow) resolve to the *current*
  *  granularity's value, so the same CSS rules render word- or char-tuned. */
-export function cssVars(cfg: RecitationAnimConfig): Record<string, string> {
+export function cssVars(cfg: RecitationAnimConfig, theme: Theme = 'dark'): Record<string, string> {
     const isChar = cfg.granularity === 'char';
-    const baseOutline = outlineShadow(cfg.baseStrokePx, cfg.baseStrokeColor);
+    const isLight = theme === 'light';
+    // On light paper the dark-on-light text needs no silhouette halo (it already
+    // separates); the black halo only earns its place lifting light text off the
+    // dark page.
+    const baseColor = isLight ? LIGHT_BASE_COLOR : cfg.baseColor;
+    const baseOutline = isLight ? '' : outlineShadow(cfg.baseStrokePx, cfg.baseStrokeColor);
+    // The active unit is coloured with the SAME legible highlight the analysis
+    // triad uses (`legibleAccent` == the analysis `triad.word`), so the line
+    // animation and the analysis cells always read as one colour — no dark↔light
+    // split between them. On light the accent is clamped into the darker band so
+    // it reads as ink. Its outline auto-contrasts; an explicit activeStroke
+    // (px > 0) is honoured verbatim, otherwise the base-width silhouette is
+    // recoloured to the contrast halo (skipped on light — a dark word on paper
+    // pops without one).
+    const hl = isLight
+        ? legibleAccentCfg(cfg.highlightColor, LIGHT_BAND_MIN_L, LIGHT_BAND_MAX_L)
+        : legibleAccent(cfg.highlightColor);
     const activeOutline = cfg.activeStrokePx > 0
         ? outlineShadow(cfg.activeStrokePx, cfg.activeStrokeColor)
-        : baseOutline;
-    const glow = cfg.activeGlowPx > 0 ? `0 0 ${cfg.activeGlowPx}px ${cfg.highlightColor}` : '';
+        : (isLight ? '' : outlineShadow(cfg.baseStrokePx, inkFor(hl)));
+    const glow = cfg.activeGlowPx > 0 ? `0 0 ${cfg.activeGlowPx}px ${hl}` : '';
     // Vertical headroom so an active word scaled by `activeScale` (>1) isn't
     // clipped by the fixed-height, overflow-hidden line box. Round up to a
     // whole px; 0 when no scale.
@@ -196,8 +224,8 @@ export function cssVars(cfg: RecitationAnimConfig): Record<string, string> {
         '--ra-active-emphasis': `${isChar ? cfg.charActiveEmphasisMs : cfg.wordActiveEmphasisMs}ms`,
         '--ra-clear-fade': `${cfg.clearFadeMs}ms`,
         '--ra-easing': cfg.easing,
-        '--ra-highlight': cfg.highlightColor,
-        '--ra-base-color': cfg.baseColor,
+        '--ra-highlight': hl,
+        '--ra-base-color': baseColor,
         '--ra-reached-opacity': String(cfg.reachedOpacity),
         '--ra-unreached-opacity': String(cfg.unreachedOpacity),
         '--ra-active-scale': String(cfg.activeScale),
@@ -219,8 +247,8 @@ export function cssVars(cfg: RecitationAnimConfig): Record<string, string> {
 }
 
 /** Serialize a config object into the `cssText` of inline custom properties. */
-export function cssVarText(cfg: RecitationAnimConfig): string {
-    return Object.entries(cssVars(cfg))
+export function cssVarText(cfg: RecitationAnimConfig, theme: Theme = 'dark'): string {
+    return Object.entries(cssVars(cfg, theme))
         .map(([k, v]) => `${k}: ${v}`)
         .join('; ');
 }

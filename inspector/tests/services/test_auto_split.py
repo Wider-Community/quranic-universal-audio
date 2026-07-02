@@ -14,7 +14,7 @@ import pytest
 from services import auto_split
 
 
-def _patch_sidecar(monkeypatch, by_uid: dict[str, dict]) -> None:
+def _patch_sidecar(monkeypatch, by_uid: dict[str, object]) -> None:
     """Replace ``load_auto_split`` with a fixed in-memory map."""
     monkeypatch.setattr(
         auto_split,

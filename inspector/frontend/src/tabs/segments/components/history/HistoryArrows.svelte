@@ -112,21 +112,22 @@
             markerHeight="6"
             orient="auto-start-reverse"
         >
-            <polygon points="0 0, 10 3.5, 0 7" fill="#4cc9f0" />
+            <polygon points="0 0, 10 3.5, 0 7" fill="currentColor" style="color: var(--accent)" />
         </marker>
     </defs>
     {#each paths as p}
         <path
             d={p.d}
             fill="none"
-            stroke="#4cc9f0"
+            stroke="currentColor"
+            style="color: var(--accent)"
             stroke-width="1.5"
             stroke-dasharray={p.dashed ? '4,3' : undefined}
             marker-end={`url(#${markerId})`}
         />
     {/each}
     {#if xMark}
-        <g stroke="#f44336" stroke-width="2">
+        <g stroke="currentColor" style="color: var(--bad-fg)" stroke-width="2">
             <line
                 x1={xMark.cx - xMark.size}
                 y1={xMark.cy - xMark.size}

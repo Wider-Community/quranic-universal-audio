@@ -134,7 +134,7 @@ def test_missing_same_origin_403(signed_in_client, seed_role):
 def _owner_actor():
     from qua_shared.schemas import Actor, Role
 
-    return Actor(hf_user_id="o", login_at_time="o", role=Role.OWNER.value)
+    return Actor(hf_user_id="o", login_at_time="o", role=Role.OWNER)
 
 
 def test_revoke_cascade_release_false_keeps_claim(seed_role, seed_state):

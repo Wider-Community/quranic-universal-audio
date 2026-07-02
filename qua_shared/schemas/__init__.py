@@ -60,6 +60,7 @@ from .config.automation import (
     HfPublishConfig,
     StaleMetadataConfig,
     StaleTsRegenConfig,
+    TsGenerationDefaults,
 )
 from .config.capabilities import (
     CAPABILITIES,
@@ -236,6 +237,7 @@ from .wire.timestamps import (
     TsVerseData,
     TsWord,
 )
+from .wire.ts_refreshed import TsRefreshedRequest
 
 __all__ = [
     "FlagAuthor",
@@ -291,6 +293,7 @@ __all__ = [
     "HfPublishConfig",
     "StaleMetadataConfig",
     "StaleTsRegenConfig",
+    "TsGenerationDefaults",
     "AdminCapabilityRow",
     "AdminCapabilityTierState",
     "AdminCutReleaseRequest",
@@ -436,6 +439,7 @@ __all__ = [
     "TsVbrResponse",
     "TsReciter",
     "TsRecitersResponse",
+    "TsRefreshedRequest",
     "Letter",
     "PhonemeInterval",
     "TsWord",

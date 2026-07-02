@@ -18,7 +18,8 @@ logger = logging.getLogger(__name__)
 
 _MODEL_REPO = os.environ.get("MFA_MODEL_REPO", "hetchyy/qua-aligner-models")
 _TTL_S = 300
-_cache: dict[str, object] = {"at": 0.0, "models": None}
+_cached_at: float = 0.0
+_cached_models: list[dict] | None = None
 
 
 def _fetch() -> list[dict]:
@@ -40,14 +41,15 @@ def _fetch() -> list[dict]:
 
 def list_models() -> list[dict]:
     """[{id, label, default}], default-first. Cached; never raises."""
+    global _cached_at, _cached_models
     now = time.time()
-    if _cache["models"] is not None and now - float(_cache["at"]) < _TTL_S:
-        return _cache["models"]  # type: ignore[return-value]
+    if _cached_models is not None and now - _cached_at < _TTL_S:
+        return _cached_models
     try:
         models = _fetch()
     except Exception as exc:  # noqa: BLE001 — degrade, don't break the form
         logger.warning("aligner catalog fetch failed (%s); using default-only", exc)
-        models = _cache["models"] or [{"id": None, "label": "Default", "default": True}]
+        models = _cached_models or [{"id": None, "label": "Default", "default": True}]
     models = sorted(models, key=lambda m: (not m["default"], str(m["label"])))
-    _cache.update(at=now, models=models)
+    _cached_at, _cached_models = now, models
     return models

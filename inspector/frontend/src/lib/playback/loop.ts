@@ -15,13 +15,15 @@
 import { writable } from 'svelte/store';
 
 export interface TsLoopTarget {
-    kind: 'word' | 'letter' | 'phoneme';
+    kind: 'word' | 'letter' | 'phoneme' | 'diacritic';
     /** Slice-relative (verse-local) seconds. */
     startSec: number;
     endSec: number;
-    /** Owning word index (flat). Set even for letter/phoneme targets. */
+    /** Owning word index (flat). Set even for letter/phoneme/diacritic targets. */
     wordIndex: number;
-    /** For 'letter': index within word.letters. For 'phoneme': flat intervals index. */
+    /** For 'letter': index within word.letters. For 'phoneme': flat intervals
+     *  index. For 'diacritic': the FIRST flat interval index the cell sounds (its
+     *  span is [startSec, endSec), the union of the cell's phonemes). */
     childIndex?: number;
 }
 

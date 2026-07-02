@@ -18,6 +18,10 @@ Public surface used by sibling scripts:
   confirm_mutation(args, action)    — bails unless --yes-prod set on --bucket prod
   abs_path(bucket_id, sub)          — hf://buckets/<id>/<sub> formatter
   ensure_utf8_stdout()              — Windows cp1252 → utf-8 patch
+  rl(fn, *a, **kw)                  — run a bucket op with HF-429 backoff
+  batch_write(bucket_id, files)     — upload many files in ONE Xet batch (fast bulk write)
+  add_notify_args(parser)           — adds --inspector-url for the ts-refreshed callback
+  notify_ts_refreshed(args, slug, …) — fire the post-upload TS-refresh callback (best-effort)
 """
 
 from __future__ import annotations
@@ -113,3 +117,88 @@ def confirm_mutation(args: argparse.Namespace, action: str) -> None:
     if not args.yes_prod:
         print(f"refusing to {action} on prod bucket without --yes-prod", file=sys.stderr)
         sys.exit(2)
+
+
+def rl(fn, *args, **kwargs):
+    """Run a bucket op, backing off on HF 429 rate-limit errors; any other error
+    re-raises immediately. Shared so every script retries identically."""
+    import re
+    import time
+
+    for attempt in range(8):
+        try:
+            return fn(*args, **kwargs)
+        except Exception as e:
+            msg = str(e)
+            if "429" not in msg and "rate limit" not in msg.lower():
+                raise
+            m = re.search(r"[Rr]etry after (\d+)", msg)
+            wait = (int(m.group(1)) + 5) if m else 60
+            print(
+                f"  rate-limited — sleeping {wait}s (attempt {attempt + 1}/8)",
+                file=sys.stderr,
+                flush=True,
+            )
+            time.sleep(wait)
+    raise RuntimeError("rate-limit retries exhausted")
+
+
+def batch_write(bucket_id: str, files: dict[str, bytes]) -> None:
+    """Upload many bucket files in ONE Xet batch — the fast bulk-write path.
+
+    ``files`` maps a bucket-RELATIVE destination path (e.g.
+    ``reciters/<slug>/timestamps/3.json.gz``) to its bytes. Each blob is staged to
+    a temp FILE and passed to ``batch_bucket_files`` by PATH: passing raw bytes
+    that OVERWRITE existing paths hits a ~25x slower server path, and a per-file
+    ``fs.open()`` write is one commit per file. Retries on HF 429; no-op when
+    ``files`` is empty."""
+    if not files:
+        return
+    import tempfile
+
+    from huggingface_hub import batch_bucket_files
+
+    with tempfile.TemporaryDirectory() as td:
+        adds = []
+        for i, (dest, body) in enumerate(files.items()):
+            local = Path(td) / f"f{i}"
+            local.write_bytes(body)
+            adds.append((str(local), dest.lstrip("/")))
+        rl(batch_bucket_files, bucket_id, add=adds)
+
+
+def add_notify_args(parser: argparse.ArgumentParser) -> None:
+    """Add ``--inspector-url`` so a backfill can fire the ts-refreshed callback.
+
+    Absent flag (and no ``INSPECTOR_URL`` env) → the callback is skipped and the
+    refresh stays silent, exactly as before. The shared secret is read from
+    ``INSPECTOR_WEBHOOK_SECRET`` env, never a flag.
+    """
+    parser.add_argument(
+        "--inspector-url",
+        default=os.environ.get("INSPECTOR_URL"),
+        help="Inspector root URL to POST the ts-refreshed callback to after a "
+        "successful write (e.g. https://hetchyy-quranic-universal-audio.hf.space); "
+        "needs INSPECTOR_WEBHOOK_SECRET in env. Omitted = silent update.",
+    )
+
+
+def notify_ts_refreshed(
+    args: argparse.Namespace,
+    slug: str,
+    *,
+    chapters: list[int] | None = None,
+    reason: str = "manual",
+) -> None:
+    """Fire the post-upload TS-refresh callback for ``slug`` (best-effort).
+
+    No-op unless ``args`` carries an ``--inspector-url`` (and a secret is in
+    env). Routes through the shared ``qua_shared.inspector_notify`` helper so the
+    callback contract has one home. Never raises — a failed callback must not
+    fail a backfill that already wrote the bucket."""
+    url = getattr(args, "inspector_url", None)
+    if not url:
+        return
+    from qua_shared.inspector_notify import notify_ts_refreshed as _notify
+
+    _notify(url, slug, chapters=chapters, reason=reason)

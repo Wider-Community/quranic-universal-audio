@@ -193,6 +193,7 @@ def main() -> int:
     # keep_q is derived from the model itself by the aligner — no flag needed.
     model_id = os.environ.get("MFA_MODEL_ID", "").strip() or None
     model_path = dictionary_path = None
+    whole_verse = False  # set True for a psil-capable model (model.seed_psil)
     try:
         from qua_sdk.components.timing.models import load_catalog
 
@@ -206,6 +207,9 @@ def main() -> int:
             m = cat.resolve(None)
         model_path, dictionary_path = Path(m.model_path), Path(m.dictionary_path)
         log.info("aligner model %r (keep_q=%s, label=%s)", m.id, m.keep_q, m.label)
+        # psil-capable model -> whole-verse inference (one align_verse pass per
+        # verse occurrence, psil seeded at every segment boundary).
+        whole_verse = bool(getattr(m, "seed_psil", False))
     except Exception as exc:  # noqa: BLE001 — degrade to the env paths
         log.info("model catalog unavailable (%s); using env model paths", exc)
         model_env = os.environ.get("MFA_MODEL_PATH", "").strip()
@@ -238,6 +242,9 @@ def main() -> int:
     )
 
     beams = _beams(os.environ.get("BEAMS", "50"))
+    if whole_verse and 5 not in beams:
+        beams = [*beams, 5]  # whole-verse probe beam (flags low-confidence on big items)
+    log.info("whole_verse=%s; beams=%s", whole_verse, beams)
     # Cap default workers: each pool worker extracts its own ~92 MB MFA model
     # at init, so too many OOM/race during simultaneous KalpyEngine init (16
     # crashed mid-init on cpu-upgrade; 8 verified safe). Override via WORKERS /
@@ -358,6 +365,7 @@ def main() -> int:
             workers=workers,
             mfa_model_path=model_path,
             mfa_dictionary_path=dictionary_path,
+            whole_verse=whole_verse,
         )
     except Exception as exc:  # noqa: BLE001
         log.exception("alignment failed for %s", slug)

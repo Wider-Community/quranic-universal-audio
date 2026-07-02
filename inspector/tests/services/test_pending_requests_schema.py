@@ -75,7 +75,7 @@ def test_proposed_edits_accepts_current_year():
 
 def test_proposed_edits_rejects_unknown_field():
     with pytest.raises(ValidationError):
-        ProposedEdits(slug="x")  # noqa — extra field forbidden
+        ProposedEdits(slug="x")  # type: ignore[call-arg]  # noqa — extra field is rejected at runtime
 
 
 def test_proposed_edits_blank_riwayah_rejected():
@@ -166,7 +166,7 @@ def test_pending_requests_file_with_entries():
 
 def test_pending_requests_file_rejects_unknown_field():
     with pytest.raises(ValidationError):
-        PendingRequestsFile(extra_field="x")
+        PendingRequestsFile(extra_field="x")  # type: ignore[call-arg]  # extra field is rejected at runtime
 
 
 # ---------------------------------------------------------------------------
@@ -236,4 +236,4 @@ def test_archived_requests_file_multiple_entries_per_slug():
 
 def test_archived_requests_file_rejects_unknown_field():
     with pytest.raises(ValidationError):
-        ArchivedRequestsFile(extra_field="x")
+        ArchivedRequestsFile(extra_field="x")  # type: ignore[call-arg]  # extra field is rejected at runtime

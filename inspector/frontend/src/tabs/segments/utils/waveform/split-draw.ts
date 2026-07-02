@@ -3,6 +3,7 @@
  * split line, and right-region tinting.
  */
 
+import { themeColor } from '../../../../lib/utils/canvas-theme';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { drawEditPeakBase } from './draw-seg';
 
@@ -58,7 +59,7 @@ export function drawSplitWaveform(canvas: SegCanvas): void {
     // in time, projected onto canvas x. Odd-indexed regions get the
     // orange tint — matches today's "shade the right half" for N=1 and
     // gives N≥2 a stable visual rhythm.
-    ctx.fillStyle = 'rgba(255, 152, 0, 0.15)';
+    ctx.fillStyle = themeColor('--wf-region-tint', 'rgba(255, 152, 0, 0.15)');
     for (let i = 0; i <= N; i++) {
         if (i % 2 === 0) continue;
         const t0 = i === 0 ? sd.viewStart : cursors[i - 1]!;
@@ -71,7 +72,7 @@ export function drawSplitWaveform(canvas: SegCanvas): void {
     // Cursor lines. In single-cursor mode an off-view cursor visually clamps
     // to canvas middle (today's grab-target behaviour); in multi-cursor mode
     // neighbours can't cross so cursors stay on-canvas by construction.
-    ctx.strokeStyle = '#ffeb3b';
+    ctx.strokeStyle = themeColor('--wf-split-cursor', '#ffeb3b');
     ctx.lineWidth = 3;
     for (let i = 0; i < N; i++) {
         const t = cursors[i]!;

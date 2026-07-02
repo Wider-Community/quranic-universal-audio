@@ -37,6 +37,7 @@ def test_prune_keeps_active_rows_regardless_of_count():
 def test_prune_drops_oldest_dismissed_beyond_keep():
     for i in range(5):
         nid = _create("u-2", f"k{i}")
+        assert nid is not None
         with _sync.durable_transaction():
             repo_notifications.dismiss(nid, "u-2")
     with _sync.durable_transaction():

@@ -40,9 +40,16 @@ JOB_FLAVOR = os.environ.get("INSPECTOR_HF_BATCH_JOB_FLAVOR", "cpu-upgrade")
 JOB_TIMEOUT = os.environ.get("INSPECTOR_HF_BATCH_JOB_TIMEOUT", "3h")
 
 
-def launch(slugs: list[str], *, webhook_base: str | None = None) -> dict:
-    """Launch one batch publish job for ``slugs``. Returns ``{job_id, url}``."""
-    from huggingface_hub import Volume, get_token, run_job
+def launch(slugs: list[str], *, settings=None, webhook_base: str | None = None) -> dict:
+    """Launch one batch publish job for ``slugs``. Returns ``{job_id, url}``.
+
+    ``settings`` is an optional ``ReleaseSettings`` (clip-edge pads); its
+    fields are threaded to the job as ``PUBLISH_PAD_START`` / ``PUBLISH_PAD_END``
+    / ``PUBLISH_MIN_GAP`` and read per-slug in ``publish_hf_batch``.
+    """
+    from typing import cast
+
+    from huggingface_hub import SpaceHardware, Volume, get_token, run_job
 
     from services.storage.hf_bucket import resolve_bucket_repo
 
@@ -60,6 +67,10 @@ def launch(slugs: list[str], *, webhook_base: str | None = None) -> dict:
         "INSPECTOR_BUCKET_MOUNT": "/data",
         "PYTHONPATH": "/aux/code",
     }
+    if settings is not None:
+        env["PUBLISH_PAD_START"] = str(settings.pad_start)
+        env["PUBLISH_PAD_END"] = str(settings.pad_end)
+        env["PUBLISH_MIN_GAP"] = str(settings.min_gap)
     secrets = {"HF_TOKEN": get_token()}
     webhook_secret = os.environ.get("INSPECTOR_WEBHOOK_SECRET", "").strip()
     if webhook_secret and webhook_base:
@@ -88,7 +99,7 @@ def launch(slugs: list[str], *, webhook_base: str | None = None) -> dict:
     job = run_job(
         image=base.JOB_IMAGE,
         command=command,
-        flavor=JOB_FLAVOR,
+        flavor=cast(SpaceHardware, JOB_FLAVOR),
         timeout=JOB_TIMEOUT,
         env=env,
         secrets=secrets,
@@ -224,4 +235,7 @@ def latest_batch_outcome() -> dict | None:
 
 def register() -> None:
     # Poll fallback: no members payload — complete() reads the bucket record.
-    base.register_handler(KIND, lambda _slug, jid: complete(jid))
+    def _handler(_slug: str | None, jid: str) -> None:
+        complete(jid)
+
+    base.register_handler(KIND, _handler)

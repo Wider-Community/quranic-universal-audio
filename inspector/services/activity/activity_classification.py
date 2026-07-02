@@ -68,6 +68,10 @@ HIDDEN_EVENTS: frozenset[str] = frozenset(
         # Audit-only: a TS regen on an already-released reciter (no transition).
         # Operator-facing via the Releases tab's stale-stamp, not the public rail.
         "reciter.ts_regenerated",
+        # Audit-only: an out-of-band TS shard refresh (manual backfill / re-stamp /
+        # local regen uploaded direct to the bucket). Same operator surface as a
+        # regen — advances the ts watermark + stamps HF/GH stale.
+        "reciter.ts_refreshed",
         "reciter.unpublished",
         "reciter.discarded",
         "reciter.undiscarded",

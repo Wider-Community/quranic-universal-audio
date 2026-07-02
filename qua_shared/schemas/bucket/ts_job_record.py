@@ -43,6 +43,11 @@ class TsJobSettings(BaseModel):
     timeout: str | None = None
     batch_size: int | None = None
     download_workers: int | None = None
+    #: Phoneme gap-padding strategy (``forward`` | ``symmetric`` | ``none``).
+    #: ``None`` = the job's ``DEFAULT_PADDING``.
+    padding: str | None = None
+    #: Alignment method (``kalpy`` | …). ``None`` = the job's ``DEFAULT_METHOD``.
+    method: str | None = None
 
 
 class TsJobRecord(BaseModel):

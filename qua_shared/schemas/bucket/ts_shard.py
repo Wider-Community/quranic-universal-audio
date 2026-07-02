@@ -17,14 +17,31 @@ Document shape (decompressed)::
       "segments": [{"ref": "1:1", "t": [start_ms, end_ms], "words": [<word>, ...]}, ...]
     }
 
-Each ``word`` is the 5-slot tuple::
+Each ``word`` is the 5- or 6-slot tuple::
 
-    [word_idx, start_ms, end_ms, letters[], phones[]]
+    [word_idx, start_ms, end_ms, letters[], phones[](, cells[])]
 
 where ``letters`` is ``[char, start_ms|null, end_ms|null(, silent)]`` rows (the
 4th ``silent`` bool lands from schema v4 — phonemizer ``silent_flags()``) and
 ``phones`` is ``[phone, start_ms, end_ms, ...optional flags]`` rows (slot 5
-may carry a cross-word tajweed bridge rule — see ``timestamps_bridges``).
+may carry a cross-word tajweed bridge rule — see
+``qua_sdk.components.timing.lib.cells``).
+
+The optional 6th slot ``cells`` (schema v5) is the per-character phoneme cells
+from the phonemizer's ``character_phoneme_mappings()`` — the full per-character
+breakdown. From the SDK annotator move, cells include ``role == 'base'``
+(consonant) rows alongside ``haraka``/``tanween``/``madd`` — the structure is
+unchanged (``CellTiming`` / ``ts_shard_cells.parse_cell`` already tolerate every
+role), only the role set written is wider. Each cell is the positional row
+``[chars, role, status, phoneme_indices, source_letter_index, tag, share_group
+(, phoneme_rule_tags)]``; see ``qua_shared/ts_shard_cells.py``. ``phoneme_indices``
+are **word-local indices over the word's indexable phones** (the qalqala ``Q``
+excluded, same coordinate space as the bridge index). The optional 8th slot
+``phoneme_rule_tags`` (schema v8) is a per-phoneme tag list parallel to
+``phoneme_indices`` — each entry a rule key or ``None`` — for cells whose phonemes
+carry distinct tajweed (muqattaat). Read via ``ts_shard_cells.parse_cell`` — never
+unpack positionally, and tolerate a missing 6th slot on v3/v4 shards and a missing
+8th slot on v5-v7 shards.
 
 Extras handling: ``extra="forbid"`` + ``strip_and_warn`` on the document and
 ``_meta``. The word/letter/phone tuples are positional and are validated by
@@ -38,6 +55,8 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, RootModel, model_validator
 
 from .._extras import strip_and_warn
+from .cell_vocab import CellRole, CellStatus
+from .tajweed_vocab import TajweedRule
 
 # Letter timing triple: [char, start_ms, end_ms]; timings may be null when the
 # aligner couldn't place an individual letter. A 4th slot ``silent`` (bool) is
@@ -52,14 +71,77 @@ LetterTiming = tuple[str, int | None, int | None] | tuple[str, int | None, int |
 # loose ``list`` of the union of cell types rather than a fixed tuple.
 PhoneTiming = list[str | int | bool]
 
+# Cell row (the 6th word slot): a per-character haraka/tanween cell.
+# ``[chars, role, status, phoneme_indices, source_letter_index, tag, share_group
+#   (, phoneme_rule_tags (, secondary_tags))]``.
+# ``role`` / ``status`` are the codegen-source enums (``bucket/cell_vocab``);
+# ``phoneme_indices`` are word-local indices over the word's indexable phones.
+# The optional 8th slot ``phoneme_rule_tags`` (schema v8) is a per-phoneme tag
+# list parallel to ``phoneme_indices`` (same length), each entry a rule key or
+# ``None`` — carries per-phoneme tajweed for cells whose phonemes diverge from
+# the cell ``tag`` (muqattaat: the long vowel gets its madd, a merged nasal gets
+# its idgham, etc.). The optional 9th slot ``secondary_tags`` (schema v9) lists
+# extra rules that co-occur on the grapheme but lost the single-``tag`` pick (in
+# practice ``["tafkheem"]`` on a heavy madd/qalqala cell); when only it is present
+# the 8th slot is padded ``None`` to keep it position-stable. Both absent on older
+# shards (readers tolerate the missing slots).
+CellTiming = (
+    tuple[str, CellRole, CellStatus, list[int], int, str | None, int | None]
+    | tuple[
+        str, CellRole, CellStatus, list[int], int, str | None, int | None, list[str | None] | None
+    ]
+    | tuple[
+        str,
+        CellRole,
+        CellStatus,
+        list[int],
+        int,
+        str | None,
+        int | None,
+        list[str | None] | None,
+        list[str],
+    ]
+)
 
-class TsShardWord(RootModel[tuple[int, int, int, list[LetterTiming], list[PhoneTiming]]]):
+
+class TsShardWord(
+    RootModel[
+        tuple[int, int, int, list[LetterTiming], list[PhoneTiming]]
+        | tuple[int, int, int, list[LetterTiming], list[PhoneTiming], list[CellTiming]]
+    ]
+):
     """One encoded word inside a segment — a flat positional tuple.
 
-    Slots: ``[word_idx, start_ms, end_ms, letters, phones]``. Modelled as a
-    ``RootModel`` over a 5-tuple so the FE codegen emits a positional TS tuple
-    (mirrors ``TsShardWord`` in ``ts-client.ts``) rather than an object.
+    Slots: ``[word_idx, start_ms, end_ms, letters, phones(, cells)]``. Modelled as
+    a ``RootModel`` over a 5- **or** 6-tuple (the 6th ``cells`` slot is schema v5)
+    so the FE codegen emits a positional TS tuple (mirrors ``TsShardWord`` in
+    ``ts-client.ts``) rather than an object, and v3/v4 shards still validate.
     """
+
+
+class TsShardCell(BaseModel):
+    """Named (object) view of a positional ``CellTiming`` row.
+
+    The shard stores cells positionally (``CellTiming``) and they are read via
+    ``ts_shard_cells.parse_cell`` — this model is the codegen vehicle that emits
+    ``CellRole`` / ``CellStatus`` / ``TajweedRule`` as TS string unions for the FE
+    (json2ts drops enums referenced only inside a positional tuple), and documents
+    the row's fields by name. It is never validated against real shard data (the
+    positional ``CellTiming`` is), so typing the rule slots as ``TajweedRule`` is a
+    codegen convenience that does not constrain the byte-pass-through read.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    chars: str
+    role: CellRole
+    status: CellStatus
+    phoneme_indices: list[int]
+    source_letter_index: int
+    tag: TajweedRule | None = None
+    share_group: int | None = None
+    phoneme_rule_tags: list[TajweedRule | None] | None = None
+    secondary_tags: list[TajweedRule] | None = None
 
 
 class TsShardSegment(BaseModel):
@@ -69,6 +151,11 @@ class TsShardSegment(BaseModel):
     ``[start_ms, end_ms]`` span. A verse may recur across several entries
     (loopbacks / re-dos) — every accepted occurrence is one entry, emitted in
     recitation order.
+
+    ``wasl`` (v10, optional) marks an occurrence that continued into the *next*
+    occurrence without a stop: its junction word carries waṣl (not waqf)
+    phonemes, and the FE walks consecutive flagged occurrences to reconstruct a
+    waṣl group. Absent (= False) on a stop/waqf occurrence.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -76,6 +163,7 @@ class TsShardSegment(BaseModel):
     ref: str = Field(..., min_length=1)
     t: tuple[int, int]
     words: list[TsShardWord] = Field(default_factory=list)
+    wasl: bool = False
 
 
 class TsShardMeta(BaseModel):

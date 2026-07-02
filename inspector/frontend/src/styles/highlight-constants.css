@@ -1,0 +1,27 @@
+/**
+ * Cell-highlight constants for the Timestamps analysis view (letter / haraka /
+ * phoneme cells). The single home for the highlight's motion + surface values
+ * that `timestamps.css` reads. The per-tier fill / ink / ghost colours are NOT
+ * here — those derive live from the user's accent in `color-derive.ts` and ride
+ * in as `--ts-*-color` / `--ts-*-ink` / `--ts-*-muted`.
+ */
+:root {
+    /* Active-highlight motion. attack = a cell lighting up, release = fading
+       back to rest; split into two transitions so on/off can differ. Tuned to
+       the fast end of reciter pace: a short attack keeps the quickest phonemes
+       crisp, a gentler eased release carries the polish. */
+    --hl-attack-dur: 45ms;
+    --hl-release-dur: 110ms;
+    --hl-attack-ease: linear;
+    --hl-release-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+    /* Cell surfaces */
+    --hl-cell-rest: #0f0f23; /* a resting cell */
+    --hl-cell-wash: #1a1a3e; /* a cell under the active word ("mini active") */
+    --hl-wash-border: 27%; /* border tint of the washed cells */
+
+    /* Default highlight hues — the live view overrides per reciter/verse via
+       --ts-letter-color / --ts-phoneme-color for contrast. */
+    --hl-letter-color: #2ec4b6;
+    --hl-phoneme-color: #4361ee;
+}

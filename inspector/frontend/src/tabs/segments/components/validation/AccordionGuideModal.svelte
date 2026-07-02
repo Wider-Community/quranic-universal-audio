@@ -268,7 +268,7 @@
         align-items: center;
         justify-content: center;
         padding: 24px;
-        background: rgba(3, 6, 18, 0.72);
+        background: var(--scrim);
     }
 
     .accordion-guide-modal {
@@ -276,11 +276,11 @@
         max-height: min(840px, calc(100vh - 32px));
         display: flex;
         flex-direction: column;
-        border: 1px solid #2a2a4a;
+        border: 1px solid var(--border-default);
         border-radius: 8px;
-        background: #0f172f;
-        box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
-        color: #e6e8f2;
+        background: var(--surface-sunken);
+        box-shadow: var(--shadow-modal);
+        color: var(--text-primary);
         outline: none;
     }
 
@@ -290,13 +290,13 @@
         justify-content: space-between;
         gap: 16px;
         padding: 18px 20px 14px;
-        border-bottom: 1px solid #27324f;
-        background: #16213e;
+        border-bottom: 1px solid var(--border-default);
+        background: var(--panel);
     }
 
     .accordion-guide-kicker {
         margin-bottom: 4px;
-        color: #9da9c7;
+        color: var(--text-secondary);
         font-size: 0.78rem;
         text-transform: uppercase;
         letter-spacing: 0.08em;
@@ -311,18 +311,18 @@
     .accordion-guide-close {
         width: 32px;
         height: 32px;
-        border: 1px solid #34405f;
+        border: 1px solid var(--border-strong);
         border-radius: 6px;
-        background: #101a33;
-        color: #d5daeb;
+        background: var(--surface-sunken);
+        color: var(--text-secondary);
         cursor: pointer;
         font-size: 1.35rem;
         line-height: 1;
     }
 
     .accordion-guide-close:hover {
-        background: #1b294d;
-        color: #fff;
+        background: var(--panel-2);
+        color: var(--text-primary);
     }
 
     .accordion-guide-body {
@@ -331,7 +331,7 @@
     }
 
     .accordion-guide-flow {
-        color: #d8deef;
+        color: var(--text-secondary);
         line-height: 1.55;
     }
 
@@ -341,7 +341,7 @@
 
     .accordion-guide-heading {
         margin: 18px 0 8px;
-        color: #f0f3ff;
+        color: var(--text-primary);
         font-size: 1rem;
     }
 
@@ -352,14 +352,10 @@
         gap: 12px;
         margin: 14px 0 16px;
         padding: 13px 15px;
-        border: 1px solid rgba(52, 211, 153, 0.32);
-        border-left: 3px solid #34d399;
+        border: 1px solid var(--goal-border);
+        border-left: 3px solid var(--goal-accent);
         border-radius: 8px;
-        background: linear-gradient(
-            135deg,
-            rgba(16, 185, 129, 0.12),
-            rgba(16, 185, 129, 0.05)
-        );
+        background: var(--goal-bg);
     }
 
     .accordion-guide-callout-icon {
@@ -374,7 +370,7 @@
 
     .accordion-guide-callout-label {
         margin-bottom: 3px;
-        color: #6ee7b7;
+        color: var(--goal-fg);
         font-size: 0.7rem;
         font-weight: 600;
         text-transform: uppercase;
@@ -383,7 +379,7 @@
 
     .accordion-guide-callout-text {
         margin: 0;
-        color: #d9f5e8;
+        color: var(--goal-text);
         font-size: 0.92rem;
         line-height: 1.5;
     }
@@ -391,17 +387,17 @@
     .accordion-guide-muted,
     .accordion-guide-error {
         margin: 0;
-        color: #aeb8d4;
+        color: var(--text-secondary);
     }
 
     .accordion-guide-error {
-        color: #ff9aa2;
+        color: var(--bad-fg);
     }
 
     .accordion-guide-example {
         margin: 14px 0 16px;
         padding-top: 14px;
-        border-top: 1px solid #26314d;
+        border-top: 1px solid var(--border-default);
     }
 
     .accordion-guide-example-header {
@@ -411,12 +407,12 @@
     .accordion-guide-example-header h3 {
         margin: 0 0 4px;
         font-size: 0.98rem;
-        color: #f0f3ff;
+        color: var(--text-primary);
     }
 
     .accordion-guide-example-header p {
         margin: 0;
-        color: #aeb8d4;
+        color: var(--text-secondary);
         font-size: 0.88rem;
         line-height: 1.45;
     }
@@ -424,16 +420,16 @@
     .accordion-guide-context {
         margin: 8px 0;
         padding: 8px 10px;
-        border: 1px dashed #2c3a5c;
-        border-left: 3px solid #3a4a73;
+        border: 1px dashed var(--border-default);
+        border-left: 3px solid var(--border-strong);
         border-radius: 6px;
-        background: #0d1428;
+        background: var(--surface-sunken);
         opacity: 0.85;
     }
 
     .accordion-guide-context-label {
         margin-bottom: 6px;
-        color: #9aa6c8;
+        color: var(--text-muted);
         font-size: 0.74rem;
         text-transform: uppercase;
         letter-spacing: 0.05em;

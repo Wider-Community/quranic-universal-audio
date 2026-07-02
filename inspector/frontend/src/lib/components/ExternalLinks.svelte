@@ -72,22 +72,22 @@
         gap: 2px;
     }
     .link {
-        --c: #e6edf3; /* GitHub default; overridden per brand below */
+        --c: var(--brand-gh); /* GitHub default; overridden per brand below */
         position: relative;
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        color: #7d869c;
+        color: var(--brand-rail-fg);
         text-decoration: none;
         padding: 8px;
         border-radius: 7px;
         transition: color 0.18s cubic-bezier(0.22, 1, 0.36, 1),
             background 0.18s cubic-bezier(0.22, 1, 0.36, 1);
     }
-    .link[data-brand='gh'] { --c: #e6edf3; }
-    .link[data-brand='rel'] { --c: #f0a500; }
-    .link[data-brand='hf'] { --c: #ffd21e; }
-    .link[data-brand='discord'] { --c: #5865f2; }
+    .link[data-brand='gh'] { --c: var(--brand-gh); }
+    .link[data-brand='rel'] { --c: var(--brand-rel); }
+    .link[data-brand='hf'] { --c: var(--brand-hf); }
+    .link[data-brand='discord'] { --c: var(--brand-discord); }
 
     .link svg {
         width: 18px;
@@ -96,13 +96,22 @@
         flex-shrink: 0;
     }
     /* Official multi-color HF logo: desaturated at rest to read as a muted
-       monochrome mark, bursting into full brand color on hover/focus. */
+       monochrome mark, bursting into full brand color on hover/focus. The bright
+       yellow/orange artwork greyscales LIGHT, so on the light theme it must be
+       darkened to stay a visible mark on near-white. */
     .link .hf-logo {
         filter: grayscale(1) opacity(0.6);
         transition: filter 0.2s cubic-bezier(0.22, 1, 0.36, 1);
     }
+    :global(html[data-theme='light']) .link .hf-logo {
+        filter: grayscale(1) brightness(0.72) opacity(0.7);
+    }
     .link:hover .hf-logo,
     .link:focus-visible .hf-logo {
+        filter: none;
+    }
+    :global(html[data-theme='light']) .link:hover .hf-logo,
+    :global(html[data-theme='light']) .link:focus-visible .hf-logo {
         filter: none;
     }
     .lbl {
@@ -122,7 +131,7 @@
     .link:hover,
     .link:focus-visible {
         color: var(--c);
-        background: #1a2a4e;
+        background: var(--panel-2);
         outline: none;
     }
     .link:focus-visible {

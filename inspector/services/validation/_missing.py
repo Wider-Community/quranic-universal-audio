@@ -119,7 +119,7 @@ def _build_missing_words(
         words = sorted(gap.get("missing_words") or [])
         if not words:
             continue
-        key = (gap.get("verse_key"), tuple(words))
+        key: tuple[str, tuple[int, ...]] = (gap["verse_key"], tuple(words))
         if key in emitted_ranges:
             continue
         issue = {

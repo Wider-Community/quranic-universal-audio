@@ -62,13 +62,13 @@ The dataset is the work of dozens of reciters whose recordings are objects of de
 
 5. **Each tab to its purpose.** One visual language, three intents: Dashboard invites and orients, Timestamps calms and reveals, Segments equips and disappears. Consistency of vocabulary, difference of mood.
 
-6. **Warmth in typography, not in chrome.** Softness comes from typographic care (line height, tracking, Arabic + Latin pairing, attentive vertical rhythm), not rounded corners or pastel colors. The interface is dark and quiet; the work inside it is alive.
+6. **Warmth in typography, not in chrome.** Softness comes from typographic care (line height, tracking, Arabic + Latin pairing, attentive vertical rhythm), not rounded corners or pastel colors. The interface is quiet — dark by default, with a calm cool-paper light theme for those who prefer it; the work inside it is alive.
 
 ## Accessibility & Inclusion
 
-- **WCAG AA target.** Contrast minimums met across all states (including dulled-empty filter pills, view-only mode, focus rings on dark backgrounds).
+- **WCAG AA target.** Contrast minimums met across all states (including dulled-empty filter pills, view-only mode, focus rings) in BOTH themes — the light theme darkens the accent and every state hue so they clear AA on a near-white surface.
 - **Color-blind safe state communication.** State pills combine hue + shape + label, never hue alone. Red/green never the sole differentiator.
 - **Arabic + English first-class.** Reciter names and Quranic text render in both with correct font and bidi handling. RTL is preserved inside Arabic fields without flipping the whole component. Latin transliteration is paired, never alone.
 - **Keyboard fluency.** Every claim / filter / play / analysis-toggle action is reachable via keyboard. Maintainer-frequented surfaces (Dashboard, Admin, Segments) prioritize shortcuts.
 - **Reduced motion respected.** All transitions — including the Timestamps animation chrome — degrade to instant when `prefers-reduced-motion: reduce`.
-- **Long sessions.** Dark theme is shipped and correct for the workload (multi-hour review sittings, relaxed listening). No flash-of-light on theme load, no white modals on dark surface.
+- **Long sessions.** Two themes ship: dark (the default, for multi-hour review sittings and relaxed listening) and a calm cool-paper light peer (header toggle, persisted). Both are flash-free on load — `data-theme` is set before first paint — so no flash-of-theme either way. See [`docs/reference/theming.md`](docs/reference/theming.md).

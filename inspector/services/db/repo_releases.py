@@ -12,6 +12,11 @@ Three tables (migration 0014):
 
 All writers run inside the caller's active ``durable_transaction`` so
 supersede/stale stamping commits atomically with the new INSERT.
+
+``mark_ts_refreshed`` is the out-of-band sibling of the HF-job completion path:
+a manual backfill / re-stamp / local regen advances the current ``ts`` row's
+``produced_at`` (clearing computed staleness) + re-stamps HF/GH stale + audits
+``reciter.ts_refreshed``, so a bucket-direct upload is no longer silent.
 """
 
 from __future__ import annotations
@@ -24,6 +29,14 @@ from qua_shared.schemas import StaleReason
 
 from . import _serde
 from .connection import get_conn
+
+
+def _require_rowid(rowid: int | None) -> int:
+    """Return the rowid of a just-completed INSERT, which sqlite always sets."""
+    if rowid is None:
+        raise RuntimeError("INSERT did not produce a rowid")
+    return rowid
+
 
 # ---------------------------------------------------------------------------
 # per_recitation_releases
@@ -73,7 +86,7 @@ def insert_per_recitation_release(
             prior_ts_version,
         ),
     )
-    return int(cur.lastrowid)
+    return _require_rowid(cur.lastrowid)
 
 
 def supersede_current(track: str, slug: str, *, except_id: int, at: datetime) -> int:
@@ -231,6 +244,54 @@ def stamp_stale(slug: str, *, at: datetime, reason: StaleReason | str) -> int:
     return n
 
 
+def mark_ts_refreshed(
+    slug: str,
+    *,
+    at: datetime,
+    chapters: list[int] | None = None,
+    reason: str | None = None,
+) -> bool:
+    """Record an out-of-band TS shard refresh for ``slug``. Idempotent.
+
+    A manual backfill / schema-bump re-stamp / local regen uploads shards to the
+    bucket outside the HF-job completion path, so the current ``ts`` release row
+    is left pointing at a stale ``produced_at``. This advances that watermark to
+    ``at`` (or now), which makes ``ts_staleness.ts_stale_info`` recompute clean
+    (edits before the refresh no longer count) and lets the automation
+    reconciler notice the refresh. It also stamps the slug's HF + most-recent-GH
+    membership stale with ``TS_REGEN`` (the published dataset is now behind the
+    refreshed shards), mirroring a normal regen, and appends a
+    ``reciter.ts_refreshed`` audit row carrying ``{chapters, reason}``.
+
+    Returns ``True`` when a current ``ts`` row existed and was advanced, ``False``
+    when the reciter has no current ``ts`` release (nothing to refresh — a
+    backfill on a never-generated reciter). Runs inside the caller's active
+    ``durable_transaction``.
+    """
+    from services.segments.auto_detect import SYSTEM_ACTOR
+    from services.state import audit
+
+    conn = get_conn()
+    iso = _serde.to_iso(at)
+    cur = conn.execute(
+        "UPDATE per_recitation_releases SET produced_at = ? "
+        "WHERE track = 'ts' AND slug = ? AND superseded_at IS NULL",
+        (iso, slug),
+    )
+    if cur.rowcount == 0:
+        return False
+    stamp_stale(slug, at=at, reason=StaleReason.TS_REGEN)
+    audit.append(
+        "reciter.ts_refreshed",
+        actor=SYSTEM_ACTOR,
+        slug=slug,
+        from_state="released",
+        to_state="released",
+        payload={"chapters": chapters or [], "reason": reason},
+    )
+    return True
+
+
 def stamp_stale_for_reciter(reciter_id: str, *, at: datetime, reason: StaleReason | str) -> int:
     """Fan ``stamp_stale`` out across every delivery of ``reciter_id`` (a
     reciter-level catalog field appears in each delivery's catalog projection).
@@ -291,7 +352,7 @@ def insert_gh_release(
             _serde.json_dumps(validation_summary) if validation_summary else None,
         ),
     )
-    return int(cur.lastrowid)
+    return _require_rowid(cur.lastrowid)
 
 
 def supersede_prior_gh_releases(*, except_id: int, at: datetime) -> int:

@@ -41,14 +41,18 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from qua_shared.letter_vocab import to_external_char  # noqa: E402
-from qua_shared.ts_shard_letters import iter_letters  # noqa: E402
 from qua_shared.mp3_frames import (  # noqa: E402
     FrameIndex,
     MultiFrameSlice,
     build_frame_index,
     slice_frames,
     slice_frames_multi,
+)
+from qua_shared.verse_layout import (  # noqa: E402
+    build_verse_layouts,
+    load_canonical_verses,
+    pad_params_from_env,
+    reshape_canonical,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
@@ -200,65 +204,13 @@ def _load_audio_manifest(slug: str) -> dict | None:
 
 
 def _load_timestamps_shards(slug: str) -> dict[str, dict]:
-    """Read every ``reciters/<slug>/timestamps/<ch>.json.gz`` segment-array shard,
-    project each to the canonical verse map (completion-based occasion dedup, the
-    EARLIEST completing occasion), and merge into one global dict.
-
-    Returns ``{"surah:ayah": {"words": [...], "verse_start_ms", "verse_end_ms"}}``.
-    """
-    from qua_shared.timestamps_dedup import project_segment_shard
-
-    ts_dir = _bucket_root() / "reciters" / slug / "timestamps"
-    out: dict[str, dict] = {}
-    if not ts_dir.exists():
-        return out
-    for path in sorted(
-        ts_dir.iterdir(),
-        key=lambda p: int(p.name.split(".", 1)[0]) if p.name.split(".", 1)[0].isdigit() else 0,
-    ):
-        name = path.name
-        if not (name.endswith(".json") or name.endswith(".json.gz")):
-            continue
-        raw = path.read_bytes()
-        if name.endswith(".gz"):
-            raw = gzip.decompress(raw)
-        shard = json.loads(raw)
-        out.update(project_segment_shard(shard))
-    return out
+    """Canonical verse map for ``slug`` (shared loader: project + dedup + merge)."""
+    return load_canonical_verses(_bucket_root() / "reciters" / slug / "timestamps")
 
 
 def _reshape_timestamps_for_rows(canonical: dict) -> dict[str, dict]:
-    """Convert the canonical verse-map shape into build_rows' expected shape.
-
-    ``canonical[ref]`` is ``{"words": [[widx, s, e, [letters], ...], ...]}``
-    (the historical ``timestamps_full.json`` body). For each verse this
-    returns ``{"words": [[widx, s, e], ...], "letters": [(widx, [(ch, s, e), ...])],
-    "verse_start_ms": int, "verse_end_ms": int}``.
-    """
-    ts: dict[str, dict] = {}
-    for ref, val in canonical.items():
-        if ref.startswith("_"):
-            continue
-        words = val.get("words") if isinstance(val, dict) else val
-        if not words:
-            ts[ref] = {"words": [], "letters": [], "verse_start_ms": 0, "verse_end_ms": 0}
-            continue
-        vs = val.get("verse_start_ms") if isinstance(val, dict) else None
-        ve = val.get("verse_end_ms") if isinstance(val, dict) else None
-        if vs is None or ve is None:
-            vs = words[0][1]
-            ve = max(int(w[2]) for w in words)
-        slim_words = [[int(w[0]), int(w[1]), int(w[2])] for w in words]
-        letters: list[tuple] = []
-        for w in words:
-            letters.append((int(w[0]), w[3] if len(w) > 3 else []))
-        ts[ref] = {
-            "words": slim_words,
-            "letters": letters,
-            "verse_start_ms": int(vs),
-            "verse_end_ms": int(ve),
-        }
-    return ts
+    """Projection → ``build_verse_layouts`` input (shared with the GH release)."""
+    return reshape_canonical(canonical)
 
 
 # ---------------------------------------------------------------------------
@@ -329,6 +281,9 @@ def build_rows(
     chapter_urls: dict[str, str] | None = None,
     *,
     chapter_offsets: dict[str, int] | None = None,
+    pad_start: int = 100,
+    pad_end: int = 300,
+    min_gap: int = 100,
 ) -> list[dict]:
     """Build dataset row metadata in canonical verse order.
 
@@ -344,6 +299,17 @@ def build_rows(
     """
     chapter_urls = chapter_urls or {}
     chapter_offsets = chapter_offsets or {}
+    # Shared geometry: clip windows + byte-exact segments + words/letters, all
+    # source-relative. The GH release builds verse bounds from the SAME layouts,
+    # so the two channels agree by construction (qua_shared/verse_layout.py).
+    layouts = build_verse_layouts(
+        timestamps,
+        pad_start=pad_start,
+        pad_end=pad_end,
+        min_gap=min_gap,
+        seg_word_range=lambda mref, sn, ay: _seg_word_range(mref, sn, ay, surah_info),
+        detailed_by_ref=detailed_by_ref,
+    )
     rows: list[dict] = []
     for surah_num in sorted(surah_info, key=int):
         surah = surah_info[surah_num]
@@ -353,32 +319,31 @@ def build_rows(
             entry = detailed_by_ref.get(ref)
             if not entry:
                 continue
-            tdata = timestamps.get(ref)
-            if not tdata:
+            layout = layouts.get(ref)
+            if not layout:
                 continue
-            clip_start = tdata["verse_start_ms"]
-            clip_end = tdata["verse_end_ms"]
+            clip_start = layout["clip_start"]
+            clip_end = layout["clip_end"]
 
-            # Segments: only those overlapping the clip AND covering this ayah;
-            # trim to clip; clip-relative. Word span comes from matched_ref.
-            verse_segments: list[list[int]] = []
-            for seg in entry.get("segments", []) or []:
-                t_start = seg.get("time_start", 0)
-                t_end = seg.get("time_end", 0)
-                if t_end <= clip_start or t_start >= clip_end:
-                    continue
-                wr = _seg_word_range(seg.get("matched_ref", ""), surah_num, ayah, surah_info)
-                if wr is None:
-                    continue
-                w_from, w_to = wr
-                verse_segments.append(
-                    [
-                        _i(w_from),
-                        _i(w_to),
-                        _i(max(0, t_start - clip_start)),
-                        _i(min(t_end, clip_end) - clip_start),
-                    ]
-                )
+            # Rebase the shared source-relative layout to clip-relative. The
+            # byte-exact segment geometry (occurrence-pinned boundaries, outer
+            # edges stretched to the clip) is owned by the shared builder.
+            verse_segments = [
+                [s[0], s[1], _i(s[2] - clip_start), _i(s[3] - clip_start)]
+                for s in layout["segments"]
+            ]
+            verse_words = [
+                [w[0], _i(w[1] - clip_start), _i(w[2] - clip_start)] for w in layout["words"]
+            ]
+            verse_letters = [
+                {
+                    "word_idx": lt[0],
+                    "char": lt[1],
+                    "start_ms": _i(lt[2] - clip_start),
+                    "end_ms": _i(lt[3] - clip_start),
+                }
+                for lt in layout["letters"]
+            ]
 
             # text_uthmani from detailed.json matched_refs, restricted to the
             # clip range; cross-verse segments use only this ayah's portion.
@@ -410,63 +375,6 @@ def build_rows(
                                 )
                 text_parts.append(seg_text)
             text = _strip_quran_markers(" ".join(text_parts))
-
-            # Words (clip-relative).
-            verse_words = [
-                [_i(w[0]), _i(w[1] - clip_start), _i(w[2] - clip_start)] for w in tdata["words"]
-            ]
-
-            # Synthesize missing segments around the home segments (cross-verse).
-            if verse_words and not verse_segments:
-                verse_segments.append(
-                    [
-                        verse_words[0][0],
-                        verse_words[-1][0],
-                        verse_words[0][1],
-                        verse_words[-1][2],
-                    ]
-                )
-            elif verse_words and verse_segments:
-                first_seg_start = verse_segments[0][2]
-                xv_before = [w for w in verse_words if w[2] <= first_seg_start]
-                if xv_before:
-                    verse_segments.insert(
-                        0,
-                        [
-                            xv_before[0][0],
-                            xv_before[-1][0],
-                            xv_before[0][1],
-                            xv_before[-1][2],
-                        ],
-                    )
-                last_seg_end = verse_segments[-1][3]
-                xv_after = [w for w in verse_words if w[1] >= last_seg_end]
-                if xv_after:
-                    verse_segments.append(
-                        [
-                            xv_after[0][0],
-                            xv_after[-1][0],
-                            xv_after[0][1],
-                            xv_after[-1][2],
-                        ]
-                    )
-
-            # Letters: flatten (widx, char, start, end) — clip-relative. Read via
-            # the named accessor; the shard's trailing ``silent`` flag (and any
-            # future slot) isn't exposed in the published letter tier.
-            verse_letters: list[dict] = []
-            for widx, letters in tdata.get("letters", []):
-                for lt in iter_letters(letters):
-                    verse_letters.append(
-                        {
-                            "word_idx": _i(widx),
-                            # Internal 57-token alphabet -> published 42-token set
-                            # (same mapping as the GH release letter tier).
-                            "char": to_external_char(lt.char),
-                            "start_ms": _i(lt.start_ms - clip_start),
-                            "end_ms": _i(lt.end_ms - clip_start),
-                        }
-                    )
 
             # Kept audio runs = the verse clip window minus any INTERIOR
             # no-match segment (empty matched_ref). A no-match segment stays in
@@ -681,7 +589,7 @@ def _verses_for_validation(rows: list[dict]) -> dict[str, dict]:
 # ---------------------------------------------------------------------------
 
 
-def _push_to_hf(slug: str, riwayah: str, rows: list[dict], audio_bytes: list[bytes]) -> str:
+def _push_to_hf(slug: str, riwayah: str, rows: list[dict], audio_bytes: list[bytes | None]) -> str:
     """Build the parquet split and push to HF. Returns the dataset commit SHA."""
     from datasets import Audio, Dataset, Features, Sequence, Value
     from huggingface_hub import HfApi
@@ -960,7 +868,15 @@ def _result(
     }
 
 
-def publish_slug(slug: str, job_id: str, *, sync_card: bool = True) -> dict:
+def publish_slug(
+    slug: str,
+    job_id: str,
+    *,
+    sync_card: bool = True,
+    pad_start: int = 100,
+    pad_end: int = 300,
+    min_gap: int = 100,
+) -> dict:
     """Publish one recitation to the HF dataset. Returns a result dict; never
     posts a webhook or raises (the caller — single or batch — owns reporting).
 
@@ -1043,6 +959,9 @@ def publish_slug(slug: str, job_id: str, *, sync_card: bool = True) -> dict:
         dk_words,
         chapter_urls,
         chapter_offsets=chapter_offsets,
+        pad_start=pad_start,
+        pad_end=pad_end,
+        min_gap=min_gap,
     )
     log.info("built %d rows for %s", len(rows), slug)
     if not rows:
@@ -1203,9 +1122,20 @@ def publish_slug(slug: str, job_id: str, *, sync_card: bool = True) -> dict:
 def main() -> int:
     slug = os.environ.get("SLUG", "").strip()
     job_id = os.environ.get("JOB_ID", "").strip() or "unknown"
-    log.info("publish_hf: slug=%s job=%s", slug, job_id)
+    pads = pad_params_from_env()
+    pad_start, pad_end, min_gap = pads["pad_start"], pads["pad_end"], pads["min_gap"]
+    log.info(
+        "publish_hf: slug=%s job=%s pads=(start=%d,end=%d,gap=%d)",
+        slug,
+        job_id,
+        pad_start,
+        pad_end,
+        min_gap,
+    )
 
-    result = publish_slug(slug, job_id, sync_card=True)
+    result = publish_slug(
+        slug, job_id, sync_card=True, pad_start=pad_start, pad_end=pad_end, min_gap=min_gap
+    )
     _post_webhook(
         slug=slug,
         job_id=job_id,

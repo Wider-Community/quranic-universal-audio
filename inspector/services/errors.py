@@ -52,6 +52,9 @@ class Codes:
     LAST_OWNER = "LAST_OWNER"
     UNKNOWN_RECITER = "UNKNOWN_RECITER"
 
+    # Storage
+    READ_ONLY = "READ_ONLY"
+
 
 def error_body(
     message: str,

@@ -524,7 +524,9 @@ def test_publish_hf_batch_launches_with_deduped_slugs(signed_in_client, monkeypa
     monkeypatch.setattr(
         batch_jobs,
         "launch",
-        lambda slugs, webhook_base=None: seen.update(slugs=slugs) or {"job_id": "j_b", "url": "u"},
+        lambda slugs, *, settings=None, webhook_base=None: (
+            seen.update(slugs=slugs) or {"job_id": "j_b", "url": "u"}
+        ),
     )
 
     resp = client.post(

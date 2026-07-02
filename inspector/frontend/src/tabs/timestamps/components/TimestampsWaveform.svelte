@@ -30,8 +30,11 @@
     import { dashPort } from '../../../lib/playback/dash-port';
     import { ensureDashCovering } from '../../../lib/playback/dash-covering';
     import { recitationConfigStore } from '../../../lib/recitation-animation/recitation-settings';
+    import { themeStore, THEME_CHANGE_EVENT } from '../../../lib/stores/theme.svelte';
     import type { AudioPeaks, PeakBucket, SegmentPeaks } from '../../../lib/types/peaks-transport';
-    import { analogousTriad } from '../../../lib/utils/color-derive';
+    import type { TsVerseData } from '../../../lib/types/ts-client';
+    import { themeColor } from '../../../lib/utils/canvas-theme';
+    import { triadForTheme } from '../../../lib/utils/highlight-model';
     import {
         PREVIEW_PLAYHEAD_COLOR,
         WAVEFORM_BG_COLOR,
@@ -49,7 +52,7 @@
         viewMode,
     } from '../stores/display';
     import { loopTarget } from '../stores/playback';
-    import { loadedVerse } from '../stores/verse';
+    import { focusWaslGroup, loadedVerse } from '../stores/verse';
     import { tsZoom, tsZoomAnimating } from '../stores/zoom';
     import { TS_PAN_HALF_CANVAS_VIEWS_PER_SEC } from '../utils/constants';
     import { findWordAt } from '../utils/loop-target';
@@ -140,7 +143,12 @@
     // Waveform overlay colors derive from the SHARED recitation accent so the
     // word/letter/phoneme bands + boundary strokes match the analysis display
     // and the now-reciting animation (one analogous family).
-    $: triad = analogousTriad($recitationConfigStore.highlightColor);
+    // Theme-conditional band (mirrors the analysis cells): light uses a darker
+    // legible band so the markers read on the light waveform. `curTheme` is a
+    // local mirror of the runes theme store, updated by the `themechange`
+    // listener below (a legacy `$:` can't reliably track the store field).
+    let curTheme = themeStore.current;
+    $: triad = triadForTheme($recitationConfigStore.highlightColor, curTheme);
     $: wordColor = triad.word;
     $: letterColor = triad.letter;
     $: phonemeColor = triad.phoneme;
@@ -148,7 +156,12 @@
     // Redraw when toggles / hover store / loop store change so overlays update
     // even while paused. Subscriptions on `$tsHoveredElement` and `$loopTarget`
     // trigger block-originated hover renders + loop band updates respectively.
-    $: ($tsHoveredElement, $loopTarget, lettersActive, phonemesActive, wordColor, drawOverlays());
+    // `themeStore.current` is listed so a light/dark flip re-runs the redraw;
+    // because a legacy `$:` block may not reliably track a runes-store field,
+    // the onMount `themechange` listener below is the guaranteed repaint path
+    // (it also invalidates the cached base snapshot so peaks repaint, not just
+    // overlays).
+    $: ($tsHoveredElement, $loopTarget, lettersActive, phonemesActive, wordColor, themeStore.current, drawOverlays());
 
     // ---- Zoom: pass sub-range to WaveformCanvas + recapture base on change ----
 
@@ -156,6 +169,13 @@
      *  `get(tsZoom)` per draw call). Updated by the reactive subscription. */
     let _zoom: { viewStart: number; viewEnd: number } | null = null;
     $: _zoom = $tsZoom;
+
+    // The displayed window: the whole cross-verse waṣl span when the focus verse
+    // is in a group (so the waveform shows the continuous recitation as one), else
+    // the focus verse. Drives the peaks fetch + the coordinate base; the merged
+    // group's cells 0-anchor to the group start, matching `_dispOffsetSec`.
+    $: _dispOffsetSec = $focusWaslGroup ? $focusWaslGroup.span[0] / 1000 : ($loadedVerse?.tsSegOffset ?? 0);
+    $: _dispEndSec = $focusWaslGroup ? $focusWaslGroup.span[1] / 1000 : ($loadedVerse?.tsSegEnd ?? 0);
 
     // Sub-range props forwarded to WaveformCanvas, resolved via `_drawRange` so
     // the bucket-snapped baked slice and the verse-exact ffmpeg slice both map
@@ -166,7 +186,7 @@
     // when the slice metadata flips (baked ↔ ffmpeg fallback).
     $: _wcRange = _drawRange(
         _zoom,
-        $loadedVerse ? ($loadedVerse.tsSegEnd - $loadedVerse.tsSegOffset) * 1000 : 0,
+        ($loadedVerse || $focusWaslGroup) ? (_dispEndSec - _dispOffsetSec) * 1000 : 0,
         _peaksSpanMs,
         _peaksOriginMs,
     );
@@ -224,8 +244,8 @@
         $loadedVerse?.data.audio_url ?? null,
         $loadedVerse?.data.reciter ?? '',
         $loadedVerse?.data.chapter ?? 0,
-        $loadedVerse?.tsSegOffset ?? 0,
-        $loadedVerse?.tsSegEnd ?? 0,
+        _dispOffsetSec,
+        _dispEndSec,
     );
 
     function _clearPeaks(): void {
@@ -413,8 +433,8 @@
         // stale playhead into every subsequent `putImageData` call
         // (user-visible as a fixed ghost cursor inside the loop word).
         if (peaks) {
-            const lv = get(loadedVerse);
-            const exactMs = lv ? (lv.tsSegEnd - lv.tsSegOffset) * 1000 : 0;
+            const win = dispWindow();
+            const exactMs = win ? (win.end - win.offset) * 1000 : 0;
             const range = _drawRange(_zoom, exactMs, _peaksSpanMs, _peaksOriginMs);
             drawWaveformPeaks(ctx, peaks, {
                 width: canvas.width,
@@ -430,6 +450,17 @@
 
     // ---- Overlays ----
 
+    /** Imperative read of the displayed window (the whole waṣl group when the
+     *  focus is in one, else the focus verse). Matches the reactive
+     *  `_dispOffsetSec`/`_dispEndSec` + the merged cells, so peaks / playhead /
+     *  bands / click all share one group-anchored coordinate base. */
+    function dispWindow(): { offset: number; end: number; data: TsVerseData } | null {
+        const fg = get(focusWaslGroup);
+        if (fg) return { offset: fg.span[0] / 1000, end: fg.span[1] / 1000, data: fg.data };
+        const lv = get(loadedVerse);
+        return lv ? { offset: lv.tsSegOffset, end: lv.tsSegEnd, data: lv.data } : null;
+    }
+
     /**
      * Draw overlays. Called per-frame from the parent animation loop and on
      * reactive store changes. Restores the immutable peaks base, then paints
@@ -444,14 +475,14 @@
 
         const width = canvas.width;
         const height = canvas.height;
-        const lv = get(loadedVerse);
-        if (!lv) return;
+        const win = dispWindow();
+        if (!win) return;
 
-        const segOffset = lv.tsSegOffset;
-        const segEnd = lv.tsSegEnd;
+        const segOffset = win.offset;
+        const segEnd = win.end;
         const duration = segEnd - segOffset || 1;
-        const words = lv.data.words;
-        const intervals = lv.data.intervals;
+        const words = win.data.words;
+        const intervals = win.data.intervals;
 
         // 1. Restore pristine base.
         //    Fast path: use the cached ImageData snapshot when it matches the
@@ -480,7 +511,7 @@
                 totalDurationMs: range.totalDurationMs,
             });
         } else {
-            ctx.fillStyle = '#0f0f23';
+            ctx.fillStyle = themeColor('--wf-bg', '#0f0f23');
             ctx.fillRect(0, 0, width, height);
         }
 
@@ -499,7 +530,7 @@
         //      gives the classic DAW "quiet zone" look without a rectangular wash.
         const dimSilence = (start: number, end: number): void => {
             if (end <= start) return;
-            _fillBand(ctx, tToX(start), tToX(end), height, WAVEFORM_BG_COLOR, SILENCE_DIM_ALPHA);
+            _fillBand(ctx, tToX(start), tToX(end), height, themeColor('--wf-bg', WAVEFORM_BG_COLOR), SILENCE_DIM_ALPHA);
         };
         if (words.length > 0) {
             const first = words[0];
@@ -723,14 +754,14 @@
         if (!waveformRef) return null;
         const canvas = waveformRef.getCanvas();
         if (!canvas) return null;
-        const lv = get(loadedVerse);
-        if (!lv) return null;
+        const win = dispWindow();
+        if (!win) return null;
         const rect = canvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const progress = x / Math.max(1, rect.width);
         // Zoom-aware: when zoomed, pixel x maps back to view window, not full slice.
         if (_zoom) return _zoom.viewStart + progress * (_zoom.viewEnd - _zoom.viewStart);
-        return progress * (lv.tsSegEnd - lv.tsSegOffset);
+        return progress * (win.end - win.offset);
     }
 
     function onCanvasMove(e: MouseEvent): void {
@@ -750,12 +781,12 @@
 
     function onCanvasClick(e: MouseEvent): void {
         if (!dashPort.element || !dashPort.element.duration) return;
-        const lv = get(loadedVerse);
-        if (!lv) return;
+        const win = dispWindow();
+        if (!win) return;
         const t = _pointerTime(e);
         if (t == null) return;
 
-        const words = lv.data.words;
+        const words = win.data.words;
         // Strict lookup — clicks in inter-word silence (or leading/trailing
         // margin) are no-ops rather than snapping to an unrelated token.
         const w = findWordAt(t, words, false);
@@ -769,7 +800,7 @@
             const wi = words.indexOf(w);
             if (cur.kind === 'word' && cur.wordIndex === wi) return;
             loopTarget.set({ kind: 'word', startSec: w.start, endSec: w.end, wordIndex: wi });
-            const targetMs = (w.start + lv.tsSegOffset) * 1000;
+            const targetMs = (w.start + win.offset) * 1000;
             ensureDashCovering(targetMs);
             dashPort.seek(targetMs);
             signalDashSeekIntent();
@@ -779,7 +810,7 @@
         }
 
         // Snap to enclosing word's start.
-        const targetMs = (w.start + lv.tsSegOffset) * 1000;
+        const targetMs = (w.start + win.offset) * 1000;
         ensureDashCovering(targetMs);
         dashPort.seek(targetMs);
         signalDashSeekIntent();
@@ -889,10 +920,22 @@
             updateSizeFromContainer();
         };
         window.addEventListener('resize', onResize);
+        // Theme flip: invalidate the cached base snapshot so peaks repaint with
+        // the new theme's --wf-* colours, then redraw overlays. The reactive
+        // `themeStore.current` dep above can't be relied on inside a legacy `$:`,
+        // so this listener is the guaranteed repaint trigger.
+        const onThemeChange = (): void => {
+            curTheme = themeStore.current; // recompute the tier triad in the new band
+            _baseImageData = null;
+            _baseCacheKey = null;
+            drawOverlays();
+        };
+        window.addEventListener(THEME_CHANGE_EVENT, onThemeChange);
         const canvas = waveformRef?.getCanvas();
         canvas?.addEventListener('wheel', onWheel, { passive: false });
         return () => {
             window.removeEventListener('resize', onResize);
+            window.removeEventListener(THEME_CHANGE_EVENT, onThemeChange);
             canvas?.removeEventListener('wheel', onWheel);
             _forceEndPan();
         };

@@ -29,7 +29,7 @@ def _row(
     slug,
     *,
     state="under_review",
-    assignee_hf_id="u-target",
+    assignee_hf_id: str | None = "u-target",
     assignee_login="target_user",
     marked_ready=False,
 ):

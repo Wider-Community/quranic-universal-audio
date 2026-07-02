@@ -1,14 +1,15 @@
 """Regression: the cut's boundary-validation input must respect a real
-``verse_start_ms == 0``.
+``verse_start_ms == 0`` and keep its three fields consistent.
 
 A canonical verse can legitimately start at 0 ms while its first word's audio
-starts a few ms later (leading gap). The old builder used
-``v.get("verse_start_ms") or words[0][1]``, which treats the real ``0`` as
-falsy and substitutes the word start for the *field* — while computing
-``duration_ms`` from the real ``0``. That asymmetry manufactured a phantom
-``duration_arithmetic`` violation and aborted the cut (seen on
-``abu_bakr_al_shatri_tarteel`` 5:1 etc.). ``_verse_for_validate`` resolves the
-bounds once so the three fields always agree.
+starts a few ms later (leading gap). The bounds the cut validates are now the
+shared layout's clip window (``build_verse_layouts``), and ``_verse_for_validate``
+derives ``duration_ms`` from those same bounds — so the three fields always
+agree (no phantom ``duration_arithmetic``, which once aborted the cut on
+``abu_bakr_al_shatri_tarteel`` 5:1). These tests run with zero pads so the clip
+window equals the word-span, isolating the consistency invariant. The release's
+tier bounds + letter mapping also come from the shared layout, so the GH release
+and the HF dataset reconstruct the same geometry.
 """
 
 from __future__ import annotations
@@ -23,25 +24,48 @@ from qua_jobs.cut_release import _verse_for_validate
 from qua_shared.dataset_validation import (
     check_duration_arithmetic,
 )
+from qua_shared.verse_layout import PadParams, build_verse_layouts, reshape_canonical
 
 # An LFS pointer file — what HF auto-LFS ships for ``data/qpc_hafs.json.gz`` in
 # the job image (LFS'd by extension; the Space build can't smudge it).
 _LFS_POINTER = b"version https://git-lfs.github.com/spec/v1\noid sha256:deadbeef\nsize 1452433\n"
 
+# Zero pads → the clip window equals the word-span, so these tier/validate tests
+# read the same bounds the old word-span builder produced.
+_ZERO_PADS: PadParams = {"pad_start": 0, "pad_end": 0, "min_gap": 0}
+
+
+def _layouts(verses: dict) -> dict:
+    return build_verse_layouts(reshape_canonical(verses), **_ZERO_PADS)
+
+
+def _tiers(verses: dict) -> dict:
+    return cut_release._build_tier_files(
+        "example_reciter", _layouts(verses), delivery_meta={"audio_category": "by_surah"}
+    )
+
 
 def test_verse_start_zero_with_leading_word_gap():
-    # verse_start_ms is a real 0; first word's audio starts at 60 ms.
-    v = {"verse_start_ms": 0, "verse_end_ms": 24095, "words": [[1, 60, 2350], [23, 21995, 24095]]}
-    out = _verse_for_validate(v, segments=[])
-    assert out["verse_start_ms"] == 0  # NOT coerced to the word start (60)
+    # verse_start_ms is a real 0; first word's audio starts at 60 ms. With zero
+    # pads the clip window is [0, 24095] — the real 0 is respected (not coerced
+    # to the word start), and duration == end - start.
+    verses = {
+        "5:1": {
+            "verse_start_ms": 0,
+            "verse_end_ms": 24095,
+            "words": [[1, 60, 2350], [23, 21995, 24095]],
+        }
+    }
+    out = _verse_for_validate(_layouts(verses)["5:1"])
+    assert out["verse_start_ms"] == 0
     assert out["verse_end_ms"] == 24095
-    assert out["duration_ms"] == 24095  # end - start, consistent
+    assert out["duration_ms"] == 24095
     assert check_duration_arithmetic("5:1", out) == []  # no phantom violation
 
 
 def test_bounds_fall_back_to_words_when_absent():
-    v = {"words": [[1, 100, 500], [2, 500, 900]]}  # no verse_start/end keys
-    out = _verse_for_validate(v, segments=[])
+    verses = {"1:1": {"words": [[1, 100, 500], [2, 500, 900]]}}  # no verse_start/end keys
+    out = _verse_for_validate(_layouts(verses)["1:1"])
     assert out["verse_start_ms"] == 100
     assert out["verse_end_ms"] == 900
     assert out["duration_ms"] == 800
@@ -49,8 +73,8 @@ def test_bounds_fall_back_to_words_when_absent():
 
 
 def test_nonzero_start_duration_consistent():
-    v = {"verse_start_ms": 120, "verse_end_ms": 12814, "words": [[1, 120, 12814]]}
-    out = _verse_for_validate(v, segments=[])
+    verses = {"22:1": {"verse_start_ms": 120, "verse_end_ms": 12814, "words": [[1, 120, 12814]]}}
+    out = _verse_for_validate(_layouts(verses)["22:1"])
     assert out["duration_ms"] == 12694
     assert check_duration_arithmetic("22:1", out) == []
 
@@ -62,12 +86,7 @@ def test_release_timestamp_tiers_preserve_verse_order():
         "10:1": {"words": [[1, 200, 300]]},
         "100:1": {"words": [[1, 300, 400]]},
     }
-    files = cut_release._build_tier_files(
-        "example_reciter",
-        verses,
-        delivery_meta={"audio_category": "by_surah"},
-    )
-
+    files = _tiers(verses)
     for name in (
         "verse_timestamps.json.gz",
         "word_timestamps.json.gz",
@@ -99,9 +118,7 @@ def test_letter_tier_maps_internal_alphabet_to_external_42_set():
             ]
         }
     }
-    files = cut_release._build_tier_files(
-        "example_reciter", verses, delivery_meta={"audio_category": "by_surah"}
-    )
+    files = _tiers(verses)
     doc = json.loads(gzip.decompress(files["letter_timestamps.json.gz"]).decode("utf-8"))
     letters = doc["19:1"][2]  # [[widx, char, start, end], ...]
     chars = [lt[1] for lt in letters]
@@ -111,12 +128,36 @@ def test_letter_tier_maps_internal_alphabet_to_external_42_set():
 
 
 def test_letter_tier_fails_loud_on_unknown_token():
-    # A haraka-bearing letter is not in the external alphabet → cut aborts.
+    # A haraka-bearing letter is not in the external alphabet → the shared layout
+    # build (where the external mapping happens) aborts.
     verses = {"1:1": {"words": [[1, 0, 100, [["بَ", 0, 100]]]]}}
     with pytest.raises(ValueError):
-        cut_release._build_tier_files(
-            "example_reciter", verses, delivery_meta={"audio_category": "by_surah"}
-        )
+        _layouts(verses)
+
+
+def test_release_verse_bound_is_padded_clip_window():
+    # Consistency with the HF dataset: the release verse bound is the padded clip
+    # window [clip_start, clip_end], NOT the raw word-span. With a trailing
+    # neighbour the gap is ample, so the first verse takes the full pad_end tail.
+    verses = {
+        "1:1": {"words": [[1, 100, 1000]], "verse_start_ms": 100, "verse_end_ms": 1000},
+        "1:2": {"words": [[1, 5000, 6000]], "verse_start_ms": 5000, "verse_end_ms": 6000},
+    }
+    layouts = build_verse_layouts(
+        reshape_canonical(verses), pad_start=100, pad_end=300, min_gap=100
+    )
+    files = cut_release._build_tier_files(
+        "example_reciter", layouts, delivery_meta={"audio_category": "by_surah"}
+    )
+    verse_doc = json.loads(gzip.decompress(files["verse_timestamps.json.gz"]).decode("utf-8"))
+    assert verse_doc["1:1"] == [
+        0,
+        1300,
+    ]  # clip window (word-span 100..1000 padded), not [100, 1000]
+    # The word tier keeps the true word times (source-relative), so the word-span
+    # is still recoverable from inside the padded clip.
+    word_doc = json.loads(gzip.decompress(files["word_timestamps.json.gz"]).decode("utf-8"))
+    assert word_doc["1:1"][1] == [[1, 100, 1000]]
 
 
 # ---------------------------------------------------------------------------

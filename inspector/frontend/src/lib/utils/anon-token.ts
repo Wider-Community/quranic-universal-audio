@@ -21,6 +21,20 @@ function mint(): string {
     }
 }
 
+/** Read the existing anon token WITHOUT minting one — `null` when this browser
+ *  has never filed an anonymous report. For reads (e.g. fetching own non-public
+ *  flags) where minting a token for a pure reader would be wasteful. */
+export function peekAnonToken(): string | null {
+    if (memo) return memo;
+    try {
+        const existing = localStorage.getItem(LS_KEYS.ANON_FLAG_TOKEN);
+        if (existing) memo = existing;
+        return existing;
+    } catch {
+        return null;
+    }
+}
+
 /** Read the persisted anon token, minting + storing one on first use. */
 export function getAnonToken(): string {
     if (memo) return memo;

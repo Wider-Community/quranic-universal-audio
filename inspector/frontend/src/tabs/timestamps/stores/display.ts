@@ -35,6 +35,27 @@ export const showPhonemes = writable<boolean>(true);
 /** Analysis mode: toggle the word-by-word translation row (above each word). */
 export const showTranslations = writable<boolean>(false);
 
+/** Analysis-mode highlight style. false = discrete fill (a cell crisply lights
+ *  and fades), true = continuous karaoke wipe (the fill tracks the voice across
+ *  each cell). Self-persisted here (the boolean toggles above are persisted from
+ *  `TimestampsTab`; this one is loaded/saved inline to stay self-contained). */
+const LS_HIGHLIGHT_WIPE = 'ts:highlightWipe';
+function _wipeInitial(): boolean {
+    try {
+        return localStorage.getItem(LS_HIGHLIGHT_WIPE) === 'true';
+    } catch {
+        return false;
+    }
+}
+export const highlightWipe = writable<boolean>(_wipeInitial());
+highlightWipe.subscribe((v) => {
+    try {
+        localStorage.setItem(LS_HIGHLIGHT_WIPE, String(v));
+    } catch {
+        /* private mode / storage disabled — in-memory only */
+    }
+});
+
 /** ISO code of the chosen word-by-word translation language (default English). */
 export const translationLanguage = writable<string>('en');
 

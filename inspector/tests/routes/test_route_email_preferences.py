@@ -41,7 +41,9 @@ def test_post_anonymous_creates_row_and_echoes_token(flask_client):
     token = body["manage_token"]
     assert token
     # Persisted + retrievable by the echoed token.
-    assert repo_subs.get_by_token(token)["prefs"]["recitation_published"] == "all"
+    saved = repo_subs.get_by_token(token)
+    assert saved is not None
+    assert saved["prefs"]["recitation_published"] == "all"
 
 
 def test_get_by_token_returns_saved_prefs(flask_client):
@@ -69,7 +71,9 @@ def test_signed_in_post_associates_user_and_get_resolves_by_cookie(signed_in_cli
     body = json.loads(client.get("/api/me/email-preferences").data)
     assert body["email"] == "alice@example.com"
     assert body["request_aligned"] is True
-    assert repo_subs.get_by_hf_user("e-1")["email"] == "alice@example.com"
+    by_user = repo_subs.get_by_hf_user("e-1")
+    assert by_user is not None
+    assert by_user["email"] == "alice@example.com"
 
 
 def test_unsubscribe_turns_events_off(flask_client):
@@ -79,4 +83,6 @@ def test_unsubscribe_turns_events_off(flask_client):
     res = flask_client.get(f"/api/email-unsubscribe?token={token}")
     assert res.status_code == 200
     assert b"unsubscribed" in res.data.lower()
-    assert repo_subs.get_by_token(token)["prefs"]["recitation_published"] == "off"
+    after = repo_subs.get_by_token(token)
+    assert after is not None
+    assert after["prefs"]["recitation_published"] == "off"
