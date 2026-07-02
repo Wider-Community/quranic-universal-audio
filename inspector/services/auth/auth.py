@@ -171,6 +171,28 @@ def pop_return_path(state: str | None) -> str | None:
     return val if isinstance(val, str) else None
 
 
+def remember_popup(state: str) -> None:
+    """Mark this OAuth ``state`` as originating from a popup sign-in.
+
+    Embedded in the cross-site HF iframe the app can't navigate the top window
+    (no ``allow-top-navigation``) and can't render HF's ``X-Frame-Options:
+    SAMEORIGIN`` login page in-frame, so the sign-in runs in a popup instead.
+    The callback checks this flag to close the popup (postMessage + close)
+    rather than redirecting. Stored alongside Authlib's state entry.
+    """
+    _state_cache.set(f"popup_{state}", True, _RETURN_PATH_TTL)
+
+
+def pop_popup(state: str | None) -> bool:
+    """Return (and clear) whether this ``state`` was a popup sign-in."""
+    if not state:
+        return False
+    key = f"popup_{state}"
+    val = _state_cache.get(key)
+    _state_cache.delete(key)
+    return bool(val)
+
+
 def init_oauth(app) -> OAuth:
     """Register the HF OAuth provider on the Flask app. Idempotent."""
     global _oauth
