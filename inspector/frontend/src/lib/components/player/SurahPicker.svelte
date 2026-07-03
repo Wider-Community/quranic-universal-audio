@@ -6,7 +6,14 @@
      * transport. The chip renders no caret (its border + hover state signal that
      * it opens); `open` is parent-controlled so each footer keeps owning its
      * click-outside and any sibling-popover coordination.
+     *
+     * The dropup is pinned to the locale direction (`popDir`) rather than
+     * inheriting it: in the Segments footer the picker sits inside the
+     * transport's `dir="ltr"` island, but its surah grid + search must still
+     * flow RTL under Arabic.
      */
+    import { i18n } from '$lib/i18n/locale.svelte';
+
     import SurahPopover from './SurahPopover.svelte';
 
     let {
@@ -37,6 +44,8 @@
         onchange: (n: number) => void;
         onhover?: (n: number) => void;
     } = $props();
+
+    const popDir = $derived(i18n.locale === 'ar' ? 'rtl' : 'ltr');
 </script>
 
 <div class="surah-picker" class:compact>
@@ -52,7 +61,7 @@
         onclick={ontoggle}
     >{label}</button>
     {#if open}
-        <div class="pop">
+        <div class="pop" dir={popDir}>
             <SurahPopover {surahNums} {value} {onchange} {onhover} />
         </div>
     {/if}
@@ -82,10 +91,11 @@
     .trigger:disabled { opacity: 0.35; cursor: not-allowed; }
     .trigger.live { color: var(--accent); border-color: var(--accent-border-soft); }
 
-    /* Segments-transport sizing: match the sibling location cells (36px). */
+    /* Segments-transport sizing: match the sibling location cells' height. No
+       fixed width — the chip hugs its label exactly like the bottom-player
+       picker, so a short surah name never leaves an empty gap. */
     .compact .trigger {
         height: 36px;
-        min-width: 80px;
         padding: 0 10px;
     }
 

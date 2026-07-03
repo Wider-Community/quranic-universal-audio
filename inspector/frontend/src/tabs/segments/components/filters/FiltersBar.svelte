@@ -22,7 +22,7 @@
     $: count = $activeFilters.length;
     $: countLabel = count > 0 ? tr($localeStore, `(${localizeDigits(count)})`) : '';
     $: statusText = ($activeFilters.some((f) => f.value !== null) || $selectedVerse)
-        ? tr($localeStore, localizeDigits(`${$displayedResult.segments.length} / ${$displayedResult.total}`))
+        ? `${$displayedResult.segments.length} / ${$displayedResult.total}`
         : '';
 
     let justAdded = false;

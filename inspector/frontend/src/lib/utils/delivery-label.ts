@@ -2,7 +2,6 @@
  * Display-name helpers for catalog vocab slugs.
  * Centralized so slugs never leak to the UI.
  */
-import { localizeDigits } from '$lib/i18n/format';
 import * as m from '$lib/paraglide/messages';
 import type { PublicDelivery } from '../types/generated/schemas';
 
@@ -56,32 +55,30 @@ export function bitrateLabel(d: PublicDelivery): string {
     const kbps = d.bitrate_kbps_nominal;
     const modeText = BITRATE_MODE_LABEL[mode]?.() ?? mode.replace(/_/g, ' ');
     if (kbps == null) return modeText || '—';
-    if (!modeText) return localizeDigits(`${kbps} kbps`);
-    return localizeDigits(`${kbps} kbps${SEP}${modeText}`);
+    if (!modeText) return `${kbps} kbps`;
+    return `${kbps} kbps${SEP}${modeText}`;
 }
 
 /** Compact coverage badge for the picker — "Full" or "47/114". */
 export function compactCoverageLabel(d: PublicDelivery): string {
     if (d.coverage_kind === 'full') return m.common_delivery_coverage_full();
-    return localizeDigits(`${d.chapter_count}/114`);
+    return `${d.chapter_count}/114`;
 }
 
 /** Compact hours badge for the picker — "3.5h", "45m", or "—". */
 export function compactHoursLabel(d: PublicDelivery): string {
     if (d.total_duration_sec == null) return '—';
     const h = d.total_duration_sec / 3600;
-    if (h < 1) return localizeDigits(`${Math.round(h * 60)}m`);
-    return localizeDigits(`${h.toFixed(1)}h`);
+    if (h < 1) return `${Math.round(h * 60)}m`;
+    return `${h.toFixed(1)}h`;
 }
 
 /** "x ayahs" if by_ayah, "x surahs" if by_surah. */
 export function coverageLabel(d: PublicDelivery): string {
     const n = d.chapter_count;
-    return localizeDigits(
-        d.audio_category === 'by_ayah'
-            ? m.common_delivery_ayah_count({ count: n })
-            : m.common_delivery_surah_count({ count: n }),
-    );
+    return d.audio_category === 'by_ayah'
+        ? m.common_delivery_ayah_count({ count: n })
+        : m.common_delivery_surah_count({ count: n });
 }
 
 export function categoryLabel(d: PublicDelivery): string {
@@ -99,8 +96,8 @@ export function totalHoursLabel(d: PublicDelivery): string {
     const totalMin = Math.round(s / 60);
     const h = Math.floor(totalMin / 60);
     const m = totalMin % 60;
-    if (h === 0) return localizeDigits(`${m}m`);
-    return localizeDigits(`${h}h ${m.toString().padStart(2, '0')}m`);
+    if (h === 0) return `${m}m`;
+    return `${h}h ${m.toString().padStart(2, '0')}m`;
 }
 
 /**
