@@ -322,14 +322,15 @@
     $: progressVisible = chapterDurationMs > 0;
 
     // ---- Live verse tracking ----------------------------------------
-    // The Surah/Ayah cells light up accent-coloured while playback is
-    // in flight. Comparing against the *current* selection rather than
-    // mutating it preserves the user's manual filter when they jump
-    // ahead via the picker (`selectedVerse` and `livePlayingVerse` then
-    // diverge — both are visible: the user's pick on the chrome, the
-    // playing verse in accent).
+    // The Ayah cell mirrors whichever segment is actually playing —
+    // main-list or accordion — the same way `displaySurahNum` mirrors
+    // `pickerDisplayChapter`. Falls back to the user's manual
+    // `selectedVerse` pick once playback stops so a paused/idle picker
+    // still reflects their last explicit choice.
     $: surahLive = !!$livePlayingVerse && $isMainAudioPlaying;
-    $: ayahLive = surahLive && String($livePlayingVerse?.verse ?? '') === $selectedVerse;
+    $: ayahLive = surahLive;
+    $: displayVerseStr =
+        surahLive && $livePlayingVerse ? String($livePlayingVerse.verse) : $selectedVerse;
 
     // ---- Player handlers --------------------------------------------
     // Pure delegate — every play/pause click (footer ▶ + spacebar shortcut)
@@ -682,7 +683,7 @@
                         <button
                             type="button"
                             class="loc-cell"
-                            class:has-value={!!$selectedVerse}
+                            class:has-value={!!displayVerseStr}
                             class:live={ayahLive}
                             disabled={!$selectedChapter}
                             on:click={openAyah}
@@ -690,7 +691,7 @@
                             aria-expanded={ayahOpen}
                         >
                             <span class="loc-label">{ayahLabel}</span>
-                            {#if $selectedVerse}<span class="loc-value">{tr($localeStore, localizeDigits($selectedVerse))}</span
+                            {#if displayVerseStr}<span class="loc-value">{tr($localeStore, localizeDigits(displayVerseStr))}</span
                             >{:else}<span class="loc-empty">{ayahAllLabel}</span>{/if}
                         </button>
                         {#if ayahOpen}
@@ -708,8 +709,8 @@
                                 <div class="ayah-grid" role="listbox">
                                     {#each filteredAyahs as v (v)}
                                         <button type="button" class="ayah-cell"
-                                            class:active={String(v) === $selectedVerse}
-                                            role="option" aria-selected={String(v) === $selectedVerse}
+                                            class:active={String(v) === displayVerseStr}
+                                            role="option" aria-selected={String(v) === displayVerseStr}
                                             on:click={() => onAyahPick(v)}>{tr($localeStore, localizeDigits(v))}</button>
                                     {:else}
                                         <div class="empty">{ayahNoMatchesLabel}</div>
