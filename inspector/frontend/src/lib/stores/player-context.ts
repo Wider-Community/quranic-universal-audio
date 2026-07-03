@@ -48,6 +48,11 @@ function initial(): PlayerContext {
 
 export const playerContext = writable<PlayerContext>(initial());
 
+/** When true the footer speed control is locked (and shown disabled). The
+ *  Timestamps WA loop forces 1× while a loop is engaged and restores the prior
+ *  speed on exit; this disables the control for the duration. */
+export const speedLocked = writable(false);
+
 interface PersistedSlice {
     deliverySlug: string | null;
     surahNum: number | null;

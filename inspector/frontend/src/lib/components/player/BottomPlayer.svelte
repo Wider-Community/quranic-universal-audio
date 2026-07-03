@@ -52,6 +52,7 @@
         setIsPlaying,
         setPosition,
         setSpeed,
+        speedLocked,
     } from '../../stores/player-context';
     import { progressHoverMs, progressScrubMs } from '../../stores/progress-hover';
     import type { PublicDelivery } from '../../types/generated/schemas';
@@ -513,6 +514,7 @@
     }
 
     function cycleSpeed(): void {
+        if ($speedLocked) return;
         const cur = $playerContext.speed;
         const idx = DASHBOARD_SPEEDS.findIndex((s) => Math.abs(s - cur) < 0.01);
         const next = DASHBOARD_SPEEDS[(idx + 1) % DASHBOARD_SPEEDS.length] ?? 1;
@@ -678,8 +680,10 @@
                 <button
                     type="button"
                     class="speed-btn"
+                    class:locked={$speedLocked}
                     on:click={cycleSpeed}
-                    title="Playback speed"
+                    disabled={$speedLocked}
+                    title={$speedLocked ? 'Speed locked to 1× while looping' : 'Playback speed'}
                 >{$playerContext.speed}×</button>
 
                 <!-- Highlight accent picker (the droplet), right of speed. -->
@@ -841,6 +845,14 @@
     .speed-btn:hover {
         border-color: var(--border-strong);
         color: var(--text-primary);
+    }
+    .speed-btn.locked {
+        opacity: 0.4;
+        cursor: not-allowed;
+    }
+    .speed-btn.locked:hover {
+        border-color: var(--border-quiet);
+        color: var(--text-secondary);
     }
     .download-btn {
         display: flex;

@@ -111,7 +111,7 @@ type Unsub = () => void;
  *  cache absorbs repeat plays of the same window. Mirrors the helper that
  *  used to live in `tabs/segments/utils/playback/range-spec.ts` — moved
  *  here so the port owns clip URL construction end-to-end. */
-function buildClipUrl(reciter: string, audioUrl: string, startMs: number, endMs: number): string {
+export function buildClipUrl(reciter: string, audioUrl: string, startMs: number, endMs: number): string {
     const params = new URLSearchParams({
         url: audioUrl,
         start_ms: String(startMs),
