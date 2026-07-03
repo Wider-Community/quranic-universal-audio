@@ -23,14 +23,15 @@ END_MARKER = "  <!-- stats-badges:end -->"
 
 @dataclass(frozen=True)
 class BadgeStats:
-    recitations: int
+    reciters: int
+    mushafs: int
     riwayat: int
     seconds: int
 
 
-def format_hours(seconds: int) -> str:
+def format_hours(seconds: int, *, step: int = 50) -> str:
     hours = max(0, int(seconds // 3600))
-    floored = (hours // 50) * 50
+    floored = (hours // step) * step
     return f"{floored:,}h+"
 
 
@@ -85,35 +86,19 @@ def _duration_from_manifest(doc: dict, slug: str) -> int:
     return int(total)
 
 
-def collect_stats(
-    db_path: Path,
+def _rows_to_stats(
+    rows: list[sqlite3.Row],
     *,
-    manifest_reader: Callable[[str], dict] | None = None,
+    manifest_reader: Callable[[str], dict] | None,
+    label: str,
 ) -> BadgeStats:
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    try:
-        published = conn.execute(
-            """
-            SELECT d.slug, d.total_duration_sec, d.riwayah
-            FROM deliveries d
-            JOIN delivery_states s ON s.slug = d.slug
-            WHERE s.state = 'released'
-              AND s.visibility = 'public'
-            ORDER BY d.slug
-            """
-        ).fetchall()
-    finally:
-        conn.close()
-
-    # Riwayat counts only what's actually available (the released/public set),
-    # not every riwayah in the catalog vocab — keeps the README consistent with
-    # the HF dataset card, which counts riwayat across its published splits.
-    riwayat = len({row["riwayah"] for row in published})
+    reciters = len({row["reciter_id"] for row in rows})
+    mushafs = len(rows)
+    riwayat = len({row["riwayah"] for row in rows})
 
     seconds = 0
     missing_duration: list[str] = []
-    for row in published:
+    for row in rows:
         duration = row["total_duration_sec"]
         if duration is not None:
             seconds += int(duration)
@@ -125,34 +110,84 @@ def collect_stats(
 
     if missing_duration:
         raise RuntimeError(
-            "missing total_duration_sec for published recitation(s): " + ", ".join(missing_duration)
+            f"missing total_duration_sec for {label} delivery(s): " + ", ".join(missing_duration)
         )
 
-    return BadgeStats(recitations=len(published), riwayat=int(riwayat or 0), seconds=seconds)
+    return BadgeStats(reciters=reciters, mushafs=mushafs, riwayat=riwayat, seconds=seconds)
 
 
-def render_badges(stats: BadgeStats) -> str:
-    recitations = f"{stats.recitations:,}"
-    riwayat = f"{stats.riwayat:,}"
-    hours = format_hours(stats.seconds)
+def collect_stats(
+    db_path: Path,
+    *,
+    manifest_reader: Callable[[str], dict] | None = None,
+) -> tuple[BadgeStats, BadgeStats]:
+    """Return (catalog_stats, aligned_stats): all sourced audio vs. released+public only."""
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        catalog_rows = conn.execute(
+            """
+            SELECT d.slug, d.reciter_id, d.total_duration_sec, d.riwayah
+            FROM deliveries d
+            ORDER BY d.slug
+            """
+        ).fetchall()
+        aligned_rows = conn.execute(
+            """
+            SELECT d.slug, d.reciter_id, d.total_duration_sec, d.riwayah
+            FROM deliveries d
+            JOIN delivery_states s ON s.slug = d.slug
+            WHERE s.state = 'released'
+              AND s.visibility = 'public'
+            ORDER BY d.slug
+            """
+        ).fetchall()
+    finally:
+        conn.close()
+
+    catalog_stats = _rows_to_stats(catalog_rows, manifest_reader=manifest_reader, label="catalog")
+    aligned_stats = _rows_to_stats(aligned_rows, manifest_reader=manifest_reader, label="aligned")
+    return catalog_stats, aligned_stats
+
+
+LABEL_COLOR = "64748b"
+STATS_COLOR = "d4842a"
+RIWAYAT_COLOR = "f0ad4e"
+
+
+def render_badges(catalog: BadgeStats, aligned: BadgeStats) -> str:
+    catalog_hours = format_hours(catalog.seconds, step=500)
+    aligned_hours = format_hours(aligned.seconds, step=50)
+
+    def label_badge(text: str) -> str:
+        return f'<img src="https://img.shields.io/badge/{quote(text, safe="")}-{LABEL_COLOR}" alt="{text}">'
+
+    def badge(label: str, value: str, color: str) -> str:
+        return (
+            '<a href="data/RECITERS.md"><img src="'
+            f'{badge_url(label, value, color)}" alt="{label}: {value}"></a>'
+        )
+
     lines = [
         START_MARKER,
         "  <br>",
-        (
-            '  <a href="data/RECITERS.md"><img src="'
-            f'{badge_url("Recitations", recitations, "d4842a")}" '
-            'alt="Published recitations"></a>'
-        ),
-        (
-            '  <a href="data/RECITERS.md"><img src="'
-            f'{badge_url("Riwayat", riwayat, "f0ad4e")}" '
-            'alt="Published riwayat"></a>'
-        ),
-        (
-            '  <a href="data/RECITERS.md"><img src="'
-            f'{badge_url("Hours", hours, "d4842a")}" '
-            'alt="Published audio hours"></a>'
-        ),
+        "  "
+        + label_badge("\U0001f509 Catalog")
+        + " "
+        + badge("Reciters", f"{catalog.reciters:,}", STATS_COLOR)
+        + " "
+        + badge("Riwayat", f"{catalog.riwayat:,}", RIWAYAT_COLOR)
+        + " "
+        + badge("Hours", catalog_hours, STATS_COLOR),
+        "  <br>",
+        "  "
+        + label_badge("\U0001f3af Aligned")
+        + " "
+        + badge("Mushafs", f"{aligned.mushafs:,}", STATS_COLOR)
+        + " "
+        + badge("Riwayat", f"{aligned.riwayat:,}", RIWAYAT_COLOR)
+        + " "
+        + badge("Hours", aligned_hours, STATS_COLOR),
         END_MARKER,
     ]
     return "\n".join(lines)
@@ -199,11 +234,15 @@ def main() -> int:
             )
             return json.loads(raw)
 
-        stats = collect_stats(db_path, manifest_reader=manifest_reader)
-        badges = render_badges(stats)
+        catalog_stats, aligned_stats = collect_stats(db_path, manifest_reader=manifest_reader)
+        badges = render_badges(catalog_stats, aligned_stats)
         print(
-            f"recitations={stats.recitations} riwayat={stats.riwayat} "
-            f"hours={format_hours(stats.seconds)}"
+            f"catalog: reciters={catalog_stats.reciters} riwayat={catalog_stats.riwayat} "
+            f"hours={format_hours(catalog_stats.seconds, step=500)}"
+        )
+        print(
+            f"aligned: mushafs={aligned_stats.mushafs} riwayat={aligned_stats.riwayat} "
+            f"hours={format_hours(aligned_stats.seconds, step=50)}"
         )
         print(badges)
 
