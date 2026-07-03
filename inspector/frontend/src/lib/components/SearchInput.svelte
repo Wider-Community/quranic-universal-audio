@@ -100,7 +100,7 @@
     }
     .icon {
         position: absolute;
-        left: var(--s-3);
+        inset-inline-start: var(--s-3);
         display: flex;
         color: var(--text-faint);
         pointer-events: none;
@@ -108,7 +108,8 @@
     input {
         width: 100%;
         height: 32px;
-        padding: 0 56px 0 calc(var(--s-3) + 24px);
+        padding-block: 0;
+        padding-inline: calc(var(--s-3) + 24px) 56px;
         background: var(--panel);
         border: 1px solid var(--border-default);
         border-radius: var(--r-2);
@@ -130,7 +131,7 @@
     }
     .count {
         position: absolute;
-        right: var(--s-3);
+        inset-inline-end: var(--s-3);
         font-size: 10.5px;
         color: var(--text-faint);
         font-family: var(--font-mono);

@@ -80,6 +80,7 @@
   "common_player_loading_audio_label": "Loading audio",
   "common_player_seek_forward_label": "Forward 15 seconds",
   "common_player_next_surah_label": "Next surah",
+  "common_player_highlight_colour_label": "Highlight colour",
   "common_player_pick_reciter_prompt": "Pick a reciter to start",
   "common_player_switch_combination_label": "Switch combination",
   "common_player_progress_label": "Playback position",

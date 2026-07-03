@@ -81,7 +81,7 @@
     const gateKicker = $derived((i18n.locale, mode === 'gate' ? m.segments_guides_gate_kicker_gate() : m.segments_guides_gate_kicker_browse()));
     const progressLabel = $derived((i18n.locale, m.segments_guides_gate_progress_label({ count: readCount, total: REQUIRED_GUIDE_KEYS.length })));
     const doneLabel = $derived((i18n.locale, mode === 'gate' ? m.segments_guides_gate_done_gate() : m.segments_guides_gate_done_browse()));
-    const dismissLabel = $derived((i18n.locale, done && mode === 'gate' ? m.segments_guides_gate_start_editing_button() : 'Close'));
+    const dismissLabel = $derived((i18n.locale, done && mode === 'gate' ? m.segments_guides_gate_start_editing_button() : m.common_action_close()));
 </script>
 
 <svelte:window onkeydown={onKeydown} />
@@ -101,13 +101,13 @@
                         {gateKicker}
                     </div>
                     <h2 id="guides-gate-title">
-                        {mode === 'gate' ? 'Read the review guides first' : 'Review guides'}
+                        {mode === 'gate' ? m.segments_guides_gate_title_gate() : m.segments_guides_gate_title_browse()}
                     </h2>
                 </div>
                 <button
                     type="button"
                     class="guides-gate-close"
-                    aria-label="Close"
+                    aria-label={m.common_action_close()}
                     onclick={closeGuidesGate}
                 >&times;</button>
             </header>

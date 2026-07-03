@@ -80,6 +80,7 @@
   "common_player_loading_audio_label": "جارٍ تحميل الصوت",
   "common_player_seek_forward_label": "للأمام 15 ثانية",
   "common_player_next_surah_label": "السورة التالية",
+  "common_player_highlight_colour_label": "لون التظليل",
   "common_player_pick_reciter_prompt": "اختر قارئا للبدء",
   "common_player_switch_combination_label": "تبديل المجموعة",
   "common_player_progress_label": "موضع التشغيل",

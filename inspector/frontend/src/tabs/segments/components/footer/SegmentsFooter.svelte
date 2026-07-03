@@ -495,6 +495,7 @@
     $: markReadyButtonLabel = tr($localeStore, m.segments_footer_mark_ready_button());
     $: unclaimButtonLabel = tr($localeStore, m.segments_footer_unclaim_button());
     $: speedTitle = tr($localeStore, m.segments_footer_speed_title());
+    $: cancelLabel = tr($localeStore, m.common_action_cancel());
     $: speedAriaLabel = tr($localeStore, m.segments_footer_speed_aria_label({ speed: $playbackSpeed }));
     $: autoplayTitle = tr($localeStore, m.segments_footer_autoplay_title());
     $: autoscrollTitle = tr($localeStore, m.segments_footer_autoscroll_title());
@@ -729,7 +730,7 @@
             <div class="save-cluster">
                 {#if hasReciter}
                     {#if showSavePreview}
-                        <button class="action ghost" on:click={() => hideSavePreview()}>Cancel</button>
+                        <button class="action ghost" on:click={() => hideSavePreview()}>{cancelLabel}</button>
                         <button class="action primary" on:click={confirmSaveFromPreview}>{saveConfirmLabel}</button>
                     {:else}
                         <button

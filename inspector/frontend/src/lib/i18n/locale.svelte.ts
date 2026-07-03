@@ -69,10 +69,10 @@ registerRuneSetter((loc) => {
     _locale = loc as Locale;
 });
 
-// Strings-only pass: the layout stays LTR (Arabic text still renders RTL within
-// its boxes via the bidi algorithm). The RTL layout workflow re-adds 'ar' here
-// once the physical->logical CSS conversion + time-axis dir="ltr" islands land.
-const RTL: ReadonlySet<string> = new Set<string>();
+// RTL locales flip `<html dir="rtl">`; chrome mirrors via logical CSS while
+// time-axis surfaces (waveforms, filmstrip, scrubber, editor rows, history
+// diffs) stay pinned `dir="ltr"` islands. Keep in lockstep with locale-store.ts.
+const RTL: ReadonlySet<string> = new Set<string>(['ar']);
 
 function applyDocument(loc: Locale): void {
     const el = document.documentElement;

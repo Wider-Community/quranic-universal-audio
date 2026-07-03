@@ -27,6 +27,7 @@
     const PRESETS = SHIPPED_HIGHLIGHT_PRESETS;
 
     const config = $derived($recitationConfigStore);
+    const colourLabel = $derived((i18n.locale, m.common_player_highlight_colour_label()));
 
     let open = $state(false);
     let root = $state<HTMLDivElement>();
@@ -94,16 +95,16 @@
     <button
         type="button"
         class="trigger"
-        aria-label="Highlight colour"
+        aria-label={colourLabel}
         aria-haspopup="dialog"
         aria-expanded={open}
-        title="Highlight colour"
+        title={colourLabel}
         style:color={config.highlightColor}
         onclick={toggle}
     ><ControlIcon name="droplet" /></button>
 
     {#if open}
-        <div class="pop" role="dialog" aria-label="Highlight colour">
+        <div class="pop" role="dialog" aria-label={colourLabel}>
             <div class="sw-row">
                 {#each PRESETS as p (p)}
                     <button
@@ -167,7 +168,7 @@
     .pop {
         position: absolute;
         bottom: calc(100% + 8px);
-        right: 0;
+        inset-inline-end: 0;
         z-index: 120;
         width: 208px;
         display: flex;
