@@ -1151,7 +1151,7 @@
         align-items: center;
         justify-content: center;
         min-width: 18px;
-        margin-left: 4px;
+        margin-inline-start: 4px;
         padding: 1px 7px;
         font-family: var(--font-mono);
         font-size: 11px;

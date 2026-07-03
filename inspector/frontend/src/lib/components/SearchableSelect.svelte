@@ -190,7 +190,7 @@
         text-overflow: ellipsis;
     }
     .ss-option-grouped {
-        padding-left: 20px;
+        padding-inline-start: 20px;
     }
     .ss-option:hover,
     .ss-highlight {

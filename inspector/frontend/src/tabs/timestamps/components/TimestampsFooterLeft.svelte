@@ -241,7 +241,7 @@
         color: inherit;
         cursor: default;
         font: inherit;
-        text-align: left;
+        text-align: start;
     }
     .picker-trigger.interactive { cursor: pointer; }
     .picker-trigger.interactive:hover { border-color: var(--border-strong); background: var(--panel); }
@@ -251,7 +251,7 @@
     .dropup {
         position: absolute;
         bottom: calc(100% + var(--s-2));
-        left: 0;
+        inset-inline-start: 0;
         min-width: 320px;
         max-width: 480px;
         max-height: min(720px, 80vh);
@@ -296,7 +296,7 @@
         border: 0;
         border-radius: var(--r-2);
         cursor: pointer;
-        text-align: left;
+        text-align: start;
         font: inherit;
         color: var(--text-primary);
         transition: background var(--t-fast);

@@ -117,7 +117,7 @@
         flex-wrap: wrap;
         gap: 5px;
         padding: 2px 0 2px 8px;
-        border-left: 3px solid var(--severity-color);
+        border-inline-start: 3px solid var(--severity-color);
     }
     .chip {
         display: flex;

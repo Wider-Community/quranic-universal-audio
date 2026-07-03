@@ -481,8 +481,8 @@
 
         .accordion-guide-header,
         .accordion-guide-body {
-            padding-left: 14px;
-            padding-right: 14px;
+            padding-inline-start: 14px;
+            padding-inline-end: 14px;
         }
     }
 </style>

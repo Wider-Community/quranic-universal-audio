@@ -535,7 +535,9 @@
 </script>
 
 <div class="segs-footer" class:is-empty={!hasReciter} bind:this={footerEl}>
-    <div class="progress" class:active={progressVisible}>
+    <!-- dir="ltr" island: the scrub bar is a time axis (fill width %, pointer math
+         from the left edge) — must run left→right even under RTL. -->
+    <div class="progress" dir="ltr" class:active={progressVisible}>
         <span class="time pos">{fmt(elapsedMs)}</span>
         <div
             class="bar"
@@ -617,7 +619,9 @@
              center; secondary controls flank it symmetrically. -->
         <div class="controls">
             {#if hasReciter}
-                <div class="transport" use:clickOutside={() => { surahOpen = false; ayahOpen = false; }}>
+                <!-- dir="ltr": media transport keeps its stable order (prefs · play ·
+                     location) even under RTL, matching the transport-stays-LTR decision. -->
+                <div class="transport" dir="ltr" use:clickOutside={() => { surahOpen = false; ayahOpen = false; }}>
                     <div class="transport-left">
                         <ShortcutsGuide />
                         <button

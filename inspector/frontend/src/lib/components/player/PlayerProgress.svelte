@@ -84,7 +84,10 @@
     });
 </script>
 
-<div class="progress">
+<!-- dir="ltr" island: the scrub bar is a time axis (fill/thumb positioned by
+     %-from-start, pointer math measures from the left edge) — it must run
+     left→right even under RTL. -->
+<div class="progress" dir="ltr">
     <span class="time pos">{fmt(shownPos)}</span>
     <div
         class="bar"

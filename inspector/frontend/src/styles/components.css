@@ -37,7 +37,7 @@
     border-radius: 6px;
     cursor: pointer;
     font-size: 1rem;
-    margin-left: auto;
+    margin-inline-start: auto;
     transition: background 0.2s;
 }
 
@@ -83,7 +83,7 @@
 
 .btn-save {
     background: var(--ok-solid);
-    margin-left: 0;
+    margin-inline-start: 0;
 }
 
 .btn-save:hover:not(:disabled) {
@@ -92,7 +92,7 @@
 
 .btn-history {
     background: var(--btn-history-bg);
-    margin-left: 0;
+    margin-inline-start: 0;
 }
 .btn-history:hover:not(:disabled) {
     background: var(--btn-history-bg-hover);
@@ -155,7 +155,7 @@
     align-self: center;
 }
 .audio-controls .btn {
-    margin-left: 0;
+    margin-inline-start: 0;
 }
 .ts-speed-label {
     font-size: 0.85rem;
@@ -222,7 +222,7 @@
 .shortcuts-guide-summary::before {
     content: '\25B6';
     display: inline-block;
-    margin-right: 8px;
+    margin-inline-end: 8px;
     font-size: 0.65rem;
     transition: transform 0.15s;
 }
@@ -309,7 +309,7 @@
     white-space: nowrap;
 }
 .ss-option-grouped {
-    padding-left: 20px;
+    padding-inline-start: 20px;
 }
 .ss-option:hover,
 .ss-highlight {

@@ -64,7 +64,7 @@
         display: inline-flex;
         align-items: center;
         height: 32px;
-        padding-left: 4px;
+        padding-inline-start: 4px;
         background: var(--panel);
         border: 1px solid var(--border-default);
         border-radius: var(--r-2);
@@ -97,7 +97,7 @@
     }
     .role {
         flex: 0 0 auto;
-        margin-right: 8px;
+        margin-inline-end: 8px;
         padding: 2px 7px;
         font-size: 0.6rem;
         font-weight: 700;
@@ -116,7 +116,7 @@
         width: 30px;
         padding: 0;
         border: 0;
-        border-left: 1px solid var(--border-quiet);
+        border-inline-start: 1px solid var(--border-quiet);
         background: transparent;
         color: var(--text-muted);
         cursor: pointer;

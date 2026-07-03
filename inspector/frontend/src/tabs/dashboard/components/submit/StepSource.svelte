@@ -295,7 +295,7 @@
         padding: var(--s-2) var(--s-3);
         border-radius: 4px;
         color: var(--text-muted);
-        text-align: left;
+        text-align: start;
         background: transparent;
         border: none;
         cursor: pointer;
@@ -430,8 +430,8 @@
         font-family: var(--font-mono);
         font-size: 10.5px;
         color: var(--text-faint);
-        text-align: right;
-        padding-right: 2px;
+        text-align: end;
+        padding-inline-end: 2px;
     }
     .pc-row input {
         background: transparent;
@@ -454,7 +454,7 @@
     .coverage { display: flex; flex-direction: column; gap: 3px; margin-top: var(--s-2); }
     .cov-line { margin: 0; font-size: 11px; line-height: 1.45; color: var(--text-muted); }
     .cov-line .cov-label {
-        display: inline-block; margin-right: 6px; padding: 0 6px;
+        display: inline-block; margin-inline-end: 6px; padding: 0 6px;
         border-radius: var(--r-1); font-size: 10px; font-weight: 500;
     }
     .cov-line.err { color: var(--state-error-fg); }

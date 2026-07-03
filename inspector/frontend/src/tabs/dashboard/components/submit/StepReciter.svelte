@@ -396,7 +396,7 @@
         padding: var(--s-2) var(--s-3);
         border-radius: 4px;
         color: var(--text-muted);
-        text-align: left;
+        text-align: start;
         transition: color var(--t-base) var(--ease-out-quart);
     }
     .mode-btn.active {
@@ -473,14 +473,14 @@
         gap: var(--s-2);
         padding: 5px 8px;
         border-radius: var(--r-1);
-        text-align: left;
+        text-align: start;
         color: var(--text-secondary);
         transition: background var(--t-fast);
     }
     .dup-row:hover { background: var(--panel); }
     .dup-name { font-size: var(--fs-body); color: var(--text-primary); }
     .dup-ar { font-size: var(--fs-meta); color: var(--text-secondary); }
-    .dup-use { margin-left: auto; font-size: 10.5px; color: var(--accent); }
+    .dup-use { margin-inline-start: auto; font-size: 10.5px; color: var(--accent); }
 
     label {
         display: flex;
@@ -490,7 +490,7 @@
         color: var(--text-muted);
     }
     label.rtl input {
-        text-align: right;
+        text-align: start;
     }
     input {
         background: var(--panel);
@@ -512,7 +512,7 @@
         background: var(--panel-2);
     }
     .label-meta {
-        margin-left: 4px;
+        margin-inline-start: 4px;
         font-size: 10.5px;
         color: var(--text-faint);
         font-variant-numeric: tabular-nums;
@@ -560,7 +560,7 @@
         padding: 6px 8px;
         border-radius: var(--r-1);
         color: var(--text-secondary);
-        text-align: left;
+        text-align: start;
         transition:
             background var(--t-fast),
             color var(--t-fast);
@@ -597,7 +597,7 @@
     }
     .r-count-unit {
         color: var(--text-faint);
-        margin-left: 3px;
+        margin-inline-start: 3px;
     }
 
     /* picked reciter chip */
@@ -707,7 +707,7 @@
         border: 1px solid transparent;
         border-radius: var(--r-1);
         color: var(--text-secondary);
-        text-align: left;
+        text-align: start;
         transition:
             background var(--t-fast),
             border-color var(--t-fast);

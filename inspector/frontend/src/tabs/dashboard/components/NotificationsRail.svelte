@@ -365,7 +365,7 @@
 <style>
     .notifs {
         padding: var(--s-5) var(--s-5);
-        border-left: 1px solid var(--border-quiet);
+        border-inline-start: 1px solid var(--border-quiet);
         border-bottom: 1px solid var(--border-quiet);
     }
     header {
@@ -384,7 +384,7 @@
         white-space: nowrap;
     }
     .email-btn {
-        margin-left: auto;
+        margin-inline-start: auto;
         display: inline-flex;
         align-items: center;
         gap: 5px;
@@ -417,7 +417,7 @@
         color: var(--ink-on-color);
     }
     .toggle {
-        margin-left: auto;
+        margin-inline-start: auto;
         display: inline-flex;
         gap: 2px;
     }
@@ -474,7 +474,7 @@
     }
     .kind {
         display: inline-block;
-        margin-left: 6px;
+        margin-inline-start: 6px;
         font-size: 10px;
         font-weight: 500;
         line-height: 1.4;

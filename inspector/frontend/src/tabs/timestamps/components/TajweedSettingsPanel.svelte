@@ -448,7 +448,7 @@
     .tjs-dropper {
         position: absolute;
         top: -6px;
-        right: -6px;
+        inset-inline-end: -6px;
         width: 13px;
         height: 13px;
         border-radius: 50%;
@@ -502,6 +502,11 @@
     .tjs-toggle.on .knob {
         transform: translateX(10px);
         background: var(--accent);
+    }
+    /* The knob rests at the inline-start edge (right in RTL), so "on" must
+       travel the other way under RTL. */
+    :global([dir='rtl']) .tjs-toggle.on .knob {
+        transform: translateX(-10px);
     }
     .tjs-label {
         flex: 1 1 auto;

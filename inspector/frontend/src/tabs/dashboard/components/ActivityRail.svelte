@@ -183,7 +183,7 @@
     }
     .activity {
         padding: var(--s-5) var(--s-5);
-        border-left: 1px solid var(--border-quiet);
+        border-inline-start: 1px solid var(--border-quiet);
     }
     @media (max-width: 1280px) {
         .rail-wrap { height: auto; }

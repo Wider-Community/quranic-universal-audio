@@ -166,7 +166,7 @@
         font-variant-numeric: tabular-nums;
         width: 20px;
         flex-shrink: 0;
-        text-align: right;
+        text-align: end;
         color: var(--text-faint);
         line-height: 1;
     }

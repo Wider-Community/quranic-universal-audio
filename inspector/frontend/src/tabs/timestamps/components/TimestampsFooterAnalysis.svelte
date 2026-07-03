@@ -266,10 +266,10 @@
     .guide-pop {
         position: absolute;
         bottom: calc(100% + var(--s-2));
-        /* Anchored to the help button's right edge so the wider box grows
-         * leftward instead of overflowing the viewport's right side. */
-        right: 0;
-        left: auto;
+        /* Anchored to the help button's trailing edge so the wider box grows
+         * toward the leading side instead of overflowing the viewport. */
+        inset-inline-end: 0;
+        inset-inline-start: auto;
         display: flex;
         align-items: stretch;
         gap: var(--s-3);

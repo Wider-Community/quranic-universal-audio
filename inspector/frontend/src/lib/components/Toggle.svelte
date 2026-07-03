@@ -108,19 +108,23 @@
     .thumb {
         position: absolute;
         top: 2px;
-        left: 2px;
+        /* inset-inline-start flips with dir: the knob rests at the start edge
+           (left in LTR, right in RTL) and slides to the far edge when on, so
+           the switch travels the correct way under RTL without a transform. */
+        inset-inline-start: 2px;
         width: 14px;
         height: 14px;
         border-radius: 50%;
         background: var(--accent-fg, var(--ink-on-color));
         box-shadow: var(--knob-shadow);
-        transition: transform var(--t-fast);
+        transition: inset-inline-start var(--t-fast);
         display: flex;
         align-items: center;
         justify-content: center;
     }
     .toggle.on .thumb {
-        transform: translateX(14px);
+        /* 32px track − 14px thumb − 2px inset = 16px */
+        inset-inline-start: 16px;
     }
     .toggle.busy .track {
         opacity: 0.7;

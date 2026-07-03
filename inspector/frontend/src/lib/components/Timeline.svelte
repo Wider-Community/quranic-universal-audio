@@ -51,7 +51,7 @@
     .dot.violet { background: oklch(0.84 0.11 300); }
     .ev { color: var(--text-secondary); font-size: var(--fs-body); line-height: var(--lh-normal); min-width: 0; }
     .ev .slugref { font-family: var(--font-mono); color: var(--text-primary); font-size: 12px; }
-    .ev .by { color: var(--text-muted); margin-left: 4px; }
+    .ev .by { color: var(--text-muted); margin-inline-start: 4px; }
     .when {
         color: var(--text-faint);
         font-size: 10.5px;
@@ -61,7 +61,7 @@
     .tag {
         display: inline-flex;
         align-items: center;
-        margin-left: 6px;
+        margin-inline-start: 6px;
         padding: 1px 7px;
         border-radius: 999px;
         font-size: 10px;

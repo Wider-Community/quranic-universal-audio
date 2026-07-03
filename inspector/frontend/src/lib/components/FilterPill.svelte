@@ -60,7 +60,7 @@
         font-size: 10.5px;
         color: var(--text-muted);
         font-variant-numeric: tabular-nums;
-        padding-left: 2px;
+        padding-inline-start: 2px;
     }
     .pill.active .pill-count { color: var(--accent-strong); }
     .pill.empty {

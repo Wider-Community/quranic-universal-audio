@@ -172,7 +172,7 @@
         color: var(--text-primary);
         line-height: var(--lh-normal);
         white-space: pre-wrap;
-        border-left: 2px solid var(--border-default);
+        border-inline-start: 2px solid var(--border-default);
         padding: 4px 0 4px 10px;
     }
 </style>

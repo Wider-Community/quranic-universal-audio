@@ -141,7 +141,7 @@
         color: inherit;
         cursor: default;
         font: inherit;
-        text-align: left;
+        text-align: start;
         transition: border-color var(--t-fast), background var(--t-fast);
     }
     .meta.interactive { cursor: pointer; }
@@ -174,7 +174,7 @@
     .dropup {
         position: absolute;
         bottom: calc(100% + var(--s-2));
-        left: 0;
+        inset-inline-start: 0;
         min-width: 320px;
         max-width: 480px;
         max-height: min(360px, 50vh);
@@ -202,7 +202,7 @@
         border: 0;
         border-radius: var(--r-2);
         cursor: pointer;
-        text-align: left;
+        text-align: start;
         transition: background var(--t-fast);
         color: var(--text-primary);
         font: inherit;

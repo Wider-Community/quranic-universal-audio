@@ -52,7 +52,7 @@
         min-width: 0;
         /* Mirror the 32px close button on the right so the title centers across
          * the whole header, not just the space to its left. */
-        padding-left: 32px;
+        padding-inline-start: 32px;
     }
     .info-title {
         margin: 0;

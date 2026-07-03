@@ -124,15 +124,23 @@
         else enterTajweed(snapSlug, snapVerse, (subtype as TajweedSubtype) ?? 'wrong_rule');
     }
 
-    // Shift a left-anchored drop-up back on-screen if it overflows the right
-    // edge on a narrow window.
+    // Shift a start-anchored drop-up back on-screen if it overflows the far
+    // edge on a narrow window. Direction-aware: in LTR it's anchored left and
+    // can overflow right; in RTL it's anchored right and can overflow left.
     function keepInView(node: HTMLElement) {
         const margin = 8;
         const place = (): void => {
-            node.style.left = '0px';
+            const rtl = getComputedStyle(node).direction === 'rtl';
+            const anchor = rtl ? 'right' : 'left';
+            const other = rtl ? 'left' : 'right';
+            node.style[other] = 'auto';
+            node.style[anchor] = '0px';
             node.style.maxWidth = '';
-            const overflow = node.getBoundingClientRect().right - (window.innerWidth - margin);
-            if (overflow > 0) node.style.left = `${-overflow}px`;
+            const rect = node.getBoundingClientRect();
+            const overflow = rtl
+                ? margin - rect.left
+                : rect.right - (window.innerWidth - margin);
+            if (overflow > 0) node.style[anchor] = `${-overflow}px`;
             node.style.maxWidth = `${window.innerWidth - margin * 2}px`;
         };
         place();
@@ -221,7 +229,7 @@
     .report-pop {
         position: absolute;
         bottom: calc(100% + var(--s-2));
-        left: 0;
+        inset-inline-start: 0;
         width: max-content;
         max-width: min(380px, calc(100vw - 16px));
         max-height: min(640px, 70vh);

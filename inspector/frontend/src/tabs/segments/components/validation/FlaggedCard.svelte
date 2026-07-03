@@ -203,8 +203,8 @@ import type { Segment } from '../../../../lib/types/view-models';
         gap: 5px;
     }
     .flag-followup {
-        padding-left: var(--s-3);
-        border-left: 1px solid var(--border-quiet);
+        padding-inline-start: var(--s-3);
+        border-inline-start: 1px solid var(--border-quiet);
     }
 
     .flag-comment-head {
@@ -237,7 +237,7 @@ import type { Segment } from '../../../../lib/types/view-models';
         border-radius: var(--r-pill);
     }
     .flag-time {
-        margin-left: auto;
+        margin-inline-start: auto;
         font-size: 10.5px;
         color: var(--text-faint);
         font-variant-numeric: tabular-nums;
@@ -255,7 +255,7 @@ import type { Segment } from '../../../../lib/types/view-models';
         word-break: break-word;
     }
     .flag-root > .flag-body {
-        border-left: 2px solid var(--state-warn-border);
+        border-inline-start: 2px solid var(--state-warn-border);
     }
 
     .flag-root-actions {
@@ -318,7 +318,7 @@ import type { Segment } from '../../../../lib/types/view-models';
     .flag-edit-actions {
         display: inline-flex;
         gap: var(--s-2);
-        margin-left: auto;
+        margin-inline-start: auto;
     }
 
     .flag-btn {

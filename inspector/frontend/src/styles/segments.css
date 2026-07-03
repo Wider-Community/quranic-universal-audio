@@ -80,7 +80,7 @@
     gap: 6px;
     max-height: 70vh;
     overflow-y: auto;
-    padding-right: 4px;
+    padding-inline-end: 4px;
     /* SegmentsList.svelte drives its own scroll anchoring via the row-group
      * ResizeObserver (see `_handleGroupResize`). The browser's default
      * `overflow-anchor: auto` also kicks in when a row grows — the two

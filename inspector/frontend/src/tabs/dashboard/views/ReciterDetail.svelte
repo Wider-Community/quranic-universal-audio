@@ -625,8 +625,8 @@
         background: var(--canvas);
         padding-bottom: var(--s-2);
         margin: 0 calc(var(--s-6) * -1) var(--s-3);
-        padding-left: var(--s-6);
-        padding-right: var(--s-6);
+        padding-inline-start: var(--s-6);
+        padding-inline-end: var(--s-6);
         border-bottom: 1px solid var(--border-quiet);
     }
 
@@ -637,7 +637,7 @@
         font-size: var(--fs-meta);
     }
     .combinations thead th {
-        text-align: left;
+        text-align: start;
         font-weight: 500;
         color: var(--text-muted);
         text-transform: uppercase;
@@ -673,14 +673,14 @@
         border-bottom: 1px solid var(--border-quiet);
     }
     .group-count {
-        margin-left: var(--s-2);
+        margin-inline-start: var(--s-2);
         color: var(--text-faint);
         font-variant-numeric: tabular-nums;
         font-family: var(--font-mono);
         text-transform: none;
     }
     .col-play { width: 36px; }
-    .col-state { text-align: left; }
+    .col-state { text-align: start; }
     .cell-coverage,
     .cell-bitrate,
     .cell-hours,
@@ -751,7 +751,7 @@
         margin: 0 0 var(--s-1);
     }
     .discarded-section .count {
-        margin-left: var(--s-2);
+        margin-inline-start: var(--s-2);
         color: var(--text-faint);
         font-weight: 400;
         font-size: var(--fs-meta);

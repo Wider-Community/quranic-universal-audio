@@ -83,7 +83,9 @@
     }
 </script>
 
-<canvas bind:this={canvas} {width} {height} {style}></canvas>
+<!-- dir="ltr": the waveform is a left→right time axis; overlays that extension
+     components position by %-from-start must not mirror under RTL. -->
+<canvas bind:this={canvas} {width} {height} {style} dir="ltr"></canvas>
 
 <style>
     canvas {

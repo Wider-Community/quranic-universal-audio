@@ -360,7 +360,7 @@
         font-size: var(--fs-meta);
         color: var(--text-primary);
         cursor: pointer;
-        text-align: left;
+        text-align: start;
     }
     .blocking .jump:hover { background: var(--panel); border-color: var(--border-quiet); }
     .blocking .count {

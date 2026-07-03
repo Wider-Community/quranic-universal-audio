@@ -59,6 +59,9 @@
   "segments_row_flag_remove_button": "أزِل الإشارة",
   "segments_row_flag_update_button": "حدِّث",
   "segments_row_flag_apply_button": "أشِر",
+  "segments_row_flag_reply_placeholder": "أضف ردًا…",
+  "segments_row_flag_reply_button": "رد",
+  "segments_row_flag_edit_link": "تعديل أو إزالة",
   "segments_time_edit_click_hint_title": "انقر لضبط الحدود",
   "segments_save_preview_warning_chapters": [
     {
@@ -406,6 +409,8 @@
   "segments_guides_gate_done_gate": "كل شيء جاهز — التحرير مفتوح.",
   "segments_guides_gate_done_browse": "قرئت جميع الأدلة.",
   "segments_guides_gate_start_editing_button": "ابدأ التحرير",
+  "segments_guides_gate_title_gate": "اقرأ أدلة المراجعة أولاً",
+  "segments_guides_gate_title_browse": "أدلة المراجعة",
   "segments_history_optype_trim_segment": "تعديل الحدود",
   "segments_history_optype_split_segment": "تقسيم",
   "segments_history_optype_merge_segments": "دمج",

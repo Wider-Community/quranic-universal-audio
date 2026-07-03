@@ -19,6 +19,7 @@
     import { get } from 'svelte/store';
 
     import { localeStore, tr } from '../../../lib/i18n/locale-store';
+    import { vocabLabel } from '../../../lib/i18n/vocab';
     import * as m from '../../../lib/paraglide/messages';
     import {
         fetchPendingRequest,
@@ -275,8 +276,8 @@
         mode === 'create'
             ? m.dashboard_request_title_create({
                   name: reciter.name,
-                  riwayah: delivery.riwayah,
-                  style: delivery.style,
+                  riwayah: vocabLabel('riwayah', delivery.riwayah),
+                  style: vocabLabel('style', delivery.style),
               })
             : m.dashboard_request_title_review({ name: reciter.name }),
     );
@@ -359,10 +360,10 @@
             <span>{fieldRiwayah}</span>
             <select bind:value={riwayah} disabled={readOnly}>
                 {#each riwayatOptions as r (r.slug)}
-                    <option value={r.slug}>{r.name}</option>
+                    <option value={r.slug}>{tr(lang, vocabLabel('riwayah', r.slug))}</option>
                 {/each}
                 {#if !riwayatOptions.some((r) => r.slug === riwayah)}
-                    <option value={riwayah}>{riwayah}</option>
+                    <option value={riwayah}>{tr(lang, vocabLabel('riwayah', riwayah))}</option>
                 {/if}
             </select>
         </label>
@@ -371,10 +372,10 @@
             <span>{fieldStyle}</span>
             <select bind:value={style} disabled={readOnly}>
                 {#each styleOptions as s (s.slug)}
-                    <option value={s.slug}>{s.name}</option>
+                    <option value={s.slug}>{tr(lang, vocabLabel('style', s.slug))}</option>
                 {/each}
                 {#if !styleOptions.some((s) => s.slug === style)}
-                    <option value={style}>{style}</option>
+                    <option value={style}>{tr(lang, vocabLabel('style', style))}</option>
                 {/if}
             </select>
         </label>
@@ -411,10 +412,10 @@
             <select bind:value={recording_context} disabled={readOnly}>
                 <option value="">{contextBlankOption}</option>
                 {#each contextOptions as c (c.slug)}
-                    <option value={c.slug}>{c.name}</option>
+                    <option value={c.slug}>{tr(lang, vocabLabel('context', c.slug))}</option>
                 {/each}
                 {#if recording_context && !contextOptions.some((c) => c.slug === recording_context)}
-                    <option value={recording_context}>{recording_context}</option>
+                    <option value={recording_context}>{tr(lang, vocabLabel('context', recording_context))}</option>
                 {/if}
             </select>
         </label>
@@ -472,8 +473,8 @@
         <p class="warning">
             {tr(lang, m.dashboard_request_conflict_warning({
                 name: reciter.name,
-                riwayah,
-                style,
+                riwayah: vocabLabel('riwayah', riwayah),
+                style: vocabLabel('style', style),
             }))}
         </p>
     {/if}
@@ -583,7 +584,7 @@
     }
     .rules {
         margin: 0;
-        padding-left: var(--s-4);
+        padding-inline-start: var(--s-4);
         display: flex;
         flex-direction: column;
         gap: var(--s-1);
@@ -603,7 +604,7 @@
        typed value doesn't match any entry) rides alongside the label so
        the input itself stays a plain text box at its natural width. */
     .label-meta {
-        margin-left: 4px;
+        margin-inline-start: 4px;
         font-size: 10.5px;
         color: var(--text-faint);
         font-variant-numeric: tabular-nums;
@@ -626,7 +627,7 @@
     label span {
         color: var(--text-muted);
     }
-    label.rtl input { text-align: right; }
+    label.rtl input { text-align: end; }
     input, select, textarea {
         background: var(--panel);
         border: 1px solid var(--border-default);

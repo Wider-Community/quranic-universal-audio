@@ -78,7 +78,7 @@
 <style>
     .rail {
         padding: var(--s-5) var(--s-4);
-        border-right: 1px solid var(--border-quiet);
+        border-inline-end: 1px solid var(--border-quiet);
         overflow-y: auto;
         display: flex;
         flex-direction: column;

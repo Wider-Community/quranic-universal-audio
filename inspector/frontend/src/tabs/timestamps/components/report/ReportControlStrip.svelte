@@ -352,7 +352,7 @@
         padding: 2px var(--s-2); font-size: var(--fs-meta); font-weight: 600; color: var(--accent);
         background: var(--accent-tint); border-radius: var(--r-2);
     }
-    .actions { margin-left: auto; display: inline-flex; gap: var(--s-2); }
+    .actions { margin-inline-start: auto; display: inline-flex; gap: var(--s-2); }
 
     .btn {
         padding: 5px var(--s-3); border-radius: var(--r-2); font: inherit; font-size: var(--fs-meta);
@@ -371,11 +371,11 @@
     .rows { display: flex; flex-direction: column; gap: var(--s-2); }
     .row {
         display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-2);
-        padding: var(--s-2); border: 1px solid var(--border-default); border-left: 3px solid var(--border-default);
+        padding: var(--s-2); border: 1px solid var(--border-default); border-inline-start: 3px solid var(--border-default);
         border-radius: var(--r-2); background: var(--panel-2);
     }
-    .row.focused { border-color: var(--accent); border-left-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-tint); }
-    .row.invalid { border-left-color: var(--state-missing-fg); }
+    .row.focused { border-color: var(--accent); border-inline-start-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-tint); }
+    .row.invalid { border-inline-start-color: var(--state-missing-fg); }
     .cell-lbl { font-size: var(--fs-meta); font-weight: 600; color: var(--text-primary); white-space: nowrap; }
 
     /* Phonemes: a compact word row of removable chips (not one row per phoneme). */

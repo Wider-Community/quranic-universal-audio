@@ -38,7 +38,9 @@
     );
 </script>
 
-<div class="controls">
+<!-- dir="ltr": media transport keeps its conventional order (prev · seek-back ·
+     play · seek-forward · next) even under RTL, matching player convention. -->
+<div class="controls" dir="ltr">
     <button
         type="button"
         class="btn"

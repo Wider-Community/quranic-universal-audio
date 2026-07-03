@@ -773,8 +773,11 @@
 </script>
 
 {#if config.filmstripShow && cells.length}
+    <!-- dir="ltr" island: a time-proportional scrubber (track translateX, needle
+         pinned by %) — the strip must run left→right even under RTL. -->
     <div
         class="filmstrip"
+        dir="ltr"
         bind:this={containerEl}
         bind:clientWidth={cw}
         style:height="{config.filmstripHeightPx}px"

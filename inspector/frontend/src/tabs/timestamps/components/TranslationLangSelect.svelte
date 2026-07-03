@@ -149,7 +149,7 @@
     .tls-menu {
         position: absolute;
         top: calc(100% + 3px);
-        left: 0;
+        inset-inline-start: 0;
         z-index: 200;
         min-width: 100%;
         max-height: 300px;
@@ -183,7 +183,7 @@
         border-radius: 4px;
         color: oklch(0.86 0.012 255);
         font-size: 0.82rem;
-        text-align: left;
+        text-align: start;
         cursor: pointer;
     }
     .tls-opt.hl { background: oklch(0.3 0.025 274); }

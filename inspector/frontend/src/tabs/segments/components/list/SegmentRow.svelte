@@ -874,8 +874,13 @@ import type { Segment } from '../../../../lib/types/view-models';
 </script>
 
 <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+<!-- dir="ltr" island: the row pairs a left→right waveform with its confidence
+     stripe / time labels / edit controls; the geometry mirrors the waveform, not
+     the RTL frame (same rationale as the guide's MockSegCard). Arabic ref text
+     still shapes RTL within its own run. -->
 <div
     class="seg-row"
+    dir="ltr"
     class:dirty
     class:playing={highlighted}
     class:seg-row-context={isContext}

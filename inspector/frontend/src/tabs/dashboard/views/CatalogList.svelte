@@ -341,7 +341,7 @@
         max-width: 210px;
     }
     .sort {
-        margin-left: auto;
+        margin-inline-start: auto;
     }
     .sort label { display: inline-flex; align-items: center; gap: var(--s-2); }
     .sort-label {
@@ -499,7 +499,7 @@
         font-size: var(--fs-meta);
         text-transform: uppercase;
         letter-spacing: 0.08em;
-        margin-right: var(--s-2);
+        margin-inline-end: var(--s-2);
     }
     .chip {
         display: inline-flex;
@@ -530,7 +530,7 @@
     .clear {
         background: transparent;
         border: 0;
-        margin-left: auto;
+        margin-inline-start: auto;
         color: var(--text-muted);
         font-size: var(--fs-meta);
         text-decoration: underline;

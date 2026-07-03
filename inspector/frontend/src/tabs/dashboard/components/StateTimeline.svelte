@@ -124,7 +124,10 @@
     });
 </script>
 
-<div class="timeline" role="list" aria-label={m.dashboard_timeline_aria_label()}>
+<!-- dir="ltr" island: nodes are laid out chronologically left→right (requested →
+     published) with connectors offset by physical left/right; the axis must not
+     mirror under RTL. -->
+<div class="timeline" role="list" dir="ltr" aria-label={m.dashboard_timeline_aria_label()}>
     <div class="axis"></div>
     <ol class="nodes" style="grid-template-columns: repeat({items.length}, 1fr)">
         {#each items as item, i (item.id)}

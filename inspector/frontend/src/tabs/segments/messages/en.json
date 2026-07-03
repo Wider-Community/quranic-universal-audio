@@ -59,6 +59,9 @@
   "segments_row_flag_remove_button": "Remove flag",
   "segments_row_flag_update_button": "Update",
   "segments_row_flag_apply_button": "Flag",
+  "segments_row_flag_reply_placeholder": "Add a reply…",
+  "segments_row_flag_reply_button": "Reply",
+  "segments_row_flag_edit_link": "Edit or remove",
   "segments_time_edit_click_hint_title": "Click to adjust boundaries",
   "segments_save_preview_warning_chapters": [
     {
@@ -382,6 +385,8 @@
   "segments_guides_gate_done_gate": "You're all set — editing is unlocked.",
   "segments_guides_gate_done_browse": "All guides read.",
   "segments_guides_gate_start_editing_button": "Start editing",
+  "segments_guides_gate_title_gate": "Read the review guides first",
+  "segments_guides_gate_title_browse": "Review guides",
   "segments_history_optype_trim_segment": "Boundary adjustment",
   "segments_history_optype_split_segment": "Split",
   "segments_history_optype_merge_segments": "Merge",

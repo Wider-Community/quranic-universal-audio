@@ -186,7 +186,9 @@
         display: inline-flex;
         align-items: center;
         gap: 4px;
-        padding: 2px 4px 2px 9px;
+        padding-block: 2px;
+        padding-inline-start: 9px;
+        padding-inline-end: 4px;
         background: var(--elevated);
         border: 1px solid var(--border-default);
         border-radius: 999px;
@@ -255,7 +257,7 @@
     }
     .menu-item {
         flex: 0 0 auto; /* keep natural height; the flex column must not squish items when scrolling */
-        text-align: left;
+        text-align: start;
         border: 0;
         background: transparent;
         color: var(--text-secondary);

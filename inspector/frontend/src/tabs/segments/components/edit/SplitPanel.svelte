@@ -146,6 +146,7 @@
         selectSplitRegion(i, canvas);
     }
 
+    $: cancelLabel = tr($localeStore, m.common_action_cancel());
     $: splitConfirmLabel = tr($localeStore, m.segments_split_confirm_button());
     $: previewLeftTitle = tr($localeStore, m.segments_split_preview_left_title());
     $: previewRightTitle = tr($localeStore, m.segments_split_preview_right_title());
@@ -160,9 +161,11 @@
     $: regionNudgeFwdTitle = tr($localeStore, m.segments_split_region_nudge_fwd_title({ ms: EDIT_NUDGE_MS }));
 </script>
 
-<div class="seg-edit-inline">
+<!-- dir="ltr" island: the L/‹›/R controls step a cursor along the left→right
+     waveform; their order must mirror the waveform, not the RTL frame. -->
+<div class="seg-edit-inline" dir="ltr">
     <div class="seg-edit-buttons">
-        <button class="btn btn-sm btn-cancel" on:click={exitEditMode}>Cancel</button>
+        <button class="btn btn-sm btn-cancel" on:click={exitEditMode}>{cancelLabel}</button>
 
         {#if isBinary}
             <button class="seg-side-pick"

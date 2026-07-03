@@ -238,9 +238,9 @@
     header.rail-aligned :global(.link-rail) {
         /* the rail's labels (e.g. "Status") sit 16px inside the rail box and the
            icon carries 8px of inner padding, so glyph offset = gutter + 16 - 8 */
-        padding-left: calc(var(--gutter) + 8px);
+        padding-inline-start: calc(var(--gutter) + 8px);
     }
     header.rail-aligned .auth-controls {
-        padding-right: var(--gutter);
+        padding-inline-end: var(--gutter);
     }
 </style>

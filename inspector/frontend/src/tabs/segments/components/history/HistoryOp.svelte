@@ -174,7 +174,9 @@
         </div>
     {/if}
 
-    <div class="seg-history-diff">
+    <!-- dir="ltr" island: before → arrows → after is a left→right change axis
+         (SVG arrows point right); the diff geometry must not mirror under RTL. -->
+    <div class="seg-history-diff" dir="ltr">
         <div class="seg-history-before">
             {#each diff.before as snap, i (snap.segment_uid ?? i)}
                 <div bind:this={beforeCardEls[i]}>

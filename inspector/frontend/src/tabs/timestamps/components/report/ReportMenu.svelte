@@ -192,7 +192,7 @@
         border: 1px solid transparent;
         border-radius: var(--r-2);
         cursor: pointer;
-        text-align: left;
+        text-align: start;
         font: inherit;
         color: var(--text-primary);
         transition: background var(--t-fast), border-color var(--t-fast);
@@ -224,6 +224,9 @@
         transition: transform var(--t-fast);
     }
     .chev.open { transform: rotate(90deg); }
+    /* Chevrons point in the reading direction: right in LTR, left in RTL. The
+       open disclosure state (rotate 90° → down) is the same in both. */
+    :global([dir='rtl']) .chev:not(.open) { transform: rotate(180deg); }
     .count {
         flex: 0 0 auto;
         min-width: 18px;
@@ -247,7 +250,9 @@
         display: flex;
         flex-direction: column;
         gap: 1px;
-        padding: 0 var(--s-2) var(--s-2) calc(var(--s-2) + 24px);
+        padding-block: 0 var(--s-2);
+        padding-inline-start: calc(var(--s-2) + 24px);
+        padding-inline-end: var(--s-2);
     }
     .sub-row {
         display: flex;
@@ -266,7 +271,7 @@
         background: transparent;
         border: 1px solid transparent;
         cursor: pointer;
-        text-align: left;
+        text-align: start;
         font: inherit;
         transition: background var(--t-fast), color var(--t-fast);
     }

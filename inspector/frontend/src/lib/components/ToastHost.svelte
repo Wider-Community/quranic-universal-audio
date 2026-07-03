@@ -23,7 +23,7 @@
 <style>
     .toast-host {
         position: fixed;
-        right: 16px;
+        inset-inline-end: 16px;
         bottom: 16px;
         display: flex;
         flex-direction: column;
@@ -33,7 +33,7 @@
     }
     .toast {
         pointer-events: auto;
-        text-align: left;
+        text-align: start;
         max-width: 360px;
         padding: 10px 14px;
         border-radius: 6px;

@@ -67,11 +67,14 @@
     $: endBackTitle = tr($localeStore, m.segments_trim_end_back_title({ ms: EDIT_NUDGE_MS }));
     $: endFwdTitle = tr($localeStore, m.segments_trim_end_fwd_title({ ms: EDIT_NUDGE_MS }));
     $: applyLabel = tr($localeStore, m.segments_trim_apply_button());
+    $: cancelLabel = tr($localeStore, m.common_action_cancel());
 </script>
 
-<div class="seg-edit-inline">
+<!-- dir="ltr" island: start/end nudgers map to the left/right trim handles on
+     the left→right waveform; their order must mirror the waveform, not the RTL frame. -->
+<div class="seg-edit-inline" dir="ltr">
     <div class="seg-edit-buttons">
-        <button class="btn btn-sm btn-cancel" on:click={exitEditMode}>Cancel</button>
+        <button class="btn btn-sm btn-cancel" on:click={exitEditMode}>{cancelLabel}</button>
 
         <div class="seg-nudge-pair seg-nudge-start" class:kb-active={$activeTrimBoundary === 'start'} role="group" aria-label={startGroupAriaLabel}>
             <button class="seg-nudge"

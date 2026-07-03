@@ -12,6 +12,7 @@
     import { fade } from 'svelte/transition';
 
     import { localeStore, tr } from '$lib/i18n/locale-store';
+    import { vocabLabel } from '$lib/i18n/vocab';
     import * as m from '$lib/paraglide/messages';
     import { loadCatalogJson } from '../../../../lib/resources/catalog';
     import { catalogData } from '../../stores/catalog-data';
@@ -76,8 +77,8 @@
         lang,
         m.dashboard_submit_details_conflict_warning({
             name: pickedReciter?.name ?? '',
-            riwayah: state.combination.riwayah,
-            style: state.combination.style,
+            riwayah: vocabLabel('riwayah', state.combination.riwayah),
+            style: vocabLabel('style', state.combination.style),
         }),
     );
 
@@ -114,7 +115,7 @@
             >
                 <option value="" disabled>{pickOne}</option>
                 {#each riwayatOptions as r (r.slug)}
-                    <option value={r.slug}>{r.name}</option>
+                    <option value={r.slug}>{tr(lang, vocabLabel('riwayah', r.slug))}</option>
                 {/each}
             </select>
         </label>
@@ -127,7 +128,7 @@
             >
                 <option value="" disabled>{pickOne}</option>
                 {#each styleOptions as s (s.slug)}
-                    <option value={s.slug}>{s.name}</option>
+                    <option value={s.slug}>{tr(lang, vocabLabel('style', s.slug))}</option>
                 {/each}
             </select>
         </label>
@@ -140,7 +141,7 @@
             >
                 <option value="">{contextBlank}</option>
                 {#each contextOptions as c (c.slug)}
-                    <option value={c.slug}>{c.name}</option>
+                    <option value={c.slug}>{tr(lang, vocabLabel('context', c.slug))}</option>
                 {/each}
             </select>
         </label>
@@ -225,7 +226,7 @@
     }
     .hint {
         color: var(--text-faint);
-        margin-left: 6px;
+        margin-inline-start: 6px;
         text-transform: lowercase;
         font-size: 10.5px;
     }

@@ -167,12 +167,12 @@
     .bookmarks-panel {
         position: fixed;
         top: 0;
-        left: 0;
+        inset-inline-start: 0;
         width: 340px;
         max-width: 90vw;
         height: 100vh;
         background: var(--panel-sidebar);
-        border-right: 1px solid var(--border-default);
+        border-inline-end: 1px solid var(--border-default);
         box-shadow: var(--shadow-pop);
         z-index: 1000;
         display: flex;
@@ -243,7 +243,7 @@
     }
     .bm-open {
         flex: 1;
-        text-align: right;
+        text-align: end;
         background: none;
         border: 0;
         color: var(--text-secondary);
@@ -259,7 +259,7 @@
     .bm-remove {
         background: none;
         border: 0;
-        border-left: 1px solid var(--border-default);
+        border-inline-start: 1px solid var(--border-default);
         color: var(--text-muted);
         font-size: 1.2rem;
         padding: 0 12px;

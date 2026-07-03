@@ -105,7 +105,7 @@
     .tg-menu {
         position: absolute;
         bottom: calc(100% + 4px);
-        left: 0;
+        inset-inline-start: 0;
         z-index: 200;
         min-width: 160px;
         max-height: 300px;
@@ -129,7 +129,7 @@
         color: var(--text-secondary);
         font: inherit;
         font-size: var(--fs-meta);
-        text-align: left;
+        text-align: start;
         cursor: pointer;
     }
     .tg-opt:hover { background: var(--panel-2); color: var(--text-primary); }

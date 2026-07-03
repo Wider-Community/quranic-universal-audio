@@ -45,7 +45,7 @@
         font-family: var(--font-mono);
         font-size: 10.5px;
         color: var(--text-secondary);
-        margin-right: 4px;
+        margin-inline-end: 4px;
     }
     .cancel {
         background: transparent;
