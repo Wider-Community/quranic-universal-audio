@@ -48,7 +48,8 @@ def read_bucket_bytes(bucket_id: str, path: str, *, token: str | None = None) ->
         os.environ.setdefault("HF_TOKEN", token)
     from huggingface_hub import hffs  # type: ignore[import-not-found]
 
-    return hffs.cat_file(_bucket_uri(bucket_id, path))
+    result = hffs.cat_file(_bucket_uri(bucket_id, path))
+    return result.encode("utf-8") if isinstance(result, str) else result
 
 
 def download_db(bucket_id: str, *, token: str | None = None) -> Path:
