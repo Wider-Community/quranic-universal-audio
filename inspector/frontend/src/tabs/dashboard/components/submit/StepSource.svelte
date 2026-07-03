@@ -315,7 +315,7 @@
         top: 3px;
         bottom: 3px;
         width: calc(50% - 3px);
-        left: 3px;
+        inset-inline-start: 3px;
         background: var(--panel);
         border: 1px solid var(--border-quiet);
         border-radius: 4px;
@@ -323,6 +323,9 @@
         pointer-events: none;
     }
     .mode-track[data-mode='playlist'] { transform: translateX(100%); }
+    /* Under RTL the track starts at the logical (right) edge, so the second
+       mode advances toward the left — negate the slide. */
+    :global([dir='rtl']) .mode-track[data-mode='playlist'] { transform: translateX(-100%); }
 
     .body-pane {
         display: flex;

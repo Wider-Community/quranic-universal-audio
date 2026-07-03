@@ -415,7 +415,7 @@
         top: 3px;
         bottom: 3px;
         width: calc(100% / 3 - 3px);
-        left: 3px;
+        inset-inline-start: 3px;
         background: var(--panel);
         border: 1px solid var(--border-quiet);
         border-radius: 4px;
@@ -427,6 +427,14 @@
     }
     .mode-track[data-mode='new'] {
         transform: translateX(200%);
+    }
+    /* Under RTL the track starts at the logical (right) edge, so later modes
+       advance toward the left — negate the slide. */
+    :global([dir='rtl']) .mode-track[data-mode='existing_reciter'] {
+        transform: translateX(-100%);
+    }
+    :global([dir='rtl']) .mode-track[data-mode='new'] {
+        transform: translateX(-200%);
     }
 
     .pane {
