@@ -334,8 +334,10 @@ Full UI map: [`admin-dashboard.md`](admin-dashboard.md).
 
 - Audio embedded as bytes (verse-trimmed); `word_idx` is 1-based, may repeat / go backward within a
   verse; `text_uthmani` token count equals `word_timestamps` occurrence count.
-- **Subset (config)** = riwayah slug (e.g. `hafs_an_asim`). **Split** = delivery slug. Readability
-  comes from `name_en` / `name_ar`, not the split key.
+- **Subset (config)** = delivery/mushaf slug (e.g. `khalifa_al_tunaiji_tarteel`), **split** =
+  `train`. Parquet still lives under the riwayah folder `hafs_an_asim/<slug>-*`; only the config
+  label differs (one config per mushaf — the HF viewer caps a config at 30 splits). Readability
+  comes from `name_en` / `name_ar`, not the config key.
 
 ### Dataset catalog config
 

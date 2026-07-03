@@ -13,7 +13,7 @@ tags:
 - asr
 pretty_name: Qur'anic Universal Ayahs
 size_categories:
-- 10K<n<100K
+- 100K<n<1M
 {{configs}}
 ---
 
@@ -44,7 +44,7 @@ Mushaf configs contain one row per ayah. Each row includes embedded ayah audio, 
 
 The `mushafs` subset is the dataset catalog index. It has one row per published mushaf, joined with reciter names, riwayah/style/channel labels, audio metadata, and coverage.
 
-Remaining subsets are grouped by riwayah, and splits are specific mushafs.
+Each remaining subset is one published mushaf — a config named after the mushaf slug, with a single `train` split. Riwayah, style, and channel for each mushaf live in the `mushafs` catalog.
 
 ## Mushaf Schema
 
@@ -69,7 +69,7 @@ One row per published mushaf.
 
 | Column | Type | Notes |
 |---|---|---|
-| `slug` | `string` | Stable mushaf identifier (the per-riwayah split name). |
+| `slug` | `string` | Stable mushaf identifier (also the subset/config name). |
 | `reciter_id` | `string` | Stable reciter identifier (shared across that reciter's mushafs). |
 | `name_en`, `name_ar` | `string` | Reciter display name (English / Arabic). |
 | `country` | `string` | Reciter country, ISO 3166-1 alpha-2 (e.g. `SA`). |
@@ -97,8 +97,8 @@ from datasets import load_dataset
 
 ds = load_dataset(
     "hetchyy/quranic-universal-ayahs",
-    "hafs_an_asim",
-    split="khalifa_al_tunaiji_tarteel",
+    "khalifa_al_tunaiji_tarteel",
+    split="train",
 )
 
 row = ds[0]

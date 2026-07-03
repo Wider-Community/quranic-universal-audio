@@ -21,6 +21,10 @@ from qua_shared.schemas.bucket.catalog import ReciterCatalog
 CATALOG_CONFIG_NAME = "mushafs"
 CATALOG_SPLIT_NAME = "all"
 
+# Each mushaf is its own config with a single split under this name. The HF
+# dataset-viewer caps a config at 30 splits, so mushafs cannot share one config.
+VERSE_SPLIT_NAME = "train"
+
 CATALOG_COLUMNS = (
     "slug",
     "reciter_id",
@@ -492,16 +496,20 @@ def badge_url(label: str, value: str, color: str) -> str:
 def _render_configs_block(splits_by_config: dict[str, list[str]]) -> str:
     """Build the dataset-card ``configs:`` YAML from published parquet splits.
 
-    One ``config_name`` per riwayah (with its splits), then the ``mushafs``/``all``
-    catalog config last. Indentation matches the hand-authored card exactly.
+    One ``config_name`` per mushaf slug, each with a single ``train`` split, then
+    the ``mushafs``/``all`` catalog config last. ``splits_by_config`` maps the
+    riwayah folder to its slugs; the folder is used only for the file ``path`` —
+    parquet stays under ``<riwayah_folder>/<slug>-*``. Mushafs get their own
+    configs (not shared splits) because the HF viewer caps a config at 30 splits.
+    Indentation matches the hand-authored card exactly.
     """
     lines = ["configs:"]
-    for config in sorted(splits_by_config):
-        lines.append(f"- config_name: {config}")
-        lines.append("  data_files:")
-        for split in splits_by_config[config]:
-            lines.append(f"  - split: {split}")
-            lines.append(f"    path: {config}/{split}-*")
+    for folder in sorted(splits_by_config):
+        for slug in splits_by_config[folder]:
+            lines.append(f"- config_name: {slug}")
+            lines.append("  data_files:")
+            lines.append(f"  - split: {VERSE_SPLIT_NAME}")
+            lines.append(f"    path: {folder}/{slug}-*")
     lines.append(f"- config_name: {CATALOG_CONFIG_NAME}")
     lines.append("  data_files:")
     lines.append(f"  - split: {CATALOG_SPLIT_NAME}")

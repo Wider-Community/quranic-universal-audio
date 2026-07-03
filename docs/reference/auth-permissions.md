@@ -14,7 +14,7 @@ Flat shims re-export it: `from services import auth`, `from services import perm
 |---|---|
 | Identity cookie | `inspector_session`, signed via `itsdangerous.URLSafeTimedSerializer` (key = `INSPECTOR_SESSION_SECRET`, salt `inspector-session-v1`) |
 | Cookie payload | `{login, hf_user_id, iat}` — **NO `role`, NO `csrf`** (`auth.py::encode_session`) |
-| Cookie max-age | `SESSION_COOKIE_MAX_AGE = 604800` (1 week); enforced in `decode_session` via `loads(..., max_age=...)` |
+| Cookie max-age | `SESSION_COOKIE_MAX_AGE = 60*60*24*SESSION_COOKIE_MAX_AGE_DAYS` (default 30 days; override per-Space via `INSPECTOR_SESSION_MAX_AGE_DAYS`); enforced in `decode_session` via `loads(..., max_age=...)` |
 | Cookie flags (deployed) | `httponly=True`, `secure=True`, `samesite="None"` (iframe context, `INSPECTOR_BEHIND_PROXY=1`) |
 | Cookie flags (local) | `secure=False`, `samesite="Lax"` (plain HTTP rejects Secure) |
 | Role | Resolved **fresh per request** via `access.resolve_role(hf_user_id)` — never carried in cookie. Revoked maintainer → contributor on next request, no re-login |

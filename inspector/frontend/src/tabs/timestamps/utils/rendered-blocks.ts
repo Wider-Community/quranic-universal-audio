@@ -90,6 +90,33 @@ export interface RenderedUnit {
     missedMark: string | null;
 }
 
+/** Re-link the share-group across each cross-verse waṣl junction, in place.
+ *  The idgham source (verse A's tanwīn) and its receiving nasalised head (verse B)
+ *  come from ONE phonemizer share-group, but live in different segments — so they
+ *  were renumbered into separate groups (per-segment stamp + per-segment `sgOffset`)
+ *  and stop co-lighting. Give the receiver's group the source's id so the verse-wide
+ *  `_shareUnions` unions [haraka, ghunnah] and the tanwīn highlights through the
+ *  merger like every intra-verse one. Pure timing/highlight — no cell content moves. */
+function _unifyWaslShareGroups(words: TsWord[], intervals: PhonemeInterval[]): void {
+    const verseOf = (loc: string) => loc.split(':').slice(0, 2).join(':');
+    for (let wi = 0; wi < words.length - 1; wi++) {
+        const cur = words[wi];
+        const next = words[wi + 1];
+        if (!cur || !next || verseOf(cur.location) === verseOf(next.location)) continue;
+        const source = (cur.cells ?? []).slice(-2).reverse().find((c) => isBridgeTag(c.tag));
+        const headPi = next.phoneme_indices?.[0];
+        if (!source || source.shareGroup == null || headPi == null || !intervals[headPi]) continue;
+        const recv = (next.cells ?? []).find((c) => c.phonemeIndices.includes(headPi));
+        if (!recv) continue;
+        const sgA = source.shareGroup;
+        const sgB = recv.shareGroup;
+        if (sgB === sgA) continue;
+        for (const c of next.cells ?? []) {
+            if (c === recv || (sgB != null && c.shareGroup === sgB)) c.shareGroup = sgA;
+        }
+    }
+}
+
 /** Build the per-word `RenderedBlock[]` for the analysis view: cross-word
  *  idgham / iltiqaa bridges lifted to between-word tiles, cell-groups whose
  *  phonemes are aligned per-grapheme to their source columns, and detected
@@ -99,6 +126,9 @@ export function buildRendered(
     intervals: PhonemeInterval[],
 ): RenderedBlock[] {
     if (!words.length) return [];
+    // Cross-verse waṣl junctions split the idgham source + receiver into separate
+    // segments → separate share-groups. Re-link before the verse-wide union below.
+    _unifyWaslShareGroups(words, intervals);
 
     // Cross-word bridges are baked into the shard at generation: a phoneme
     // carrying a ``bridge`` rule is the idgham merger that fuses two words.

@@ -2,12 +2,26 @@
     Sign-in modal. Mounted once at the app root and surfaced via
     `openSignInModal()` whenever an anonymous user attempts a
     contribution action (claim, save, etc.).
+
+    Standalone tab: the CTA kicks off the plain redirect sign-in.
+    Embedded HF iframe: the CTA runs the silent in-iframe flow
+    (`embedded-auth.ts`); if the browser won't complete it in-frame, the modal
+    offers a single "continue in a new tab" link (a click is required — browsers
+    block auto-opening tabs). See `embedded-auth.ts` for the constraints.
 -->
 <script lang="ts">
     import { localeStore, tr } from '$lib/i18n/locale-store';
     import * as m from '$lib/paraglide/messages';
 
     import { signIn } from '../api/auth-client';
+    import {
+        beginEmbeddedSignIn,
+        continueInTab,
+        embeddedAuth,
+        isEmbedded,
+        recheckSession,
+        resetEmbeddedAuth,
+    } from '../api/embedded-auth';
     import { closeSignInModal, signInModal } from '../stores/sign-in-modal';
 
     $: lang = $localeStore;
@@ -15,19 +29,33 @@
     $: body = $signInModal.context?.body ?? tr(lang, m.common_signin_default_body());
     $: continueLabel = tr(lang, m.common_auth_continue_with_hf());
     $: cancelLabel = tr(lang, m.common_action_cancel());
+    $: returnPath = $signInModal.returnPath ?? '/';
+    $: phase = $embeddedAuth.phase;
+    $: embedded = isEmbedded();
+
+    // Success: identity is already loaded by the flow — just close.
+    $: if ($signInModal.open && phase === 'done') _close();
 
     function _onContinue() {
-        const returnPath = $signInModal.returnPath ?? '/';
+        if (embedded) {
+            void beginEmbeddedSignIn(returnPath);
+        } else {
+            closeSignInModal();
+            signIn(returnPath);
+        }
+    }
+
+    function _close() {
         closeSignInModal();
-        signIn(returnPath);
+        resetEmbeddedAuth();
     }
 
     function _onBackdropClick(e: MouseEvent) {
-        if (e.target === e.currentTarget) closeSignInModal();
+        if (e.target === e.currentTarget) _close();
     }
 
     function _onKeydown(e: KeyboardEvent) {
-        if (e.key === 'Escape') closeSignInModal();
+        if (e.key === 'Escape') _close();
     }
 </script>
 
@@ -41,20 +69,50 @@
             aria-modal="true"
             aria-labelledby="sign-in-title"
         >
-            <h2 id="sign-in-title" class="sign-in-title">{title}</h2>
-            <p class="sign-in-body">{body}</p>
-            <div class="sign-in-actions">
-                <button type="button" class="sign-in-cta" on:click={_onContinue}>
-                    {continueLabel}
-                </button>
-                <button
-                    type="button"
-                    class="sign-in-dismiss"
-                    on:click={closeSignInModal}
-                >
-                    {cancelLabel}
-                </button>
-            </div>
+            {#if embedded && phase === 'trying'}
+                <h2 id="sign-in-title" class="sign-in-title">
+                    {tr(lang, m.common_signin_embedded_signing_in())}
+                </h2>
+            {:else if embedded && phase === 'need-tab'}
+                <h2 id="sign-in-title" class="sign-in-title">
+                    {tr(lang, m.common_signin_embedded_need_tab_title())}
+                </h2>
+                <p class="sign-in-body">
+                    {tr(lang, m.common_signin_embedded_need_tab_body())}
+                </p>
+                <div class="sign-in-actions">
+                    <button type="button" class="sign-in-cta" on:click={continueInTab}>
+                        {tr(lang, m.common_signin_embedded_open_tab())}
+                    </button>
+                    <button type="button" class="sign-in-dismiss" on:click={_close}>
+                        {cancelLabel}
+                    </button>
+                </div>
+            {:else if embedded && phase === 'awaiting-tab'}
+                <h2 id="sign-in-title" class="sign-in-title">
+                    {tr(lang, m.common_signin_embedded_awaiting_title())}
+                </h2>
+                <p class="sign-in-body">{tr(lang, m.common_signin_embedded_awaiting_body())}</p>
+                <div class="sign-in-actions">
+                    <button type="button" class="sign-in-cta" on:click={() => void recheckSession()}>
+                        {tr(lang, m.common_signin_embedded_recheck())}
+                    </button>
+                    <button type="button" class="sign-in-dismiss" on:click={_close}>
+                        {cancelLabel}
+                    </button>
+                </div>
+            {:else}
+                <h2 id="sign-in-title" class="sign-in-title">{title}</h2>
+                <p class="sign-in-body">{body}</p>
+                <div class="sign-in-actions">
+                    <button type="button" class="sign-in-cta" on:click={_onContinue}>
+                        {continueLabel}
+                    </button>
+                    <button type="button" class="sign-in-dismiss" on:click={_close}>
+                        {cancelLabel}
+                    </button>
+                </div>
+            {/if}
         </div>
     </div>
 {/if}

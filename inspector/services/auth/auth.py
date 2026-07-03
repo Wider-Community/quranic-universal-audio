@@ -10,7 +10,8 @@ OAuth-state store + one cookie surface:
   round-trip. Safe because the app is pinned to a single worker (see
   ``app.py`` ``_assert_single_worker``).
 - ``inspector_session`` cookie signed via ``itsdangerous`` is the long-lived
-  (1 week) identity cookie, set after a successful callback. Holds
+  identity cookie (``SESSION_COOKIE_MAX_AGE_DAYS``, default 30, overridable via
+  ``INSPECTOR_SESSION_MAX_AGE_DAYS``), set after a successful callback. Holds
   ``{login, hf_user_id, iat}``.
 
 The identity cookie does NOT carry ``role`` — ``current_user()`` resolves
@@ -49,7 +50,11 @@ from .secrets_guard import MissingSecret, get_session_secret
 logger = logging.getLogger(__name__)
 
 SESSION_COOKIE_NAME = "inspector_session"
-SESSION_COOKIE_MAX_AGE = 60 * 60 * 24 * 7  # 1 week — mirrors hf_oauth_expiration_minutes: 10080
+# How long the identity cookie stays valid before a re-login is required.
+# Overridable per-Space via INSPECTOR_SESSION_MAX_AGE_DAYS (a plain Space
+# variable) without a redeploy.
+SESSION_COOKIE_MAX_AGE_DAYS = int(os.getenv("INSPECTOR_SESSION_MAX_AGE_DAYS", "30"))
+SESSION_COOKIE_MAX_AGE = 60 * 60 * 24 * SESSION_COOKIE_MAX_AGE_DAYS
 SESSION_SALT = "inspector-session-v1"
 
 # Dev-mode synthetic identity. Unsigned cookie; only honoured when
@@ -169,6 +174,28 @@ def pop_return_path(state: str | None) -> str | None:
     val = _state_cache.get(key)
     _state_cache.delete(key)
     return val if isinstance(val, str) else None
+
+
+def remember_popup(state: str) -> None:
+    """Mark this OAuth ``state`` as originating from a popup sign-in.
+
+    Embedded in the cross-site HF iframe the app can't navigate the top window
+    (no ``allow-top-navigation``) and can't render HF's ``X-Frame-Options:
+    SAMEORIGIN`` login page in-frame, so the sign-in runs in a popup instead.
+    The callback checks this flag to close the popup (postMessage + close)
+    rather than redirecting. Stored alongside Authlib's state entry.
+    """
+    _state_cache.set(f"popup_{state}", True, _RETURN_PATH_TTL)
+
+
+def pop_popup(state: str | None) -> bool:
+    """Return (and clear) whether this ``state`` was a popup sign-in."""
+    if not state:
+        return False
+    key = f"popup_{state}"
+    val = _state_cache.get(key)
+    _state_cache.delete(key)
+    return bool(val)
 
 
 def init_oauth(app) -> OAuth:
