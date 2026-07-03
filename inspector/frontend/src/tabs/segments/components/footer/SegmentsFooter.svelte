@@ -22,6 +22,7 @@
 
     import * as m from '$lib/paraglide/messages';
     import { clickOutside } from '../../../../lib/actions/click-outside';
+    import { localizeDigits } from '../../../../lib/i18n/format';
     import { localeStore, tr } from '../../../../lib/i18n/locale-store';
     import { markReadyBypass } from '../../../../lib/api/claims-client';
     import type { ReciterTask } from '../../../../lib/api/reciter-task';
@@ -29,7 +30,7 @@
     import type { CombinationSelection } from '../../../../lib/components/picker/combination-picker-types';
     import CombinationPicker from '../../../../lib/components/picker/CombinationPicker.svelte';
     import LoadingSpinner from '../../../../lib/components/player/LoadingSpinner.svelte';
-    import SurahPopover from '../../../../lib/components/player/SurahPopover.svelte';
+    import SurahPicker from '../../../../lib/components/player/SurahPicker.svelte';
     import ReciterChip from '../../../../lib/components/ReciterChip.svelte';
     import Icon from '../../../../lib/icons/Icon.svelte';
     import type { IconName } from '../../../../lib/icons/index';
@@ -402,14 +403,15 @@
         pickerOpen = false;
     }
 
-    function onSurahPick(ev: CustomEvent<number>): void {
+    function onSurahPick(n: number): void {
         surahOpen = false;
-        dispatch('chapterChange', String(ev.detail));
+        dispatch('chapterChange', String(n));
     }
 
     async function openAyah(): Promise<void> {
         if (!$selectedChapter) return;
         ayahQuery = '';
+        surahOpen = false;
         ayahOpen = true;
         await tick();
         ayahFilterInput?.focus();
@@ -497,12 +499,16 @@
     $: speedTitle = tr($localeStore, m.segments_footer_speed_title());
     $: cancelLabel = tr($localeStore, m.common_action_cancel());
     $: speedAriaLabel = tr($localeStore, m.segments_footer_speed_aria_label({ speed: $playbackSpeed }));
+    $: speedLabel = tr($localeStore, localizeDigits(`${$playbackSpeed}×`));
     $: autoplayTitle = tr($localeStore, m.segments_footer_autoplay_title());
     $: autoscrollTitle = tr($localeStore, m.segments_footer_autoscroll_title());
     $: playPauseAriaLabel = tr($localeStore, $segAudioBuffering
         ? m.segments_footer_loading_audio_aria_label()
         : playGlyph === 'pause' ? m.segments_footer_pause_aria_label() : m.segments_footer_play_aria_label());
     $: surahEmptyLabel = tr($localeStore, m.segments_footer_surah_label());
+    $: surahTriggerLabel = displaySurahNum
+        ? (displaySurahName ?? localizeDigits(displaySurahNum))
+        : surahEmptyLabel;
     $: ayahLabel = tr($localeStore, m.segments_footer_ayah_label());
     $: ayahAllLabel = tr($localeStore, m.segments_footer_ayah_all());
     $: ayahSearchPlaceholder = tr($localeStore, m.segments_footer_ayah_search_placeholder());
@@ -631,7 +637,7 @@
                             class:boosted={$playbackSpeed !== 1}
                             on:click={cyclePlaybackSpeed}
                             title={speedTitle}
-                            aria-label={speedAriaLabel}>{$playbackSpeed}×</button
+                            aria-label={speedAriaLabel}>{speedLabel}</button
                         >
                         <button
                             type="button"
@@ -662,19 +668,17 @@
                     >{#if $segAudioBuffering}<LoadingSpinner color="var(--accent-fg)" />{:else}<Icon name={playGlyph} size={18} />{/if}</button>
 
                     <div class="transport-right">
-                        <button
-                            type="button"
-                            class="loc-cell surah-cell"
-                            class:has-value={!!displaySurahNum}
-                            class:live={surahLive}
-                            on:click={() => { surahOpen = !surahOpen; ayahOpen = false; }}
-                            aria-haspopup="dialog"
-                            aria-expanded={surahOpen}
-                        >
-                            {#if displaySurahNum}<span class="loc-value">{displaySurahName ?? displaySurahNum}</span
-                            >{:else}<span class="loc-empty">{surahEmptyLabel}</span>{/if}
-                            <Icon name="caret-down" size={10} />
-                        </button>
+                        <SurahPicker
+                            compact
+                            surahNums={allSurahs}
+                            value={displaySurahNum}
+                            label={surahTriggerLabel}
+                            hasValue={!!displaySurahNum}
+                            live={surahLive}
+                            open={surahOpen}
+                            ontoggle={() => { surahOpen = !surahOpen; ayahOpen = false; }}
+                            onchange={onSurahPick}
+                        />
                         <button
                             type="button"
                             class="loc-cell"
@@ -686,16 +690,9 @@
                             aria-expanded={ayahOpen}
                         >
                             <span class="loc-label">{ayahLabel}</span>
-                            {#if $selectedVerse}<span class="loc-value">{$selectedVerse}</span
+                            {#if $selectedVerse}<span class="loc-value">{tr($localeStore, localizeDigits($selectedVerse))}</span
                             >{:else}<span class="loc-empty">{ayahAllLabel}</span>{/if}
-                            <Icon name="caret-down" size={10} />
                         </button>
-
-                        {#if surahOpen}
-                            <div class="pop pop-surah">
-                                <SurahPopover surahNums={allSurahs} value={displaySurahNum} on:change={onSurahPick} />
-                            </div>
-                        {/if}
                         {#if ayahOpen}
                             <div class="pop pop-ayah" role="dialog" aria-label={ayahPickerAriaLabel}>
                                 <input
@@ -713,7 +710,7 @@
                                         <button type="button" class="ayah-cell"
                                             class:active={String(v) === $selectedVerse}
                                             role="option" aria-selected={String(v) === $selectedVerse}
-                                            on:click={() => onAyahPick(v)}>{v}</button>
+                                            on:click={() => onAyahPick(v)}>{tr($localeStore, localizeDigits(v))}</button>
                                     {:else}
                                         <div class="empty">{ayahNoMatchesLabel}</div>
                                     {/each}
@@ -1122,15 +1119,6 @@
         font-variant-numeric: tabular-nums;
         color: var(--text-primary);
     }
-    .loc-cell.surah-cell .loc-value {
-        font-family: var(--font-sans);
-        font-variant-numeric: normal;
-        font-size: 12px;
-        white-space: nowrap;
-    }
-    .loc-cell.surah-cell {
-        min-width: 80px;
-    }
     .loc-cell .loc-empty {
         font-style: italic;
         font-size: 11px;
@@ -1158,14 +1146,6 @@
         box-shadow: var(--shadow-pop);
         padding: var(--s-2);
         z-index: 50;
-    }
-    /* Clip the surah popover to the player-stack row width (38 + 96 + 96
-     * + 4*2 gaps = 238px) so the dropup never sprawls beyond the row it
-     * anchors to. The inner SurahPopover is width:100% and clamps to it. */
-    .pop-surah {
-        left: 50%;
-        transform: translateX(-50%);
-        width: min(700px, calc(100vw - var(--s-4) * 2));
     }
     .pop-ayah {
         left: 50%;
@@ -1384,7 +1364,6 @@
         }
         .zone-left  { justify-content: flex-start; flex-wrap: wrap; }
         .zone-right { justify-content: flex-start; flex-wrap: wrap; }
-        .pop-surah,
         .pop-ayah {
             left: 0;
             right: 0;

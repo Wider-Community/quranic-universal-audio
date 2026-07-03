@@ -7,6 +7,9 @@
      */
     import { createEventDispatcher } from 'svelte';
 
+    import { localizeDigits } from '$lib/i18n/format';
+    import { localeStore, tr } from '$lib/i18n/locale-store';
+
     export let label: string;
     export let count: number | null = null;
     export let active = false;
@@ -27,7 +30,7 @@
 >
     <span class="label">{label}</span>
     {#if count !== null}
-        <span class="pill-count">{count}</span>
+        <span class="pill-count">{tr($localeStore, localizeDigits(count))}</span>
     {/if}
 </button>
 

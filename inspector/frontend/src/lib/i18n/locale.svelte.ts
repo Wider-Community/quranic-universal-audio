@@ -23,6 +23,7 @@ import { baseLocale, getLocale, locales } from '$lib/paraglide/runtime';
 
 import { LS_KEYS } from '../utils/constants';
 
+import { localizeDigits } from './format';
 import { registerRuneSetter, switchLocale } from './locale-store';
 
 export type Locale = (typeof locales)[number];
@@ -125,6 +126,17 @@ export const i18n = {
         this.setMode(loc);
     },
 };
+
+/**
+ * Reactive digit localization for runes scopes — reads the reactive `_locale`
+ * cell so a `{fmtNum(n)}` in a template / `$derived` re-renders on locale
+ * switch, with no per-call-site `i18n.locale === 'ar' ? …` conditional. The
+ * ambient-locale core is `./format.ts::localizeDigits` (for pure `.ts` and
+ * legacy files).
+ */
+export function fmtNum(value: string | number): string {
+    return localizeDigits(value, _locale);
+}
 
 /** Call once at app boot (main.ts) to sync <html dir/lang> with the resolved locale. */
 export function initLocale(): void {

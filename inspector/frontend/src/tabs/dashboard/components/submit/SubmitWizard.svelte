@@ -465,7 +465,7 @@
     .stepper-track {
         position: absolute;
         bottom: -3px;
-        left: 0;
+        inset-inline-start: 0;
         width: calc(100% / 4);
         height: 2px;
         background: var(--accent);
@@ -475,6 +475,11 @@
     .stepper-track[data-step='2'] { transform: translateX(100%); }
     .stepper-track[data-step='3'] { transform: translateX(200%); }
     .stepper-track[data-step='4'] { transform: translateX(300%); }
+    /* Under RTL the track starts at the logical (right) edge, so later steps
+       advance toward the left — negate the slide. */
+    :global([dir='rtl']) .stepper-track[data-step='2'] { transform: translateX(-100%); }
+    :global([dir='rtl']) .stepper-track[data-step='3'] { transform: translateX(-200%); }
+    :global([dir='rtl']) .stepper-track[data-step='4'] { transform: translateX(-300%); }
     .dot {
         display: flex;
         align-items: center;

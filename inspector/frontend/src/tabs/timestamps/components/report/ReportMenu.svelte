@@ -11,7 +11,7 @@
      * "reported" highlight + a count.
      */
     import * as m from '$lib/paraglide/messages';
-    import { i18n } from '$lib/i18n/locale.svelte';
+    import { fmtNum, i18n } from '$lib/i18n/locale.svelte';
     import type { TsReport } from '../../../../lib/types/generated/schemas';
     import type { SilenceSubtype, TajweedSubtype } from '../../stores/report-mode';
     import {
@@ -99,7 +99,7 @@
                         <span class="cat-blurb">{cat.blurb()}</span>
                     </span>
                     {#if count > 0}
-                        <span class="count" title={m.ts_report_menu_open_reports_count_tooltip({ count })}>{count}</span>
+                        <span class="count" title={m.ts_report_menu_open_reports_count_tooltip({ count })}>{fmtNum(count)}</span>
                     {/if}
                     <span class="chev" class:open={expandable && open}><ReportIcon name="chevron" size={14} /></span>
                 </button>

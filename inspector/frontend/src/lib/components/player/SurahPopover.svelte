@@ -3,8 +3,9 @@
      * Surah picker popover — 6-column grid matching the ayah picker style.
      * Each cell: number (left, small, muted) · name_en / name_ar stacked right.
      */
-    import { createEventDispatcher, onMount, tick } from 'svelte';
+    import { onMount, tick } from 'svelte';
 
+    import { localizeDigits } from '$lib/i18n/format';
     import { localeStore, tr } from '$lib/i18n/locale-store';
     import * as m from '$lib/paraglide/messages';
 
@@ -12,6 +13,9 @@
 
     export let surahNums: number[] = [];
     export let value: number | null = null;
+    /** Callback props — the picker forwards selection/hover to its parent. */
+    export let onchange: (n: number) => void = () => {};
+    export let onhover: (n: number) => void = () => {};
 
     let ready = false;
     let query = '';
@@ -44,14 +48,12 @@
         ? items.filter((it) => it.search.includes(query.trim().toLowerCase()))
         : items;
 
-    const dispatch = createEventDispatcher<{ change: number; hover: number }>();
-
     function pick(n: number): void {
-        dispatch('change', n);
+        onchange(n);
     }
 
     function hover(n: number): void {
-        dispatch('hover', n);
+        onhover(n);
     }
 
     function onKeydown(ev: KeyboardEvent): void {
@@ -87,7 +89,7 @@
                 on:pointerenter={() => hover(it.n)}
                 on:focus={() => hover(it.n)}
             >
-                <span class="num">{it.n}</span>
+                <span class="num">{tr($localeStore, localizeDigits(it.n))}</span>
                 <span class="names">
                     <span class="name-en">{it.nameEn}</span>
                     <span class="name-ar">{it.nameAr}</span>

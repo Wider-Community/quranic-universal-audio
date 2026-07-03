@@ -14,6 +14,7 @@
     import { createEventDispatcher, onMount, tick } from 'svelte';
     import { get } from 'svelte/store';
 
+    import { localizeDigits } from '$lib/i18n/format';
     import { localeStore, tr } from '$lib/i18n/locale-store';
     import * as m from '$lib/paraglide/messages';
 
@@ -222,7 +223,7 @@
     $: searchPlaceholder = tr($localeStore, m.common_picker_search_placeholder());
     $: loadingLabel = tr($localeStore, m.common_picker_loading());
     $: noMatchesLabel = tr($localeStore, m.common_picker_no_matches());
-    $: mineSectionLabel = tr($localeStore, m.common_picker_section_your_active_claims({ count: mineRows.length }));
+    $: mineSectionLabel = tr($localeStore, localizeDigits(m.common_picker_section_your_active_claims({ count: mineRows.length })));
 
     function toggleFacet(detail: { axis: string; tag: string }): void {
         const set = new Set(activeFilters[detail.axis] ?? []);
@@ -388,7 +389,7 @@
                     {#each groupedRest as group (group.bucket)}
                         <div class="picker-section-head bucket-head">
                             <StatePill state={group.bucket} size="sm" />
-                            <span class="head-count">{group.rows.length}</span>
+                            <span class="head-count">{tr($localeStore, localizeDigits(group.rows.length))}</span>
                         </div>
                         {#each group.rows as c (c.delivery.slug)}
                             {@const idx = orderedRows.indexOf(c)}

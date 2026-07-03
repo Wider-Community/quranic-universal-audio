@@ -9,6 +9,7 @@
      * clears it when filters become non-empty).
      */
 
+    import { localizeDigits } from '../../../../lib/i18n/format';
     import { localeStore, tr } from '../../../../lib/i18n/locale-store';
     import * as m from '../../../../lib/paraglide/messages';
     import { selectedVerse } from '../../stores/chapter';
@@ -19,9 +20,9 @@
     export let hidden: boolean = true;
 
     $: count = $activeFilters.length;
-    $: countLabel = count > 0 ? `(${count})` : '';
+    $: countLabel = count > 0 ? tr($localeStore, `(${localizeDigits(count)})`) : '';
     $: statusText = ($activeFilters.some((f) => f.value !== null) || $selectedVerse)
-        ? `${$displayedResult.segments.length} / ${$displayedResult.total}`
+        ? tr($localeStore, localizeDigits(`${$displayedResult.segments.length} / ${$displayedResult.total}`))
         : '';
 
     let justAdded = false;

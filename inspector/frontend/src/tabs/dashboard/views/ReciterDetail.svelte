@@ -13,6 +13,7 @@
 
     import { fetchPublicReciter } from '../../../lib/api/public-reciter-detail';
     import { undiscardReciter } from '../../../lib/api/requests';
+    import { localizeDigits } from '../../../lib/i18n/format';
     import { localeStore, tr } from '../../../lib/i18n/locale-store';
     import { vocabLabel } from '../../../lib/i18n/vocab';
     import * as m from '../../../lib/paraglide/messages';
@@ -200,7 +201,7 @@
         { key: 'riwayah', label: m.dashboard_detail_col_riwayah, present: (d) => !!d.riwayah, value: (d) => vocabLabel('riwayah', d.riwayah) },
         { key: 'style',   label: m.dashboard_detail_col_style,   present: (d) => !!d.style,   value: (d) => vocabLabel('style', d.style) },
         { key: 'context', label: m.dashboard_detail_col_context, present: (d) => !!d.recording_context, value: (d) => vocabLabel('context', d.recording_context) },
-        { key: 'year',    label: m.dashboard_detail_col_year,    present: (d) => d.recording_year != null, value: (d) => String(d.recording_year ?? '') },
+        { key: 'year',    label: m.dashboard_detail_col_year,    present: (d) => d.recording_year != null, value: (d) => (d.recording_year != null ? localizeDigits(d.recording_year) : '') },
         { key: 'category', label: m.dashboard_detail_col_category, present: (d) => !!d.audio_category, value: (d) => categoryLabel(d) },
         { key: 'coverage', label: m.dashboard_detail_col_coverage, present: (d) => d.chapter_count > 0, value: (d) => coverageLabel(d) },
         { key: 'channel', label: m.dashboard_detail_col_channel, present: (d) => !!d.channel, value: (d) => channelDisplay(d) },
@@ -362,7 +363,7 @@
                                 <tr class="group-head">
                                     <td colspan={visibleCols.length + 2}>
                                         {groupMatchingLabel}
-                                        <span class="group-count">{partition.matching.length}</span>
+                                        <span class="group-count">{tr(lang, localizeDigits(partition.matching.length))}</span>
                                     </td>
                                 </tr>
                                 {#each partition.matching as d (d.slug)}
@@ -417,7 +418,7 @@
                                     <tr class="group-head other">
                                         <td colspan={visibleCols.length + 2}>
                                             {groupOtherLabel}
-                                            <span class="group-count">{partition.other.length}</span>
+                                            <span class="group-count">{tr(lang, localizeDigits(partition.other.length))}</span>
                                         </td>
                                     </tr>
                                     {#each partition.other as d (d.slug)}
@@ -504,7 +505,7 @@
                 <section class="discarded-section" aria-label={discardedAriaLabel}>
                     <h3>
                         {discardedHeadingLabel}
-                        <span class="count">{reciter.discarded_deliveries.length}</span>
+                        <span class="count">{tr(lang, localizeDigits(reciter.discarded_deliveries.length))}</span>
                     </h3>
                     <p class="note">
                         {discardedNoteVisibility}

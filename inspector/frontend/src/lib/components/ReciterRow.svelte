@@ -11,6 +11,7 @@
      */
     import { createEventDispatcher } from 'svelte';
 
+    import { localizeDigits } from '$lib/i18n/format';
     import { localeStore, tr } from '$lib/i18n/locale-store';
     import * as m from '$lib/paraglide/messages';
 
@@ -46,9 +47,9 @@
     $: styleCount = new Set(visibleDeliveries.map((d) => d.style)).size;
 
     $: playAriaLabel = tr($localeStore, m.common_reciter_row_play_aria_label({ name: reciter.name }));
-    $: combinationLabel = tr($localeStore, m.common_reciter_row_combination_count({ count: combinationCount }));
-    $: riwayahLabel = tr($localeStore, m.common_reciter_row_riwayah_count({ count: riwayahCount }));
-    $: styleLabel = tr($localeStore, m.common_reciter_row_style_count({ count: styleCount }));
+    $: combinationLabel = tr($localeStore, localizeDigits(m.common_reciter_row_combination_count({ count: combinationCount })));
+    $: riwayahLabel = tr($localeStore, localizeDigits(m.common_reciter_row_riwayah_count({ count: riwayahCount })));
+    $: styleLabel = tr($localeStore, localizeDigits(m.common_reciter_row_style_count({ count: styleCount })));
 
     function computeVisibleBuckets(dels: PublicDelivery[]): PublicBucket[] {
         const present = new Set<PublicBucket>(dels.map((d) => d.bucket));
