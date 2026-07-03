@@ -2,26 +2,54 @@
     Sign-in modal. Mounted once at the app root and surfaced via
     `openSignInModal()` whenever an anonymous user attempts a
     contribution action (claim, save, etc.).
+
+    Standalone tab: the CTA kicks off the plain redirect sign-in.
+    Embedded HF iframe: the CTA runs the silent in-iframe flow
+    (`embedded-auth.ts`); if the browser won't complete it in-frame, the modal
+    offers a single "continue in a new tab" link (a click is required — browsers
+    block auto-opening tabs). See `embedded-auth.ts` for the constraints.
 -->
 <script lang="ts">
     import { signIn } from '../api/auth-client';
+    import {
+        beginEmbeddedSignIn,
+        continueInTab,
+        embeddedAuth,
+        isEmbedded,
+        recheckSession,
+        resetEmbeddedAuth,
+    } from '../api/embedded-auth';
     import { closeSignInModal, signInModal } from '../stores/sign-in-modal';
 
     $: title = $signInModal.context?.title ?? 'Sign in to contribute';
     $: body = $signInModal.context?.body ?? 'Sign in with your Hugging Face account to claim a reciter and edit segments. We only read your username and avatar — nothing else.';
+    $: returnPath = $signInModal.returnPath ?? '/';
+    $: phase = $embeddedAuth.phase;
+    $: embedded = isEmbedded();
+
+    // Success: identity is already loaded by the flow — just close.
+    $: if ($signInModal.open && phase === 'done') _close();
 
     function _onContinue() {
-        const returnPath = $signInModal.returnPath ?? '/';
+        if (embedded) {
+            void beginEmbeddedSignIn(returnPath);
+        } else {
+            closeSignInModal();
+            signIn(returnPath);
+        }
+    }
+
+    function _close() {
         closeSignInModal();
-        signIn(returnPath);
+        resetEmbeddedAuth();
     }
 
     function _onBackdropClick(e: MouseEvent) {
-        if (e.target === e.currentTarget) closeSignInModal();
+        if (e.target === e.currentTarget) _close();
     }
 
     function _onKeydown(e: KeyboardEvent) {
-        if (e.key === 'Escape') closeSignInModal();
+        if (e.key === 'Escape') _close();
     }
 </script>
 
@@ -35,20 +63,38 @@
             aria-modal="true"
             aria-labelledby="sign-in-title"
         >
-            <h2 id="sign-in-title" class="sign-in-title">{title}</h2>
-            <p class="sign-in-body">{body}</p>
-            <div class="sign-in-actions">
-                <button type="button" class="sign-in-cta" on:click={_onContinue}>
-                    Continue with Hugging Face
-                </button>
-                <button
-                    type="button"
-                    class="sign-in-dismiss"
-                    on:click={closeSignInModal}
-                >
-                    Cancel
-                </button>
-            </div>
+            {#if embedded && phase === 'trying'}
+                <h2 id="sign-in-title" class="sign-in-title">Signing in…</h2>
+            {:else if embedded && phase === 'need-tab'}
+                <h2 id="sign-in-title" class="sign-in-title">Continue in a new tab</h2>
+                <p class="sign-in-body">
+                    This browser blocks sign-in inside embedded pages.
+                </p>
+                <div class="sign-in-actions">
+                    <button type="button" class="sign-in-cta" on:click={continueInTab}>
+                        Open new tab
+                    </button>
+                    <button type="button" class="sign-in-dismiss" on:click={_close}>Cancel</button>
+                </div>
+            {:else if embedded && phase === 'awaiting-tab'}
+                <h2 id="sign-in-title" class="sign-in-title">Waiting for sign-in</h2>
+                <p class="sign-in-body">Finish in the other tab.</p>
+                <div class="sign-in-actions">
+                    <button type="button" class="sign-in-cta" on:click={() => void recheckSession()}>
+                        Recheck
+                    </button>
+                    <button type="button" class="sign-in-dismiss" on:click={_close}>Cancel</button>
+                </div>
+            {:else}
+                <h2 id="sign-in-title" class="sign-in-title">{title}</h2>
+                <p class="sign-in-body">{body}</p>
+                <div class="sign-in-actions">
+                    <button type="button" class="sign-in-cta" on:click={_onContinue}>
+                        Continue with Hugging Face
+                    </button>
+                    <button type="button" class="sign-in-dismiss" on:click={_close}>Cancel</button>
+                </div>
+            {/if}
         </div>
     </div>
 {/if}

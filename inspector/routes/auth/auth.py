@@ -1,7 +1,11 @@
 """HF OAuth + signed-cookie session routes.
 
 - ``GET /api/auth/login?return=<path>``  redirect to HF consent screen.
-- ``GET /api/auth/callback``             exchange code, set identity cookie, redirect.
+  ``?popup=1`` marks the embedded-iframe popup flow (callback closes the window
+  instead of redirecting).
+- ``GET /api/auth/callback``             exchange code, set identity cookie, then
+  redirect to the return path — or, for a popup sign-in, serve a page that
+  notifies the opener and closes itself.
 - ``POST /api/auth/logout``              clear identity cookie. Claims survive.
 - ``GET /api/me``                        identity + active_claim. Stable shape for
                                          anonymous (all fields null).
@@ -33,6 +37,29 @@ auth_bp = Blueprint("auth", __name__, url_prefix="/api")
 # can set Secure cookies. Locally the inspector runs over plain HTTP, where
 # Secure-tagged cookies are rejected — fall back to non-Secure + Lax.
 _BEHIND_PROXY = os.environ.get("INSPECTOR_BEHIND_PROXY") == "1"
+
+# Landing page for a popup sign-in (embedded HF iframe flow). The identity
+# cookie is set on THIS response (first-party to the *.hf.space popup), then the
+# page notifies the opener (the embedded app, same origin) and closes itself.
+# The opener then calls the Storage Access API so its own same-origin /api/me
+# request carries the now-unpartitioned cookie. postMessage targets the page's
+# own origin (opener shares it), so no server-side origin templating is needed.
+_POPUP_CLOSE_HTML = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Signed in</title></head>
+<body style="font-family:system-ui,sans-serif;background:#0b1020;color:#e8ecff;\
+display:grid;place-items:center;min-height:100vh;margin:0">
+<p>You're signed in. This window will close automatically.</p>
+<script>
+  (function () {
+    try {
+      if (window.opener && !window.opener.closed) {
+        window.opener.postMessage({ source: "inspector-auth", ok: true }, window.location.origin);
+      }
+    } catch (e) {}
+    window.close();
+  })();
+</script>
+</body></html>"""
 
 
 def _safe_return_path(raw: str | None) -> str:
@@ -86,6 +113,9 @@ def auth_login():
     if not auth_service.is_oauth_configured():
         return jsonify({"error": "OAuth not configured on this deploy"}), 503
     return_to = _safe_return_path(request.args.get("return"))
+    # Popup sign-in (embedded HF iframe): the FE opens this URL in a popup with
+    # ``?popup=1``. The callback then closes the window instead of redirecting.
+    is_popup = request.args.get("popup") == "1"
     oauth = auth_service.get_oauth()
     redirect_uri = _callback_url()
     resp = oauth.huggingface.authorize_redirect(redirect_uri)
@@ -96,6 +126,8 @@ def auth_login():
     state = _state_from_redirect(resp)
     if state:
         auth_service.remember_return_path(state, return_to)
+        if is_popup:
+            auth_service.remember_popup(state)
     logger.info(
         "auth.login url_root=%s host=%s scheme=%s redirect_uri=%s return=%s",
         request.url_root,
@@ -175,7 +207,11 @@ def auth_callback():
         logger.exception("auth.callback: failed to persist user on login (continuing)")
 
     cookie = auth_service.encode_session(login=login, hf_user_id=sub)
-    resp = make_response(redirect(return_to, code=302))
+    # Popup sign-in closes itself; normal sign-in redirects to the return path.
+    if auth_service.pop_popup(request.args.get("state")):
+        resp = make_response(_POPUP_CLOSE_HTML)
+    else:
+        resp = make_response(redirect(return_to, code=302))
     resp.set_cookie(
         auth_service.SESSION_COOKIE_NAME,
         cookie,

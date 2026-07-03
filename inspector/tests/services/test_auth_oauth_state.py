@@ -48,3 +48,21 @@ def test_pop_return_path_handles_missing_and_none():
 
     assert auth_service.pop_return_path(None) is None
     assert auth_service.pop_return_path("never-set") is None
+
+
+def test_popup_flag_round_trip_is_single_use():
+    """The popup marker (embedded-iframe sign-in) round-trips and is consumed on
+    first read so a replayed callback can't re-trigger the close-window path."""
+    from services.auth import auth as auth_service
+
+    auth_service.remember_popup("state-popup-1")
+    assert auth_service.pop_popup("state-popup-1") is True
+    assert auth_service.pop_popup("state-popup-1") is False
+
+
+def test_pop_popup_defaults_false_for_missing_and_none():
+    """An ordinary (non-popup) sign-in never set the flag → callback redirects."""
+    from services.auth import auth as auth_service
+
+    assert auth_service.pop_popup(None) is False
+    assert auth_service.pop_popup("never-set-popup") is False
