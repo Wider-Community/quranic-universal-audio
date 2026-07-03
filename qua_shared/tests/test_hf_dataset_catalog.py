@@ -246,13 +246,16 @@ def test_render_dataset_card_substitutes_configs_and_badges():
     # No placeholder survives.
     assert "{{" not in card
 
-    # Frontmatter configs: both verse splits + mushafs/all last, in order.
-    assert "- config_name: hafs_an_asim" in card
-    assert "  - split: alpha\n    path: hafs_an_asim/alpha-*" in card
-    assert "  - split: beta\n    path: hafs_an_asim/beta-*" in card
+    # Frontmatter configs: one config per mushaf (single `train` split), mushafs/all last.
+    # The riwayah is the on-disk folder in the path, not a config of its own.
+    assert "- config_name: hafs_an_asim\n" not in card
+    assert "- config_name: alpha" in card
+    assert "- config_name: beta" in card
+    assert "  - split: train\n    path: hafs_an_asim/alpha-*" in card
+    assert "  - split: train\n    path: hafs_an_asim/beta-*" in card
     mushafs_idx = card.index("- config_name: mushafs")
-    riwayah_idx = card.index("- config_name: hafs_an_asim")
-    assert riwayah_idx < mushafs_idx  # mushafs is last
+    assert card.index("- config_name: alpha") < mushafs_idx  # mushafs is last
+    assert card.index("- config_name: beta") < mushafs_idx
     assert "  - split: all\n    path: mushafs/all-*" in card
 
     # Header badges reflect the stats (hours floored to 50h blocks, URL-encoded).
