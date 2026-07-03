@@ -6,6 +6,7 @@ import {
     isCombiningMark,
     splitIntoCharGroups,
     stripTashkeel,
+    toArabicNumeral,
 } from '../arabic-text';
 
 describe('stripTashkeel', () => {
@@ -72,6 +73,28 @@ describe('charsMatch', () => {
         // MFA letter is longer than display char and contains it — exercises
         // the otherwise-untested ``mfaChar.includes(stripped)`` branch.
         expect(charsMatch('بسم', 'ب')).toBe(true);
+    });
+});
+
+describe('toArabicNumeral', () => {
+    it('maps ASCII digits to Arabic-Indic numerals', () => {
+        expect(toArabicNumeral(12)).toBe('١٢');
+        expect(toArabicNumeral('2025')).toBe('٢٠٢٥');
+    });
+
+    it('leaves non-digit characters untouched — spaces are NOT digits', () => {
+        // Regression: a char-by-char `+d` maps a space to 0 (`+' ' === 0`),
+        // turning "أسلوب واحد" into "أسلوب٠واحد" (a stray ٠ dot). Only 0-9 convert.
+        expect(toArabicNumeral('أسلوب واحد')).toBe('أسلوب واحد');
+        expect(toArabicNumeral('3 مجموعات')).toBe('٣ مجموعات');
+    });
+
+    it('localizes digits in mixed strings while preserving units and separators', () => {
+        expect(toArabicNumeral('192 kbps')).toBe('١٩٢ kbps');
+        expect(toArabicNumeral('3h 45m')).toBe('٣h ٤٥m');
+        expect(toArabicNumeral('47/114')).toBe('٤٧/١١٤');
+        // The ASCII '.' is not a digit, so it rides through unchanged.
+        expect(toArabicNumeral('1.5×')).toBe('١.٥×');
     });
 });
 

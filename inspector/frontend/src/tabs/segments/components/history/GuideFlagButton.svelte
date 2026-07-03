@@ -155,6 +155,7 @@
     const exampleIdPlaceholder = $derived((i18n.locale, m.segments_guide_flag_example_id_placeholder()));
     const savingLabel = $derived((i18n.locale, m.segments_guide_flag_saving_label()));
     const submitLabel = $derived((i18n.locale, m.segments_guide_flag_submit_button()));
+    const cancelLabel = $derived((i18n.locale, m.common_action_cancel()));
 </script>
 
 {#if $currentUser.dev_mode && batchId && $selectedReciter}
@@ -195,7 +196,7 @@
             </label>
             {#if error}<p class="guide-flag-err">{error}</p>{/if}
             <div class="guide-flag-actions">
-                <button type="button" onclick={() => (open = false)} disabled={saving}>Cancel</button>
+                <button type="button" onclick={() => (open = false)} disabled={saving}>{cancelLabel}</button>
                 <button type="button" class="primary" onclick={submit} disabled={saving || !category}>
                     {saving ? savingLabel : submitLabel}
                 </button>

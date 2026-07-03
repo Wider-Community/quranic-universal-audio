@@ -162,7 +162,7 @@
                 {/if}
             {/each}
         {:else if isLoading}
-            <div class="seg-stats-loading">Loading…</div>
+            <div class="seg-stats-loading">{tr($localeStore, m.common_state_loading())}</div>
         {:else}
             <div class="seg-stats-loading">{noStatsLabel}</div>
         {/if}

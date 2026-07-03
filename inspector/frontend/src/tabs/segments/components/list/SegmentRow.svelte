@@ -995,7 +995,7 @@ import type { Segment } from '../../../../lib/types/view-models';
                             {flagHint}
                         </span>
                         <span class="seg-flag-editor-actions">
-                            <button class="btn btn-sm seg-flag-cancel" on:click|stopPropagation={cancelFlagEditor}>Cancel</button>
+                            <button class="btn btn-sm seg-flag-cancel" on:click|stopPropagation={cancelFlagEditor}>{tr($localeStore, m.common_action_cancel())}</button>
                             <button
                                 class="btn btn-sm seg-flag-apply"
                                 disabled={flagApplyDisabled}
