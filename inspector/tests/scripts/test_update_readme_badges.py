@@ -46,15 +46,19 @@ def test_replace_badges_replaces_legacy_commented_block():
   <br>
 </p>
 """
-    rendered = badges.render_badges(
-        badges.BadgeStats(recitations=12, riwayat=7, seconds=123 * 3600)
-    )
+    catalog = badges.BadgeStats(reciters=12, mushafs=20, riwayat=7, seconds=750 * 3600)
+    aligned = badges.BadgeStats(reciters=5, mushafs=14, riwayat=3, seconds=100 * 3600)
+
+    rendered = badges.render_badges(catalog, aligned)
 
     updated = badges.replace_badges(readme, rendered)
 
     assert "<!-- stats-badges:start -->" in updated
-    assert "Recitations-12" in updated
+    assert "Reciters-12" in updated
     assert "Riwayat-7" in updated
+    assert "Mushafs-14" in updated
+    assert "Riwayat-3" in updated
+    assert "Hours-500h%2B" in updated
     assert "Hours-100h%2B" in updated
     assert "Unsegmented" not in updated
 
@@ -69,13 +73,15 @@ def test_replace_badges_updates_existing_marked_block():
             "after",
         ]
     )
-    new_block = badges.render_badges(badges.BadgeStats(recitations=1, riwayat=2, seconds=50 * 3600))
+    catalog = badges.BadgeStats(reciters=1, mushafs=2, riwayat=2, seconds=50 * 3600)
+    aligned = badges.BadgeStats(reciters=1, mushafs=1, riwayat=1, seconds=50 * 3600)
+    new_block = badges.render_badges(catalog, aligned)
 
     updated = badges.replace_badges(old, new_block)
 
     assert "stale" not in updated
     assert updated.count(badges.START_MARKER) == 1
-    assert "Recitations-1" in updated
+    assert "Reciters-1" in updated
 
 
 def test_collect_stats_filters_public_released_and_uses_manifest_fallback(tmp_path):
@@ -86,6 +92,7 @@ def test_collect_stats_filters_public_released_and_uses_manifest_fallback(tmp_pa
             """
             CREATE TABLE deliveries (
                 slug TEXT PRIMARY KEY,
+                reciter_id TEXT NOT NULL,
                 riwayah TEXT NOT NULL,
                 total_duration_sec INTEGER
             );
@@ -95,10 +102,10 @@ def test_collect_stats_filters_public_released_and_uses_manifest_fallback(tmp_pa
                 visibility TEXT NOT NULL
             );
             INSERT INTO deliveries VALUES
-                ('pub_a', 'hafs_an_asim', 3600),
-                ('pub_b', 'warsh_an_nafi', NULL),
-                ('wip', 'hafs_an_asim', 7200),
-                ('discarded', 'qalun_an_nafi', 7200);
+                ('pub_a', 'r1', 'hafs_an_asim', 3600),
+                ('pub_b', 'r2', 'warsh_an_nafi', NULL),
+                ('wip', 'r1', 'hafs_an_asim', 7200),
+                ('discarded', 'r3', 'qalun_an_nafi', 7200);
             INSERT INTO delivery_states VALUES
                 ('pub_a', 'released', 'public'),
                 ('pub_b', 'released', 'public'),
@@ -119,10 +126,18 @@ def test_collect_stats_filters_public_released_and_uses_manifest_fallback(tmp_pa
             }
         }
 
-    stats = badges.collect_stats(db_path, manifest_reader=manifest_reader)
+    catalog_stats, aligned_stats = badges.collect_stats(db_path, manifest_reader=manifest_reader)
 
-    assert stats.recitations == 2
-    # Riwayat counts only the released/public set (hafs + warsh), NOT the wip or
-    # discarded rows' riwayat — consistent with the published dataset.
-    assert stats.riwayat == 2
-    assert stats.seconds == 3630
+    # Catalog counts every sourced delivery — all 4 rows, 3 distinct reciters
+    # (r1 appears twice via pub_a/wip), 3 distinct riwayat.
+    assert catalog_stats.reciters == 3
+    assert catalog_stats.mushafs == 4
+    assert catalog_stats.riwayat == 3
+    assert catalog_stats.seconds == 18030
+
+    # Aligned counts only the released/public set (pub_a + pub_b), NOT the wip
+    # or discarded rows — consistent with the published dataset.
+    assert aligned_stats.reciters == 2
+    assert aligned_stats.mushafs == 2
+    assert aligned_stats.riwayat == 2
+    assert aligned_stats.seconds == 3630
