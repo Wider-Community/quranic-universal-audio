@@ -164,10 +164,7 @@ def render_badges(catalog: BadgeStats, aligned: BadgeStats) -> str:
         return f'<img src="https://img.shields.io/badge/{quote(text, safe="")}-{LABEL_COLOR}" alt="{text}">'
 
     def badge(label: str, value: str, color: str) -> str:
-        return (
-            '<a href="data/RECITERS.md"><img src="'
-            f'{badge_url(label, value, color)}" alt="{label}: {value}"></a>'
-        )
+        return f'<img src="{badge_url(label, value, color)}" alt="{label}: {value}">'
 
     lines = [
         START_MARKER,
