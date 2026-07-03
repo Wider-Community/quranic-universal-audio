@@ -61,7 +61,9 @@ def pad_params_from_env() -> PadParams:
     cut identically. Unset/empty falls back to ``PAD_DEFAULTS``.
     """
     return {
-        "pad_start": int(os.environ.get("PUBLISH_PAD_START", "").strip() or PAD_DEFAULTS["pad_start"]),
+        "pad_start": int(
+            os.environ.get("PUBLISH_PAD_START", "").strip() or PAD_DEFAULTS["pad_start"]
+        ),
         "pad_end": int(os.environ.get("PUBLISH_PAD_END", "").strip() or PAD_DEFAULTS["pad_end"]),
         "min_gap": int(os.environ.get("PUBLISH_MIN_GAP", "").strip() or PAD_DEFAULTS["min_gap"]),
     }
@@ -139,8 +141,13 @@ def reshape_canonical(canonical: dict) -> dict[str, dict]:
             continue
         words = val.get("words") if isinstance(val, dict) else val
         if not words:
-            ts[ref] = {"words": [], "letters": [], "verse_start_ms": 0,
-                       "verse_end_ms": 0, "seg_spans": []}
+            ts[ref] = {
+                "words": [],
+                "letters": [],
+                "verse_start_ms": 0,
+                "verse_end_ms": 0,
+                "seg_spans": [],
+            }
             continue
         vs = val.get("verse_start_ms") if isinstance(val, dict) else None
         ve = val.get("verse_end_ms") if isinstance(val, dict) else None
@@ -204,12 +211,14 @@ def build_verse_layouts(
         nxt = timestamps.get(f"{surah_num}:{ayah + 1}")
         if prev and prev.get("words"):
             _, lead_pad = _fit_boundary(
-                int(prev["verse_end_ms"]), verse_start, pad_end, pad_start, min_gap)
+                int(prev["verse_end_ms"]), verse_start, pad_end, pad_start, min_gap
+            )
         else:
             lead_pad = float(pad_start)
         if nxt and nxt.get("words"):
             tail_pad, _ = _fit_boundary(
-                verse_end, int(nxt["verse_start_ms"]), pad_end, pad_start, min_gap)
+                verse_end, int(nxt["verse_start_ms"]), pad_end, pad_start, min_gap
+            )
         else:
             tail_pad = float(pad_end)
         clip_start = max(0, int(round(verse_start - lead_pad)))
@@ -223,8 +232,12 @@ def build_verse_layouts(
         if seg_spans:
             for sp in seg_spans:
                 segments.append(
-                    [_i(sp["w_from"]), _i(sp["w_to"]),
-                     _i(int(sp["start_ms"])), _i(int(sp["end_ms"]))]
+                    [
+                        _i(sp["w_from"]),
+                        _i(sp["w_to"]),
+                        _i(int(sp["start_ms"])),
+                        _i(int(sp["end_ms"])),
+                    ]
                 )
         elif seg_word_range is not None:
             word_by_idx = {int(w[0]): (int(w[1]), int(w[2])) for w in words}
@@ -236,8 +249,7 @@ def build_verse_layouts(
                 if w_from not in word_by_idx or w_to not in word_by_idx:
                     continue
                 segments.append(
-                    [_i(w_from), _i(w_to),
-                     _i(word_by_idx[w_from][0]), _i(word_by_idx[w_to][1])]
+                    [_i(w_from), _i(w_to), _i(word_by_idx[w_from][0]), _i(word_by_idx[w_to][1])]
                 )
 
         verse_words = [[_i(w[0]), _i(w[1]), _i(w[2])] for w in words]
@@ -258,9 +270,7 @@ def build_verse_layouts(
             last_seg_end = segments[-1][3]
             xv_after = [w for w in verse_words if w[1] >= last_seg_end]
             if xv_after:
-                segments.append(
-                    [xv_after[0][0], xv_after[-1][0], xv_after[0][1], xv_after[-1][2]]
-                )
+                segments.append([xv_after[0][0], xv_after[-1][0], xv_after[0][1], xv_after[-1][2]])
 
         # Outer-edge headroom: the first segment starts at the clip start and the
         # last ends at the clip end, so the two outer segments absorb the lead/

@@ -222,7 +222,6 @@ from .wire.seg import (
     SegValStats,
     SegValStructuralErrorItem,
 )
-from .wire.ts_refreshed import TsRefreshedRequest
 from .wire.timestamps import (
     Letter,
     PhonemeInterval,
@@ -238,6 +237,7 @@ from .wire.timestamps import (
     TsVerseData,
     TsWord,
 )
+from .wire.ts_refreshed import TsRefreshedRequest
 
 __all__ = [
     "FlagAuthor",

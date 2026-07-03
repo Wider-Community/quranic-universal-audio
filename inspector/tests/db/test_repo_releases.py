@@ -241,7 +241,9 @@ def test_mark_ts_refreshed_no_ts_row_returns_false(fresh_db):
         slug = _seed_minimal_delivery()
         refreshed = repo_releases.mark_ts_refreshed(slug, at=now)
     assert refreshed is False
-    assert [t for t in repo_transitions.for_slug(slug) if t["event"] == "reciter.ts_refreshed"] == []
+    assert [
+        t for t in repo_transitions.for_slug(slug) if t["event"] == "reciter.ts_refreshed"
+    ] == []
 
 
 def test_stamp_stale_no_hf_row_does_not_error(fresh_db):

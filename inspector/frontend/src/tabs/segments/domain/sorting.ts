@@ -14,6 +14,7 @@
  * `../stores/validation-sort.ts`.
  */
 
+import * as m from '../../../lib/paraglide/messages';
 import type { SegValAnyItem } from '../../../lib/types/generated/schemas';
 
 export type SortKind = 'quran_order' | 'confidence' | 'word_count' | 'verse_count' | 'rep_split_count';
@@ -27,12 +28,12 @@ export interface SortOption {
 }
 
 /** Presentation + default direction per sort kind. */
-export const SORT_META: Readonly<Record<SortKind, { label: string; defaultDir: SortDir }>> = Object.freeze({
-    quran_order:     { label: 'Quran order', defaultDir: 'asc' },
-    confidence:      { label: 'Confidence',  defaultDir: 'asc' },
-    word_count:      { label: 'Words',       defaultDir: 'asc' },
-    verse_count:     { label: 'Verses',      defaultDir: 'asc' },
-    rep_split_count: { label: 'Splits',      defaultDir: 'asc' },
+export const SORT_META: Readonly<Record<SortKind, { label: () => string; defaultDir: SortDir }>> = Object.freeze({
+    quran_order:     { label: m.segments_validation_sort_quran_order_label, defaultDir: 'asc' },
+    confidence:      { label: m.segments_validation_sort_confidence_label,  defaultDir: 'asc' },
+    word_count:      { label: m.segments_validation_sort_words_label,       defaultDir: 'asc' },
+    verse_count:     { label: m.segments_validation_sort_verses_label,      defaultDir: 'asc' },
+    rep_split_count: { label: m.segments_validation_sort_splits_label,      defaultDir: 'asc' },
 });
 
 /** Extra inputs some extractors need (resolved at projection time). */

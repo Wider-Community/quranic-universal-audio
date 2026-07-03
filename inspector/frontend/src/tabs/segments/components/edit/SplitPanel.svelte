@@ -29,6 +29,8 @@
 
     import { get } from 'svelte/store';
 
+    import { localeStore, tr } from '../../../../lib/i18n/locale-store';
+    import * as m from '../../../../lib/paraglide/messages';
     import type { Segment } from '../../../../lib/types/view-models';
     import {
         editingMountId,
@@ -143,27 +145,43 @@
     function pickRegionAndMaybeSwitch(i: number): void {
         selectSplitRegion(i, canvas);
     }
+
+    $: cancelLabel = tr($localeStore, m.common_action_cancel());
+    $: splitConfirmLabel = tr($localeStore, m.segments_split_confirm_button());
+    $: previewLeftTitle = tr($localeStore, m.segments_split_preview_left_title());
+    $: previewRightTitle = tr($localeStore, m.segments_split_preview_right_title());
+    $: cursorGroupAriaLabel = tr($localeStore, m.segments_split_cursor_group_aria_label());
+    $: nudgeBackTitle = tr($localeStore, m.segments_split_nudge_back_title({ ms: EDIT_NUDGE_MS }));
+    $: nudgeFwdTitle = tr($localeStore, m.segments_split_nudge_fwd_title({ ms: EDIT_NUDGE_MS }));
+    $: regionGroupAriaLabel = tr($localeStore, m.segments_split_region_group_aria_label());
+    $: regionPreviewTitle = (i: number) => tr($localeStore, m.segments_split_region_preview_title({ n: i + 1 }));
+    $: regionBoundaryAriaLabel = (i: number) =>
+        tr($localeStore, m.segments_split_region_boundary_aria_label({ a: i + 1, b: i + 2 }));
+    $: regionNudgeBackTitle = tr($localeStore, m.segments_split_region_nudge_back_title({ ms: EDIT_NUDGE_MS }));
+    $: regionNudgeFwdTitle = tr($localeStore, m.segments_split_region_nudge_fwd_title({ ms: EDIT_NUDGE_MS }));
 </script>
 
-<div class="seg-edit-inline">
+<!-- dir="ltr" island: the L/‹›/R controls step a cursor along the left→right
+     waveform; their order must mirror the waveform, not the RTL frame. -->
+<div class="seg-edit-inline" dir="ltr">
     <div class="seg-edit-buttons">
-        <button class="btn btn-sm btn-cancel" on:click={exitEditMode}>Cancel</button>
+        <button class="btn btn-sm btn-cancel" on:click={exitEditMode}>{cancelLabel}</button>
 
         {#if isBinary}
             <button class="seg-side-pick"
                 class:active={selLeftActive}
                 aria-pressed={selLeftActive}
-                title="Preview the LEFT half — press footer ▶ to loop"
+                title={previewLeftTitle}
                 on:click={() => pickAndMaybeSwitch('left')}
             >L</button>
 
-            <div class="seg-nudge-pair seg-nudge-split" role="group" aria-label="Split cursor">
+            <div class="seg-nudge-pair seg-nudge-split" role="group" aria-label={cursorGroupAriaLabel}>
                 <button class="seg-nudge"
-                    title="Move split back {EDIT_NUDGE_MS} ms"
+                    title={nudgeBackTitle}
                     disabled={splitBackDisabled}
                     on:click={nudgeSplitBack}>&lsaquo;</button>
                 <button class="seg-nudge"
-                    title="Move split forward {EDIT_NUDGE_MS} ms"
+                    title={nudgeFwdTitle}
                     disabled={splitFwdDisabled}
                     on:click={nudgeSplitFwd}>&rsaquo;</button>
             </div>
@@ -171,29 +189,29 @@
             <button class="seg-side-pick"
                 class:active={selRightActive}
                 aria-pressed={selRightActive}
-                title="Preview the RIGHT half — press footer ▶ to loop"
+                title={previewRightTitle}
                 on:click={() => pickAndMaybeSwitch('right')}
             >R</button>
         {:else}
-            <div class="seg-region-picks" role="group" aria-label="Region preview">
+            <div class="seg-region-picks" role="group" aria-label={regionGroupAriaLabel}>
                 {#each regionCtls as r (r.i)}
                     <button class="seg-side-pick"
                         class:active={r.selected}
                         aria-pressed={r.selected}
-                        title="Preview region {r.i + 1} — press footer ▶ to loop"
+                        title={regionPreviewTitle(r.i)}
                         on:click={() => pickRegionAndMaybeSwitch(r.i)}
                     >{r.i + 1}</button>
                     {#if r.boundary}
                         <div class="seg-nudge-pair seg-nudge-split"
                             class:inactive={!r.boundary.active}
                             role="group"
-                            aria-label="Adjust split between region {r.i + 1} and {r.i + 2}">
+                            aria-label={regionBoundaryAriaLabel(r.i)}>
                             <button class="seg-nudge"
-                                title="Move this split back {EDIT_NUDGE_MS} ms"
+                                title={regionNudgeBackTitle}
                                 disabled={!r.boundary.active || r.boundary.backDisabled}
                                 on:click={() => nudgeCursor(r.i, -EDIT_NUDGE_MS)}>&lsaquo;</button>
                             <button class="seg-nudge"
-                                title="Move this split forward {EDIT_NUDGE_MS} ms"
+                                title={regionNudgeFwdTitle}
                                 disabled={!r.boundary.active || r.boundary.fwdDisabled}
                                 on:click={() => nudgeCursor(r.i, EDIT_NUDGE_MS)}>&rsaquo;</button>
                         </div>
@@ -202,7 +220,7 @@
             </div>
         {/if}
 
-        <button class="btn btn-sm btn-confirm" on:click={onConfirm}>Split</button>
+        <button class="btn btn-sm btn-confirm" on:click={onConfirm}>{splitConfirmLabel}</button>
         <span class="seg-edit-status">{$editStatusText}</span>
     </div>
 </div>

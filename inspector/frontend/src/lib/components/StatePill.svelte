@@ -4,6 +4,7 @@
      * Mirrors the design `.state.state-*` classes from
      * `inspector/frontend/design/components.css`.
      */
+    import { localeStore, tr } from '../i18n/locale-store';
     import { type AdminBucket, PUBLIC_BUCKET_LABELS } from '../types/public-bucket';
 
     /**
@@ -16,11 +17,12 @@
     export let size: 'sm' | 'md' | 'lg' = 'md';
 
     $: bucketClass = `bucket-${state.replace(/_/g, '-')}`;
+    $: stateLabel = tr($localeStore, PUBLIC_BUCKET_LABELS[state]());
 </script>
 
 <span class="pill {bucketClass}" class:sm={size === 'sm'} class:lg={size === 'lg'}>
     <span class="dot" aria-hidden="true"></span>
-    <span class="label">{PUBLIC_BUCKET_LABELS[state]}</span>
+    <span class="label">{stateLabel}</span>
 </span>
 
 <style>

@@ -392,9 +392,17 @@ def _silence_action(report: dict[str, Any], doc: dict[str, Any]) -> tuple[str, s
     subtype = report.get("subtype")
     now_gap = _gap_present(new)
     if subtype == "pause_missed":
-        return ("resolve", "A pause now appears here on the latest timestamps.") if now_gap else ("none", None)
+        return (
+            ("resolve", "A pause now appears here on the latest timestamps.")
+            if now_gap
+            else ("none", None)
+        )
     if subtype == "pause_wasl":
-        return ("none", None) if now_gap else ("resolve", "This pause is gone on the latest timestamps.")
+        return (
+            ("none", None)
+            if now_gap
+            else ("resolve", "This pause is gone on the latest timestamps.")
+        )
     if subtype == "pause_boundary":
         if not now_gap:
             return "resolve", "This pause is gone on the latest timestamps."

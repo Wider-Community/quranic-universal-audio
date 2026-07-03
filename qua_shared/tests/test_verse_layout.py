@@ -42,7 +42,7 @@ def test_clip_window_ratio_fit_keeps_min_gap():
         "1:2": _ts([[1, 1300, 2000]], 1300, 2000),
     }
     lay = build_verse_layouts(timestamps, **PADS)
-    end1 = lay["1:1"]["clip_end"]      # 1000 + 150 (3/4 of the 200 budget)
+    end1 = lay["1:1"]["clip_end"]  # 1000 + 150 (3/4 of the 200 budget)
     start2 = lay["1:2"]["clip_start"]  # 1300 - 50  (1/4 of the 200 budget)
     assert end1 == 1150
     assert start2 == 1250
@@ -54,16 +54,38 @@ def test_repeat_pivot_segments_non_overlapping_and_outer_override():
     # occurrence spans pin each segment to its own word-6, so segments stay
     # non-overlapping; the outer segments stretch to the clip edges.
     words = [
-        [1, 70, 1020], [2, 1020, 1910], [3, 1910, 2660], [4, 2660, 4930],
-        [5, 4930, 5860], [6, 5860, 8530],          # word 6, first occurrence
-        [6, 8540, 10340], [7, 10340, 10700], [8, 10700, 11060],
-        [9, 11060, 12740], [10, 12740, 13160], [11, 13160, 15280],
+        [1, 70, 1020],
+        [2, 1020, 1910],
+        [3, 1910, 2660],
+        [4, 2660, 4930],
+        [5, 4930, 5860],
+        [6, 5860, 8530],  # word 6, first occurrence
+        [6, 8540, 10340],
+        [7, 10340, 10700],
+        [8, 10700, 11060],
+        [9, 11060, 12740],
+        [10, 12740, 13160],
+        [11, 13160, 15280],
     ]
     seg_spans = [
-        {"ref": "2:6", "w_from": 1, "w_to": 6, "occ_start": 0, "occ_end": 6,
-         "start_ms": 70, "end_ms": 8530},
-        {"ref": "2:6", "w_from": 6, "w_to": 11, "occ_start": 6, "occ_end": 12,
-         "start_ms": 8540, "end_ms": 15280},
+        {
+            "ref": "2:6",
+            "w_from": 1,
+            "w_to": 6,
+            "occ_start": 0,
+            "occ_end": 6,
+            "start_ms": 70,
+            "end_ms": 8530,
+        },
+        {
+            "ref": "2:6",
+            "w_from": 6,
+            "w_to": 11,
+            "occ_start": 6,
+            "occ_end": 12,
+            "start_ms": 8540,
+            "end_ms": 15280,
+        },
     ]
     lay = build_verse_layouts({"2:6": _ts(words, 70, 15280, seg_spans)}, **PADS)["2:6"]
     segs = lay["segments"]

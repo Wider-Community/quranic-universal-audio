@@ -24,6 +24,7 @@ export default defineConfig({
         'src/**/*.{test,spec}.ts',
         'src/**/__tests__/**',
         'src/lib/types/generated/**',
+        'src/lib/paraglide/**',
         'src/**/*.d.ts',
         'vitest.setup.ts',
         '**/*.config.{ts,js,cjs,mjs}',
@@ -34,6 +35,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@fixtures': resolve(here, '../tests/fixtures/segments'),
+      $lib: resolve(here, 'src/lib'),
     },
     conditions: ['browser'],
   },

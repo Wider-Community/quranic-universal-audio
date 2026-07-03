@@ -9,6 +9,8 @@
      * non-English gloss. Keyboard: Enter/Space/↓ open, ↑/↓ move, Enter select,
      * Esc close; closes on outside click.
      */
+    import { i18n } from '../../../lib/i18n/locale.svelte';
+    import * as m from '../../../lib/paraglide/messages';
     import type { WbwLanguage } from '../services/ts_client';
 
     let {
@@ -32,6 +34,9 @@
     ]);
     const current = $derived(languages.find((l) => l.code === value));
     const firstPartialIdx = $derived(ordered.findIndex((l) => !l.complete));
+
+    // Reading i18n.locale here re-renders the localized chrome on a locale switch.
+    const partialGroupLabel = $derived((i18n.locale, m.ts_translation_group_partial()));
 
     function openMenu(): void {
         open = true;
@@ -95,7 +100,7 @@
         <ul class="tls-menu" role="listbox" tabindex="-1">
             {#each ordered as lang, i (lang.code)}
                 {#if i === firstPartialIdx && firstPartialIdx > 0}
-                    <li class="tls-group" role="presentation">Partial · English mixed in</li>
+                    <li class="tls-group" role="presentation">{partialGroupLabel}</li>
                 {/if}
                 <li role="option" aria-selected={lang.code === value}>
                     <button
@@ -107,7 +112,7 @@
                         onmouseenter={() => (highlight = i)}
                     >
                         <span class="tls-label">{lang.label}</span>
-                        {#if !lang.complete}<span class="tls-pill">partial</span>{/if}
+                        {#if !lang.complete}<span class="tls-pill">{m.ts_translation_pill_partial()}</span>{/if}
                     </button>
                 </li>
             {/each}
@@ -144,7 +149,7 @@
     .tls-menu {
         position: absolute;
         top: calc(100% + 3px);
-        left: 0;
+        inset-inline-start: 0;
         z-index: 200;
         min-width: 100%;
         max-height: 300px;
@@ -178,7 +183,7 @@
         border-radius: 4px;
         color: oklch(0.86 0.012 255);
         font-size: 0.82rem;
-        text-align: left;
+        text-align: start;
         cursor: pointer;
     }
     .tls-opt.hl { background: oklch(0.3 0.025 274); }

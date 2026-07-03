@@ -1,0 +1,371 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "common_action_save": "Save",
+  "common_action_cancel": "Cancel",
+  "common_action_close": "Close",
+  "common_action_retry": "Retry",
+  "common_action_try_again": "Try again",
+  "common_action_dismiss": "Dismiss",
+  "common_action_clear_all": "Clear all",
+  "common_action_change": "Change",
+  "common_action_back": "← Back",
+  "common_action_continue": "Continue",
+  "common_action_submit": "Submit",
+  "common_action_play": "Play",
+  "common_action_pause": "Pause",
+  "common_action_ok": "OK",
+  "common_status_saving": "Saving…",
+  "common_status_submitting": "Submitting…",
+  "common_state_loading": "Loading…",
+  "common_label_optional": "optional",
+  "common_label_optional_paren": "(optional)",
+  "common_auth_sign_in": "Sign in",
+  "common_auth_sign_out": "Sign out",
+  "common_auth_sign_in_with_hf": "Sign in with HF",
+  "common_auth_signed_in_as_title": "Signed in as {login}",
+  "common_player_text_size_group": "Text size",
+  "common_player_filmstrip_controls_group": "Filmstrip controls",
+  "common_auth_continue_with_hf": "Continue with Hugging Face",
+  "common_signin_edit_title": "Sign in to edit",
+  "common_signin_edit_body": "Editing segments requires a Hugging Face account. Sign in to claim this reciter and start contributing.",
+  "common_signin_claim_title": "Sign in to claim",
+  "common_signin_claim_body": "Claiming a reciter requires a Hugging Face account. Sign in to start contributing.",
+  "common_signin_request_title": "Sign in to request",
+  "common_signin_request_body": "Submitting a recitation request requires a Hugging Face account.",
+  "common_signin_save_title": "Session expired",
+  "common_signin_save_body": "Your session expired before changes could be saved. Sign in again to continue.",
+  "common_signin_claim_expired_title": "Sign in to continue",
+  "common_signin_claim_expired_body": "Your session expired. Sign in again to continue claiming reciters.",
+  "common_signin_default_title": "Sign in to contribute",
+  "common_signin_default_body": "Sign in with your Hugging Face account to claim a reciter and edit segments. We only read your username and avatar — nothing else.",
+  "common_signin_embedded_signing_in": "Signing in…",
+  "common_signin_embedded_need_tab_title": "Continue in a new tab",
+  "common_signin_embedded_need_tab_body": "This browser blocks sign-in inside embedded pages.",
+  "common_signin_embedded_open_tab": "Open new tab",
+  "common_signin_embedded_awaiting_title": "Waiting for sign-in",
+  "common_signin_embedded_awaiting_body": "Finish in the other tab.",
+  "common_signin_embedded_recheck": "Recheck",
+  "common_state_available_for_request": "Available for request",
+  "common_state_requested": "Requested",
+  "common_state_available_for_review": "Available for review",
+  "common_state_under_review": "Under review",
+  "common_state_published": "Published",
+  "common_state_discarded": "Discarded",
+  "common_player_pick_surah": "Pick surah",
+  "common_player_surah_fallback": "Surah {num}",
+  "common_player_speed_title": "Playback speed",
+  "common_player_download_label": "Download surah",
+  "common_player_missing_words_pill": "missing words",
+  "common_player_missing_words_list": "Missing words: {words}",
+  "common_player_missing_words_none": "This verse is missing words",
+  "common_player_recitation_display_group": "Recitation display",
+  "common_player_upcoming_visibility_label": "Cycle upcoming text visibility",
+  "common_player_upcoming_text_title": "Upcoming text: {state}",
+  "common_player_upcoming_state_full": "full",
+  "common_player_upcoming_state_hidden": "hidden",
+  "common_player_upcoming_state_dim": "dim",
+  "common_player_granularity_toggle_label": "Toggle word / letter",
+  "common_player_granularity_char_title": "Letter-by-letter",
+  "common_player_granularity_word_title": "Word-by-word",
+  "common_player_motion_toggle_label": "Toggle filmstrip motion",
+  "common_player_motion_snap_title": "Snap to ayah",
+  "common_player_motion_glide_title": "Continuous glide",
+  "common_player_collapse_line_title": "Collapse line",
+  "common_player_expand_line_title": "Expand line",
+  "common_player_text_size_color_group": "Text size & color",
+  "common_player_highlight_color_label": "Highlight color",
+  "common_player_size_down_label": "Decrease text size",
+  "common_player_size_down_title": "Smaller text",
+  "common_player_size_up_label": "Increase text size",
+  "common_player_size_up_title": "Larger text",
+  "common_player_bookmarks_group": "Bookmarks",
+  "common_player_bookmark_remove_title": "Remove bookmark",
+  "common_player_bookmark_add_title": "Bookmark this verse",
+  "common_player_bookmarks_panel_open": "Open bookmarks panel",
+  "common_player_prev_surah_label": "Previous surah",
+  "common_player_seek_back_label": "Back 15 seconds",
+  "common_player_loading_audio_label": "Loading audio",
+  "common_player_seek_forward_label": "Forward 15 seconds",
+  "common_player_next_surah_label": "Next surah",
+  "common_player_highlight_colour_label": "Highlight colour",
+  "common_player_pick_reciter_prompt": "Pick a reciter to start",
+  "common_player_switch_combination_label": "Switch combination",
+  "common_player_progress_label": "Playback position",
+  "common_player_surah_picker_label": "Surah picker",
+  "common_player_surah_filter_placeholder": "Filter surahs…",
+  "common_player_surah_no_matches": "No matches",
+  "common_picker_default_title": "Pick a reciter",
+  "common_picker_search_placeholder": "Search reciters — name in English or Arabic",
+  "common_picker_loading": "Loading…",
+  "common_picker_no_matches": "No matches. Try a different filter or search.",
+  "common_picker_section_your_active_claims": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Your active claim",
+        "countPlural=other": "Your active claims"
+      }
+    }
+  ],
+  "common_picker_load_error_fallback": "Failed to load reciters",
+  "common_picker_filters_aria_label": "Secondary filters",
+  "common_picker_hint_navigate": "navigate",
+  "common_picker_hint_select": "select",
+  "common_picker_hint_close": "close",
+  "common_picker_hint_search": "search",
+  "common_picker_review_ready_badge": "ready",
+  "common_picker_review_ready_title": "Marked ready for review",
+  "common_picker_review_claimed_by_title": "Claimed by {login}",
+  "common_picker_tab_all": "All",
+  "common_picker_tabs_aria_label": "State",
+  "common_claim_confirm_release_first_title": "Release your current claim first",
+  "common_claim_confirm_release_first_body": "You already hold a claim on {name}. You can work on one reciter at a time — unclaim it (or mark it ready) before claiming another.",
+  "common_claim_confirm_title": "Claim this recitation for review?",
+  "common_claim_confirm_body": "Claiming this recitation will let you edit and fix its segments independently. You can hold one claim at a time, released when you finish editing and mark it as ready. You can also unclaim at any time or switch to a different one.",
+  "common_claim_confirm_busy": "Claiming…",
+  "common_claim_confirm_cta": "Confirm",
+  "common_claim_button_label": "Claim review",
+  "common_edit_gate_title_claimable": "Claim to edit",
+  "common_edit_gate_title_holds_other_claim": "Finish your current claim first",
+  "common_edit_gate_title_wrong_assignee": "Being edited by someone else",
+  "common_edit_gate_title_marked_ready": "Locked for publish",
+  "common_edit_gate_title_published": "Already published",
+  "common_edit_gate_title_not_available": "Not ready to edit yet",
+  "common_edit_gate_title_discarded": "Reciter unavailable",
+  "common_edit_gate_title_default": "Not available for editing",
+  "common_edit_gate_body_claimable": "This reciter is available to work on. Claim it (button below) to start editing its segments.",
+  "common_edit_gate_body_holds_other_claim": "This reciter is available, but you can work on one claim at a time. Unclaim your current reciter (or mark it ready) before claiming this one.",
+  "common_edit_gate_body_wrong_assignee": "Another contributor currently holds this reciter. You can browse it read-only, or claim a different one from the dashboard.",
+  "common_edit_gate_body_marked_ready": "You marked this reciter ready for publish, so it's locked. Choose “Continue editing” in the banner to make changes.",
+  "common_edit_gate_body_published": "This reciter is published and read-only. View its word timestamps on the Timestamps tab.",
+  "common_edit_gate_body_not_available": "This reciter hasn't been prepared for editing yet. It'll open once its recitation has been processed.",
+  "common_edit_gate_body_discarded": "This reciter has been discarded and is not available for editing.",
+  "common_edit_gate_body_default": "This reciter is not available for editing.",
+  "common_bookmarks_panel_aria_label": "Bookmarks",
+  "common_bookmarks_heading": "Bookmarks",
+  "common_bookmarks_conn_dev_stub_title": "Local dev stub — NOT a real Quran.Foundation login. No account or token involved.",
+  "common_bookmarks_conn_dev_stub_label": "⚙ Dev stub (local only)",
+  "common_bookmarks_conn_synced_title": "Synced with Quran.Foundation",
+  "common_bookmarks_conn_synced_label": "● Synced",
+  "common_bookmarks_disconnect": "Disconnect",
+  "common_bookmarks_connect_dev_stub": "Connect (dev stub)",
+  "common_bookmarks_conn_hint_dev": "Saved locally. Connect to sync across Quran.com apps.",
+  "common_bookmarks_connect_qf": "Connect Quran.Foundation",
+  "common_bookmarks_conn_hint_anon": "Opens a new tab to sign in. Bookmarks are saved locally until then.",
+  "common_bookmarks_empty": "No bookmarks yet. Open a verse in Timestamps and tap ☆ to save it.",
+  "common_bookmarks_item_surah_fallback": "Surah {surah}",
+  "common_bookmarks_item_ayah": "Ayah {ayah}",
+  "common_bookmarks_remove_title": "Remove bookmark",
+  "common_info_index_aria_label": "Jump to section",
+  "common_reciter_row_play_aria_label": "Play {name}",
+  "common_reciter_row_combination_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} combination",
+        "countPlural=other": "{count} combinations"
+      }
+    }
+  ],
+  "common_reciter_row_riwayah_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} riwayah",
+        "countPlural=other": "{count} riwayahs"
+      }
+    }
+  ],
+  "common_reciter_row_style_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} style",
+        "countPlural=other": "{count} styles"
+      }
+    }
+  ],
+  "common_search_input_placeholder": "Search",
+  "common_search_input_count_label": "{count} of {total}",
+  "common_select_no_results": "No results",
+  "common_toggle_na_marker": "N/A",
+  "common_toggle_na_aria_label": "Not applicable",
+  "common_chip_multiselect_placeholder": "Search…",
+  "common_chip_multiselect_all_added": "All added",
+  "common_chip_multiselect_no_matches": "No matches",
+  "common_chip_multiselect_remove_aria_label": "Remove {label}",
+  "common_external_links_nav_aria_label": "Project links",
+  "common_external_links_releases_label": "Releases",
+  "common_external_links_dataset_label": "Dataset",
+  "common_speed_control_label": "Speed:",
+  "common_picker_switch_reciter_title": "Switch reciter",
+  "common_nav_tab_dashboard": "Dashboard",
+  "common_nav_tab_timestamps": "Timestamps",
+  "common_nav_tab_segments": "Segments",
+  "common_theme_toggle_system_label": "Theme: following your device — click for light",
+  "common_theme_toggle_light_label": "Theme: light — click for dark",
+  "common_theme_toggle_dark_label": "Theme: dark — click to follow your device",
+  "common_locale_toggle_auto_label": "Language: following your browser — click for English",
+  "common_locale_toggle_en_label": "Language: English — click for عربي",
+  "common_locale_toggle_ar_label": "Language: عربي — click to follow your browser",
+  "common_player_preset_color_label": "Preset colour",
+  "common_player_hue_label": "Hue",
+  "common_player_saturation_label": "Saturation",
+  "common_player_filmstrip_scrubber_aria_label": "Ayah scrubber",
+  "common_claim_unclaim_first_toast": "Unclaim {existing} first to claim {target}.",
+  "common_relative_time_just_now": "just now",
+  "common_relative_time_yesterday": "yesterday",
+  "common_relative_time_minutes_ago": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} minute ago",
+        "countPlural=other": "{count} minutes ago"
+      }
+    }
+  ],
+  "common_relative_time_hours_ago": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} hour ago",
+        "countPlural=other": "{count} hours ago"
+      }
+    }
+  ],
+  "common_relative_time_days_ago": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} day ago",
+        "countPlural=other": "{count} days ago"
+      }
+    }
+  ],
+  "common_relative_time_weeks_ago": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} week ago",
+        "countPlural=other": "{count} weeks ago"
+      }
+    }
+  ],
+  "common_relative_time_months_ago": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} month ago",
+        "countPlural=other": "{count} months ago"
+      }
+    }
+  ],
+  "common_relative_time_years_ago": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} year ago",
+        "countPlural=other": "{count} years ago"
+      }
+    }
+  ],
+  "common_delivery_coverage_full": "Full",
+  "common_delivery_ayah_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} ayah",
+        "countPlural=other": "{count} ayahs"
+      }
+    }
+  ],
+  "common_delivery_surah_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} surah",
+        "countPlural=other": "{count} surahs"
+      }
+    }
+  ],
+  "common_delivery_category_ayah": "Ayah",
+  "common_delivery_category_surah": "Surah",
+  "common_delivery_bitrate_cbr": "cbr",
+  "common_delivery_bitrate_vbr": "vbr",
+  "common_delivery_bitrate_mixed": "mixed",
+  "common_filmstrip_not_recited": "Not recited",
+  "common_filmstrip_missing_words": "Missing words",
+  "common_filmstrip_missing_words_list": "Missing words: {indices}"
+}

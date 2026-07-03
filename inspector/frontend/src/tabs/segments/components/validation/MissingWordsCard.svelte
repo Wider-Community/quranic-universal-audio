@@ -2,6 +2,8 @@
     import { createEventDispatcher } from 'svelte';
 
     import { editGate } from '../../../../lib/actions/editGate';
+    import { localeStore, tr } from '../../../../lib/i18n/locale-store';
+    import * as m from '../../../../lib/paraglide/messages';
     import type { SegValAutoFix, SegValMissingWordsItem } from '../../../../lib/types/generated/schemas';
     import type { Segment } from '../../../../lib/types/view-models';
     import {
@@ -167,15 +169,25 @@
           ? () => handleAutoFix(item.auto_fix_up)
           : null;
 
+    $: gapLabel = tr($localeStore, item.msg || m.segments_validation_missing_words_default_label());
+    $: contextPreviousLabel = tr($localeStore, m.segments_validation_context_label_previous());
+    $: contextNextLabel = tr($localeStore, m.segments_validation_context_label_next());
+    $: autofillTitle = tr($localeStore, m.segments_validation_autofill_title());
+    $: autofillButtonLabel = tr($localeStore, m.segments_validation_autofill_button());
+    $: autofillUpTitle = tr($localeStore, m.segments_validation_autofill_up_title());
+    $: autofillUpButtonLabel = tr($localeStore, m.segments_validation_autofill_up_button());
+    $: autofillDownTitle = tr($localeStore, m.segments_validation_autofill_down_title());
+    $: autofillDownButtonLabel = tr($localeStore, m.segments_validation_autofill_down_button());
+    $: contextToggleLabel = tr($localeStore, showContext ? m.segments_validation_hide_context_button() : m.segments_validation_show_context_button());
 </script>
 
 <div>
-    <div class="val-card-gap-label">{item.msg || 'Missing words between segments'}</div>
+    <div class="val-card-gap-label">{gapLabel}</div>
     {#if prevSeg}
         <SegmentRow
             seg={prevSeg}
             isContext={true}
-            contextLabel="Previous"
+            contextLabel={contextPreviousLabel}
             showPlayBtn={true}
             showChapter={true}
             accordionSiblings={siblings}
@@ -197,7 +209,7 @@
         <SegmentRow
             seg={nextSeg}
             isContext={true}
-            contextLabel="Next"
+            contextLabel={contextNextLabel}
             showPlayBtn={true}
             showChapter={true}
             accordionSiblings={siblings}
@@ -207,27 +219,27 @@
         {#if item.auto_fix}
             <button
                 class="val-action-btn"
-                title="Extend segment ref to cover the missing word"
+                title={autofillTitle}
                 use:editGate
                 on:click={() => handleAutoFix(item.auto_fix)}
-            >Auto Fill</button>
+            >{autofillButtonLabel}</button>
         {:else if item.auto_fix_up && item.auto_fix_down}
             <button
                 class="val-action-btn"
-                title="Extend previous segment to cover the missing word"
+                title={autofillUpTitle}
                 use:editGate
                 on:click={() => handleAutoFix(item.auto_fix_up)}
-            >Auto Fill Up</button>
+            >{autofillUpButtonLabel}</button>
             <button
                 class="val-action-btn"
-                title="Extend next segment to cover the missing word"
+                title={autofillDownTitle}
                 use:editGate
                 on:click={() => handleAutoFix(item.auto_fix_down)}
-            >Auto Fill Down</button>
+            >{autofillDownButtonLabel}</button>
         {/if}
         <button
             class="val-action-btn val-action-btn-muted val-ctx-toggle-btn"
             on:click={toggleContext}
-        >{showContext ? 'Hide Context' : 'Show Context'}</button>
+        >{contextToggleLabel}</button>
     </div>
 </div>

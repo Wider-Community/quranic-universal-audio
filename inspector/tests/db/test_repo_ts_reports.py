@@ -88,7 +88,12 @@ def test_silence_gap_is_one_stance_per_gap_subtype_free(fresh_db):
 def test_silence_report_is_public_to_other_viewers(fresh_db):
     """Silence flags are public — a different viewer without the nonpublic cap sees them
     (unlike tajweed/phonemes)."""
-    _create(category="silence", subtype="pause_missed", target=_target("gap", word_index=0), comment=None)
+    _create(
+        category="silence",
+        subtype="pause_missed",
+        target=_target("gap", word_index=0),
+        comment=None,
+    )
     rows = repo.list_for_verse("reciter-a", "2:45", anon_token="anon-2", can_view_nonpublic=False)
     assert len(rows) == 1 and rows[0]["category"] == "silence"
 
@@ -431,19 +436,13 @@ def _seed_public_and_nonpublic(token: str = "anon-1") -> None:
 def test_list_for_verse_hides_nonpublic_from_other_viewer(fresh_db):
     _seed_public_and_nonpublic("anon-1")
     # A different anonymous viewer without the capability sees only the public timing report.
-    other = repo.list_for_verse(
-        "reciter-a", "2:45", anon_token="anon-2", can_view_nonpublic=False
-    )
+    other = repo.list_for_verse("reciter-a", "2:45", anon_token="anon-2", can_view_nonpublic=False)
     assert {r["category"] for r in other} == {"timing"}
     # The reporter (same token) sees their own tajweed + phonemes too.
-    mine = repo.list_for_verse(
-        "reciter-a", "2:45", anon_token="anon-1", can_view_nonpublic=False
-    )
+    mine = repo.list_for_verse("reciter-a", "2:45", anon_token="anon-1", can_view_nonpublic=False)
     assert {r["category"] for r in mine} == {"timing", "tajweed", "phonemes"}
     # A capability holder sees everything regardless of identity.
-    cap = repo.list_for_verse(
-        "reciter-a", "2:45", anon_token="anon-2", can_view_nonpublic=True
-    )
+    cap = repo.list_for_verse("reciter-a", "2:45", anon_token="anon-2", can_view_nonpublic=True)
     assert {r["category"] for r in cap} == {"timing", "tajweed", "phonemes"}
 
 

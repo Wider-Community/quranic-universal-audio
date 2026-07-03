@@ -16,17 +16,49 @@
      * (datalist + focus-stash dance + ISO-2 resolution) so the UX matches.
      * TODO: extract to a shared CountryField component.
      */
-    import { writable } from 'svelte/store';
+    import { get, writable } from 'svelte/store';
     import { fade, fly } from 'svelte/transition';
 
-    import { COUNTRIES, countryByName } from '../../../../lib/utils/countries';
-    import { channelDisplay, titleCaseSlug } from '../../../../lib/utils/delivery-label';
+    import { localeStore, tr } from '$lib/i18n/locale-store';
+    import { vocabLabel } from '$lib/i18n/vocab';
+    import * as m from '$lib/paraglide/messages';
+    import CountryPicker from '../../../../lib/components/CountryPicker.svelte';
+    import { countryByName } from '../../../../lib/utils/countries';
+    import { channelDisplay } from '../../../../lib/utils/delivery-label';
     import { filterByFields, match } from '../../../../lib/utils/fuzzy-match';
     import { catalogData } from '../../stores/catalog-data';
     import { openDetail } from '../../stores/dashboard-state';
     import { closeSubmitWizard, submitWizard } from '../../stores/submit-wizard';
 
     const queryStore = writable('');
+
+    $: lang = $localeStore;
+    $: changeLabel = tr(lang, m.common_action_change());
+    $: modeAria = tr(lang, m.dashboard_submit_reciter_mode_aria());
+    $: modeExistingComboLabel = tr(lang, m.dashboard_submit_mode_existing_combo_label());
+    $: modeExistingComboHint = tr(lang, m.dashboard_submit_mode_existing_combo_hint());
+    $: modeExistingReciterLabel = tr(lang, m.dashboard_submit_mode_existing_reciter_label());
+    $: modeNewLabel = tr(lang, m.dashboard_submit_mode_new_label());
+    $: modeNewHint = tr(lang, m.dashboard_submit_mode_new_hint());
+    $: openDetailTitle = tr(lang, m.dashboard_submit_open_detail_title());
+    $: viewDetailButton = tr(lang, m.dashboard_submit_view_detail_button());
+    $: pickComboLabel = tr(lang, m.dashboard_submit_pick_combo_label());
+    $: combosEmpty = tr(lang, m.dashboard_submit_combos_empty());
+    $: alreadyCoveredLabel = tr(lang, m.dashboard_submit_already_covered_label());
+    $: reciterFieldLabel = tr(lang, m.dashboard_submit_reciter_field_label());
+    $: reciterSearchPlaceholder = tr(lang, m.dashboard_submit_reciter_search_placeholder());
+    $: reciterResultsAria = tr(lang, m.dashboard_submit_reciter_results_aria());
+    $: reciterNoMatch = tr(lang, m.dashboard_submit_reciter_no_match());
+    $: newDupHint = tr(lang, m.dashboard_submit_new_dup_hint());
+    $: fieldEnglishName = tr(lang, m.dashboard_submit_field_english_name());
+    $: newNameEnPlaceholder = tr(lang, m.dashboard_submit_new_name_en_placeholder());
+    $: fieldArabicName = tr(lang, m.dashboard_submit_field_arabic_name());
+    $: newNameArPlaceholder = tr(lang, m.dashboard_submit_new_name_ar_placeholder());
+    $: fieldCountry = tr(lang, m.dashboard_submit_field_country());
+    $: countryUnknown = tr(lang, m.dashboard_submit_country_unknown());
+    $: countryPlaceholder = tr(lang, m.dashboard_submit_country_placeholder());
+    $: dupMatchesLabel = tr(lang, m.dashboard_submit_dup_matches_label());
+    $: dupUseThis = tr(lang, m.dashboard_submit_dup_use_this());
 
     $: state = $submitWizard;
     $: mode = state.reciterMode;
@@ -99,24 +131,17 @@
                   .slice(0, 4)
             : [];
 
-    // Country picker dance — copied from RequestForm.
-    let countryFocusStash: string | null = null;
-    $: countryName = state.newReciter.countryName;
-    $: countryCode = countryByName(countryName)?.code ?? '';
-    function onCountryFocus(): void {
-        countryFocusStash = countryName;
-        updateNew('countryName', '');
-    }
-    function onCountryBlur(): void {
-        if (!countryName && countryFocusStash != null) {
-            updateNew('countryName', countryFocusStash);
-        }
-        countryFocusStash = null;
-    }
+    // Country picker: CountryPicker two-way binds `countryInput`; push changes back
+    // into the wizard store (guarded so a redundant tick doesn't churn the store).
+    // Seed from the store synchronously — the reactive `state` is still undefined
+    // during this top-level init, so reading `state.newReciter` here would throw.
+    let countryInput = get(submitWizard).newReciter.countryName;
+    $: if (countryInput !== state.newReciter.countryName) updateNew('countryName', countryInput);
+    $: countryCode = countryByName(countryInput, lang)?.code ?? '';
 </script>
 
 <div class="step" in:fade={{ duration: 180 }}>
-    <div class="mode-toggle" role="tablist" aria-label="Reciter mode">
+    <div class="mode-toggle" role="tablist" aria-label={modeAria}>
         <button
             type="button"
             class="mode-btn"
@@ -125,8 +150,8 @@
             aria-selected={mode === 'existing_combo'}
             on:click={() => setMode('existing_combo')}
         >
-            <span class="mode-label">Existing combination</span>
-            <span class="mode-hint">edit metadata or request alignment</span>
+            <span class="mode-label">{modeExistingComboLabel}</span>
+            <span class="mode-hint">{modeExistingComboHint}</span>
         </button>
         <button
             type="button"
@@ -136,8 +161,11 @@
             aria-selected={mode === 'existing_reciter'}
             on:click={() => setMode('existing_reciter')}
         >
-            <span class="mode-label">Existing reciter</span>
-            <span class="mode-hint">new combination · {reciters.length} catalogued</span>
+            <span class="mode-label">{modeExistingReciterLabel}</span>
+            <span class="mode-hint"
+                >{tr(lang, m.dashboard_submit_mode_existing_reciter_hint({
+                    count: reciters.length,
+                }))}</span>
         </button>
         <button
             type="button"
@@ -147,8 +175,8 @@
             aria-selected={mode === 'new'}
             on:click={() => setMode('new')}
         >
-            <span class="mode-label">New reciter</span>
-            <span class="mode-hint">not in the catalog yet</span>
+            <span class="mode-label">{modeNewLabel}</span>
+            <span class="mode-hint">{modeNewHint}</span>
         </button>
         <span class="mode-track" data-mode={mode} aria-hidden="true"></span>
     </div>
@@ -168,21 +196,21 @@
                             <button
                                 type="button"
                                 class="picked-action"
-                                title="Open this reciter's detail page"
+                                title={openDetailTitle}
                                 on:click={openPickedReciterDetail}
-                            >View detail <span class="picked-action-glyph" aria-hidden="true">↗</span></button>
+                            >{viewDetailButton} <span class="picked-action-glyph" aria-hidden="true">↗</span></button>
                             <button
                                 type="button"
                                 class="picked-action"
                                 on:click={clearReciter}
-                            >Change</button>
+                            >{changeLabel}</button>
                         </div>
                     </div>
                 </div>
 
                 {#if mode === 'existing_combo'}
                     <div class="combos-block" in:fade={{ duration: 200 }}>
-                        <span class="combos-label">Pick the combination to edit</span>
+                        <span class="combos-label">{pickComboLabel}</span>
                         <ul class="combo-list">
                             {#each pickedReciter.deliveries as d, i (d.slug)}
                                 <li>
@@ -194,13 +222,13 @@
                                         style:--row={i}
                                     >
                                         <span class="combo-tags">
-                                            <span class="ct">{titleCaseSlug(d.riwayah)}</span>
+                                            <span class="ct">{vocabLabel('riwayah', d.riwayah)}</span>
                                             <span class="ct dim">·</span>
-                                            <span class="ct">{titleCaseSlug(d.style)}</span>
+                                            <span class="ct">{vocabLabel('style', d.style)}</span>
                                             {#if d.recording_context}
                                                 <span class="ct dim">·</span>
                                                 <span class="ct dim"
-                                                    >{titleCaseSlug(d.recording_context)}</span
+                                                    >{vocabLabel('context', d.recording_context)}</span
                                                 >
                                             {/if}
                                             {#if d.channel}
@@ -209,31 +237,28 @@
                                             {/if}
                                         </span>
                                         <span class="combo-meta">
-                                            {d.chapter_count}/114
+                                            {tr(lang, m.dashboard_submit_combo_coverage({
+                                                count: d.chapter_count,
+                                            }))}
                                         </span>
                                     </button>
                                 </li>
                             {/each}
                             {#if pickedReciter.deliveries.length === 0}
-                                <li class="combo-empty">
-                                    No combinations yet for this reciter — switch to "Existing
-                                    reciter" to add the first.
-                                </li>
+                                <li class="combo-empty">{combosEmpty}</li>
                             {/if}
                         </ul>
                     </div>
                 {:else if pickedReciter.deliveries.length > 0}
                     <div class="combos-block muted" in:fade={{ duration: 200 }}>
-                        <span class="combos-label"
-                            >Already covered (heads-up — pick a fresh combination on step 3)</span
-                        >
+                        <span class="combos-label">{alreadyCoveredLabel}</span>
                         <div class="combo-pills">
                             {#each pickedReciter.deliveries as d (d.slug)}
                                 <span class="combo-pill">
                                     {[
-                                        titleCaseSlug(d.riwayah),
-                                        titleCaseSlug(d.style),
-                                        d.recording_context ? titleCaseSlug(d.recording_context) : null,
+                                        vocabLabel('riwayah', d.riwayah),
+                                        vocabLabel('style', d.style),
+                                        d.recording_context ? vocabLabel('context', d.recording_context) : null,
                                         d.channel ? channelDisplay(d) : null,
                                     ]
                                         .filter(Boolean)
@@ -245,20 +270,18 @@
                 {/if}
             {:else}
                 <label class="picker">
-                    <span class="picker-label">Reciter</span>
+                    <span class="picker-label">{reciterFieldLabel}</span>
                     <input
                         type="text"
                         autocomplete="off"
-                        placeholder="Type a name in Arabic or Latin…"
+                        placeholder={reciterSearchPlaceholder}
                         bind:value={$queryStore}
                     />
                 </label>
 
-                <ul class="results" role="listbox" aria-label="Reciter results">
+                <ul class="results" role="listbox" aria-label={reciterResultsAria}>
                     {#if filtered.length === 0}
-                        <li class="results-empty">
-                            No match. Try a partial name, or switch to "New reciter".
-                        </li>
+                        <li class="results-empty">{reciterNoMatch}</li>
                     {:else}
                         {#each filtered as r, i (r.reciter_id)}
                             <li>
@@ -274,7 +297,10 @@
                                     {/if}
                                     <span class="r-count">
                                         {r.deliveries.length}
-                                        <span class="r-count-unit">combos</span>
+                                        <span class="r-count-unit"
+                                            >{tr(lang, m.dashboard_submit_reciter_combos_unit({
+                                                count: r.deliveries.length,
+                                            }))}</span>
                                     </span>
                                 </button>
                             </li>
@@ -285,26 +311,23 @@
         </div>
     {:else}
         <div class="pane new" in:fly={{ y: 4, duration: 180 }}>
-            <p class="dup-hint">
-                Please double-check this reciter isn’t already in the catalog — even under a
-                slightly different spelling. Search “Existing reciter” first if unsure.
-            </p>
+            <p class="dup-hint">{newDupHint}</p>
             <label>
-                <span>English name</span>
+                <span>{fieldEnglishName}</span>
                 <input
                     type="text"
-                    placeholder="Abdul-Basit Abdus-Samad"
+                    placeholder={newNameEnPlaceholder}
                     value={state.newReciter.name_en}
                     on:input={(e) =>
                         updateNew('name_en', (e.currentTarget as HTMLInputElement).value)}
                 />
             </label>
             <label class="rtl">
-                <span>Arabic name</span>
+                <span>{fieldArabicName}</span>
                 <input
                     type="text"
                     dir="rtl"
-                    placeholder="عبد الباسط عبد الصمد"
+                    placeholder={newNameArPlaceholder}
                     value={state.newReciter.name_ar}
                     on:input={(e) =>
                         updateNew('name_ar', (e.currentTarget as HTMLInputElement).value)}
@@ -312,40 +335,30 @@
             </label>
             <label class="country-field">
                 <span>
-                    Country
+                    {fieldCountry}
                     {#if countryCode}
                         <span class="label-meta">({countryCode})</span>
-                    {:else if countryName}
-                        <span class="label-meta warn">(unknown)</span>
+                    {:else if countryInput}
+                        <span class="label-meta warn">{countryUnknown}</span>
                     {/if}
                 </span>
-                <input
-                    type="text"
-                    list="submit-wizard-countries"
-                    placeholder="Start typing a country name…"
-                    value={state.newReciter.countryName}
-                    on:input={(e) =>
-                        updateNew('countryName', (e.currentTarget as HTMLInputElement).value)}
-                    on:focus={onCountryFocus}
-                    on:blur={onCountryBlur}
+                <CountryPicker
+                    bind:value={countryInput}
+                    locale={lang}
+                    placeholder={countryPlaceholder}
                 />
             </label>
-            <datalist id="submit-wizard-countries">
-                {#each COUNTRIES as c (c.code)}
-                    <option value={c.name} label={c.code}></option>
-                {/each}
-            </datalist>
 
             {#if dupCandidates.length > 0}
                 <div class="dup-matches" transition:fade={{ duration: 160 }}>
-                    <span class="dup-matches-label">Possibly already in the catalog</span>
+                    <span class="dup-matches-label">{dupMatchesLabel}</span>
                     <ul>
                         {#each dupCandidates as r (r.reciter_id)}
                             <li>
                                 <button type="button" class="dup-row" on:click={() => { setMode('existing_reciter'); pickReciter(r.reciter_id); }}>
                                     <span class="dup-name">{r.name}</span>
                                     {#if r.name_ar}<span class="dup-ar" dir="rtl">{r.name_ar}</span>{/if}
-                                    <span class="dup-use">Use this →</span>
+                                    <span class="dup-use">{dupUseThis}</span>
                                 </button>
                             </li>
                         {/each}
@@ -383,7 +396,7 @@
         padding: var(--s-2) var(--s-3);
         border-radius: 4px;
         color: var(--text-muted);
-        text-align: left;
+        text-align: start;
         transition: color var(--t-base) var(--ease-out-quart);
     }
     .mode-btn.active {
@@ -460,14 +473,14 @@
         gap: var(--s-2);
         padding: 5px 8px;
         border-radius: var(--r-1);
-        text-align: left;
+        text-align: start;
         color: var(--text-secondary);
         transition: background var(--t-fast);
     }
     .dup-row:hover { background: var(--panel); }
     .dup-name { font-size: var(--fs-body); color: var(--text-primary); }
     .dup-ar { font-size: var(--fs-meta); color: var(--text-secondary); }
-    .dup-use { margin-left: auto; font-size: 10.5px; color: var(--accent); }
+    .dup-use { margin-inline-start: auto; font-size: 10.5px; color: var(--accent); }
 
     label {
         display: flex;
@@ -477,7 +490,7 @@
         color: var(--text-muted);
     }
     label.rtl input {
-        text-align: right;
+        text-align: start;
     }
     input {
         background: var(--panel);
@@ -499,7 +512,7 @@
         background: var(--panel-2);
     }
     .label-meta {
-        margin-left: 4px;
+        margin-inline-start: 4px;
         font-size: 10.5px;
         color: var(--text-faint);
         font-variant-numeric: tabular-nums;
@@ -547,7 +560,7 @@
         padding: 6px 8px;
         border-radius: var(--r-1);
         color: var(--text-secondary);
-        text-align: left;
+        text-align: start;
         transition:
             background var(--t-fast),
             color var(--t-fast);
@@ -584,7 +597,7 @@
     }
     .r-count-unit {
         color: var(--text-faint);
-        margin-left: 3px;
+        margin-inline-start: 3px;
     }
 
     /* picked reciter chip */
@@ -694,7 +707,7 @@
         border: 1px solid transparent;
         border-radius: var(--r-1);
         color: var(--text-secondary);
-        text-align: left;
+        text-align: start;
         transition:
             background var(--t-fast),
             border-color var(--t-fast);

@@ -24,7 +24,7 @@
 .seg-stats-summary::before {
     content: '\25B6';
     display: inline-block;
-    margin-right: 8px;
+    margin-inline-end: 8px;
     font-size: 0.65rem;
     transition: transform 0.15s;
 }

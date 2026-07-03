@@ -2,6 +2,7 @@
  * Display-name helpers for catalog vocab slugs.
  * Centralized so slugs never leak to the UI.
  */
+import * as m from '$lib/paraglide/messages';
 import type { PublicDelivery } from '../types/generated/schemas';
 
 const TITLE_CASE_OVERRIDES: Record<string, string> = {
@@ -24,11 +25,26 @@ export function titleCaseSlug(slug: string | null | undefined): string {
         .join(' ');
 }
 
-const BITRATE_MODE_LABEL: Record<string, string> = {
-    cbr: 'cbr',
-    vbr: 'vbr',
-    mixed: 'mixed',
-    unknown: '',
+/** DB enum vocab kinds that carry a `vocab_<kind>_<value>` translation. */
+export type VocabKind = 'riwayah' | 'style' | 'context' | 'coverage';
+
+/**
+ * Locale-aware label for a DB enum value (riwayah / style / recording context /
+ * coverage). Returns the `vocab_<kind>_<value>` message in the ambient locale, or
+ * `titleCaseSlug(value)` when no translation is registered. Channels stay Latin —
+ * use `channelDisplay()` for those, not this.
+ */
+export function vocabLabel(kind: VocabKind, value: string | null | undefined): string {
+    if (!value) return '';
+    const fn = (m as unknown as Record<string, (() => string) | undefined>)[`vocab_${kind}_${value}`];
+    return fn ? fn() : titleCaseSlug(value);
+}
+
+const BITRATE_MODE_LABEL: Record<string, () => string> = {
+    cbr: m.common_delivery_bitrate_cbr,
+    vbr: m.common_delivery_bitrate_vbr,
+    mixed: m.common_delivery_bitrate_mixed,
+    unknown: () => '',
 };
 
 /** Field separator used across all combination display surfaces. */
@@ -37,7 +53,7 @@ export const SEP = ' · ';
 export function bitrateLabel(d: PublicDelivery): string {
     const mode = (d.bitrate_mode || '').toLowerCase();
     const kbps = d.bitrate_kbps_nominal;
-    const modeText = BITRATE_MODE_LABEL[mode] ?? mode.replace(/_/g, ' ');
+    const modeText = BITRATE_MODE_LABEL[mode]?.() ?? mode.replace(/_/g, ' ');
     if (kbps == null) return modeText || '—';
     if (!modeText) return `${kbps} kbps`;
     return `${kbps} kbps${SEP}${modeText}`;
@@ -45,7 +61,7 @@ export function bitrateLabel(d: PublicDelivery): string {
 
 /** Compact coverage badge for the picker — "Full" or "47/114". */
 export function compactCoverageLabel(d: PublicDelivery): string {
-    if (d.coverage_kind === 'full') return 'Full';
+    if (d.coverage_kind === 'full') return m.common_delivery_coverage_full();
     return `${d.chapter_count}/114`;
 }
 
@@ -59,16 +75,14 @@ export function compactHoursLabel(d: PublicDelivery): string {
 
 /** "x ayahs" if by_ayah, "x surahs" if by_surah. */
 export function coverageLabel(d: PublicDelivery): string {
-    if (d.audio_category === 'by_ayah') {
-        const n = d.chapter_count;
-        return `${n} ${n === 1 ? 'ayah' : 'ayahs'}`;
-    }
     const n = d.chapter_count;
-    return `${n} ${n === 1 ? 'surah' : 'surahs'}`;
+    return d.audio_category === 'by_ayah'
+        ? m.common_delivery_ayah_count({ count: n })
+        : m.common_delivery_surah_count({ count: n });
 }
 
 export function categoryLabel(d: PublicDelivery): string {
-    return d.audio_category === 'by_ayah' ? 'Ayah' : 'Surah';
+    return d.audio_category === 'by_ayah' ? m.common_delivery_category_ayah() : m.common_delivery_category_surah();
 }
 
 export function channelDisplay(d: PublicDelivery): string {
@@ -91,7 +105,7 @@ export function totalHoursLabel(d: PublicDelivery): string {
  * "Hafs · Murattal · QDC Official"
  */
 export function combinationCompact(d: PublicDelivery): string {
-    return [titleCaseSlug(d.riwayah), titleCaseSlug(d.style), channelDisplay(d)]
+    return [vocabLabel('riwayah', d.riwayah), vocabLabel('style', d.style), channelDisplay(d)]
         .filter(Boolean)
         .join(SEP);
 }
@@ -102,8 +116,8 @@ export function combinationCompact(d: PublicDelivery): string {
  * line 2: Coverage · Bitrate · [Hours]
  */
 export function combinationStandard(d: PublicDelivery): { line1: string; line2: string } {
-    const line1Parts: string[] = [titleCaseSlug(d.riwayah), titleCaseSlug(d.style)];
-    if (d.recording_context) line1Parts.push(titleCaseSlug(d.recording_context));
+    const line1Parts: string[] = [vocabLabel('riwayah', d.riwayah), vocabLabel('style', d.style)];
+    if (d.recording_context) line1Parts.push(vocabLabel('context', d.recording_context));
     line1Parts.push(channelDisplay(d));
 
     const line2Parts: string[] = [coverageLabel(d), bitrateLabel(d)];
@@ -116,20 +130,24 @@ export function combinationStandard(d: PublicDelivery): { line1: string; line2: 
     };
 }
 
-/** ISO-2 → country display name. Falls back to the code when unknown. */
-let _countryDisplay: Intl.DisplayNames | null | undefined = undefined;
-function countryDisplayInstance(): Intl.DisplayNames | null {
-    if (_countryDisplay !== undefined) return _countryDisplay;
+/** ISO-2 → country display name in a given locale (default English). Falls back to
+ * the code when unknown. Instances are cached per locale. */
+const _countryDisplay = new Map<string, Intl.DisplayNames | null>();
+function countryDisplayInstance(locale: string): Intl.DisplayNames | null {
+    const cached = _countryDisplay.get(locale);
+    if (cached !== undefined) return cached;
+    let dn: Intl.DisplayNames | null;
     try {
-        _countryDisplay = new Intl.DisplayNames(['en'], { type: 'region' });
+        dn = new Intl.DisplayNames([locale], { type: 'region' });
     } catch {
-        _countryDisplay = null;
+        dn = null;
     }
-    return _countryDisplay;
+    _countryDisplay.set(locale, dn);
+    return dn;
 }
-export function countryName(iso2: string | null | undefined): string {
+export function countryName(iso2: string | null | undefined, locale = 'en'): string {
     if (!iso2) return '';
-    const dn = countryDisplayInstance();
+    const dn = countryDisplayInstance(locale);
     if (!dn) return iso2.toUpperCase();
     try {
         return dn.of(iso2.toUpperCase()) ?? iso2.toUpperCase();

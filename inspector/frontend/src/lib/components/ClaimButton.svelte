@@ -6,6 +6,9 @@
     `claim()` call, the existing-claim warning, and the 409 backstop.
 -->
 <script lang="ts">
+    import { localeStore, tr } from '$lib/i18n/locale-store';
+    import * as m from '$lib/paraglide/messages';
+
     import type { ReciterTask } from '../api/reciter-task';
     import { SIGN_IN_MESSAGES } from '../sign-in-messages';
     import { openClaimConfirm } from '../stores/claim-confirm-modal';
@@ -34,10 +37,12 @@
         }
         openClaimConfirm(slug, { onClaimed });
     }
+
+    $: claimLabel = tr($localeStore, m.common_claim_button_label());
 </script>
 
 {#if visible}
     <button type="button" class="seg-btn primary" on:click={_onClick}>
-        Claim review
+        {claimLabel}
     </button>
 {/if}

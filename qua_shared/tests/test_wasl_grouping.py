@@ -34,16 +34,18 @@ def test_same_verse_repeat_is_silence_boundary():
 
 def test_retake_starts_a_new_item():
     # verse change with a stop between (not waṣl) → separate items.
-    segs = [_seg("101:1:1-101:1:1", 0), _seg("101:2:1-101:2:2", 100),
-            _seg("101:1:1-101:1:1", 200)]
+    segs = [_seg("101:1:1-101:1:1", 0), _seg("101:2:1-101:2:2", 100), _seg("101:1:1-101:1:1", 200)]
     items = _group_verse_items(segs)
     assert [it["seg_idxs"] for it in items] == [[0], [1], [2]]
     assert all(it["wasl_after"] == [] for it in items)
 
 
 def test_three_verse_wasl_chain():
-    segs = [_seg("79:1:1-79:1:5", 0, wasl=True), _seg("79:2:1-79:2:5", 100, wasl=True),
-            _seg("79:3:1-79:3:5", 200)]
+    segs = [
+        _seg("79:1:1-79:1:5", 0, wasl=True),
+        _seg("79:2:1-79:2:5", 100, wasl=True),
+        _seg("79:3:1-79:3:5", 200),
+    ]
     items = _group_verse_items(segs)
     assert len(items) == 1
     assert items[0]["seg_idxs"] == [0, 1, 2]
@@ -56,8 +58,10 @@ def test_split_chain_verse_in_two_groups():
     # silence/psil boundary) — but the per-occurrence flags still reconstruct the
     # two waṣl groups (74:39>74:40 and 74:40>74:41), matching the live ch74 shard.
     segs = [
-        _seg("74:39:1-74:39:4", 0, wasl=True), _seg("74:40:1-74:40:2", 100),
-        _seg("74:40:3-74:40:3", 200, wasl=True), _seg("74:41:1-74:41:5", 300),
+        _seg("74:39:1-74:39:4", 0, wasl=True),
+        _seg("74:40:1-74:40:2", 100),
+        _seg("74:40:3-74:40:3", 200, wasl=True),
+        _seg("74:41:1-74:41:5", 300),
     ]
     items = _group_verse_items(segs)
     assert len(items) == 1
@@ -75,7 +79,7 @@ def test_split_chain_verse_in_two_groups():
             j = i
             while j < 4 and flags[j]:
                 j += 1
-            groups.append((i, j))      # segments i..j inclusive
+            groups.append((i, j))  # segments i..j inclusive
             i = j + 1
         else:
             i += 1
@@ -85,8 +89,11 @@ def test_split_chain_verse_in_two_groups():
 def test_mixed_silence_then_wasl_in_one_item():
     # same-verse repeat (silence) then waṣl to the next verse → one item, mixed
     # boundary types.
-    segs = [_seg("2:45:1-2:45:8", 0), _seg("2:45:6-2:45:8", 100, wasl=True),
-            _seg("2:46:1-2:46:5", 200)]
+    segs = [
+        _seg("2:45:1-2:45:8", 0),
+        _seg("2:45:6-2:45:8", 100, wasl=True),
+        _seg("2:46:1-2:46:5", 200),
+    ]
     items = _group_verse_items(segs)
     assert len(items) == 1
     assert items[0]["seg_idxs"] == [0, 1, 2]

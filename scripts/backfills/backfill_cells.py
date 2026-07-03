@@ -44,7 +44,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "bucket"))
 import _bootstrap as bs  # noqa: E402
-
 from qua_sdk.components.timing.lib.cells import (  # noqa: E402
     _is_indexable,
     annotate_ordered_segments,
@@ -86,8 +85,7 @@ def _stamp_doc(data: dict, *, restamp: bool) -> tuple[int, Counter, Counter, lis
     # are already time-ordered + carry the per-segment `wasl` boundary flag), so a
     # waṣl-continued boundary's cells derive in continuation form and don't drop —
     # the same linking generation does via annotate_v2_doc.
-    seq = [(seg["ref"], seg["words"], bool(seg.get("wasl")))
-           for seg in data.get("segments", [])]
+    seq = [(seg["ref"], seg["words"], bool(seg.get("wasl"))) for seg in data.get("segments", [])]
     annotate_ordered_segments(seq)
 
     n_cells = 0
@@ -109,6 +107,7 @@ def _stamp_doc(data: dict, *, restamp: bool) -> tuple[int, Counter, Counter, lis
 
 
 # --- bucket mode -----------------------------------------------------------
+
 
 def _list_reciters(fs, bucket: str) -> list[str]:
     base = bs.abs_path(bucket, "reciters")
@@ -171,6 +170,7 @@ def process_reciter(fs, bucket: str, slug: str, *, write: bool, restamp: bool, l
 
 # --- local-dir mode --------------------------------------------------------
 
+
 def _load_local(path: Path) -> dict:
     raw = path.read_bytes()
     if path.suffix == ".gz":
@@ -186,9 +186,13 @@ def _write_local(path: Path, data: dict) -> None:
 
 
 def process_local_dir(d: Path, *, write: bool, restamp: bool, log, quiet: bool = False) -> dict:
-    files = sorted(p for p in d.iterdir()
-                   if p.name.endswith(".shard.json") or p.name.endswith(".json.gz"))
-    status = Counter(); tags = Counter(); total_cells = 0; violations: list = []
+    files = sorted(
+        p for p in d.iterdir() if p.name.endswith(".shard.json") or p.name.endswith(".json.gz")
+    )
+    status = Counter()
+    tags = Counter()
+    total_cells = 0
+    violations: list = []
     for path in files:
         data = _load_local(path)
         if data.get("_meta", {}).get("schema_version", 0) >= SEGMENT_SCHEMA_VERSION and not restamp:
@@ -196,28 +200,43 @@ def process_local_dir(d: Path, *, write: bool, restamp: bool, log, quiet: bool =
                 log(f"  {path.name}: already v{SEGMENT_SCHEMA_VERSION}, skip")
             continue
         n, sd, td, viol = _stamp_doc(data, restamp=restamp)
-        total_cells += n; status.update(sd); tags.update(td); violations += viol
+        total_cells += n
+        status.update(sd)
+        tags.update(td)
+        violations += viol
         if write and not viol:
             data.setdefault("_meta", {})["schema_version"] = SEGMENT_SCHEMA_VERSION
             _write_local(path, data)
         if not quiet:
-            log(f"  {path.name}: cells={n} violations={len(viol)}"
-                + ("  [WROTE]" if write and not viol else ""))
+            log(
+                f"  {path.name}: cells={n} violations={len(viol)}"
+                + ("  [WROTE]" if write and not viol else "")
+            )
     return {"status": status, "tags": tags, "violations": violations, "cells": total_cells}
 
 
 def process_local_root(root: Path, *, write: bool, restamp: bool, log) -> dict:
     """Process every ``reciters/<slug>/timestamps`` shard dir under ``root``."""
-    status = Counter(); tags = Counter(); violations: list = []
+    status = Counter()
+    tags = Counter()
+    violations: list = []
     rec_base = root / "reciters"
-    slugs = sorted(p.name for p in rec_base.iterdir() if (p / "timestamps").is_dir()) \
-        if rec_base.is_dir() else []
+    slugs = (
+        sorted(p.name for p in rec_base.iterdir() if (p / "timestamps").is_dir())
+        if rec_base.is_dir()
+        else []
+    )
     for slug in slugs:
-        res = process_local_dir(rec_base / slug / "timestamps",
-                                write=write, restamp=restamp, log=log, quiet=True)
-        status.update(res["status"]); tags.update(res["tags"]); violations += res["violations"]
-        log(f"  {slug:44} cells={res['cells']:6} violations={len(res['violations'])}"
-            + ("  [WROTE]" if write and not res["violations"] else ""))
+        res = process_local_dir(
+            rec_base / slug / "timestamps", write=write, restamp=restamp, log=log, quiet=True
+        )
+        status.update(res["status"])
+        tags.update(res["tags"])
+        violations += res["violations"]
+        log(
+            f"  {slug:44} cells={res['cells']:6} violations={len(res['violations'])}"
+            + ("  [WROTE]" if write and not res["violations"] else "")
+        )
     return {"status": status, "tags": tags, "violations": violations}
 
 
@@ -245,10 +264,15 @@ def main() -> int:
 
     if args.local_dir or args.local_root:
         if args.local_root:
-            res = process_local_root(Path(args.local_root), write=args.write, restamp=args.restamp, log=log)
+            res = process_local_root(
+                Path(args.local_root), write=args.write, restamp=args.restamp, log=log
+            )
         else:
-            res = process_local_dir(Path(args.local_dir), write=args.write, restamp=args.restamp, log=log)
-        grand_status.update(res["status"]); grand_tags.update(res["tags"])
+            res = process_local_dir(
+                Path(args.local_dir), write=args.write, restamp=args.restamp, log=log
+            )
+        grand_status.update(res["status"])
+        grand_tags.update(res["tags"])
         grand_viol += len(res["violations"])
     else:
         if args.write:
@@ -258,7 +282,8 @@ def main() -> int:
         for slug in slugs:
             res = process_reciter(fs, bucket, slug, write=args.write, restamp=args.restamp, log=log)
             if res:
-                grand_status.update(res["status"]); grand_tags.update(res["tags"])
+                grand_status.update(res["status"])
+                grand_tags.update(res["tags"])
                 grand_viol += len(res["violations"])
                 # Tell the Inspector the shards changed so staleness re-evaluates
                 # (otherwise this bucket-direct write is silent). Best-effort.
@@ -273,8 +298,10 @@ def main() -> int:
     log("=== corpus cell tag distribution ===")
     for tg, c in grand_tags.most_common():
         log(f"  {c:7}  {tg}")
-    log(f"\ntotal violations: {grand_viol}  "
-        f"({'DRY-RUN' if not args.write else 'WROTE schema_version=' + str(SEGMENT_SCHEMA_VERSION)})")
+    log(
+        f"\ntotal violations: {grand_viol}  "
+        f"({'DRY-RUN' if not args.write else 'WROTE schema_version=' + str(SEGMENT_SCHEMA_VERSION)})"
+    )
     return 1 if grand_viol else 0
 
 

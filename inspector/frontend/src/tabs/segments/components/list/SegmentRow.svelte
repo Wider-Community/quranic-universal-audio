@@ -26,6 +26,8 @@
 
     import { editGate } from '../../../../lib/actions/editGate';
     import { fetchJsonOrNull } from '../../../../lib/api';
+    import { localeStore, tr } from '../../../../lib/i18n/locale-store';
+    import * as m from '../../../../lib/paraglide/messages';
     import { shadowPrewarm } from '../../../../lib/playback/shadow-audio';
     import { quranRefs } from '../../../../lib/refs/quran-refs';
     import { currentUser } from '../../../../lib/stores/current-user';
@@ -237,18 +239,18 @@ import type { Segment } from '../../../../lib/types/view-models';
         : { prev: null, next: null };
     $: mergePrevDisabled = !adj.prev
         || (!!adj.prev?.audio_url && !!seg.audio_url && adj.prev.audio_url !== seg.audio_url);
-    $: mergePrevTitle = !adj.prev
-        ? 'No previous segment to merge with'
+    $: mergePrevTitle = tr($localeStore, !adj.prev
+        ? m.segments_row_no_prev_merge_title()
         : (adj.prev.audio_url && seg.audio_url && adj.prev.audio_url !== seg.audio_url)
-        ? 'Cannot merge segments from different audio files'
-        : '';
+        ? m.segments_row_merge_diff_audio_title()
+        : '');
     $: mergeNextDisabled = !adj.next
         || (!!adj.next?.audio_url && !!seg.audio_url && adj.next.audio_url !== seg.audio_url);
-    $: mergeNextTitle = !adj.next
-        ? 'No next segment to merge with'
+    $: mergeNextTitle = tr($localeStore, !adj.next
+        ? m.segments_row_no_next_merge_title()
         : (adj.next.audio_url && seg.audio_url && adj.next.audio_url !== seg.audio_url)
-        ? 'Cannot merge segments from different audio files'
-        : '';
+        ? m.segments_row_merge_diff_audio_title()
+        : '');
     // Live ref-edit preview ref. ReferenceEditor dispatches the normalized ref
     // on every keystroke; the body re-renders synchronously through the same
     // `dkTextForRef` lookup the persisted row uses. `null` = no preview /
@@ -270,14 +272,33 @@ import type { Segment } from '../../../../lib/types/view-models';
             // Arabic text on the snapshot but have non-Quran-ref matched_refs,
             // so the dk_words lookup is empty. Fall back to matched_text.
             if (seg.matched_text) return seg.matched_text;
-            return seg.matched_ref ? '(no text)' : '(no match)';
+            return seg.matched_ref ? tr($localeStore, m.segments_row_no_text_fallback()) : tr($localeStore, m.segments_row_no_match_fallback());
         }
         return _addVerseMarkers(text, bodyRef, $quranRefs?.verse_word_counts) || text;
     })();
-    $: confText = (void segStoreTick, seg.matched_ref ? ((seg.confidence ?? 0) * 100).toFixed(1) + '%' : 'FAIL');
+    $: confText = (void segStoreTick, seg.matched_ref ? ((seg.confidence ?? 0) * 100).toFixed(1) + '%' : tr($localeStore, m.segments_row_conf_fail_label()));
     $: indexLabel = (showChapter && seg.chapter != null)
         ? `${seg.chapter}:#${seg.index}`
         : `#${seg.index}`;
+
+    $: playButtonTitle = tr($localeStore, m.segments_row_play_button_title());
+    $: gotoButtonLabel = tr($localeStore, m.segments_row_goto_button());
+    $: flagAriaLabel = tr($localeStore, !canEditFlag
+        ? m.segments_row_flag_view_other_aria_label()
+        : isFlagged ? m.segments_row_flag_view_mine_aria_label() : m.segments_row_flag_new_aria_label());
+    $: flagButtonTitle = tr($localeStore, m.segments_row_flag_button_title());
+    $: flagTipLabel = tr($localeStore, m.segments_row_flag_tip_label());
+    $: adjustButtonLabel = tr($localeStore, m.segments_row_adjust_button());
+    $: mergeUpButtonLabel = tr($localeStore, m.segments_row_merge_up_button());
+    $: deleteButtonLabel = tr($localeStore, m.segments_row_delete_button());
+    $: splitButtonLabel = tr($localeStore, isAutoSplit ? m.segments_row_auto_split_button() : m.segments_row_split_button());
+    $: mergeDownButtonLabel = tr($localeStore, m.segments_row_merge_down_button());
+    $: editRefButtonLabel = tr($localeStore, m.segments_row_edit_ref_button());
+    $: flagPlaceholder = tr($localeStore, m.segments_row_flag_placeholder());
+    $: flagHint = tr($localeStore, isFlagged ? m.segments_row_flag_hint_clear() : m.segments_row_flag_hint_required());
+    $: flagApplyLabel = tr($localeStore, isFlagged && flagDraft.trim().length === 0
+        ? m.segments_row_flag_remove_button()
+        : isFlagged ? m.segments_row_flag_update_button() : m.segments_row_flag_apply_button());
 
     // ---------------------------------------------------------------------
     // Playback highlight + jump target (store-driven)
@@ -853,8 +874,13 @@ import type { Segment } from '../../../../lib/types/view-models';
 </script>
 
 <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+<!-- dir="ltr" island: the row pairs a left→right waveform with its confidence
+     stripe / time labels / edit controls; the geometry mirrors the waveform, not
+     the RTL frame (same rationale as the guide's MockSegCard). Arabic ref text
+     still shapes RTL within its own run. -->
 <div
     class="seg-row"
+    dir="ltr"
     class:dirty
     class:playing={highlighted}
     class:seg-row-context={isContext}
@@ -877,11 +903,11 @@ import type { Segment } from '../../../../lib/types/view-models';
                 <button
                     class="btn btn-sm seg-card-play-btn"
                     class:playing={previewActive}
-                    title="Play segment audio"
+                    title={playButtonTitle}
                     on:click={onPreviewPlayClick}
                 >{playGlyph}</button>
             {:else}
-                <button class="btn btn-sm seg-card-play-btn" title="Play segment audio">&#9654;</button>
+                <button class="btn btn-sm seg-card-play-btn" title={playButtonTitle}>&#9654;</button>
             {/if}
         {/if}
         <canvas
@@ -900,10 +926,10 @@ import type { Segment } from '../../../../lib/types/view-models';
                 {#if showPlayBtn || showGotoBtn || !isContext}
                     <div class="seg-row-play-actions">
                         {#if showPlayBtn}
-                            <button class="btn btn-sm seg-card-play-btn" title="Play segment audio" on:click={onPlayClick} on:mouseenter={onPlayHover} on:mouseleave={onPlayLeave}>{playGlyph}</button>
+                            <button class="btn btn-sm seg-card-play-btn" title={playButtonTitle} on:click={onPlayClick} on:mouseenter={onPlayHover} on:mouseleave={onPlayLeave}>{playGlyph}</button>
                         {/if}
                         {#if showGotoBtn}
-                            <button class="btn btn-sm seg-card-goto-btn" on:click={onGotoClick}>Go to</button>
+                            <button class="btn btn-sm seg-card-goto-btn" on:click={onGotoClick}>{gotoButtonLabel}</button>
                         {/if}
                         {#if !isContext}
                             <span class="seg-flag-wrap">
@@ -913,10 +939,8 @@ import type { Segment } from '../../../../lib/types/view-models';
                                     class:is-open={flagEditing}
                                     class:is-readonly={isFlagged && !canEditFlag}
                                     aria-pressed={isFlagged}
-                                    aria-label={!canEditFlag
-                                        ? 'Flagged by another reviewer; view comment'
-                                        : isFlagged ? 'Flagged; view or edit comment' : 'Flag this segment'}
-                                    title={isFlagged ? seg.flag?.comment : 'Flag this segment for a second look'}
+                                    aria-label={flagAriaLabel}
+                                    title={isFlagged ? seg.flag?.comment : flagButtonTitle}
                                     on:click={openFlagEditor}
                                 >
                                     <svg class="seg-flag-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
@@ -926,7 +950,7 @@ import type { Segment } from '../../../../lib/types/view-models';
                                 </button>
                                 {#if isFlagged && !flagEditing}
                                     <span class="seg-flag-tip" role="tooltip">
-                                        <span class="seg-flag-tip-label">Flagged</span>
+                                        <span class="seg-flag-tip-label">{flagTipLabel}</span>
                                         <span class="seg-flag-tip-body">{seg.flag?.comment}</span>
                                     </span>
                                 {/if}
@@ -937,20 +961,20 @@ import type { Segment } from '../../../../lib/types/view-models';
 
                 {#if !isContext}
                     <div class="seg-actions">
-                        <button class="btn btn-sm btn-adjust" use:editGate on:click={onAdjustClick}>Adjust</button>
+                        <button class="btn btn-sm btn-adjust" use:editGate on:click={onAdjustClick}>{adjustButtonLabel}</button>
                         <button class="btn btn-sm btn-merge-prev"
                             disabled={mergePrevDisabled}
                             title={mergePrevTitle}
                             use:editGate
-                            on:click={onMergePrevClick}>Merge &uarr;</button>
-                        <button class="btn btn-sm btn-delete" use:editGate on:click={onDeleteClick}>Delete</button>
-                        <button class="btn btn-sm btn-split" use:editGate on:click={onSplitClick}>{isAutoSplit ? 'Auto Split' : 'Split'}</button>
+                            on:click={onMergePrevClick}>{mergeUpButtonLabel}</button>
+                        <button class="btn btn-sm btn-delete" use:editGate on:click={onDeleteClick}>{deleteButtonLabel}</button>
+                        <button class="btn btn-sm btn-split" use:editGate on:click={onSplitClick}>{splitButtonLabel}</button>
                         <button class="btn btn-sm btn-merge-next"
                             disabled={mergeNextDisabled}
                             title={mergeNextTitle}
                             use:editGate
-                            on:click={onMergeNextClick}>Merge &darr;</button>
-                        <button class="btn btn-sm btn-edit-ref" use:editGate on:click={onEditRefClick}>Edit Ref</button>
+                            on:click={onMergeNextClick}>{mergeDownButtonLabel}</button>
+                        <button class="btn btn-sm btn-edit-ref" use:editGate on:click={onEditRefClick}>{editRefButtonLabel}</button>
                     </div>
                 {/if}
             </div>
@@ -962,21 +986,21 @@ import type { Segment } from '../../../../lib/types/view-models';
                         class="seg-flag-input"
                         bind:value={flagDraft}
                         rows="2"
-                        placeholder="Describe the issue, or why you're unsure…"
+                        placeholder={flagPlaceholder}
                         on:keydown={onFlagKeydown}
                         on:mousedown={(e) => e.stopPropagation()}
                     ></textarea>
                     <div class="seg-flag-editor-foot">
                         <span class="seg-flag-hint">
-                            {isFlagged ? 'Clear the comment to remove the flag.' : 'A comment is required.'}
+                            {flagHint}
                         </span>
                         <span class="seg-flag-editor-actions">
-                            <button class="btn btn-sm seg-flag-cancel" on:click|stopPropagation={cancelFlagEditor}>Cancel</button>
+                            <button class="btn btn-sm seg-flag-cancel" on:click|stopPropagation={cancelFlagEditor}>{tr($localeStore, m.common_action_cancel())}</button>
                             <button
                                 class="btn btn-sm seg-flag-apply"
                                 disabled={flagApplyDisabled}
                                 on:click|stopPropagation={applyFlagEditor}
-                            >{isFlagged && flagDraft.trim().length === 0 ? 'Remove flag' : isFlagged ? 'Update' : 'Flag'}</button>
+                            >{flagApplyLabel}</button>
                         </span>
                     </div>
                 </div>

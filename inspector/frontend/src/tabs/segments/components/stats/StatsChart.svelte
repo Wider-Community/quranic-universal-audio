@@ -14,6 +14,8 @@
     import { onDestroy, onMount } from 'svelte';
 
     import { fetchJson } from '../../../../lib/api';
+    import { localeStore, tr } from '../../../../lib/i18n/locale-store';
+    import * as m from '../../../../lib/paraglide/messages';
     import { THEME_CHANGE_EVENT } from '../../../../lib/stores/theme.svelte';
     import type { SegSaveChartResponse } from '../../../../lib/types/view-models';
     import type { Chart } from '../../../../lib/utils/chart';
@@ -86,21 +88,25 @@
             }).catch((err: unknown) => { console.warn('Stats save failed:', err); });
         }, 'image/png');
     }
+
+    $: savedTipLabel = tr($localeStore, m.segments_stats_chart_saved_tip());
+    $: fullscreenTitle = tr($localeStore, m.segments_stats_chart_fullscreen_title());
+    $: savePngTitle = tr($localeStore, m.segments_stats_chart_save_png_title());
 </script>
 
 <div class="seg-stats-chart-wrap">
-    {#if showSavedTip}<span class="seg-stats-saved-tip">Saved</span>{/if}
+    {#if showSavedTip}<span class="seg-stats-saved-tip">{savedTipLabel}</span>{/if}
     <div class="seg-stats-chart-header">
         <h4>{title}</h4>
         <span class="seg-stats-chart-btns">
             {#if onOpenFullscreen}
                 <button
                     class="seg-stats-chart-btn"
-                    title="Full screen"
+                    title={fullscreenTitle}
                     on:click={() => onOpenFullscreen && onOpenFullscreen(dist, cfg)}
                 >&#x26F6;</button>
             {/if}
-            <button class="seg-stats-chart-btn" title="Save PNG" on:click={handleSave}>&#x2B73;</button>
+            <button class="seg-stats-chart-btn" title={savePngTitle} on:click={handleSave}>&#x2B73;</button>
         </span>
     </div>
     <div style="position: relative; width: 100%; height: 160px;">

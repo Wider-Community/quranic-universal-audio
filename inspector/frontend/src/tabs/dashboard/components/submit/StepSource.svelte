@@ -18,11 +18,31 @@
      */
     import { fade, fly } from 'svelte/transition';
 
+    import { localeStore, tr } from '$lib/i18n/locale-store';
+    import * as m from '$lib/paraglide/messages';
     import { isPlausibleUrl } from '../../../../lib/utils/url';
     import { type LinkRow, submitWizard } from '../../stores/submit-wizard';
 
     $: state = $submitWizard;
     $: method = state.sourceMethod ?? 'links';
+
+    $: lang = $localeStore;
+    $: sourceMethodAria = tr(lang, m.dashboard_submit_source_method_aria());
+    $: linksLabel = tr(lang, m.dashboard_submit_source_links_label());
+    $: linksHint = tr(lang, m.dashboard_submit_source_links_hint());
+    $: playlistLabel = tr(lang, m.dashboard_submit_source_playlist_label());
+    $: playlistModeHint = tr(lang, m.dashboard_submit_source_playlist_hint());
+    $: csvBrowse = tr(lang, m.dashboard_submit_csv_browse());
+    $: exampleCsvLabel = tr(lang, m.dashboard_submit_example_csv_label());
+    $: exampleJsonLabel = tr(lang, m.dashboard_submit_example_json_label());
+    $: perChapterHead = tr(lang, m.dashboard_submit_per_chapter_head());
+    $: rowPlaceholder = tr(lang, m.dashboard_submit_per_chapter_row_placeholder());
+    $: linksInvalid = tr(lang, m.dashboard_submit_links_invalid());
+    $: missingLabel = tr(lang, m.dashboard_submit_missing_label());
+    $: playlistUrlLabel = tr(lang, m.dashboard_submit_playlist_url_label());
+    $: playlistUrlPlaceholder = tr(lang, m.dashboard_submit_playlist_url_placeholder());
+    $: playlistHint = tr(lang, m.dashboard_submit_playlist_hint());
+    $: csvDropCopy = tr(lang, m.dashboard_submit_csv_drop_copy({ csv: '.csv', json: '.json' }));
 
     function pick(m: 'links' | 'playlist'): void {
         submitWizard.update((s) => ({ ...s, sourceMethod: m }));
@@ -100,6 +120,14 @@
     $: missingChapters = Array.from({ length: 114 }, (_, i) => i + 1).filter(
         (c) => !presentChapters.has(c),
     );
+    $: linkCountLabel = tr(lang, m.dashboard_submit_link_count({ count: linkCount }));
+    $: missingCoverage = tr(
+        lang,
+        m.dashboard_submit_missing_coverage({
+            count: missingChapters.length,
+            ranges: compactRanges(missingChapters),
+        }),
+    );
 
     /** Render a sorted int list as compact ranges: [1,2,3,7] → "1–3, 7". */
     function compactRanges(nums: number[]): string {
@@ -121,7 +149,7 @@
 </script>
 
 <div class="step" in:fade={{ duration: 180 }}>
-    <div class="mode-toggle" role="tablist" aria-label="Source method">
+    <div class="mode-toggle" role="tablist" aria-label={sourceMethodAria}>
         <button
             type="button"
             class="mode-btn"
@@ -130,8 +158,8 @@
             aria-selected={method === 'links'}
             on:click={() => pick('links')}
         >
-            <span class="mode-label">Direct links</span>
-            <span class="mode-hint">114 URLs · paste, drop, or per chapter</span>
+            <span class="mode-label">{linksLabel}</span>
+            <span class="mode-hint">{linksHint}</span>
         </button>
         <button
             type="button"
@@ -141,8 +169,8 @@
             aria-selected={method === 'playlist'}
             on:click={() => pick('playlist')}
         >
-            <span class="mode-label">Playlist</span>
-            <span class="mode-hint">YouTube · SoundCloud · Archive · Drive folder</span>
+            <span class="mode-label">{playlistLabel}</span>
+            <span class="mode-hint">{playlistModeHint}</span>
         </button>
         <span class="mode-track" data-mode={method} aria-hidden="true"></span>
     </div>
@@ -159,24 +187,22 @@
                             role="presentation"
                         >
                             <span class="csv-icon" aria-hidden="true">⟱</span>
-                            <span class="csv-copy">
-                                Drop <span class="m">.csv</span> or <span class="m">.json</span>, or
-                            </span>
+                            <span class="csv-copy">{csvDropCopy}</span>
                             <label class="csv-pick">
-                                browse
+                                {csvBrowse}
                                 <input type="file" accept=".csv,.json,text/csv,application/json" on:change={onFilePick} hidden />
                             </label>
                         </div>
 
                         <div class="example">
-                            <span class="example-label">CSV — header optional</span>
+                            <span class="example-label">{exampleCsvLabel}</span>
                             <pre class="example-code">chapter,url
 1,https://example.com/001.mp3
 2,https://example.com/002.mp3
 …</pre>
                         </div>
                         <div class="example">
-                            <span class="example-label">JSON</span>
+                            <span class="example-label">{exampleJsonLabel}</span>
                             <pre class="example-code">{`[
   { "chapter": 1, "url": "https://example.com/001.mp3" },
   { "chapter": 2, "url": "https://example.com/002.mp3" },
@@ -187,9 +213,9 @@
 
                     <div class="per-chapter">
                         <div class="pc-head">
-                            <span>Per chapter</span>
+                            <span>{perChapterHead}</span>
                             <span class="pc-count" class:complete={linkComplete} class:warn={linkAnyMalformed}>
-                                {linkCount} / 114
+                                {linkCountLabel}
                             </span>
                         </div>
                         <div class="pc-rows">
@@ -198,7 +224,7 @@
                                     <span class="pc-num">{String(row.chapter).padStart(3, '0')}</span>
                                     <input
                                         type="url"
-                                        placeholder="https://…"
+                                        placeholder={rowPlaceholder}
                                         value={row.url}
                                         class:has-url={row.url.trim().length > 0}
                                         class:malformed={row.url.trim().length > 0 && !isPlausibleUrl(row.url)}
@@ -212,14 +238,13 @@
                             <div class="coverage">
                                 {#if linkAnyMalformed}
                                     <p class="cov-line err">
-                                        Some URLs are invalid (highlighted) — each must start with http(s)://
+                                        {linksInvalid}
                                     </p>
                                 {/if}
                                 {#if linkCount > 0 && !linkComplete}
                                     <p class="cov-line warn">
-                                        <span class="cov-label">Missing</span>
-                                        {missingChapters.length} of 114 — chapter{missingChapters.length === 1 ? '' : 's'}
-                                        {compactRanges(missingChapters)}
+                                        <span class="cov-label">{missingLabel}</span>
+                                        {missingCoverage}
                                     </p>
                                 {/if}
                             </div>
@@ -228,15 +253,15 @@
                 </div>
             {:else}
                 <label class="playlist">
-                    <span>Playlist URL</span>
+                    <span>{playlistUrlLabel}</span>
                     <input
                         type="url"
-                        placeholder="YouTube, SoundCloud, Internet Archive, Google Drive folder, etc."
+                        placeholder={playlistUrlPlaceholder}
                         value={state.playlistUrl}
                         on:input={(e) => submitWizard.update((s) => ({ ...s, playlistUrl: (e.currentTarget as HTMLInputElement).value }))}
                     />
                     <span class="playlist-hint">
-                        For a Drive folder, make sure it is publically accessible.
+                        {playlistHint}
                     </span>
                 </label>
             {/if}
@@ -270,7 +295,7 @@
         padding: var(--s-2) var(--s-3);
         border-radius: 4px;
         color: var(--text-muted);
-        text-align: left;
+        text-align: start;
         background: transparent;
         border: none;
         cursor: pointer;
@@ -304,8 +329,6 @@
         flex-direction: column;
         will-change: transform, opacity;
     }
-
-    .m { font-family: var(--font-mono); color: var(--text-secondary); }
 
     /* links */
     .links-grid {
@@ -407,8 +430,8 @@
         font-family: var(--font-mono);
         font-size: 10.5px;
         color: var(--text-faint);
-        text-align: right;
-        padding-right: 2px;
+        text-align: end;
+        padding-inline-end: 2px;
     }
     .pc-row input {
         background: transparent;
@@ -431,7 +454,7 @@
     .coverage { display: flex; flex-direction: column; gap: 3px; margin-top: var(--s-2); }
     .cov-line { margin: 0; font-size: 11px; line-height: 1.45; color: var(--text-muted); }
     .cov-line .cov-label {
-        display: inline-block; margin-right: 6px; padding: 0 6px;
+        display: inline-block; margin-inline-end: 6px; padding: 0 6px;
         border-radius: var(--r-1); font-size: 10px; font-weight: 500;
     }
     .cov-line.err { color: var(--state-error-fg); }

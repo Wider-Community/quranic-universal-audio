@@ -9,6 +9,9 @@
      * - `disabled` hard-locks the control (lock glyph, no pointer).
      * - `busy` shows an in-flight spinner and suppresses input.
      */
+    import { i18n } from '../i18n/locale.svelte';
+    import * as m from '../paraglide/messages';
+
     interface Props {
         checked: boolean;
         disabled?: boolean;
@@ -29,6 +32,9 @@
         onchange,
     }: Props = $props();
 
+    // Reading i18n.locale keeps the N/A marker + aria-label reactive on switch.
+    const naAriaLabel = $derived((i18n.locale, label ?? m.common_toggle_na_aria_label()));
+
     function fire(): void {
         if (disabled || busy || na) return;
         onchange?.(!checked);
@@ -43,7 +49,7 @@
 </script>
 
 {#if na}
-    <span class="toggle-na" {title} aria-label={label ?? 'Not applicable'}>N/A</span>
+    <span class="toggle-na" {title} aria-label={naAriaLabel}>{m.common_toggle_na_marker()}</span>
 {:else}
     <button
         type="button"
@@ -102,19 +108,23 @@
     .thumb {
         position: absolute;
         top: 2px;
-        left: 2px;
+        /* inset-inline-start flips with dir: the knob rests at the start edge
+           (left in LTR, right in RTL) and slides to the far edge when on, so
+           the switch travels the correct way under RTL without a transform. */
+        inset-inline-start: 2px;
         width: 14px;
         height: 14px;
         border-radius: 50%;
         background: var(--accent-fg, var(--ink-on-color));
         box-shadow: var(--knob-shadow);
-        transition: transform var(--t-fast);
+        transition: inset-inline-start var(--t-fast);
         display: flex;
         align-items: center;
         justify-content: center;
     }
     .toggle.on .thumb {
-        transform: translateX(14px);
+        /* 32px track − 14px thumb − 2px inset = 16px */
+        inset-inline-start: 16px;
     }
     .toggle.busy .track {
         opacity: 0.7;

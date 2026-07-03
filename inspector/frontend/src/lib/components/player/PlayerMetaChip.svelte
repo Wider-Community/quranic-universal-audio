@@ -7,6 +7,9 @@
      */
     import { createEventDispatcher } from 'svelte';
 
+    import { localeStore, tr } from '$lib/i18n/locale-store';
+    import * as m from '$lib/paraglide/messages';
+
     import { catalogData } from '../../../tabs/dashboard/stores/catalog-data';
     import { clickOutside } from '../../actions/click-outside';
     import type { PublicDelivery, PublicReciter } from '../../types/generated/schemas';
@@ -62,6 +65,10 @@
         if (delivery && d.slug === delivery.slug) return;
         dispatch('select', d);
     }
+
+    $: lang = $localeStore;
+    $: pickReciterPrompt = tr(lang, m.common_player_pick_reciter_prompt());
+    $: switchCombinationLabel = tr(lang, m.common_player_switch_combination_label());
 </script>
 
 <div class="wrap" use:clickOutside={() => (open = false)}>
@@ -86,12 +93,12 @@
                 <span class="switch" aria-hidden="true">⇄</span>
             {/if}
         {:else}
-            <span class="name muted">Pick a reciter to start</span>
+            <span class="name muted">{pickReciterPrompt}</span>
         {/if}
     </button>
 
     {#if open && hasMany && liveReciter}
-        <div class="dropup" role="listbox" aria-label="Switch combination">
+        <div class="dropup" role="listbox" aria-label={switchCombinationLabel}>
             {#each combinations as d (d.slug)}
                 <button
                     class="opt"
@@ -134,7 +141,7 @@
         color: inherit;
         cursor: default;
         font: inherit;
-        text-align: left;
+        text-align: start;
         transition: border-color var(--t-fast), background var(--t-fast);
     }
     .meta.interactive { cursor: pointer; }
@@ -167,7 +174,7 @@
     .dropup {
         position: absolute;
         bottom: calc(100% + var(--s-2));
-        left: 0;
+        inset-inline-start: 0;
         min-width: 320px;
         max-width: 480px;
         max-height: min(360px, 50vh);
@@ -195,7 +202,7 @@
         border: 0;
         border-radius: var(--r-2);
         cursor: pointer;
-        text-align: left;
+        text-align: start;
         transition: background var(--t-fast);
         color: var(--text-primary);
         font: inherit;

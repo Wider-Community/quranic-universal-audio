@@ -82,8 +82,12 @@ def test_complete_preserves_existing_ts_release():
     _seed_state(slug, state="released")
     with db.transaction():
         repo_releases.insert_per_recitation_release(
-            track="ts", slug=slug, version="job-abc",
-            produced_at=datetime.now(UTC), produced_by="SYSTEM_ACTOR")
+            track="ts",
+            slug=slug,
+            version="job-abc",
+            produced_at=datetime.now(UTC),
+            produced_by="SYSTEM_ACTOR",
+        )
 
     hf_publish.complete(slug, "job-1", version=version)
 

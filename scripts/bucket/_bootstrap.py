@@ -184,7 +184,11 @@ def add_notify_args(parser: argparse.ArgumentParser) -> None:
 
 
 def notify_ts_refreshed(
-    args: argparse.Namespace, slug: str, *, chapters: list[int] | None = None, reason: str = "manual"
+    args: argparse.Namespace,
+    slug: str,
+    *,
+    chapters: list[int] | None = None,
+    reason: str = "manual",
 ) -> None:
     """Fire the post-upload TS-refresh callback for ``slug`` (best-effort).
 

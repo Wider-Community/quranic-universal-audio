@@ -1,6 +1,7 @@
 import { get as storeGet } from 'svelte/store';
 
 import { fetchJson } from '../../../../lib/api';
+import * as m from '../../../../lib/paraglide/messages';
 import type { SegUndoResponse as SegUndoBatchResponse, SegUndoResponse as SegUndoOpsResponse } from '../../../../lib/types/generated/schemas';
 import type { EditOp, HistoryBatch } from '../../../../lib/types/view-models';
 import { surahOptionText } from '../../../../lib/utils/surah-info';
@@ -57,7 +58,7 @@ export async function onBatchUndoClick(batchId: string, chapter: number | null):
     const reciter = storeGet(selectedReciter);
     if (!reciter) return;
     const chLabel = chapter != null ? ` for ${surahOptionText(chapter)}` : '';
-    if (!confirm(`Undo this save${chLabel}? The operations will be reversed.`)) return;
+    if (!confirm(m.segments_undo_batch_confirm({ ch_label: chLabel }))) return;
 
     markUndoing(batchId);
     try {
@@ -72,11 +73,11 @@ export async function onBatchUndoClick(batchId: string, chapter: number | null):
         if (result.ok) {
             await _afterUndoSuccess(reciter, result.operations_reversed ?? 0);
         } else {
-            alert(`Undo failed: ${result.error}`);
+            alert(m.segments_undo_generic_failed_alert({ error: result.error ?? '' }));
         }
     } catch (e) {
         console.error('Undo batch failed:', e);
-        alert('Undo failed \u2014 see console for details');
+        alert(m.segments_undo_console_error_alert());
     } finally {
         clearUndoing(batchId);
     }
@@ -89,7 +90,7 @@ export async function onBatchUndoClick(batchId: string, chapter: number | null):
 export async function onOpUndoClick(batchId: string, opIds: string[]): Promise<void> {
     const reciter = storeGet(selectedReciter);
     if (!reciter) return;
-    if (!confirm('Undo this operation?')) return;
+    if (!confirm(m.segments_undo_op_confirm())) return;
 
     const opKey = `${batchId}:${opIds.join(',')}`;
     markUndoing(opKey);
@@ -105,11 +106,11 @@ export async function onOpUndoClick(batchId: string, opIds: string[]): Promise<v
         if (result.ok) {
             await _afterUndoSuccess(reciter, result.operations_reversed ?? 0);
         } else {
-            alert(`Undo failed: ${result.error}`);
+            alert(m.segments_undo_generic_failed_alert({ error: result.error ?? '' }));
         }
     } catch (e) {
         console.error('Undo op failed:', e);
-        alert('Undo failed \u2014 see console for details');
+        alert(m.segments_undo_console_error_alert());
     } finally {
         clearUndoing(opKey);
     }
@@ -140,7 +141,7 @@ export async function onChainUndoClick(batchIds: string[], chapter: number | nul
     const reciter = storeGet(selectedReciter);
     if (!reciter) return;
     const chLabel = chapter != null ? ` for ${surahOptionText(chapter)}` : '';
-    if (!confirm(`Undo this entire split chain${chLabel}? ${batchIds.length} save(s) will be reversed in order.`)) return;
+    if (!confirm(m.segments_undo_chain_confirm({ count: batchIds.length, ch_label: chLabel }))) return;
 
     const chainKey = `chain:${batchIds.join(',')}`;
     markUndoing(chainKey);
@@ -160,13 +161,17 @@ export async function onChainUndoClick(batchIds: string[], chapter: number | nul
                 if (result.ok) {
                     totalReversed += result.operations_reversed || 0;
                 } else {
-                    alert(`Undo failed on batch ${batchIds.indexOf(batchId) + 1}/${batchIds.length}: ${result.error}`);
+                    alert(m.segments_undo_chain_batch_failed_alert({
+                        n: batchIds.indexOf(batchId) + 1,
+                        total: batchIds.length,
+                        error: result.error ?? '',
+                    }));
                     failed = true;
                     break;
                 }
             } catch (e) {
                 console.error('Chain undo failed:', e);
-                alert('Undo failed \u2014 see console for details');
+                alert(m.segments_undo_console_error_alert());
                 failed = true;
                 break;
             }
@@ -217,8 +222,7 @@ export function onPendingOpsDiscard(
     void btn;
     if (opIds.length === 0) return;
     const chLabel = chapter != null ? ` for ${surahOptionText(chapter)}` : '';
-    const noun = opIds.length === 1 ? 'edit' : 'edits';
-    if (!confirm(`Discard ${opIds.length} ${noun}${chLabel}?`)) return;
+    if (!confirm(m.segments_discard_confirm({ count: opIds.length, ch_label: chLabel }))) return;
 
     pendingChainTargets.set([]);
     pendingWaslConfirm.set(new Set());

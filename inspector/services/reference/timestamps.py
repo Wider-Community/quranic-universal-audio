@@ -246,7 +246,9 @@ def _dev_fixture_shard(reciter: str, chapter: int) -> bytes | None:
     if not base:
         return None
     try:
-        return (Path(base) / "reciters" / reciter / "timestamps" / f"{chapter}.json.gz").read_bytes()
+        return (
+            Path(base) / "reciters" / reciter / "timestamps" / f"{chapter}.json.gz"
+        ).read_bytes()
     except OSError:
         return None
 

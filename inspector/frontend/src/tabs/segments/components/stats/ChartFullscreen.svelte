@@ -14,6 +14,8 @@
     import { onDestroy, onMount } from 'svelte';
 
     import { fetchJson } from '../../../../lib/api';
+    import { localeStore, tr } from '../../../../lib/i18n/locale-store';
+    import * as m from '../../../../lib/paraglide/messages';
     import { THEME_CHANGE_EVENT } from '../../../../lib/stores/theme.svelte';
     import type { SegSaveChartResponse } from '../../../../lib/types/view-models';
     import type { Chart } from '../../../../lib/utils/chart';
@@ -92,6 +94,10 @@
             });
         }, 'image/png');
     }
+
+    $: savedTipLabel = tr($localeStore, m.segments_stats_chart_saved_tip());
+    $: savePngTitle = tr($localeStore, m.segments_stats_chart_save_png_title());
+    $: closeTitle = tr($localeStore, m.segments_stats_chart_close_title());
 </script>
 
 <svelte:window on:keydown={handleKeydown} />
@@ -104,12 +110,12 @@
         class="seg-stats-fullscreen"
         on:click={handleBackdropClick}
     >
-        {#if showSavedTip}<span class="seg-stats-saved-tip">Saved</span>{/if}
+        {#if showSavedTip}<span class="seg-stats-saved-tip">{savedTipLabel}</span>{/if}
         <div class="seg-stats-fs-inner">
             <div class="seg-stats-fs-bar">
                 <span class="seg-stats-fs-title">{cfg.title}</span>
-                <button class="seg-stats-chart-btn seg-stats-fs-save" title="Save PNG" on:click={handleSave}>&#x2B73;</button>
-                <button class="seg-stats-chart-btn seg-stats-fs-close" title="Close" on:click={onClose}>&#x2715;</button>
+                <button class="seg-stats-chart-btn seg-stats-fs-save" title={savePngTitle} on:click={handleSave}>&#x2B73;</button>
+                <button class="seg-stats-chart-btn seg-stats-fs-close" title={closeTitle} on:click={onClose}>&#x2715;</button>
             </div>
             <div style="flex: 1; min-height: 0; position: relative;">
                 <canvas bind:this={canvasEl}></canvas>

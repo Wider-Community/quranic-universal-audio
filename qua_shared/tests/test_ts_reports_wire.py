@@ -33,8 +33,12 @@ def test_other_requires_comment():
 def test_timing_axes_required_no_subtype():
     word = {"kind": "word", "word_index": 0}
     # one axis is enough; comment optional
-    TsReportCreateRequest.model_validate(_req(category="timing", comment=None, onset="early", target=word))
-    TsReportCreateRequest.model_validate(_req(category="timing", comment=None, offset="late", target=word))
+    TsReportCreateRequest.model_validate(
+        _req(category="timing", comment=None, onset="early", target=word)
+    )
+    TsReportCreateRequest.model_validate(
+        _req(category="timing", comment=None, offset="late", target=word)
+    )
     # both axes set is fine
     TsReportCreateRequest.model_validate(
         _req(category="timing", comment=None, onset="late", offset="early", target=word)
@@ -96,7 +100,11 @@ def test_phonemes_target_phoneme_no_subtype_axes_or_comment():
         )
     with pytest.raises(ValidationError):  # phonemes can only target a phoneme
         TsReportCreateRequest.model_validate(
-            _req(category="phonemes", comment=None, target={"kind": "cell", "word_index": 0, "cell_index": 1})
+            _req(
+                category="phonemes",
+                comment=None,
+                target={"kind": "cell", "word_index": 0, "cell_index": 1},
+            )
         )
     with pytest.raises(ValidationError):  # selected_rule_tags is tajweed-only
         TsReportCreateRequest.model_validate(
@@ -107,8 +115,12 @@ def test_phonemes_target_phoneme_no_subtype_axes_or_comment():
 def test_silence_subtypes_target_gap():
     gap = {"kind": "gap", "word_index": 1}
     # binary subtypes: a gap target, no comment, no axes — valid
-    TsReportCreateRequest.model_validate(_req(category="silence", subtype="pause_wasl", comment=None, target=gap))
-    TsReportCreateRequest.model_validate(_req(category="silence", subtype="pause_missed", comment=None, target=gap))
+    TsReportCreateRequest.model_validate(
+        _req(category="silence", subtype="pause_wasl", comment=None, target=gap)
+    )
+    TsReportCreateRequest.model_validate(
+        _req(category="silence", subtype="pause_missed", comment=None, target=gap)
+    )
     # pause_boundary carries the onset/offset axes (≥1)
     TsReportCreateRequest.model_validate(
         _req(category="silence", subtype="pause_boundary", comment=None, onset="early", target=gap)
@@ -119,7 +131,9 @@ def test_silence_subtypes_target_gap():
         )
     with pytest.raises(ValidationError):  # axes only on pause_boundary
         TsReportCreateRequest.model_validate(
-            _req(category="silence", subtype="pause_missed", comment=None, onset="early", target=gap)
+            _req(
+                category="silence", subtype="pause_missed", comment=None, onset="early", target=gap
+            )
         )
     with pytest.raises(ValidationError):  # silence requires a subtype
         TsReportCreateRequest.model_validate(_req(category="silence", comment=None, target=gap))
@@ -220,10 +234,15 @@ def test_batch_item_shares_validation_with_single_create():
 
 def test_batch_item_requires_comment_when_mandatory():
     with pytest.raises(ValidationError):
-        TsReportBatchItem.model_validate(_item(category="tajweed", onset=None, subtype="wrong_rule",
-                                               comment=None,
-                                               target={"kind": "cell", "word_index": 0,
-                                                       "cell_index": 1}))
+        TsReportBatchItem.model_validate(
+            _item(
+                category="tajweed",
+                onset=None,
+                subtype="wrong_rule",
+                comment=None,
+                target={"kind": "cell", "word_index": 0, "cell_index": 1},
+            )
+        )
 
 
 def test_batch_request_rejects_empty_items():

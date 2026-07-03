@@ -216,9 +216,7 @@ def _build_tier_files(
         verse_pos = [int(layout["clip_start"]), int(layout["clip_end"])]
 
         word_array = [[int(w[0]), int(w[1]), int(w[2])] for w in layout["words"]]
-        letter_array = [
-            [int(lt[0]), lt[1], int(lt[2]), int(lt[3])] for lt in layout["letters"]
-        ]
+        letter_array = [[int(lt[0]), lt[1], int(lt[2]), int(lt[3])] for lt in layout["letters"]]
 
         verse_body[key] = verse_pos
         word_body[key] = [verse_pos, word_array]
@@ -915,9 +913,7 @@ def main() -> int:
         # byte-exact segments (gapless within a segment, gaps only across
         # boundaries) — source-relative ms.
         for_validate = {
-            k: _verse_for_validate(layout)
-            for k, layout in layouts.items()
-            if not k.startswith("_")
+            k: _verse_for_validate(layout) for k, layout in layouts.items() if not k.startswith("_")
         }
         rec_summary = validate_dataset(for_validate, surah_info=surah_info)
         fatal = fatal_violations(rec_summary["violations"])

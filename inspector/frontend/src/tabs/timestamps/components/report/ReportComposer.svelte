@@ -8,6 +8,8 @@
      * soft delete that drops the report from every view. Anonymous callers are
      * keyed by a localStorage token so they can edit/remove across refreshes.
      */
+    import * as m from '$lib/paraglide/messages';
+    import { i18n } from '$lib/i18n/locale.svelte';
     import { currentUser } from '../../../../lib/stores/current-user';
     import { pushToast } from '../../../../lib/stores/toast';
     import type { TsReport } from '../../../../lib/types/generated/schemas';
@@ -45,6 +47,15 @@
         verseReports.filter((r) => r.category === category.id && !r.mine).length,
     );
 
+    // Attribute/text labels gated on i18n.locale so they re-render on a locale switch.
+    const backAriaLabel = $derived((i18n.locale, m.ts_report_composer_back_aria_label()));
+    const editButtonLabel = $derived((i18n.locale, m.ts_report_composer_edit_button()));
+    const removeButtonLabel = $derived((i18n.locale, m.ts_report_composer_remove_button()));
+    const reportedNote = $derived((i18n.locale, m.ts_report_composer_reported_note()));
+    const saveChangesLabel = $derived((i18n.locale, m.ts_report_composer_save_changes_button()));
+    const submitLabel = $derived((i18n.locale, m.ts_report_composer_submit_button()));
+    const cancelLabel = $derived((i18n.locale, m.common_action_cancel()));
+
     let draft = $state('');
     let editing = $state(false);
     let busy = $state(false);
@@ -80,7 +91,7 @@
             });
             if (!res?.error) {
                 editing = false;
-                pushToast({ kind: 'success', text: 'Thank you for the feedback!' });
+                pushToast({ kind: 'success', text: m.ts_report_thanks_toast() });
                 onchanged();
             }
         } finally {
@@ -112,11 +123,11 @@
 <div class="composer">
     {#if !inline}
         <header class="head">
-            <button type="button" class="back" onclick={() => onback?.()} aria-label="Back to categories">
+            <button type="button" class="back" onclick={() => onback?.()} aria-label={backAriaLabel}>
                 <ReportIcon name="back" size={15} />
             </button>
             <span class="cat-ic"><ReportIcon name={category.id} size={15} /></span>
-            <h4>{category.label}</h4>
+            <h4>{category.label()}</h4>
         </header>
     {/if}
 
@@ -125,36 +136,36 @@
             <p class="saved-body">{mine.comment}</p>
             <div class="saved-actions">
                 <button type="button" class="link" onclick={startEdit} disabled={busy}>
-                    <ReportIcon name="edit" size={13} /> Edit
+                    <ReportIcon name="edit" size={13} /> {editButtonLabel}
                 </button>
                 <button type="button" class="link danger" onclick={remove} disabled={busy}>
-                    <ReportIcon name="trash" size={13} /> Remove
+                    <ReportIcon name="trash" size={13} /> {removeButtonLabel}
                 </button>
             </div>
         </div>
-        <p class="note ok"><ReportIcon name="check" size={13} /> Reported. Reviewers will see this.</p>
+        <p class="note ok"><ReportIcon name="check" size={13} /> {reportedNote}</p>
     {:else}
         <textarea
             class="field"
             bind:value={draft}
             rows="3"
-            placeholder={category.placeholder}
-            aria-label={`Describe the ${category.label.toLowerCase()} issue`}
+            placeholder={category.placeholder?.()}
+            aria-label={m.ts_report_composer_field_aria_label({ category: category.label().toLowerCase() })}
         ></textarea>
         <div class="composer-actions">
             {#if editing}
                 <button type="button" class="btn ghost" onclick={() => (editing = false)} disabled={busy}>
-                    Cancel
+                    {cancelLabel}
                 </button>
             {/if}
             <button type="button" class="btn primary" onclick={submit} disabled={!canSubmit}>
-                {editing ? 'Save changes' : 'Submit report'}
+                {editing ? saveChangesLabel : submitLabel}
             </button>
         </div>
     {/if}
 
     {#if othersCount > 0}
-        <p class="note">{othersCount} {othersCount === 1 ? 'other listener has' : 'other listeners have'} reported this.</p>
+        <p class="note">{m.ts_report_composer_others_count({ count: othersCount })}</p>
     {/if}
 </div>
 

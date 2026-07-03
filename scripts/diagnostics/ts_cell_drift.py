@@ -182,9 +182,7 @@ def _classify(stored: list[str], phon: list[str], *, is_first: bool) -> str:
     while cp < len(stored) and cp < len(phon) and stored[cp] == phon[cp]:
         cp += 1
     cs = 0
-    while (
-        cs < len(stored) - cp and cs < len(phon) - cp and stored[-1 - cs] == phon[-1 - cs]
-    ):
+    while cs < len(stored) - cp and cs < len(phon) - cp and stored[-1 - cs] == phon[-1 - cs]:
         cs += 1
     s_mid = stored[cp : len(stored) - cs]
     p_mid = phon[cp : len(phon) - cs]
@@ -237,7 +235,7 @@ def _classify(stored: list[str], phon: list[str], *, is_first: bool) -> str:
 
 @dataclass
 class WordDrift:
-    ref: str          # chapter:verse:word
+    ref: str  # chapter:verse:word
     widx: int
     text: str
     stored: list[str]
@@ -247,7 +245,7 @@ class WordDrift:
 
 @dataclass
 class RunDrift:
-    ref: str          # the gap-run ref handed to the phonemizer
+    ref: str  # the gap-run ref handed to the phonemizer
     words: list[WordDrift] = field(default_factory=list)
     word_count_mismatch: bool = False
 
@@ -287,13 +285,13 @@ def analyze_run(verse_key: str, run: list, mapping_for_ref) -> RunDrift | None:
     if len(pw) != len(run):
         return RunDrift(ref=ref, word_count_mismatch=True)
 
-    pairs = [(_stored_idx(wd[4]), _phon_idx(w.phonemes)) for wd, w in zip(run, pw)]
+    pairs = [(_stored_idx(wd[4]), _phon_idx(w.phonemes)) for wd, w in zip(run, pw, strict=False)]
     if all(s == p for s, p in pairs):
         return None
 
     reattrib = _detect_reattrib(pairs)
     drift = RunDrift(ref=ref)
-    for i, (wd, w) in enumerate(zip(run, pw)):
+    for i, (wd, w) in enumerate(zip(run, pw, strict=False)):
         s, p = pairs[i]
         if s == p:
             continue
@@ -389,9 +387,7 @@ def scan_reciter(backend, slug: str, chapters: set[int] | None, mapping_for_ref)
                     shard.empty_letter_words += 1
             for run in _gap_runs(words):
                 # only bother when the run has a word with phones but no cells
-                if not any(
-                    (len(wd) <= 5 or not wd[5]) and _stored_idx(wd[4]) for wd in run
-                ):
+                if not any((len(wd) <= 5 or not wd[5]) and _stored_idx(wd[4]) for wd in run):
                     continue
                 d = analyze_run(verse_key, run, mapping_for_ref)
                 if d is not None:
@@ -427,18 +423,24 @@ def _render(reports: list[ReciterReport], *, max_examples: int) -> str:
             continue
         summary = f"{rep.n_drift_words} drift word(s) in chapters {rep.drift_chapters}"
         if rep.n_empty_letter_words:
-            summary += (f"  |  BROKEN: {rep.n_empty_letter_words} word(s) with NO letters "
-                        f"in chapters {rep.empty_letter_chapters}")
+            summary += (
+                f"  |  BROKEN: {rep.n_empty_letter_words} word(s) with NO letters "
+                f"in chapters {rep.empty_letter_chapters}"
+            )
         out.append(f"\n[{rep.slug}]  {summary}")
         for s in rep.shards:
             if s.empty_letter_words:
-                out.append(f"  ch{s.chapter:>3} sv={s.schema_version}  ✗ STRUCTURAL: "
-                           f"{s.empty_letter_words}/{s.total_words} words have empty "
-                           f"letter rows (broken re-stamp — renders nothing per-letter)")
+                out.append(
+                    f"  ch{s.chapter:>3} sv={s.schema_version}  ✗ STRUCTURAL: "
+                    f"{s.empty_letter_words}/{s.total_words} words have empty "
+                    f"letter rows (broken re-stamp — renders nothing per-letter)"
+                )
             for run in s.runs:
                 if run.word_count_mismatch:
-                    out.append(f"  ch{s.chapter:>3} sv={s.schema_version}  {run.ref}  "
-                               f"✗ WORD-COUNT mismatch (phonemizer ≠ shard)")
+                    out.append(
+                        f"  ch{s.chapter:>3} sv={s.schema_version}  {run.ref}  "
+                        f"✗ WORD-COUNT mismatch (phonemizer ≠ shard)"
+                    )
                     continue
                 head = f"  ch{s.chapter:>3} sv={s.schema_version}  {run.ref}"
                 out.append(head)
@@ -504,14 +506,28 @@ def _to_json(reports: list[ReciterReport]) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--bucket", choices=sorted(_BUCKETS), default="dev",
-                    help="Bucket to scan (default: dev). Prod is read-only here.")
-    ap.add_argument("--reciters", default="",
-                    help="Comma-separated slugs (default: every reciter on the bucket).")
-    ap.add_argument("--chapters", default="",
-                    help="Comma-separated chapter numbers to limit the scan (default: all).")
-    ap.add_argument("--max-examples", type=int, default=40,
-                    help="Max diverging words printed per run (default: 40).")
+    ap.add_argument(
+        "--bucket",
+        choices=sorted(_BUCKETS),
+        default="dev",
+        help="Bucket to scan (default: dev). Prod is read-only here.",
+    )
+    ap.add_argument(
+        "--reciters",
+        default="",
+        help="Comma-separated slugs (default: every reciter on the bucket).",
+    )
+    ap.add_argument(
+        "--chapters",
+        default="",
+        help="Comma-separated chapter numbers to limit the scan (default: all).",
+    )
+    ap.add_argument(
+        "--max-examples",
+        type=int,
+        default=40,
+        help="Max diverging words printed per run (default: 40).",
+    )
     ap.add_argument("--json", action="store_true", help="Emit JSON instead of text.")
     ap.add_argument("-v", "--verbose", action="store_true", help="Debug logging.")
     args = ap.parse_args()
@@ -533,7 +549,7 @@ def main() -> int:
         raise SystemExit(
             f"qua_sdk / quranic_phonemizer not importable ({e}). This scanner needs "
             "the same pair the TS job stages — install them in this environment."
-        )
+        ) from e
 
     from services.storage.hf_bucket import get_backend
 
@@ -571,8 +587,10 @@ def main() -> int:
         elif not broken:
             print("  no drift — every scanned shard's cells match the phonemizer")
         if broken:
-            print(f"  STRUCTURAL: {broken} word(s) with empty letter rows "
-                  "(broken re-stamp — renders nothing per-letter)")
+            print(
+                f"  STRUCTURAL: {broken} word(s) with empty letter rows "
+                "(broken re-stamp — renders nothing per-letter)"
+            )
 
     return 1 if any(r.shards for r in reports) else 0
 

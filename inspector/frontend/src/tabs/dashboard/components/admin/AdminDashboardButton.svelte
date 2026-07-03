@@ -3,6 +3,8 @@
      * owners ($isAdmin); opens the admin dashboard modal. Incoming-request
      * awareness now lives in the per-user My Notifications rail, so this button
      * carries no badge of its own. */
+    import { i18n } from '../../../../lib/i18n/locale.svelte';
+    import * as m from '../../../../lib/paraglide/messages';
     import { isAdmin } from '../../../../lib/stores/current-user';
     import { adminDashboard } from '../../stores/admin-dashboard.svelte';
 </script>
@@ -15,7 +17,7 @@
             <rect x="1.5" y="9.5" width="5" height="5" rx="1" />
             <rect x="9.5" y="9.5" width="5" height="5" rx="1" />
         </svg>
-        Admin dashboard
+        {(i18n.locale, m.dashboard_admin_dashboard_button())}
     </button>
 {/if}
 

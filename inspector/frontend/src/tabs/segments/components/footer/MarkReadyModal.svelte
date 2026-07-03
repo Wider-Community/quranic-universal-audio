@@ -12,7 +12,9 @@
      * `../../../copy/mark-ready/` — edit those to change wording, never
      * inline strings here.
      */
+    import { i18n } from '../../../../lib/i18n/locale.svelte';
     import { markReady } from '../../../../lib/api/claims-client';
+    import * as m from '../../../../lib/paraglide/messages';
     import type { SegValAnyItem, SegValLowConfidenceItem, SegValidateResponse } from '../../../../lib/types/generated/schemas';
     import type { MarkReadyChecklist } from '../../../../lib/types/generated/schemas';
     import {
@@ -20,8 +22,8 @@
         BLOCKING_LABELS,
         type BlockingCountKey,
         emptyChecklist,
+        getMarkReadyCopy,
         isAllChecked,
-        markReadyCopy,
     } from '../../copy/mark-ready';
     import { segAllData } from '../../stores/chapter';
     import { segConfig } from '../../stores/config';
@@ -35,6 +37,8 @@
         onSubmitted: () => void;
     }
     let { open = $bindable(), slug, onClose, onSubmitted }: Props = $props();
+
+    const markReadyCopy = $derived(getMarkReadyCopy(i18n.locale));
 
     let checklist = $state<MarkReadyChecklist>(emptyChecklist());
     let commentChecks = $state('');
@@ -138,7 +142,7 @@
         } catch (e) {
             // `markReady` already surfaced a toast; this duplicates the
             // message inline so the reviewer doesn't lose the form context.
-            const msg = e instanceof Error ? e.message : 'Submit failed.';
+            const msg = e instanceof Error ? e.message : m.segments_mark_ready_submit_error_fallback();
             error = msg;
         } finally {
             busy = false;
@@ -155,6 +159,10 @@
         if (!open) return;
         if (e.key === 'Escape') cancel();
     }
+
+    const closeAriaLabel = $derived((i18n.locale, m.segments_mark_ready_close_aria_label()));
+    const disabledChecklistTitle = $derived((i18n.locale, m.segments_mark_ready_submit_disabled_checklist_title()));
+    const disabledBlockingTitle = $derived((i18n.locale, m.segments_mark_ready_submit_disabled_blocking_title()));
 </script>
 
 <svelte:window onkeydown={onKey} />
@@ -168,7 +176,7 @@
         <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="mr-title">
             <header>
                 <h2 id="mr-title">{markReadyCopy.form.title}</h2>
-                <button class="close" aria-label="Close" onclick={cancel}>×</button>
+                <button class="close" aria-label={closeAriaLabel} onclick={cancel}>×</button>
             </header>
 
             {#if blockingNonZero.length > 0}
@@ -245,9 +253,9 @@
                         onclick={submit}
                         disabled={!canSubmit}
                         title={!allChecked
-                            ? 'Check every attestation to enable submit'
+                            ? disabledChecklistTitle
                             : blockingNonZero.length > 0
-                              ? 'Resolve or ignore the blocking items first'
+                              ? disabledBlockingTitle
                               : ''}
                     >
                         {busy ? markReadyCopy.form.submitting : markReadyCopy.form.submit}
@@ -352,7 +360,7 @@
         font-size: var(--fs-meta);
         color: var(--text-primary);
         cursor: pointer;
-        text-align: left;
+        text-align: start;
     }
     .blocking .jump:hover { background: var(--panel); border-color: var(--border-quiet); }
     .blocking .count {

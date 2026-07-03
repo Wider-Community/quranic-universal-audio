@@ -12,25 +12,31 @@
 -->
 <script lang="ts">
     import { signIn, signOut } from '../api/auth-client';
+    import { i18n } from '../i18n/locale.svelte';
+    import * as m from '../paraglide/messages';
     import { currentUser, isSignedIn } from '../stores/current-user';
     import DevRoleSwitcher from './DevRoleSwitcher.svelte';
 
     const user = $derived($currentUser);
     const initial = $derived(user.login ? user.login.charAt(0).toUpperCase() : '?');
     const showRole = $derived(!!user.role && user.role !== 'contributor');
+
+    const signInLabel = $derived((i18n.locale, m.common_auth_sign_in_with_hf()));
+    const signOutLabel = $derived((i18n.locale, m.common_auth_sign_out()));
+    const signedInTitle = $derived((i18n.locale, m.common_auth_signed_in_as_title({ login: user.login ?? '' })));
 </script>
 
 {#if user.dev_mode}
     <!-- Local dev only — never rendered on the deployed Space. -->
     <DevRoleSwitcher />
 {:else if isSignedIn(user)}
-    <div class="identity" title="Signed in as {user.login}">
+    <div class="identity" title={signedInTitle}>
         <span class="avatar" aria-hidden="true">{initial}</span>
         <span class="name">{user.login}</span>
         {#if showRole}
             <span class="role">{user.role}</span>
         {/if}
-        <button type="button" class="signout" title="Sign out" aria-label="Sign out"
+        <button type="button" class="signout" title={signOutLabel} aria-label={signOutLabel}
                 onclick={() => void signOut()}>
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -48,7 +54,7 @@
             <polyline points="10 17 15 12 10 7" />
             <line x1="15" y1="12" x2="3" y2="12" />
         </svg>
-        Sign in with HF
+        {signInLabel}
     </button>
 {/if}
 
@@ -58,7 +64,7 @@
         display: inline-flex;
         align-items: center;
         height: 32px;
-        padding-left: 4px;
+        padding-inline-start: 4px;
         background: var(--panel);
         border: 1px solid var(--border-default);
         border-radius: var(--r-2);
@@ -91,7 +97,7 @@
     }
     .role {
         flex: 0 0 auto;
-        margin-right: 8px;
+        margin-inline-end: 8px;
         padding: 2px 7px;
         font-size: 0.6rem;
         font-weight: 700;
@@ -110,7 +116,7 @@
         width: 30px;
         padding: 0;
         border: 0;
-        border-left: 1px solid var(--border-quiet);
+        border-inline-start: 1px solid var(--border-quiet);
         background: transparent;
         color: var(--text-muted);
         cursor: pointer;

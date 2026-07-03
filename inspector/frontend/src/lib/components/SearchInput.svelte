@@ -15,12 +15,18 @@
 <script lang="ts">
     import { createEventDispatcher, onDestroy } from 'svelte';
 
+    import { localeStore, tr } from '$lib/i18n/locale-store';
+    import * as m from '$lib/paraglide/messages';
+
     export let value = '';
-    export let placeholder = 'Search';
+    export let placeholder: string | undefined = undefined;
     export let count: number | null = null;
     export let total: number | null = null;
     export let ariaLabel: string | undefined = undefined;
     export let debounceMs = 0;
+
+    // Default placeholder is the localized "Search"; callers may override it.
+    $: effectivePlaceholder = placeholder ?? tr($localeStore, m.common_search_input_placeholder());
 
     let inputEl: HTMLInputElement | null = null;
     export function focus(): void { inputEl?.focus(); }
@@ -60,7 +66,10 @@
 
     onDestroy(() => { if (timer) clearTimeout(timer); });
 
-    $: countLabel = count !== null && total !== null ? `${count} of ${total}` : null;
+    $: countLabel =
+        count !== null && total !== null
+            ? tr($localeStore, m.common_search_input_count_label({ count, total }))
+            : null;
 </script>
 
 <div class="search-input">
@@ -74,8 +83,8 @@
         bind:this={inputEl}
         type="search"
         autocomplete="off"
-        {placeholder}
-        aria-label={ariaLabel ?? placeholder}
+        placeholder={effectivePlaceholder}
+        aria-label={ariaLabel ?? effectivePlaceholder}
         value={display}
         on:input={onInput}
     />
@@ -91,7 +100,7 @@
     }
     .icon {
         position: absolute;
-        left: var(--s-3);
+        inset-inline-start: var(--s-3);
         display: flex;
         color: var(--text-faint);
         pointer-events: none;
@@ -99,7 +108,8 @@
     input {
         width: 100%;
         height: 32px;
-        padding: 0 56px 0 calc(var(--s-3) + 24px);
+        padding-block: 0;
+        padding-inline: calc(var(--s-3) + 24px) 56px;
         background: var(--panel);
         border: 1px solid var(--border-default);
         border-radius: var(--r-2);
@@ -121,7 +131,7 @@
     }
     .count {
         position: absolute;
-        right: var(--s-3);
+        inset-inline-end: var(--s-3);
         font-size: 10.5px;
         color: var(--text-faint);
         font-family: var(--font-mono);

@@ -55,7 +55,7 @@
     .menu {
         position: absolute;
         bottom: calc(100% + var(--s-2));
-        right: 0;
+        inset-inline-end: 0;
         list-style: none;
         margin: 0;
         padding: var(--s-1) 0;
@@ -79,7 +79,7 @@
         border: 0;
         cursor: pointer;
         transition: background var(--t-fast), color var(--t-fast);
-        text-align: left;
+        text-align: start;
     }
     .opt:hover {
         background: var(--panel-2);
@@ -89,5 +89,5 @@
         background: var(--accent-tint);
         color: var(--text-primary);
     }
-    .tick { color: var(--accent-strong); margin-left: var(--s-2); }
+    .tick { color: var(--accent-strong); margin-inline-start: var(--s-2); }
 </style>

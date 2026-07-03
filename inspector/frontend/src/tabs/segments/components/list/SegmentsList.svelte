@@ -25,6 +25,8 @@
     import { afterUpdate, onDestroy, onMount } from 'svelte';
     import { get } from 'svelte/store';
 
+    import { localeStore, tr } from '../../../../lib/i18n/locale-store';
+    import * as m from '../../../../lib/paraglide/messages';
     import type { Segment } from '../../../../lib/types/view-models';
     import { SCROLL_ANIM_MODES } from '../../../../lib/utils/constants';
     import { selectedChapter } from '../../stores/chapter';
@@ -381,6 +383,8 @@
     $: bottomSpacerPx = virtualize
         ? bottomSpacerValue(cumHeights, endIdx, total, editingPos, $displayedSegments, rowKey, heights, estimateHeight)
         : 0;
+
+    $: emptyStateLabel = tr($localeStore, m.segments_list_empty_state());
 </script>
 
 <div id="seg-list" class="seg-list" bind:this={listEl} use:waveformContainer on:scroll={onScroll}>
@@ -389,7 +393,7 @@
     <Navigation on:restore={() => onRestore && onRestore()} />
 
     {#if total === 0}
-        <div class="seg-loading">No segments to display</div>
+        <div class="seg-loading">{emptyStateLabel}</div>
     {:else}
         {#if topSpacerPx > 0}
             <div class="seg-list-spacer" style="height: {topSpacerPx}px" aria-hidden="true"></div>

@@ -13,6 +13,9 @@
      */
     import { onDestroy, onMount } from 'svelte';
 
+    import { localeStore, tr } from '$lib/i18n/locale-store';
+    import { vocabLabel } from '$lib/i18n/vocab';
+    import * as m from '$lib/paraglide/messages';
     import {
         fetchPublicActivity,
         type PublicActivityCard,
@@ -20,11 +23,19 @@
     } from '../../../lib/api/public-activity';
     import { deletePublicActivity } from '../../../lib/api/public-activity-admin';
     import { can } from '../../../lib/stores/capabilities';
-    import { titleCaseSlug } from '../../../lib/utils/delivery-label';
     import { relativeTime } from '../../../lib/utils/relative-time';
     import { visiblePoll } from '../../../lib/utils/visible-poll';
     import NotificationsRail from './NotificationsRail.svelte';
     import AdminDashboardButton from './admin/AdminDashboardButton.svelte';
+
+    $: lang = $localeStore;
+    $: railAriaLabel = tr(lang, m.dashboard_activity_rail_aria_label());
+    $: heading = tr(lang, m.dashboard_activity_heading());
+    $: eventCount = tr(lang, m.dashboard_activity_event_count({ count: cards.length }));
+    $: loadingLabel = tr(lang, m.common_state_loading());
+    $: emptyLabel = tr(lang, m.dashboard_activity_empty());
+    $: deleteAriaLabel = tr(lang, m.dashboard_activity_delete_aria_label());
+    $: deleteTitle = tr(lang, m.dashboard_activity_delete_title());
 
     // Capability-gated affordances (both default owner-only, so this matches
     // the prior `$isOwner` behavior — but now reflects an owner's toggle).
@@ -47,7 +58,7 @@
             },
             onError: (e) => {
                 loading = false;
-                error = (e as Error).message ?? 'Failed to load activity';
+                error = (e as Error).message ?? m.dashboard_activity_load_error_fallback();
             },
         });
     });
@@ -58,32 +69,31 @@
         return `marker marker-${kind.replace(/_/g, '-')}`;
     }
 
-    const ACTION: Record<PublicEventKind, string> = {
-        added: 'added to catalog',
-        requested: 'has been requested',
-        available_for_review: 'is now available for review',
-        under_review: 'is now under review',
-        published: 'is now published',
+    const ACTION: Record<PublicEventKind, () => string> = {
+        added: m.dashboard_activity_action_added,
+        requested: m.dashboard_activity_action_requested,
+        available_for_review: m.dashboard_activity_action_available_for_review,
+        under_review: m.dashboard_activity_action_under_review,
+        published: m.dashboard_activity_action_published,
     };
 
     function formatLine(card: PublicActivityCard): string {
+        const displayName = lang === 'ar' && card.name_ar ? card.name_ar : card.name;
         if (card.riwayah && card.style) {
-            return `${card.name} (${titleCaseSlug(card.riwayah)}) (${titleCaseSlug(card.style)}) ${ACTION[card.kind]}`;
+            return `${displayName} (${vocabLabel('riwayah', card.riwayah)}) (${vocabLabel('style', card.style)}) ${ACTION[card.kind]()}`;
         }
         return card.text;
     }
+    // Re-run formatLine in markup when the locale switches.
+    $: formatLineForLang = (card: PublicActivityCard): string => tr(lang, formatLine(card));
 
     async function onDelete(card: PublicActivityCard): Promise<void> {
         if (!card.audit_id) return;
-        const reason = window.prompt(
-            'Delete this card from Recent Activity for everyone?\n\n' +
-                'Reason (≥10 characters; recorded in the audit log):',
-            '',
-        );
+        const reason = window.prompt(m.dashboard_activity_delete_prompt(), '');
         if (reason === null) return; // cancelled
         const trimmed = reason.trim();
         if (trimmed.length < 10) {
-            window.alert('Reason must be at least 10 characters.');
+            window.alert(m.dashboard_activity_delete_reason_too_short());
             return;
         }
         const idx = cards.findIndex((c) => c.audit_id === card.audit_id);
@@ -94,7 +104,7 @@
             await deletePublicActivity(card.audit_id, trimmed);
         } catch (e) {
             cards = [...cards.slice(0, idx), removed, ...cards.slice(idx)];
-            error = (e as Error).message ?? 'Failed to delete';
+            error = (e as Error).message ?? m.dashboard_activity_delete_error_fallback();
         }
     }
 </script>
@@ -105,25 +115,25 @@
     <div class="rail-scroll">
         <NotificationsRail />
 
-        <aside class="activity" aria-label="Recent activity">
+        <aside class="activity" aria-label={railAriaLabel}>
         <header>
-            <h2>Recent activity</h2>
-            <span class="sub">Last {cards.length} events</span>
+            <h2>{heading}</h2>
+            <span class="sub">{eventCount}</span>
         </header>
 
         {#if loading}
-            <div class="state">Loading…</div>
+            <div class="state">{loadingLabel}</div>
         {:else if error}
             <div class="state error">{error}</div>
         {:else if cards.length === 0}
-            <div class="state">No activity yet.</div>
+            <div class="state">{emptyLabel}</div>
         {:else}
             <ol class="list">
                 {#each cards as card (card.audit_id ?? card.ts + card.kind + card.name)}
                     <li class="item" class:has-delete={$canDelete && card.audit_id}>
                         <span class={dotClass(card.kind)} aria-hidden="true"></span>
                         <div class="body">
-                            <p class="text">{formatLine(card)}</p>
+                            <p class="text">{formatLineForLang(card)}</p>
                             <time class="time" datetime={card.ts}>
                                 {#if $canSeeActor && card.actor_login}
                                     <span class="actor">@{card.actor_login}</span>
@@ -136,8 +146,8 @@
                             <button
                                 class="delete"
                                 type="button"
-                                aria-label="Delete from public feed"
-                                title="Delete permanently from the public feed"
+                                aria-label={deleteAriaLabel}
+                                title={deleteTitle}
                                 on:click={() => onDelete(card)}
                             >
                                 🗑
@@ -173,7 +183,7 @@
     }
     .activity {
         padding: var(--s-5) var(--s-5);
-        border-left: 1px solid var(--border-quiet);
+        border-inline-start: 1px solid var(--border-quiet);
     }
     @media (max-width: 1280px) {
         .rail-wrap { height: auto; }

@@ -5,6 +5,7 @@ post-MFA word ends; the two outer segments absorb the lead/tail headroom; and
 adjacent verse rows always keep >= min_gap of silence (pads scale by ratio when
 the inter-verse silence is tight).
 """
+
 from __future__ import annotations
 
 from qua_jobs.publish_hf import build_rows
@@ -23,26 +24,29 @@ def _ts(verse_words):
 
 
 def _detailed(segments):
-    return {"segments": [
-        {"matched_ref": mref, "matched_text": txt, "time_start": ts, "time_end": te}
-        for (mref, txt, ts, te) in segments
-    ]}
+    return {
+        "segments": [
+            {"matched_ref": mref, "matched_text": txt, "time_start": ts, "time_end": te}
+            for (mref, txt, ts, te) in segments
+        ]
+    }
 
 
 def test_fit_boundary_ratio_and_min_gap():
     assert _fit_boundary(1000, 2000, 300, 100, 100) == (300.0, 100.0)  # fits as-is
-    tail, lead = _fit_boundary(1000, 1300, 300, 100, 100)              # overflow
+    tail, lead = _fit_boundary(1000, 1300, 300, 100, 100)  # overflow
     assert (tail, lead) == (150.0, 50.0)
-    assert tail / lead == 3.0                       # pad_end:pad_start ratio kept
-    assert (1300 - 1000) - (tail + lead) == 100     # leftover gap == min_gap
-    assert _fit_boundary(1000, 1050, 300, 100, 100) == (0.0, 0.0)      # tighter than min_gap
+    assert tail / lead == 3.0  # pad_end:pad_start ratio kept
+    assert (1300 - 1000) - (tail + lead) == 100  # leftover gap == min_gap
+    assert _fit_boundary(1000, 1050, 300, 100, 100) == (0.0, 0.0)  # tighter than min_gap
 
 
 def _rows(v1_words, v2_words, v1_segs, v2_segs):
     timestamps = {"112:1": _ts(v1_words), "112:2": _ts(v2_words)}
     detailed = {"112:1": _detailed(v1_segs), "112:2": _detailed(v2_segs)}
-    return build_rows(timestamps, detailed, SURAH, {}, None,
-                      pad_start=100, pad_end=300, min_gap=100)
+    return build_rows(
+        timestamps, detailed, SURAH, {}, None, pad_start=100, pad_end=300, min_gap=100
+    )
 
 
 def test_segments_byte_exact_and_outer_headroom():
@@ -61,8 +65,8 @@ def test_segments_byte_exact_and_outer_headroom():
     assert segs[0][2] == 0 and segs[-1][3] == duration
     # internal boundary is byte-exact with the abutting word ends (clip-relative)
     w = {wi: (s, e) for wi, s, e in r0["word_timestamps"]}
-    assert segs[0][3] == w[2][1]      # seg0 end == word2 end
-    assert segs[1][2] == w[3][0]      # seg1 start == word3 start
+    assert segs[0][3] == w[2][1]  # seg0 end == word2 end
+    assert segs[1][2] == w[3][0]  # seg1 start == word3 start
     # the inter-segment gap is the recovered silence (word2.end -> word3.start)
     assert segs[1][2] - segs[0][3] == w[3][0] - w[2][1] > 0
     # first word sits pad_start into the clip (the intentional outer mismatch)

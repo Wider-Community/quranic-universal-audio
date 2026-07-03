@@ -16,6 +16,8 @@
      */
     import { onDestroy, onMount } from 'svelte';
 
+    import { i18n } from '../../../lib/i18n/locale.svelte';
+    import * as m from '../../../lib/paraglide/messages';
     import type { UserNotification } from '../../../lib/api/notifications';
     import Icon from '../../../lib/icons/Icon.svelte';
     import { can } from '../../../lib/stores/capabilities';
@@ -107,13 +109,15 @@
             case 'reciter.marked_ready':
                 return slug
                     ? {
-                          label: 'Review submission',
+                          label: m.dashboard_notifs_nav_review_submission(),
                           go: () => gotoSegments(slug, { openMarkReadyReview: true }),
                       }
                     : null;
             case 'reciter.alignment_completed':
             case 'reciter.claimed':
-                return slug ? { label: 'Review in Segments', go: () => gotoSegments(slug) } : null;
+                return slug
+                    ? { label: m.dashboard_notifs_nav_review_in_segments(), go: () => gotoSegments(slug) }
+                    : null;
             case 'flag.reply':
             case 'flag.created':
             case 'flag.replied': {
@@ -121,7 +125,7 @@
                 const uid =
                     typeof n.payload?.segment_uid === 'string' ? n.payload.segment_uid : undefined;
                 return {
-                    label: 'Open flagged segment',
+                    label: m.dashboard_notifs_nav_open_flagged_segment(),
                     go: () => gotoSegments(slug, { openFlagged: true, focusFlaggedUid: uid }),
                 };
             }
@@ -132,13 +136,13 @@
                     typeof n.payload?.verse_key === 'string' ? n.payload.verse_key : '';
                 if (!slug || !verseKey) return null;
                 return {
-                    label: 'View reported verse',
+                    label: m.dashboard_notifs_nav_view_flagged_verse(),
                     go: () => gotoTimestamps(slug, verseKey),
                 };
             }
             default:
                 return slug && resolveDeliverySlug(slug)
-                    ? { label: 'View reciter', go: () => openReciter(n) }
+                    ? { label: m.dashboard_notifs_nav_view_reciter(), go: () => openReciter(n) }
                     : null;
         }
     }
@@ -148,11 +152,11 @@
     function kindBadgeLabel(kind: unknown): string | null {
         switch (kind) {
             case 'existing_combo_edit':
-                return 'Edit existing combo';
+                return m.dashboard_notifs_badge_edit_existing_combo();
             case 'existing_reciter_new_combo':
-                return 'New riwāyah / style';
+                return m.dashboard_notifs_badge_new_riwayah_style();
             case 'new_reciter':
-                return 'New reciter';
+                return m.dashboard_notifs_badge_new_reciter();
             default:
                 return null;
         }
@@ -163,16 +167,16 @@
             case 'request.received':
                 return kindBadgeLabel(n.payload?.kind);
             case 'reciter.marked_ready':
-                return 'Has notes';
+                return m.dashboard_notifs_badge_has_notes();
             case 'flag.created':
-                return 'Flag · comment';
+                return m.dashboard_notifs_badge_flag_comment();
             case 'flag.replied':
-                return 'Flag · reply';
+                return m.dashboard_notifs_badge_flag_reply();
             case 'ts_report.created':
-                return 'Timestamps · report';
+                return m.dashboard_notifs_badge_timestamps_report();
             case 'ts_report.resolved':
             case 'ts_report.auto_resolved':
-                return 'Timestamps · resolved';
+                return m.dashboard_notifs_badge_timestamps_resolved();
             default:
                 return null;
         }
@@ -185,14 +189,18 @@
         if (n.event === 'ts_report.created' && showReporter) {
             const login =
                 typeof n.payload?.author_login === 'string' ? n.payload.author_login : null;
-            const who = login ?? 'an anonymous listener';
-            return n.body ? `${n.body}\n— reported by ${who}` : `Reported by ${who}`;
+            const who = login ?? m.dashboard_notifs_reporter_anonymous();
+            return n.body
+                ? m.dashboard_notifs_reported_by_with_body({ body: n.body, who })
+                : m.dashboard_notifs_reported_by({ who });
         }
         return n.body;
     }
 
     /** Active view: announcements + personal notifications merged, newest-first. */
     const activeCards = $derived<RailCard[]>(
+        // Reading i18n.locale re-derives card labels/badges/bodies on locale switch.
+        (i18n.locale,
         [
             ...announcements.active.map(
                 (a): RailCard => ({
@@ -218,43 +226,51 @@
                     dismiss: () => notifications.dismiss(n.id),
                 }),
             ),
-        ].sort((a, b) => (a.created_at < b.created_at ? 1 : -1)),
+        ].sort((a, b) => (a.created_at < b.created_at ? 1 : -1))),
     );
 
     const badge = $derived(announcements.unread + notifications.unread);
 </script>
 
 {#if visible}
-    <aside class="notifs" aria-label="My notifications">
+    <!-- Re-render the whole rail on a locale switch: its labels are read via
+         m.*() across many branches and helper returns (navTarget / cardBadge),
+         so one locale dependency here is simpler and safer than threading one
+         through each call site. -->
+    {#key i18n.locale}
+    <aside class="notifs" aria-label={m.dashboard_notifs_rail_aria_label()}>
         <header>
-            <h2>My notifications</h2>
+            <h2>{m.dashboard_notifs_rail_heading()}</h2>
             {#if $canEmail}
                 <button
                     type="button"
                     class="email-btn"
-                    title="Manage email notifications"
+                    title={m.dashboard_notifs_email_button_title()}
                     onclick={() => (prefsOpen = true)}>
                     <Icon name="mail" size={14} />
-                    <span>Email</span>
+                    <span>{m.dashboard_notifs_email_button_label()}</span>
                 </button>
             {/if}
             {#if badge > 0 && notifications.view === 'active'}
-                <span class="badge" aria-label="{badge} unread">{badge}</span>
+                <span class="badge" aria-label={m.dashboard_notifs_unread_aria({ count: badge })}
+                    >{badge}</span>
             {/if}
             {#if signedIn}
-                <div class="toggle" role="tablist" aria-label="Notifications view">
+                <div class="toggle" role="tablist" aria-label={m.dashboard_notifs_view_aria()}>
                     <button
                         type="button"
                         role="tab"
                         aria-selected={notifications.view === 'active'}
                         class:on={notifications.view === 'active'}
-                        onclick={() => notifications.setView('active')}>Active</button>
+                        onclick={() => notifications.setView('active')}
+                        >{m.dashboard_notifs_view_active()}</button>
                     <button
                         type="button"
                         role="tab"
                         aria-selected={notifications.view === 'archive'}
                         class:on={notifications.view === 'archive'}
-                        onclick={() => notifications.setView('archive')}>Archive</button>
+                        onclick={() => notifications.setView('archive')}
+                        >{m.dashboard_notifs_view_archive()}</button>
                 </div>
             {/if}
         </header>
@@ -263,7 +279,7 @@
             {#if notifications.error}
                 <div class="state error">{notifications.error}</div>
             {:else if notifications.archived.length === 0}
-                <div class="state">Nothing archived.</div>
+                <div class="state">{m.dashboard_notifs_archive_empty()}</div>
             {:else}
                 <ol class="list">
                     {#each notifications.archived as n (n.id)}
@@ -293,8 +309,8 @@
                                 <button
                                     class="act"
                                     type="button"
-                                    aria-label="Restore"
-                                    title="Restore to active"
+                                    aria-label={m.dashboard_notifs_restore_aria()}
+                                    title={m.dashboard_notifs_restore_title()}
                                     onclick={() => notifications.restore(n.id)}>↩</button>
                             </div>
                         </li>
@@ -304,9 +320,9 @@
         {:else if notifications.error}
             <div class="state error">{notifications.error}</div>
         {:else if signedIn && notifications.loading && activeCards.length === 0}
-            <div class="state">Loading…</div>
+            <div class="state">{m.common_state_loading()}</div>
         {:else if activeCards.length === 0}
-            <div class="state">No notifications.</div>
+            <div class="state">{m.dashboard_notifs_empty()}</div>
         {:else}
             <ol class="list">
                 {#each activeCards as c (c.key)}
@@ -332,8 +348,8 @@
                             <button
                                 class="act"
                                 type="button"
-                                aria-label="Dismiss"
-                                title="Dismiss"
+                                aria-label={m.common_action_dismiss()}
+                                title={m.common_action_dismiss()}
                                 onclick={c.dismiss}>✕</button>
                         </div>
                     </li>
@@ -341,6 +357,7 @@
             </ol>
         {/if}
     </aside>
+    {/key}
 {/if}
 
 <EmailPrefsModal {manageToken} open={prefsOpen} onclose={() => (prefsOpen = false)} />
@@ -348,7 +365,7 @@
 <style>
     .notifs {
         padding: var(--s-5) var(--s-5);
-        border-left: 1px solid var(--border-quiet);
+        border-inline-start: 1px solid var(--border-quiet);
         border-bottom: 1px solid var(--border-quiet);
     }
     header {
@@ -367,7 +384,7 @@
         white-space: nowrap;
     }
     .email-btn {
-        margin-left: auto;
+        margin-inline-start: auto;
         display: inline-flex;
         align-items: center;
         gap: 5px;
@@ -400,7 +417,7 @@
         color: var(--ink-on-color);
     }
     .toggle {
-        margin-left: auto;
+        margin-inline-start: auto;
         display: inline-flex;
         gap: 2px;
     }
@@ -457,7 +474,7 @@
     }
     .kind {
         display: inline-block;
-        margin-left: 6px;
+        margin-inline-start: 6px;
         font-size: 10px;
         font-weight: 500;
         line-height: 1.4;

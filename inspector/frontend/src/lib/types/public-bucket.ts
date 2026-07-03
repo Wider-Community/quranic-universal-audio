@@ -6,7 +6,14 @@
  * encode FE display ordering + copy. ``PublicBucket`` is the single source of
  * truth for the bucket literals. The data-contract reciter/delivery/page shapes
  * are codegen'd and imported straight from ``./generated/schemas``.
+ *
+ * ``PUBLIC_BUCKET_LABELS`` maps each bucket value to a Paraglide message
+ * getter (``() => string``) rather than a literal, so the display string
+ * follows the ambient locale; consumers call ``PUBLIC_BUCKET_LABELS[bucket]()``
+ * at the render site. The enum value stays the backend wire contract.
  */
+
+import * as m from '../paraglide/messages';
 
 export type PublicBucket =
     | 'available_for_request'
@@ -24,13 +31,13 @@ export type PublicBucket =
  */
 export type AdminBucket = PublicBucket | 'discarded';
 
-export const PUBLIC_BUCKET_LABELS: Record<AdminBucket, string> = {
-    available_for_request: 'Available for request',
-    requested: 'Requested',
-    available_for_review: 'Available for review',
-    under_review: 'Under review',
-    published: 'Published',
-    discarded: 'Discarded',
+export const PUBLIC_BUCKET_LABELS: Record<AdminBucket, () => string> = {
+    available_for_request: m.common_state_available_for_request,
+    requested: m.common_state_requested,
+    available_for_review: m.common_state_available_for_review,
+    under_review: m.common_state_under_review,
+    published: m.common_state_published,
+    discarded: m.common_state_discarded,
 };
 
 export const PUBLIC_BUCKETS: readonly PublicBucket[] = [

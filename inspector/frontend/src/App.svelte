@@ -1,12 +1,17 @@
 <script lang="ts">
     import { onMount } from 'svelte';
 
+    import { common_nav_tab_dashboard } from './lib/paraglide/messages/common_nav_tab_dashboard';
+    import { common_nav_tab_segments } from './lib/paraglide/messages/common_nav_tab_segments';
+    import { common_nav_tab_timestamps } from './lib/paraglide/messages/common_nav_tab_timestamps';
+    import { localeStore, tr } from './lib/i18n/locale-store';
     import AuthControls from './lib/components/AuthControls.svelte';
     import BookmarksPanel from './lib/components/BookmarksPanel.svelte';
     import ClaimConfirmModal from './lib/components/ClaimConfirmModal.svelte';
     import EditAffordancePopover from './lib/components/EditAffordancePopover.svelte';
     import ExternalLinks from './lib/components/ExternalLinks.svelte';
     import InfoModal from './lib/components/info/InfoModal.svelte';
+    import LocaleSwitcher from './lib/components/LocaleSwitcher.svelte';
     import BottomPlayer from './lib/components/player/BottomPlayer.svelte';
     import NowReciting from './lib/components/player/NowReciting.svelte';
     import PlayerMetaChip from './lib/components/player/PlayerMetaChip.svelte';
@@ -45,6 +50,14 @@
     // button or external setActiveTab. Persist the choice and pause the ports
     // of the tabs being left (pause is a no-op when nothing's playing).
     $: applyTabSideEffects(activeTab);
+
+    // Localized tab labels. Gating the message reads on `$localeStore` is the
+    // legacy Svelte-4 reactivity idiom (mirrors `$: activeTab = $activeTabStore`
+    // above): `tr` makes the statement depend on the store so the copy
+    // re-evaluates when the locale switches in-place.
+    $: dashboardTabLabel = tr($localeStore, common_nav_tab_dashboard());
+    $: timestampsTabLabel = tr($localeStore, common_nav_tab_timestamps());
+    $: segmentsTabLabel = tr($localeStore, common_nav_tab_segments());
 
     function applyTabSideEffects(tab: string): void {
         if (!tab) return;
@@ -108,11 +121,12 @@
     <header class:rail-aligned={activeTab === TAB_NAMES.DASHBOARD}>
         <ExternalLinks />
         <div class="tab-bar">
-            <button class="tab-btn" class:active={activeTab === TAB_NAMES.DASHBOARD} data-tab={TAB_NAMES.DASHBOARD} on:click={() => setActiveTab(TAB_NAMES.DASHBOARD)}>Dashboard</button>
-            <button class="tab-btn" class:active={activeTab === TAB_NAMES.TIMESTAMPS} data-tab={TAB_NAMES.TIMESTAMPS} on:click={() => setActiveTab(TAB_NAMES.TIMESTAMPS)}>Timestamps</button>
-            <button class="tab-btn" class:active={activeTab === TAB_NAMES.SEGMENTS} data-tab={TAB_NAMES.SEGMENTS} on:click={() => setActiveTab(TAB_NAMES.SEGMENTS)}>Segments</button>
+            <button class="tab-btn" class:active={activeTab === TAB_NAMES.DASHBOARD} data-tab={TAB_NAMES.DASHBOARD} on:click={() => setActiveTab(TAB_NAMES.DASHBOARD)}>{dashboardTabLabel}</button>
+            <button class="tab-btn" class:active={activeTab === TAB_NAMES.TIMESTAMPS} data-tab={TAB_NAMES.TIMESTAMPS} on:click={() => setActiveTab(TAB_NAMES.TIMESTAMPS)}>{timestampsTabLabel}</button>
+            <button class="tab-btn" class:active={activeTab === TAB_NAMES.SEGMENTS} data-tab={TAB_NAMES.SEGMENTS} on:click={() => setActiveTab(TAB_NAMES.SEGMENTS)}>{segmentsTabLabel}</button>
         </div>
         <div class="auth-controls">
+            <LocaleSwitcher />
             <ThemeToggle />
             <AuthControls />
         </div>
@@ -224,9 +238,9 @@
     header.rail-aligned :global(.link-rail) {
         /* the rail's labels (e.g. "Status") sit 16px inside the rail box and the
            icon carries 8px of inner padding, so glyph offset = gutter + 16 - 8 */
-        padding-left: calc(var(--gutter) + 8px);
+        padding-inline-start: calc(var(--gutter) + 8px);
     }
     header.rail-aligned .auth-controls {
-        padding-right: var(--gutter);
+        padding-inline-end: var(--gutter);
     }
 </style>

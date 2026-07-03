@@ -14,6 +14,10 @@
     import { createEventDispatcher, onMount, tick } from 'svelte';
     import { get } from 'svelte/store';
 
+    import { localizeDigits } from '$lib/i18n/format';
+    import { localeStore, tr } from '$lib/i18n/locale-store';
+    import * as m from '$lib/paraglide/messages';
+
     // Picker subscribes to the shared dashboard catalog store instead of
     // re-fetching /api/public/reciters. loadCatalog() is idempotent so the
     // first caller (Dashboard, Segments-tab context resolver, or picker open)
@@ -49,7 +53,7 @@
     }
 
     export let open = true;
-    export let title = 'Pick a reciter';
+    export let title = m.common_picker_default_title();
     export let initialFilter: InitialFilter = {};
     /** Buckets eligible to appear in the picker. */
     export let allowedBuckets: readonly PublicBucket[] = [
@@ -123,7 +127,7 @@
             await tick();
             searchInputEl?.focus();
         } catch (e) {
-            error = (e as Error).message ?? 'Failed to load reciters';
+            error = (e as Error).message ?? m.common_picker_load_error_fallback();
         } finally {
             loading = false;
         }
@@ -216,6 +220,11 @@
         return acc;
     }, {});
 
+    $: searchPlaceholder = tr($localeStore, m.common_picker_search_placeholder());
+    $: loadingLabel = tr($localeStore, m.common_picker_loading());
+    $: noMatchesLabel = tr($localeStore, m.common_picker_no_matches());
+    $: mineSectionLabel = tr($localeStore, localizeDigits(m.common_picker_section_your_active_claims({ count: mineRows.length })));
+
     function toggleFacet(detail: { axis: string; tag: string }): void {
         const set = new Set(activeFilters[detail.axis] ?? []);
         if (set.has(detail.tag)) set.delete(detail.tag);
@@ -307,7 +316,7 @@
                 <SearchInput
                     bind:this={searchInputEl}
                     value={search}
-                    placeholder="Search reciters — name in English or Arabic"
+                    placeholder={searchPlaceholder}
                     count={orderedRows.length}
                     total={allCombos.length}
                     on:input={(e) => onSearchInput(e.detail)}
@@ -336,16 +345,16 @@
 
             <div class="list" bind:this={listEl}>
                 {#if loading}
-                    <div class="state">Loading…</div>
+                    <div class="state">{loadingLabel}</div>
                 {:else if error}
                     <div class="state error">{error}</div>
                 {:else if orderedRows.length === 0}
-                    <div class="state">No matches. Try a different filter or search.</div>
+                    <div class="state">{noMatchesLabel}</div>
                 {:else}
                     {#if mineRows.length > 0}
                         <div class="picker-section-head mine-head">
                             <span class="mine-dot" aria-hidden="true"></span>
-                            {mineRows.length === 1 ? 'Your active claim' : 'Your active claims'}
+                            {mineSectionLabel}
                         </div>
                         {#each mineRows as c (c.delivery.slug)}
                             {@const idx = orderedRows.indexOf(c)}
@@ -380,7 +389,7 @@
                     {#each groupedRest as group (group.bucket)}
                         <div class="picker-section-head bucket-head">
                             <StatePill state={group.bucket} size="sm" />
-                            <span class="head-count">{group.rows.length}</span>
+                            <span class="head-count">{tr($localeStore, localizeDigits(group.rows.length))}</span>
                         </div>
                         {#each group.rows as c (c.delivery.slug)}
                             {@const idx = orderedRows.indexOf(c)}

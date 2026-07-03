@@ -1,6 +1,8 @@
 <script lang="ts">
     import { createEventDispatcher } from 'svelte';
 
+    import { localeStore, tr } from '../../../../lib/i18n/locale-store';
+    import * as m from '../../../../lib/paraglide/messages';
     import type { SegValMissingVerseItem } from '../../../../lib/types/generated/schemas';
     import type { Segment } from '../../../../lib/types/view-models';
     import { getAdjacentSegments, segAllData } from '../../stores/chapter';
@@ -56,6 +58,13 @@
         showContext = !showContext;
         dispatch('contextchange', showContext);
     }
+
+    $: beforeLabel = tr($localeStore, m.segments_validation_context_label_before());
+    $: prevBoundaryLabel = tr($localeStore, m.segments_validation_context_label_previous_verse_boundary());
+    $: nextBoundaryLabel = tr($localeStore, m.segments_validation_context_label_next_verse_boundary());
+    $: afterLabel = tr($localeStore, m.segments_validation_context_label_after());
+    $: noBoundarySegsLabel = tr($localeStore, m.segments_validation_no_boundary_segments());
+    $: contextToggleLabel = tr($localeStore, showContext ? m.segments_validation_hide_context_button() : m.segments_validation_show_context_button());
 </script>
 
 <div class="val-card-issue-label">
@@ -65,7 +74,7 @@
     <SegmentRow
         seg={beforeCtx}
         isContext={true}
-        contextLabel="Before"
+        contextLabel={beforeLabel}
         showPlayBtn={true}
         showChapter={true}
         accordionSiblings={siblings}
@@ -75,7 +84,7 @@
     <SegmentRow
         seg={prev}
         isContext={true}
-        contextLabel="Previous verse boundary"
+        contextLabel={prevBoundaryLabel}
         showPlayBtn={true}
         showChapter={true}
         accordionSiblings={siblings}
@@ -85,7 +94,7 @@
     <SegmentRow
         seg={next}
         isContext={true}
-        contextLabel="Next verse boundary"
+        contextLabel={nextBoundaryLabel}
         showPlayBtn={true}
         showChapter={true}
         accordionSiblings={siblings}
@@ -95,19 +104,19 @@
     <SegmentRow
         seg={afterCtx}
         isContext={true}
-        contextLabel="After"
+        contextLabel={afterLabel}
         showPlayBtn={true}
         showChapter={true}
         accordionSiblings={siblings}
     />
 {/if}
 {#if !hasBoundarySegs}
-    <div class="seg-loading">No boundary segments found for this missing verse.</div>
+    <div class="seg-loading">{noBoundarySegsLabel}</div>
 {:else}
     <div class="val-card-actions">
         <button
             class="val-action-btn val-action-btn-muted val-ctx-toggle-btn"
             on:click={toggleContext}
-        >{showContext ? 'Hide Context' : 'Show Context'}</button>
+        >{contextToggleLabel}</button>
     </div>
 {/if}

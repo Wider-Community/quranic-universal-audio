@@ -13,6 +13,10 @@
      */
     import { onDestroy, onMount } from 'svelte';
 
+    import { localizeDigits } from '$lib/i18n/format';
+    import { localeStore, tr } from '$lib/i18n/locale-store';
+    import * as m from '$lib/paraglide/messages';
+
     import { clickOutside } from '../../actions/click-outside';
     import { fetchSurahsForDelivery, type SurahEntry } from '../../api/audio-surahs';
     import { setAdoptedSource, takeAdoptedSource } from '../../playback/adopt-signal';
@@ -63,7 +67,7 @@
     import PlayerControls from './PlayerControls.svelte';
     import PlayerMetaChip from './PlayerMetaChip.svelte';
     import PlayerProgress from './PlayerProgress.svelte';
-    import SurahPopover from './SurahPopover.svelte';
+    import SurahPicker from './SurahPicker.svelte';
 
     let audioEl: HTMLAudioElement | null = null;
     let urls: Record<string, SurahEntry> = {};
@@ -497,8 +501,8 @@
         if (idx >= 0 && idx < surahNums.length - 1) { exitLoop(); setSurahAndResume(surahNums[idx + 1]!); }
     }
 
-    function onSurahChange(ev: CustomEvent<number>): void {
-        setSurahAndResume(ev.detail);
+    function onSurahChange(n: number): void {
+        setSurahAndResume(n);
         surahPopoverOpen = false;
     }
 
@@ -581,7 +585,11 @@
 
     let _surahMap: ReturnType<typeof getSurahInfo> = {};
     void surahInfoReady.then(() => { _surahMap = getSurahInfo(); });
-    $: activeSurahName = _surahMap[String($playerContext.surahNum)]?.name_en ?? null;
+    $: activeSurahName = ((): string | null => {
+        const info = _surahMap[String($playerContext.surahNum)];
+        if (!info) return null;
+        return lang === 'ar' && info.name_ar ? info.name_ar.replace(/^سُورَةُ\s*/, '') : info.name_en;
+    })();
 
     $: canPrev = $playerContext.surahNum !== null && surahNums.indexOf($playerContext.surahNum) > 0;
     $: canNext = $playerContext.surahNum !== null
@@ -589,6 +597,21 @@
         && surahNums.indexOf($playerContext.surahNum) < surahNums.length - 1;
     $: canDownload = $playerContext.surahNum !== null
         && !!urls[String($playerContext.surahNum)];
+
+    $: lang = $localeStore;
+    $: pickSurahLabel = tr(lang, m.common_player_pick_surah());
+    $: surahFallbackLabel = tr(
+        lang,
+        localizeDigits(m.common_player_surah_fallback({ num: $playerContext.surahNum ?? 0 })),
+    );
+    $: surahTriggerLabel = $playerContext.surahNum
+        ? (activeSurahName ?? surahFallbackLabel)
+        : pickSurahLabel;
+    $: speedTitle = tr(lang, m.common_player_speed_title());
+    // Localized digits; `×` kept trailing the number as a stable LTR token
+    // (a numeric HUD chip, not flowing prose), so RTL never reorders it.
+    $: speedLabel = tr(lang, localizeDigits(`${$playerContext.speed}×`));
+    $: downloadLabel = tr(lang, m.common_player_download_label());
 </script>
 
 <div
@@ -623,30 +646,17 @@
                 <slot name="loc-lead" />
 
                 <div class="surah-trigger-wrap" use:clickOutside={() => (surahPopoverOpen = false)}>
-                    <button
-                        type="button"
-                        class="surah-trigger"
-                        on:click={() => (surahPopoverOpen = !surahPopoverOpen)}
+                    <SurahPicker
+                        surahNums={surahNums}
+                        value={$playerContext.surahNum}
+                        label={surahTriggerLabel}
+                        hasValue={!!$playerContext.surahNum}
                         disabled={surahNums.length === 0}
-                        aria-expanded={surahPopoverOpen}
-                        aria-haspopup="dialog"
-                    >
-                        {#if $playerContext.surahNum}
-                            {activeSurahName ?? `Surah ${$playerContext.surahNum}`}
-                        {:else}
-                            Pick surah
-                        {/if}
-                    </button>
-                    {#if surahPopoverOpen}
-                        <div class="surah-pop">
-                            <SurahPopover
-                                surahNums={surahNums}
-                                value={$playerContext.surahNum}
-                                on:change={onSurahChange}
-                                on:hover={(ev) => warmSurah(ev.detail)}
-                            />
-                        </div>
-                    {/if}
+                        open={surahPopoverOpen}
+                        ontoggle={() => (surahPopoverOpen = !surahPopoverOpen)}
+                        onchange={onSurahChange}
+                        onhover={warmSurah}
+                    />
                 </div>
             </div>
         </div>
@@ -678,9 +688,10 @@
                 <button
                     type="button"
                     class="speed-btn"
+                    dir="ltr"
                     on:click={cycleSpeed}
-                    title="Playback speed"
-                >{$playerContext.speed}×</button>
+                    title={speedTitle}
+                >{speedLabel}</button>
 
                 <!-- Highlight accent picker (the droplet), right of speed. -->
                 <HighlightColorPicker />
@@ -700,8 +711,8 @@
                     class="download-btn"
                     on:click={downloadSurah}
                     disabled={!canDownload}
-                    aria-label="Download surah"
-                    title="Download surah"
+                    aria-label={downloadLabel}
+                    title={downloadLabel}
                 >
                     <svg
                         width="16"
@@ -788,40 +799,6 @@
         min-width: 0;
     }
     .surah-trigger-wrap { position: relative; }
-    .surah-trigger {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--s-2);
-        padding: 4px var(--s-2);
-        font-size: var(--fs-meta);
-        color: var(--text-secondary);
-        background: transparent;
-        border: 1px solid var(--border-quiet);
-        border-radius: var(--r-2);
-        cursor: pointer;
-        transition: border-color var(--t-fast), color var(--t-fast);
-    }
-    .surah-trigger:hover:not(:disabled) {
-        border-color: var(--border-strong);
-        color: var(--text-primary);
-    }
-    .surah-trigger:disabled {
-        opacity: 0.35;
-        cursor: not-allowed;
-    }
-    .surah-pop {
-        position: absolute;
-        bottom: calc(100% + var(--s-2));
-        left: 50%;
-        transform: translateX(-50%);
-        width: min(700px, calc(100vw - var(--s-4) * 2));
-        padding: var(--s-2);
-        background: var(--panel);
-        border: 1px solid var(--border-default);
-        border-radius: var(--r-3);
-        box-shadow: 0 16px 48px oklch(0 0 0 / 0.45);
-        z-index: 50;
-    }
     .speed-btn {
         box-sizing: border-box;
         padding: 4px var(--s-2);

@@ -36,7 +36,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "bucket"))
 import _bootstrap as bs  # noqa: E402
-
 from qua_sdk.components.timing.lib.cells import (  # noqa: E402
     _looks_like_merger,
     annotate_segment_words,

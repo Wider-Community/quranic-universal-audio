@@ -173,8 +173,12 @@ def complete(
         # Register the production now so the published reciter is tracked.
         if repo_releases.current_release("ts", slug) is None:
             repo_releases.insert_per_recitation_release(
-                track="ts", slug=slug, version="offline-ingest",
-                produced_at=now, produced_by="SYSTEM_ACTOR")
+                track="ts",
+                slug=slug,
+                version="offline-ingest",
+                produced_at=now,
+                produced_by="SYSTEM_ACTOR",
+            )
         # Supersede prior current row FIRST — the partial-unique blocks two
         # current rows for (hf, slug) so we can't insert before clearing.
         repo_releases.supersede_current("hf", slug, except_id=-1, at=now)

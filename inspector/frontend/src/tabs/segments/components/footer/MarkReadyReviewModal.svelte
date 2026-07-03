@@ -9,12 +9,16 @@
      * (``GET /api/admin/reviews/<slug>`` → ``current_claim.mark_ready_submission``)
      * which the server gates on ``reviews.view``.
      */
+    import { i18n } from '../../../../lib/i18n/locale.svelte';
     import { fetchAdminReviewDetail } from '../../../../lib/api/admin-reviews';
+    import * as m from '../../../../lib/paraglide/messages';
     import type { AdminReviewDetail } from '../../../../lib/types/generated/schemas';
     import { relativeTime } from '../../../../lib/utils/relative-time';
-    import { markReadyCopy } from '../../copy/mark-ready';
+    import { getMarkReadyCopy } from '../../copy/mark-ready';
 
     let { slug, onClose }: { slug: string; onClose: () => void } = $props();
+
+    const markReadyCopy = $derived(getMarkReadyCopy(i18n.locale));
 
     let detail = $state<AdminReviewDetail | null>(null);
     let loading = $state(true);
@@ -38,7 +42,7 @@
             })
             .catch((e: unknown) => {
                 if (ac.signal.aborted) return;
-                error = e instanceof Error ? e.message : 'Could not load the submission.';
+                error = e instanceof Error ? e.message : m.segments_mark_ready_review_load_error();
             })
             .finally(() => {
                 if (!ac.signal.aborted) loading = false;
@@ -49,6 +53,14 @@
     function onKey(e: KeyboardEvent): void {
         if (e.key === 'Escape') onClose();
     }
+
+    const titleLabel = $derived((i18n.locale, m.segments_mark_ready_title()));
+    const closeAriaLabel = $derived((i18n.locale, m.segments_mark_ready_close_aria_label()));
+    const loadingLabel = $derived((i18n.locale, m.segments_mark_ready_review_loading()));
+    const notReadyLabel = $derived((i18n.locale, m.segments_mark_ready_review_not_ready()));
+    const bypassPillLabel = $derived((i18n.locale, m.segments_mark_ready_review_bypass_pill()));
+    const bypassTitle = $derived((i18n.locale, m.segments_mark_ready_review_bypass_title()));
+    const noNotesLabel = $derived((i18n.locale, m.segments_mark_ready_review_no_notes()));
 </script>
 
 <svelte:window onkeydown={onKey} />
@@ -56,24 +68,24 @@
 <div class="backdrop" role="presentation" onclick={(e) => e.target === e.currentTarget && onClose()}>
     <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="mrr-title">
         <header>
-            <h2 id="mrr-title">Reviewer notes</h2>
-            <button class="close" aria-label="Close" onclick={onClose}>×</button>
+            <h2 id="mrr-title">{titleLabel}</h2>
+            <button class="close" aria-label={closeAriaLabel} onclick={onClose}>×</button>
         </header>
 
         {#if loading}
-            <p class="state">Loading…</p>
+            <p class="state">{loadingLabel}</p>
         {:else if error}
             <p class="state err" role="alert">{error}</p>
         {:else if !submission}
-            <p class="state">This recitation isn't marked ready right now.</p>
+            <p class="state">{notReadyLabel}</p>
         {:else}
             {#if submission.bypass_used}
-                <span class="bypass-pill" title="Submitted with the owner-bypass capability">
-                    owner bypass
+                <span class="bypass-pill" title={bypassTitle}>
+                    {bypassPillLabel}
                 </span>
             {/if}
             {#if detail?.current_claim?.marked_ready_at}
-                <p class="meta">Marked ready {relativeTime(detail.current_claim.marked_ready_at)}</p>
+                <p class="meta">{m.segments_mark_ready_review_marked_at({ when: relativeTime(detail.current_claim.marked_ready_at) })}</p>
             {/if}
 
             {#if hasNotes}
@@ -90,7 +102,7 @@
                     </div>
                 {/if}
             {:else}
-                <p class="state">The reviewer left no written notes.</p>
+                <p class="state">{noNotesLabel}</p>
             {/if}
         {/if}
     </div>
@@ -160,7 +172,7 @@
         color: var(--text-primary);
         line-height: var(--lh-normal);
         white-space: pre-wrap;
-        border-left: 2px solid var(--border-default);
+        border-inline-start: 2px solid var(--border-default);
         padding: 4px 0 4px 10px;
     }
 </style>

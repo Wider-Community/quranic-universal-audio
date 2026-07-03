@@ -3,12 +3,19 @@
      * Surah picker popover — 6-column grid matching the ayah picker style.
      * Each cell: number (left, small, muted) · name_en / name_ar stacked right.
      */
-    import { createEventDispatcher, onMount, tick } from 'svelte';
+    import { onMount, tick } from 'svelte';
 
-    import { getSurahInfo, surahInfoReady, surahOptionText } from '../../utils/surah-info';
+    import { localizeDigits } from '$lib/i18n/format';
+    import { localeStore, tr } from '$lib/i18n/locale-store';
+    import * as m from '$lib/paraglide/messages';
+
+    import { getSurahInfo, surahInfoReady } from '../../utils/surah-info';
 
     export let surahNums: number[] = [];
     export let value: number | null = null;
+    /** Callback props — the picker forwards selection/hover to its parent. */
+    export let onchange: (n: number) => void = () => {};
+    export let onhover: (n: number) => void = () => {};
 
     let ready = false;
     let query = '';
@@ -25,7 +32,8 @@
         n: number;
         nameEn: string;
         nameAr: string;
-        label: string;
+        /** Combined search key: number + English + Arabic, so filtering matches either script. */
+        search: string;
     }
 
     $: items = ready
@@ -33,21 +41,19 @@
               const info = getSurahInfo()[String(n)];
               const nameEn = info?.name_en ?? String(n);
               const nameAr = info?.name_ar.replace(/^سُورَةُ\s*/, '') ?? '';
-              return { n, nameEn, nameAr, label: surahOptionText(n) } as Item;
+              return { n, nameEn, nameAr, search: `${n} ${nameEn} ${nameAr}`.toLowerCase() } as Item;
           })
         : [];
     $: filtered = query.trim()
-        ? items.filter((it) => it.label.toLowerCase().includes(query.trim().toLowerCase()))
+        ? items.filter((it) => it.search.includes(query.trim().toLowerCase()))
         : items;
 
-    const dispatch = createEventDispatcher<{ change: number; hover: number }>();
-
     function pick(n: number): void {
-        dispatch('change', n);
+        onchange(n);
     }
 
     function hover(n: number): void {
-        dispatch('hover', n);
+        onhover(n);
     }
 
     function onKeydown(ev: KeyboardEvent): void {
@@ -55,16 +61,20 @@
             pick(filtered[0]!.n);
         }
     }
+
+    $: pickerLabel = tr($localeStore, m.common_player_surah_picker_label());
+    $: filterPlaceholder = tr($localeStore, m.common_player_surah_filter_placeholder());
+    $: noMatches = tr($localeStore, m.common_player_surah_no_matches());
 </script>
 
-<div class="wrap" role="dialog" aria-label="Surah picker">
+<div class="wrap" role="dialog" aria-label={pickerLabel}>
     <input
         bind:this={inputEl}
         bind:value={query}
         on:keydown={onKeydown}
         class="search"
         type="text"
-        placeholder="Filter surahs…"
+        placeholder={filterPlaceholder}
         autocomplete="off"
     />
     <div class="grid" role="listbox">
@@ -79,14 +89,14 @@
                 on:pointerenter={() => hover(it.n)}
                 on:focus={() => hover(it.n)}
             >
-                <span class="num">{it.n}</span>
+                <span class="num">{tr($localeStore, localizeDigits(it.n))}</span>
                 <span class="names">
                     <span class="name-en">{it.nameEn}</span>
                     <span class="name-ar">{it.nameAr}</span>
                 </span>
             </button>
         {:else}
-            <div class="empty">No matches</div>
+            <div class="empty">{noMatches}</div>
         {/each}
     </div>
 </div>
@@ -158,7 +168,7 @@
         font-variant-numeric: tabular-nums;
         width: 20px;
         flex-shrink: 0;
-        text-align: right;
+        text-align: end;
         color: var(--text-faint);
         line-height: 1;
     }

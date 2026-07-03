@@ -240,11 +240,7 @@ def test_cells_only_restamp_preserves_slot3_letters(chapter):
         pytest.skip(f"fixture missing: {fix}")
 
     doc = json.loads(fix.read_text(encoding="utf-8"))
-    before = [
-        [[lt[1], lt[2]] for lt in wd[3]]
-        for seg in doc["segments"]
-        for wd in seg["words"]
-    ]
+    before = [[[lt[1], lt[2]] for lt in wd[3]] for seg in doc["segments"] for wd in seg["words"]]
     _n, _sd, _td, violations = bc._stamp_doc(doc, restamp=True)
     assert not violations
     after = [wd for seg in doc["segments"] for wd in seg["words"]]

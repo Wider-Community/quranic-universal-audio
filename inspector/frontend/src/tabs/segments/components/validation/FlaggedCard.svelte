@@ -13,6 +13,8 @@
      * (the viewer holds `segments.see_flagger_identity`). `mine` — not the
      * identity — decides whose comment carries the edit affordance.
      */
+    import { i18n } from '../../../../lib/i18n/locale.svelte';
+    import * as m from '../../../../lib/paraglide/messages';
     import { currentUser } from '../../../../lib/stores/current-user';
     import type { FlagAuthor, FlagComment, SegmentFlagView } from '../../../../lib/types/generated/schemas';
 import type { Segment } from '../../../../lib/types/view-models';
@@ -38,6 +40,21 @@ import type { Segment } from '../../../../lib/types/view-models';
             ?? null,
     );
     const followUps = $derived<FlagComment[]>(flag?.follow_ups ?? []);
+
+    // Locale-reactive labels (reuse the SegmentRow flag-editor keys so the two stay in lockstep).
+    const L = $derived.by(() => {
+        void i18n.locale;
+        return {
+            notePlaceholder: m.segments_row_flag_placeholder(),
+            noteHint: m.segments_row_flag_hint_clear(),
+            cancel: m.common_action_cancel(),
+            remove: m.segments_row_flag_remove_button(),
+            update: m.segments_row_flag_update_button(),
+            editLink: m.segments_row_flag_edit_link(),
+            replyPlaceholder: m.segments_row_flag_reply_placeholder(),
+            reply: m.segments_row_flag_reply_button(),
+        };
+    });
 
     const author = $derived<FlagAuthor>({
         role: $currentUser.role,
@@ -120,14 +137,14 @@ import type { Segment } from '../../../../lib/types/view-models';
                             class="flag-input"
                             bind:value={rootDraft}
                             rows="2"
-                            placeholder="Describe the issue, or why you're unsure…"
+                            placeholder={L.notePlaceholder}
                         ></textarea>
                         <div class="flag-edit-foot">
-                            <span class="flag-hint">Clear the comment to remove the flag.</span>
+                            <span class="flag-hint">{L.noteHint}</span>
                             <span class="flag-edit-actions">
-                                <button class="flag-btn flag-btn-ghost" onclick={cancelRootEditor}>Cancel</button>
+                                <button class="flag-btn flag-btn-ghost" onclick={cancelRootEditor}>{L.cancel}</button>
                                 <button class="flag-btn flag-btn-primary" onclick={applyRootEditor}>
-                                    {rootDraft.trim().length === 0 ? 'Remove flag' : 'Update'}
+                                    {rootDraft.trim().length === 0 ? L.remove : L.update}
                                 </button>
                             </span>
                         </div>
@@ -136,7 +153,7 @@ import type { Segment } from '../../../../lib/types/view-models';
                     <blockquote class="flag-body">{flag.comment}</blockquote>
                     {#if flag.mine}
                         <div class="flag-root-actions">
-                            <button class="flag-link" onclick={openRootEditor}>Edit or remove</button>
+                            <button class="flag-link" onclick={openRootEditor}>{L.editLink}</button>
                         </div>
                     {/if}
                 {/if}
@@ -166,14 +183,14 @@ import type { Segment } from '../../../../lib/types/view-models';
                     class="flag-input"
                     bind:value={replyDraft}
                     rows="1"
-                    placeholder="Add a reply…"
+                    placeholder={L.replyPlaceholder}
                     onkeydown={onReplyKeydown}
                 ></textarea>
                 <button
                     class="flag-btn flag-btn-primary flag-reply-send"
                     disabled={replyDisabled}
                     onclick={submitReply}
-                >Reply</button>
+                >{L.reply}</button>
             </div>
         </div>
     {/if}
@@ -203,8 +220,8 @@ import type { Segment } from '../../../../lib/types/view-models';
         gap: 5px;
     }
     .flag-followup {
-        padding-left: var(--s-3);
-        border-left: 1px solid var(--border-quiet);
+        padding-inline-start: var(--s-3);
+        border-inline-start: 1px solid var(--border-quiet);
     }
 
     .flag-comment-head {
@@ -237,7 +254,7 @@ import type { Segment } from '../../../../lib/types/view-models';
         border-radius: var(--r-pill);
     }
     .flag-time {
-        margin-left: auto;
+        margin-inline-start: auto;
         font-size: 10.5px;
         color: var(--text-faint);
         font-variant-numeric: tabular-nums;
@@ -255,7 +272,7 @@ import type { Segment } from '../../../../lib/types/view-models';
         word-break: break-word;
     }
     .flag-root > .flag-body {
-        border-left: 2px solid var(--state-warn-border);
+        border-inline-start: 2px solid var(--state-warn-border);
     }
 
     .flag-root-actions {
@@ -318,7 +335,7 @@ import type { Segment } from '../../../../lib/types/view-models';
     .flag-edit-actions {
         display: inline-flex;
         gap: var(--s-2);
-        margin-left: auto;
+        margin-inline-start: auto;
     }
 
     .flag-btn {

@@ -15,6 +15,8 @@
     import { onDestroy } from 'svelte';
 
     import AudioElement from '../../../../lib/components/AudioElement.svelte';
+    import { localeStore, tr } from '../../../../lib/i18n/locale-store';
+    import * as m from '../../../../lib/paraglide/messages';
     import {
         buildDisplayItems,
         chainedOpIds,
@@ -49,17 +51,21 @@
     ) as DisplayEntry[];
 
     // Summary stat cards ----------------------------------------------------
-    $: summaryCards = computeSummarycards();
+    $: summaryCards = tr($localeStore, computeSummarycards());
 
     function computeSummarycards(): Array<{ value: number | string; label: string }> | null {
         const d = $savePreviewData;
         if (!d) return null;
         return [
-            { value: d.summary.total_operations, label: 'Operations' },
-            { value: d.summary.chapters_edited, label: 'Chapters' },
-            { value: d.summary.verses_edited, label: 'Verses' },
+            { value: d.summary.total_operations, label: m.segments_save_preview_stat_operations() },
+            { value: d.summary.chapters_edited, label: m.segments_save_preview_stat_chapters() },
+            { value: d.summary.verses_edited, label: m.segments_save_preview_stat_verses() },
         ];
     }
+
+    $: warningChaptersText = $savePreviewData?.warningChapters
+        ? tr($localeStore, m.segments_save_preview_warning_chapters({ count: $savePreviewData.warningChapters.length }))
+        : '';
 
     // Key helper for {#each} keying -----------------------------------------
     function entryKey(di: DisplayEntry): string {
@@ -87,8 +93,7 @@
     <div id="seg-save-preview-stats" class="seg-history-stats">
         {#if $savePreviewData?.warningChapters && $savePreviewData.warningChapters.length > 0}
             <div class="seg-save-preview-warning">
-                {$savePreviewData.warningChapters.length} chapter(s) marked as changed
-                but have no detailed operations recorded.
+                {warningChaptersText}
             </div>
         {/if}
         {#if summaryCards}

@@ -9,9 +9,22 @@
      */
     import { onMount } from 'svelte';
 
+    import { localeStore, tr } from '$lib/i18n/locale-store';
+    import * as m from '$lib/paraglide/messages';
+
     import StatePill from '../StatePill.svelte';
     import type { InlineToken } from './info-doc';
-    import { overviewDoc } from './overview';
+    import { getOverviewDoc } from './overview';
+
+    $: indexAriaLabel = tr($localeStore, m.common_info_index_aria_label());
+
+    // Scoped RTL for the modal content + TOC while the app-wide layout stays LTR
+    // (the full RTL flip is a separate workflow): Arabic prose, bullets, and the
+    // section-index row read right-to-left within this subtree only.
+    $: dir = ($localeStore === 'ar' ? 'rtl' : 'ltr') as 'rtl' | 'ltr';
+
+    // Locale-aware doc: re-selects the translated overview.md on a switch.
+    $: overviewDoc = getOverviewDoc($localeStore);
 
     let rootEl: HTMLDivElement | undefined;
     let navEl: HTMLElement | undefined;
@@ -20,13 +33,33 @@
     const slugify = (s: string): string =>
         s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
-    // Jump index built from the `##` section headings.
-    const sections = overviewDoc.blocks.flatMap((b) =>
-        b.type === 'heading' ? [{ title: b.text, slug: slugify(b.text) }] : [],
+    // Unique, non-empty slug per heading block. Arabic headings slugify to '' (no
+    // ASCII), so a bare slug would collide across every section and crash the keyed
+    // {#each}; a per-base counter guarantees uniqueness while keeping readable
+    // slugs for ASCII headings. Keyed by block reference so the nav and the heading
+    // anchor resolve to the same slug.
+    $: headingSlugs = ((): Map<object, string> => {
+        const map = new Map<object, string>();
+        const seen = new Map<string, number>();
+        for (const b of overviewDoc.blocks) {
+            if (b.type !== 'heading') continue;
+            const base = slugify(b.text) || 'section';
+            const n = seen.get(base) ?? 0;
+            seen.set(base, n + 1);
+            map.set(b, n === 0 ? base : `${base}-${n}`);
+        }
+        return map;
+    })();
+
+    // Jump index built from the `##` section headings (re-derives on locale switch).
+    $: sections = overviewDoc.blocks.flatMap((b) =>
+        b.type === 'heading' ? [{ title: b.text, slug: headingSlugs.get(b) ?? '' }] : [],
     );
 
     // Scroll-spy: the section whose heading currently sits under the pinned index.
-    let activeSlug = sections[0]?.slug ?? '';
+    let activeSlug = '';
+    // Seed the highlight to the first section once sections resolve.
+    $: if (!activeSlug && sections[0]) activeSlug = sections[0].slug;
     // A click holds its section highlighted until the next manual scroll, so the
     // highlight never sweeps past it (released by cancelLock in onMount).
     let lockedSlug: string | null = null;
@@ -132,7 +165,7 @@
 {#snippet inline(tokens: InlineToken[])}{#each tokens as t, i (i)}{#if t.href}<a href={t.href} target="_blank" rel="noopener noreferrer">{#if t.bold}<strong>{t.text}</strong>{:else}{t.text}{/if}</a>{:else if t.bold}<strong>{t.text}</strong>{:else}{t.text}{/if}{/each}{/snippet}
 
 {#if sections.length > 1}
-    <nav class="info-index" aria-label="Jump to section" bind:this={navEl}>
+    <nav class="info-index" {dir} aria-label={indexAriaLabel} bind:this={navEl}>
         {#each sections as s, i (s.slug)}
             {#if i > 0}<span class="info-index-sep" aria-hidden="true">·</span>{/if}
             <button
@@ -145,10 +178,10 @@
     </nav>
 {/if}
 
-<div class="info-doc" bind:this={rootEl}>
+<div class="info-doc" {dir} bind:this={rootEl}>
     {#each overviewDoc.blocks as block, i (i)}
         {#if block.type === 'heading'}
-            <h3 class="info-h" data-slug={slugify(block.text)}>{block.text}</h3>
+            <h3 class="info-h" data-slug={headingSlugs.get(block) ?? ''}>{block.text}</h3>
         {:else if block.type === 'paragraph'}
             <p class="info-p">{@render inline(block.tokens)}</p>
         {:else if block.type === 'list'}
@@ -240,7 +273,7 @@
     }
     .info-list {
         margin: 0 0 var(--s-3);
-        padding-left: var(--s-5);
+        padding-inline-start: var(--s-5);
         display: flex;
         flex-direction: column;
         gap: var(--s-2);

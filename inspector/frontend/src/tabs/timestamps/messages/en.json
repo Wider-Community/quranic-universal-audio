@@ -1,0 +1,269 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "ts_footer_analysis_group_aria_label": "Analysis tiers",
+  "ts_footer_loop_word_title": "Loop current word",
+  "ts_footer_toggle_letters_title": "Toggle letters",
+  "ts_footer_toggle_phonemes_title": "Toggle phonemes",
+  "ts_footer_letters_locked_title": "Letters locked while reporting",
+  "ts_footer_phonemes_locked_on_title": "Phonemes locked on while reporting",
+  "ts_footer_phonemes_off_reporting_title": "Phonemes off while reporting",
+  "ts_footer_shortcuts_guide_title": "Shortcuts & guide",
+  "ts_shortcuts_section_playback": "Playback",
+  "ts_shortcuts_section_navigation": "Navigation",
+  "ts_shortcuts_section_display": "Display",
+  "ts_shortcuts_section_interactions": "Interactions",
+  "ts_shortcuts_label_play_pause": "Play / pause",
+  "ts_shortcuts_label_seek_prev_next_ayah": "Seek prev / next ayah",
+  "ts_shortcuts_label_prev_next_word": "Prev / next word",
+  "ts_shortcuts_label_prev_next_ayah": "Prev / next ayah",
+  "ts_shortcuts_label_shuffle_jump": "Shuffle jump",
+  "ts_shortcuts_label_scroll_active": "Scroll active",
+  "ts_shortcuts_label_letters": "Letters",
+  "ts_shortcuts_label_phonemes": "Phonemes",
+  "ts_shortcuts_label_translations": "Translations",
+  "ts_shortcuts_label_seek_to_word": "Seek to word",
+  "ts_shortcuts_label_loop_word": "Loop word",
+  "ts_shortcuts_label_click_to_seek": "Click to seek",
+  "ts_footer_report_aria_label": "Report a timestamps issue on verse {verse}",
+  "ts_footer_report_aria_label_plain": "Report a timestamps issue",
+  "ts_footer_report_title": "Report a timestamps issue",
+  "ts_footer_report_button": "Report",
+  "ts_footer_shuffle_off_label": "Shuffle: off",
+  "ts_footer_shuffle_ayah_label": "Shuffle ayah (same reciter)",
+  "ts_footer_shuffle_both_label": "Shuffle reciter + ayah",
+  "ts_footer_picker_empty": "Pick a reciter",
+  "ts_footer_picker_listbox_aria_label": "Pick reciter",
+  "ts_footer_picker_search_placeholder": "Search reciters",
+  "ts_footer_picker_search_aria_label": "Search reciters",
+  "ts_footer_picker_no_results": "No results",
+  "ts_globe_button_title": "Translations",
+  "ts_globe_menu_aria_label": "Translation language",
+  "ts_globe_option_off": "Off",
+  "ts_translation_group_partial": "Partial · English mixed in",
+  "ts_translation_pill_partial": "partial",
+  "ts_flagmodal_title": "Report — verse {verse}",
+  "ts_flagmodal_lead": "Flag a timestamps issue on this verse.",
+  "ts_flagmodal_author_you": "You",
+  "ts_flagmodal_author_listener": "A listener",
+  "ts_flagmodal_author_anonymous": "Anonymous",
+  "ts_flagmodal_no_comment": "Flagged without a comment.",
+  "ts_flagmodal_edit_comment_label": "Edit your comment",
+  "ts_flagmodal_add_comment_label": "Add a comment (optional)",
+  "ts_flagmodal_textarea_placeholder": "Describe what looks off with the timestamps…",
+  "ts_flagmodal_remove_report": "Remove my report",
+  "ts_flagmodal_submit_report": "Submit report",
+  "ts_flagged_accordion_summary": "Flagged issues",
+  "ts_flagged_accordion_chip_aria_label": [
+    {
+      "declarations": [
+        "input count",
+        "input verse",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Jump to flagged verse {verse} ({count} report)",
+        "countPlural=other": "Jump to flagged verse {verse} ({count} reports)"
+      }
+    }
+  ],
+  "ts_validation_panel_summary": "Low-confidence verses",
+  "ts_validation_panel_chip_aria_label": "Jump to low-confidence verse {verse}",
+  "ts_unified_pause_bridge_stop_title": "Stop sign",
+  "ts_unified_pause_bridge_pause_title": "Pause",
+  "ts_report_composer_back_aria_label": "Back to categories",
+  "ts_report_composer_edit_button": "Edit",
+  "ts_report_composer_remove_button": "Remove",
+  "ts_report_composer_reported_note": "Reported. Reviewers will see this.",
+  "ts_report_composer_field_aria_label": "Describe the {category} issue",
+  "ts_report_composer_save_changes_button": "Save changes",
+  "ts_report_composer_submit_button": "Submit report",
+  "ts_report_composer_others_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} other listener has reported this.",
+        "countPlural=other": "{count} other listeners have reported this."
+      }
+    }
+  ],
+  "ts_report_strip_group_aria_label": "Report controls",
+  "ts_report_strip_gap_pause_label": "Pause after word {w}",
+  "ts_report_strip_word_label": "Word {w}",
+  "ts_report_strip_cell_label": "W{w}·cell {cell}",
+  "ts_report_strip_remove_phoneme_title": "Remove phoneme",
+  "ts_report_strip_remove_phoneme_aria_label": "Remove phoneme {glyph}",
+  "ts_report_strip_start_boundary_aria_label": "Start boundary",
+  "ts_report_strip_end_boundary_aria_label": "End boundary",
+  "ts_report_strip_axis_start_label": "Start",
+  "ts_report_strip_axis_end_label": "End",
+  "ts_report_strip_axis_early_option": "early",
+  "ts_report_strip_axis_late_option": "late",
+  "ts_report_strip_existing_label": "Existing:",
+  "ts_report_strip_comment_required_placeholder": "Comment (required)…",
+  "ts_report_strip_note_optional_placeholder": "Note (optional)…",
+  "ts_report_strip_remove_aria_label": "Remove",
+  "ts_report_strip_saving_label": "Saving…",
+  "ts_report_strip_confirm_delete_label": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Confirm delete",
+        "countPlural=other": "Confirm delete {count}"
+      }
+    }
+  ],
+  "ts_report_strip_submit_label": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Submit",
+        "countPlural=other": "Submit {count}"
+      }
+    }
+  ],
+  "ts_report_silence_pause_boundary_label": "Pause timing off",
+  "ts_report_silence_pause_wasl_label": "Shouldn't be here",
+  "ts_report_silence_pause_missed_label": "Missing pause",
+  "ts_report_tajweed_wrong_rule_label": "Wrong rule",
+  "ts_report_tajweed_missing_rule_label": "Missing rule",
+  "ts_report_strip_head_title_tajweed": "Report a tajweed issue",
+  "ts_report_strip_head_title_phonemes": "Report a phoneme issue",
+  "ts_report_strip_head_title_silence": "Report a pause issue",
+  "ts_report_strip_head_title_timing": "Report a timing issue",
+  "ts_report_strip_instruction_pause_boundary": "Click a highlighted pause, then mark how its start and/or end is off.",
+  "ts_report_strip_instruction_pause_wasl": "Click any pause that shouldn't be there (the words should connect).",
+  "ts_report_strip_instruction_pause_missed": "Click where a pause is missing — a slot between words where the reciter stops.",
+  "ts_report_strip_instruction_timing": "Click a letter or word, then mark how its start and/or end is off.",
+  "ts_report_strip_instruction_phonemes": "Click any phonemes that are wrong or mislabeled. Click again to remove.",
+  "ts_report_strip_instruction_tajweed_wrong_rule": "Highlighted cells carry a rule — click one to flag the wrong rule.",
+  "ts_report_strip_instruction_tajweed_missing_rule": "Click any cell where a rule should apply but is missing.",
+  "ts_report_strip_empty_phonemes": "No phonemes flagged yet.",
+  "ts_report_strip_empty_silence": "No pauses flagged yet.",
+  "ts_report_strip_empty_default": "Nothing flagged yet.",
+  "ts_report_thanks_toast": "Thank you for the feedback!",
+  "ts_report_thanks_subtext_timing": "This helps us improve our timing model",
+  "ts_report_thanks_subtext_silence": "This helps us improve our pause detection pipeline",
+  "ts_report_submit_failed_fallback": "Failed to submit",
+  "ts_report_menu_title": "Report an issue",
+  "ts_report_menu_open_reports_count_tooltip": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} open report",
+        "countPlural=other": "{count} open reports"
+      }
+    }
+  ],
+  "ts_report_menu_tajweed_wrong_rule_blurb": "A rule shown is incorrect",
+  "ts_report_menu_tajweed_missing_rule_blurb": "A rule should apply but is absent",
+  "ts_report_menu_silence_pause_boundary_blurb": "A pause starts or ends off",
+  "ts_report_menu_silence_pause_wasl_blurb": "A detected pause should be connected (waṣl)",
+  "ts_report_menu_silence_pause_missed_blurb": "A pause is absent where the reciter stops",
+  "ts_report_category_timing_label": "Timing",
+  "ts_report_category_timing_blurb": "A boundary starts or ends off",
+  "ts_report_category_tajweed_label": "Tajweed",
+  "ts_report_category_tajweed_blurb": "A rule is wrong, missing, or mis-applied",
+  "ts_report_category_phonemes_label": "Phonemes",
+  "ts_report_category_phonemes_blurb": "A phoneme is wrong or mislabeled",
+  "ts_report_category_silence_label": "Silence",
+  "ts_report_category_silence_blurb": "A pause is wrong, unwanted, or missing",
+  "ts_report_category_audio_label": "Audio",
+  "ts_report_category_audio_blurb": "Recording quality, or wrong / missing audio",
+  "ts_report_category_audio_placeholder": "What sounds wrong on this verse?",
+  "ts_report_category_other_label": "Other",
+  "ts_report_category_other_blurb": "Anything else about this verse",
+  "ts_report_category_other_placeholder": "Describe the issue…",
+  "ts_report_timing_label_too_long": "Too long",
+  "ts_report_timing_label_too_short": "Too short",
+  "ts_report_timing_label_shifted_earlier": "Shifted earlier",
+  "ts_report_timing_label_shifted_later": "Shifted later",
+  "ts_report_timing_label_starts_early": "Starts early",
+  "ts_report_timing_label_starts_late": "Starts late",
+  "ts_report_timing_label_finishes_early": "Finishes early",
+  "ts_report_timing_label_finishes_late": "Finishes late",
+  "ts_report_timing_label_default": "Timing",
+  "ts_tajweed_panel_title": "Tajweed rules",
+  "ts_tajweed_panel_subtitle": "(hover a cell for rule details)",
+  "ts_tajweed_panel_reset_all_button": "Reset all",
+  "ts_tajweed_panel_change_colour_title": "Change colour",
+  "ts_tajweed_panel_rule_state_aria_label": "{rule} {state}",
+  "ts_tajweed_panel_state_on": "on",
+  "ts_tajweed_panel_state_off": "off",
+  "ts_tajweed_panel_group_toggle_aria_label": "Turn all {title} rules {state}",
+  "ts_tajweed_panel_group_toggle_disable_title": "Disable all in group",
+  "ts_tajweed_panel_group_toggle_enable_title": "Enable all in group",
+  "ts_tajweed_panel_key_unwritten_caption": "Pronounced but unwritten/transformed",
+  "ts_tajweed_panel_key_silent_caption": "Written but silent",
+  "ts_tajweed_panel_waqf_section_title": "Waqf · stop signs",
+  "ts_tajweed_panel_group_title_noon_meem": "Noon / Meem",
+  "ts_tajweed_panel_group_title_noon": "Noon",
+  "ts_tajweed_panel_group_title_meem": "Meem",
+  "ts_tajweed_panel_group_title_madd": "Madd",
+  "ts_tajweed_panel_group_title_other": "Other rules",
+  "ts_tajweed_panel_waqf_stop_or_continue": "Stop or Continue",
+  "ts_tajweed_panel_waqf_better_to_stop": "Better to Stop",
+  "ts_tajweed_panel_waqf_better_to_continue": "Better to Continue",
+  "ts_tajweed_panel_waqf_must_stop": "Must Stop",
+  "ts_tajweed_panel_waqf_should_not_stop": "Should Not Stop",
+  "ts_tajweed_panel_waqf_stop_at_one_only": "Stop at one only",
+  "ts_tajweed_rule_ghunnah": "Ghunnah",
+  "ts_tajweed_rule_ikhfaa": "Ikhfaa",
+  "ts_tajweed_rule_ikhfaa_shafawi": "Ikhfaa Shafawi",
+  "ts_tajweed_rule_iqlab": "Iqlab",
+  "ts_tajweed_rule_idgham_ghunnah": "Idgham Ghunnah",
+  "ts_tajweed_rule_idgham_shafawi": "Idgham Shafawi",
+  "ts_tajweed_rule_madd_lazim": "Madd Lazim",
+  "ts_tajweed_rule_madd_wajib": "Madd Wajib Muttassil",
+  "ts_tajweed_rule_madd_jaiz": "Madd Ja'iz Munfassil",
+  "ts_tajweed_rule_madd_arid": "Madd 'Arid-lissukun",
+  "ts_tajweed_rule_madd_leen": "Madd Leen",
+  "ts_tajweed_rule_madd_tabii": "Madd Tabi'i",
+  "ts_tajweed_rule_madd_iwad": "Madd 'Iwad",
+  "ts_tajweed_rule_tafkheem": "Tafkheem",
+  "ts_tajweed_rule_qalqala_sughra": "Qalqala Sughra",
+  "ts_tajweed_rule_qalqala_kubra": "Qalqala Kubra",
+  "ts_tajweed_rule_idgham_bila_ghunnah": "Idgham bila Ghunnah",
+  "ts_tajweed_rule_idgham_mutamathilayn": "Idgham Mutamathilayn",
+  "ts_tajweed_rule_idgham_mutaqaribayn": "Idgham Mutaqaribayn",
+  "ts_tajweed_rule_idgham_mutajanisayn_kamil": "Idgham Mutajanisayn Kamil",
+  "ts_tajweed_rule_idgham_mutajanisayn_naqis": "Idgham Mutajanisayn Naqis",
+  "ts_tajweed_rule_idgham_mutajanisayn": "Idgham Mutajanisayn",
+  "ts_tajweed_rule_izhar_halqi": "Izhar Halqi",
+  "ts_tajweed_rule_izhar_shafawi": "Izhar Shafawi",
+  "ts_tajweed_rule_silent_vowel": "Silent vowel",
+  "ts_tajweed_rule_silent_hamza_wasl": "Hamzat-al-wasl (silent)",
+  "ts_tajweed_rule_silent_lam_shamsiyah": "Lam Shamsiyyah",
+  "ts_tajweed_rule_silent_iltiqaa": "Iltiqa' 'as-sakinayn",
+  "ts_footer_wipe_title": "Continuous highlight (karaoke wipe)",
+  "ts_footer_tajweed_settings_title": "Tajweed rules & colours",
+  "ts_footer_open_segments_aria_label_with_verse": "Open verse {verse} in the Segments editor",
+  "ts_footer_open_segments_aria_label_plain": "Open in Segments editor",
+  "ts_footer_open_segments_title": "Open this verse in the Segments editor"
+}

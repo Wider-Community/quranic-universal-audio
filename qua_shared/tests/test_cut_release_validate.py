@@ -49,8 +49,13 @@ def test_verse_start_zero_with_leading_word_gap():
     # verse_start_ms is a real 0; first word's audio starts at 60 ms. With zero
     # pads the clip window is [0, 24095] — the real 0 is respected (not coerced
     # to the word start), and duration == end - start.
-    verses = {"5:1": {"verse_start_ms": 0, "verse_end_ms": 24095,
-                      "words": [[1, 60, 2350], [23, 21995, 24095]]}}
+    verses = {
+        "5:1": {
+            "verse_start_ms": 0,
+            "verse_end_ms": 24095,
+            "words": [[1, 60, 2350], [23, 21995, 24095]],
+        }
+    }
     out = _verse_for_validate(_layouts(verses)["5:1"])
     assert out["verse_start_ms"] == 0
     assert out["verse_end_ms"] == 24095
@@ -138,12 +143,17 @@ def test_release_verse_bound_is_padded_clip_window():
         "1:1": {"words": [[1, 100, 1000]], "verse_start_ms": 100, "verse_end_ms": 1000},
         "1:2": {"words": [[1, 5000, 6000]], "verse_start_ms": 5000, "verse_end_ms": 6000},
     }
-    layouts = build_verse_layouts(reshape_canonical(verses), pad_start=100, pad_end=300, min_gap=100)
+    layouts = build_verse_layouts(
+        reshape_canonical(verses), pad_start=100, pad_end=300, min_gap=100
+    )
     files = cut_release._build_tier_files(
         "example_reciter", layouts, delivery_meta={"audio_category": "by_surah"}
     )
     verse_doc = json.loads(gzip.decompress(files["verse_timestamps.json.gz"]).decode("utf-8"))
-    assert verse_doc["1:1"] == [0, 1300]  # clip window (word-span 100..1000 padded), not [100, 1000]
+    assert verse_doc["1:1"] == [
+        0,
+        1300,
+    ]  # clip window (word-span 100..1000 padded), not [100, 1000]
     # The word tier keeps the true word times (source-relative), so the word-span
     # is still recoverable from inside the padded clip.
     word_doc = json.loads(gzip.decompress(files["word_timestamps.json.gz"]).decode("utf-8"))

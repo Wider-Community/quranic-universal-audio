@@ -3,6 +3,8 @@
     import { get } from 'svelte/store';
 
     import { editGate } from '../../../../lib/actions/editGate';
+    import { localeStore, tr } from '../../../../lib/i18n/locale-store';
+    import * as m from '../../../../lib/paraglide/messages';
     import type { SegValAnyItem } from '../../../../lib/types/generated/schemas';
     import type { Segment } from '../../../../lib/types/view-models';
     import { IssueRegistry } from '../../domain/registry';
@@ -210,6 +212,14 @@
             console.warn('Ignore: dispatch failed:', err);
         }
     }
+
+    $: contextPreviousLabel = tr($localeStore, m.segments_validation_context_label_previous());
+    $: contextNextLabel = tr($localeStore, m.segments_validation_context_label_next());
+    $: ignoreTitle = tr($localeStore, isDirtySegment
+        ? m.segments_validation_ignore_dirty_title()
+        : m.segments_validation_ignore_default_title());
+    $: ignoreButtonLabel = tr($localeStore, isAlreadyIgnored ? m.segments_validation_ignored_label() : m.segments_validation_ignore_button());
+    $: contextToggleLabel = tr($localeStore, showContext ? m.segments_validation_hide_context_button() : m.segments_validation_show_context_button());
 </script>
 
 <div style:opacity={isAlreadyIgnored ? 0.5 : null}>
@@ -221,15 +231,15 @@
             <SegmentRow
                 seg={prevSeg}
                 isContext={true}
-                contextLabel="Previous"
+                contextLabel={contextPreviousLabel}
                 showPlayBtn={true}
                 showChapter={true}
                 accordionSiblings={siblings}
             />
         {/if}
-        {#each mainMembers as m, i (m.segment_uid ?? `${m.chapter}:${m.index}`)}
+        {#each mainMembers as mem, i (mem.segment_uid ?? `${mem.chapter}:${mem.index}`)}
             <SegmentRow
-                seg={m}
+                seg={mem}
                 showGotoBtn={true}
                 showPlayBtn={true}
                 showChapter={true}
@@ -241,7 +251,7 @@
             {#if category === 'cross_verse' && i < mainMembers.length - 1}
                 {@const next = mainMembers[i + 1]}
                 {#if next}
-                    <WaslBoundary leftSeg={m} rightSeg={next} />
+                    <WaslBoundary leftSeg={mem} rightSeg={next} />
                 {/if}
             {/if}
         {/each}
@@ -249,7 +259,7 @@
             <SegmentRow
                 seg={nextSeg}
                 isContext={true}
-                contextLabel="Next"
+                contextLabel={contextNextLabel}
                 showPlayBtn={true}
                 showChapter={true}
                 accordionSiblings={siblings}
@@ -261,16 +271,14 @@
             <button
                 class="val-action-btn ignore-btn"
                 disabled={isAlreadyIgnored || isDirtySegment}
-                title={isDirtySegment
-                    ? 'Cannot ignore \u2014 this segment already has unsaved edits'
-                    : 'Dismiss this issue for this category'}
+                title={ignoreTitle}
                 use:editGate
                 on:click={handleIgnore}
-            >{isAlreadyIgnored ? 'Ignored' : 'Ignore'}</button>
+            >{ignoreButtonLabel}</button>
         {/if}
         <button
             class="val-action-btn val-action-btn-muted val-ctx-toggle-btn"
             on:click={toggleContext}
-        >{showContext ? 'Hide Context' : 'Show Context'}</button>
+        >{contextToggleLabel}</button>
     </div>
 </div>

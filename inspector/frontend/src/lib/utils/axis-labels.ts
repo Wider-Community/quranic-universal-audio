@@ -7,7 +7,15 @@
  * need this exact lookup; centralizing here keeps them in lockstep.
  */
 import type { SchemaDescriptor } from '../catalog/schema-descriptor';
-import { titleCaseSlug } from './delivery-label';
+import { titleCaseSlug, vocabLabel, type VocabKind } from './delivery-label';
+
+/** Facet axis keys whose tag values carry a `vocab_*` translation. */
+const VOCAB_AXIS: Record<string, VocabKind> = {
+    riwayah: 'riwayah',
+    style: 'style',
+    recording_context: 'context',
+    coverage: 'coverage',
+};
 
 /** Display label for an axis (e.g. "riwayah" → "Riwayah"). */
 export function axisLabel(
@@ -29,6 +37,8 @@ export function tagLabel(
     tag: string | null | undefined,
 ): string {
     if (!tag) return '';
+    const vocabKind = VOCAB_AXIS[axisKey];
+    if (vocabKind) return vocabLabel(vocabKind, tag);
     if (!descriptor) return titleCaseSlug(tag);
     const axis = descriptor.axes.find((a) => a.key === axisKey);
     const opt = axis?.options.find((o) => o.key === tag);

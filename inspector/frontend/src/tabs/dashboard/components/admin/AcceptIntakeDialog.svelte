@@ -10,8 +10,8 @@
      * plain confirm.
      */
     import { acceptRequest } from '../../../../lib/api/admin-requests';
+    import { vocabLabel } from '../../../../lib/i18n/vocab';
     import type { AdminRequestRow } from '../../../../lib/types/generated/schemas';
-    import { titleCaseSlug } from '../../../../lib/utils/delivery-label';
 
     interface Props {
         row: AdminRequestRow;
@@ -47,10 +47,7 @@
     const canAccept = $derived(reciterIdValid && !busy);
 
     const comboLabel = $derived(
-        [row.riwayah, row.style]
-            .filter(Boolean)
-            .map((s) => titleCaseSlug(s as string))
-            .join(' · '),
+        [vocabLabel('riwayah', row.riwayah), vocabLabel('style', row.style)].filter(Boolean).join(' · '),
     );
 
     async function confirm(): Promise<void> {

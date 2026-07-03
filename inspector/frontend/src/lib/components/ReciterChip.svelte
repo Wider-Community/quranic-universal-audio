@@ -17,6 +17,8 @@
      * Consumers wrap the chip in their own <button> or <div> depending
      * on whether the chip itself is the click target.
      */
+    import { localeStore } from '$lib/i18n/locale-store';
+
     import type { PublicBucket } from '../types/public-bucket';
     import { normalizeCountry } from '../utils/countries';
     import { countryFlag, countryName } from '../utils/delivery-label';
@@ -48,7 +50,7 @@
     // string when the country can't be normalised (rare).
     $: iso = country ? normalizeCountry(country) : '';
     $: flag = countryFlag(iso);
-    $: flagTitle = country ? countryName(iso || country) : '';
+    $: flagTitle = country ? countryName(iso || country, $localeStore) : '';
     $: hasState = !!bucket;
     /** Pass through the caller's pre-formatted subline. */
     $: displaySubline = subline?.trim() ? subline : '';

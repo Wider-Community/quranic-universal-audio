@@ -7,14 +7,27 @@
  * typed object. Edit the .md files to change wording — never edit text
  * inline in the Svelte components.
  *
+ * Translated copy is authored as sibling `<name>.<locale>.md` files with the
+ * identical `### key` set; `getMarkReadyCopy(locale)` selects them and falls
+ * back to English per missing locale/file. The `.ar.md` siblings are discovered
+ * via an eager glob so a translator only drops the files in — no edit here.
+ *
  * The checklist key set MUST stay in lockstep with the backend Pydantic
  * `MarkReadyChecklist` model in qua_shared/schemas/mark_ready.py. A
  * parity test under __tests__ asserts both sides match.
  */
+import type { Locale } from '../../../../lib/i18n/locale-store';
 import type { MarkReadyChecklist } from '../../../../lib/types/generated/schemas';
 import checklistMd from './checklist.md?raw';
 import commentsMd from './comments.md?raw';
 import formMd from './form.md?raw';
+
+// Translated .md siblings (`checklist.ar.md`, etc.), bundled if present.
+const localeMd = import.meta.glob<string>('./*.*.md', {
+    eager: true,
+    query: '?raw',
+    import: 'default',
+});
 
 /** Literal union of checklist keys — single source of truth for the FE.
  *  Mirrors `ChecklistKey` on the backend. Adding a key requires updating
@@ -104,34 +117,84 @@ function expect(map: Record<string, string>, key: string, file: string): string 
     return v;
 }
 
-const formSections = parseSections(formMd);
-const checklistSections = parseSections(checklistMd);
-const commentsSections = parseSections(commentsMd);
+/** Build a typed copy object from the three parsed `### key` section maps. */
+function buildCopy(
+    formSections: Record<string, string>,
+    checklistSections: Record<string, string>,
+    commentsSections: Record<string, string>,
+    suffix: string,
+): MarkReadyCopy {
+    return {
+        form: {
+            title: expect(formSections, 'title', `form${suffix}.md`),
+            warning: expect(formSections, 'warning', `form${suffix}.md`),
+            blockingLede: expect(formSections, 'blocking_lede', `form${suffix}.md`),
+            submit: expect(formSections, 'submit', `form${suffix}.md`),
+            cancel: expect(formSections, 'cancel', `form${suffix}.md`),
+            submitting: expect(formSections, 'submitting', `form${suffix}.md`),
+        },
+        checklist: CHECKLIST_ORDER.map((key) => ({
+            key,
+            label: expect(checklistSections, key, `checklist${suffix}.md`),
+        })),
+        comments: {
+            checks: {
+                label: expect(commentsSections, 'checks_label', `comments${suffix}.md`),
+                placeholder: expect(commentsSections, 'checks_placeholder', `comments${suffix}.md`),
+            },
+            issues: {
+                label: expect(commentsSections, 'issues_label', `comments${suffix}.md`),
+                placeholder: expect(commentsSections, 'issues_placeholder', `comments${suffix}.md`),
+            },
+        },
+    };
+}
 
-export const markReadyCopy: MarkReadyCopy = {
-    form: {
-        title: expect(formSections, 'title', 'form.md'),
-        warning: expect(formSections, 'warning', 'form.md'),
-        blockingLede: expect(formSections, 'blocking_lede', 'form.md'),
-        submit: expect(formSections, 'submit', 'form.md'),
-        cancel: expect(formSections, 'cancel', 'form.md'),
-        submitting: expect(formSections, 'submitting', 'form.md'),
-    },
-    checklist: CHECKLIST_ORDER.map((key) => ({
-        key,
-        label: expect(checklistSections, key, 'checklist.md'),
-    })),
-    comments: {
-        checks: {
-            label: expect(commentsSections, 'checks_label', 'comments.md'),
-            placeholder: expect(commentsSections, 'checks_placeholder', 'comments.md'),
-        },
-        issues: {
-            label: expect(commentsSections, 'issues_label', 'comments.md'),
-            placeholder: expect(commentsSections, 'issues_placeholder', 'comments.md'),
-        },
-    },
-};
+/** English (base) copy — parsed once, the default for any un-migrated consumer. */
+export const markReadyCopy: MarkReadyCopy = buildCopy(
+    parseSections(formMd),
+    parseSections(checklistMd),
+    parseSections(commentsMd),
+    '',
+);
+
+// Per-locale copy, built only for locales that ship a full trio of `.md`
+// siblings; anything missing (or missing a key) falls back to English.
+const markReadyCopyByLocale: Record<string, MarkReadyCopy> = {};
+{
+    const trios: Record<string, { form?: string; checklist?: string; comments?: string }> = {};
+    const re = /^\.\/(form|checklist|comments)\.([a-z]{2})\.md$/;
+    for (const [path, raw] of Object.entries(localeMd)) {
+        const match = re.exec(path);
+        if (!match) continue;
+        const [, name, locale] = match;
+        if (!name || !locale) continue;
+        (trios[locale] ??= {})[name as 'form' | 'checklist' | 'comments'] = raw;
+    }
+    for (const [locale, trio] of Object.entries(trios)) {
+        if (!trio.form || !trio.checklist || !trio.comments) continue;
+        try {
+            markReadyCopyByLocale[locale] = buildCopy(
+                parseSections(trio.form),
+                parseSections(trio.checklist),
+                parseSections(trio.comments),
+                `.${locale}`,
+            );
+        } catch {
+            // A partial/malformed translation must never break the form — keep
+            // English for this locale and surface the gap in the parity test.
+        }
+    }
+}
+
+/**
+ * Mark-ready copy for `locale`, or English when no complete translation exists.
+ * Locale-aware consumers call this reactively (gate a `$derived` on the current
+ * locale / read `$localeStore`) so a switch re-selects the copy.
+ */
+export function getMarkReadyCopy(locale: Locale): MarkReadyCopy {
+    return markReadyCopyByLocale[locale] ?? markReadyCopy;
+}
 
 export function emptyChecklist(): MarkReadyChecklist {
     return {

@@ -34,6 +34,8 @@
     import { tick } from 'svelte';
 
     import { editGate } from '../../../../lib/actions/editGate';
+    import { localeStore, tr } from '../../../../lib/i18n/locale-store';
+    import * as m from '../../../../lib/paraglide/messages';
     import { composeHmsMs, splitHmsMs } from '../../utils/data/references';
 
     export let value: number;                     // ms
@@ -79,6 +81,8 @@
     // A group is "editable" iff the clamped range spans its boundary — some
     // change to that group, possibly together with others, yields a valid time.
     $: editable = computeEditable(bounds);
+
+    $: clickHintTitle = tr($localeStore, m.segments_time_edit_click_hint_title());
 
     function computeEditable(b: { min: number; max: number } | null): Record<Group, boolean> {
         if (!b) return { hh: false, mm: false, ss: false, mmm: false };
@@ -340,7 +344,7 @@
     <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
     <span class="seg-text-time clickable" use:editGate on:click={onWholeClick}
         bind:this={spanEl}
-        title="Click to adjust boundaries">{#each GROUPS as g, i}<span class="seg-time-group" data-group={g}>{groupDisplay[g]}</span>{#if i < GROUPS.length - 1}<span class="seg-time-sep">{i === 2 ? '.' : ':'}</span>{/if}{/each}</span>
+        title={clickHintTitle}>{#each GROUPS as g, i}<span class="seg-time-group" data-group={g}>{groupDisplay[g]}</span>{#if i < GROUPS.length - 1}<span class="seg-time-sep">{i === 2 ? '.' : ':'}</span>{/if}{/each}</span>
 {:else}
     <span class="seg-text-time seg-text-time-editing" class:invalid={wholeInvalid}
         bind:this={spanEl}>

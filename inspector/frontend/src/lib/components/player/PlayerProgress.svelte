@@ -4,6 +4,9 @@
      *  dashboard now-reciting filmstrip can preview the matching ayah cell. */
     import { createEventDispatcher, onDestroy } from 'svelte';
 
+    import { localeStore, tr } from '$lib/i18n/locale-store';
+    import * as m from '$lib/paraglide/messages';
+
     import { progressHoverMs, progressScrubMs } from '../../stores/progress-hover';
 
     export let positionMs = 0;
@@ -21,6 +24,8 @@
           ? Math.min(100, (positionMs / durationMs) * 100)
           : 0;
     $: shownPos = dragging ? dragRatio * durationMs : positionMs;
+
+    $: progressLabel = tr($localeStore, m.common_player_progress_label());
 
     function fmt(ms: number): string {
         if (!ms || !isFinite(ms)) return '0:00:00';
@@ -79,13 +84,16 @@
     });
 </script>
 
-<div class="progress">
+<!-- dir="ltr" island: the scrub bar is a time axis (fill/thumb positioned by
+     %-from-start, pointer math measures from the left edge) — it must run
+     left→right even under RTL. -->
+<div class="progress" dir="ltr">
     <span class="time pos">{fmt(shownPos)}</span>
     <div
         class="bar"
         bind:this={barEl}
         role="slider"
-        aria-label="Playback position"
+        aria-label={progressLabel}
         aria-valuemin={0}
         aria-valuemax={durationMs}
         aria-valuenow={positionMs}

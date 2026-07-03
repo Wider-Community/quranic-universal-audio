@@ -9,6 +9,9 @@
      * clears it when filters become non-empty).
      */
 
+    import { localizeDigits } from '../../../../lib/i18n/format';
+    import { localeStore, tr } from '../../../../lib/i18n/locale-store';
+    import * as m from '../../../../lib/paraglide/messages';
     import { selectedVerse } from '../../stores/chapter';
     import { activeFilters, displayedResult } from '../../stores/filters';
     import { savedFilterView } from '../../stores/navigation';
@@ -17,7 +20,7 @@
     export let hidden: boolean = true;
 
     $: count = $activeFilters.length;
-    $: countLabel = count > 0 ? `(${count})` : '';
+    $: countLabel = count > 0 ? tr($localeStore, `(${localizeDigits(count)})`) : '';
     $: statusText = ($activeFilters.some((f) => f.value !== null) || $selectedVerse)
         ? `${$displayedResult.segments.length} / ${$displayedResult.total}`
         : '';
@@ -51,19 +54,23 @@
             return next;
         });
     }
+
+    $: filterBarTitle = tr($localeStore, m.segments_filter_bar_title());
+    $: addConditionLabel = tr($localeStore, m.segments_filter_add_button());
+    $: clearAllLabel = tr($localeStore, m.segments_filter_clear_all_button());
 </script>
 
 <div class="seg-filter-bar" id="seg-filter-bar" {hidden}>
     <div class="seg-filter-header">
         <span class="seg-filter-title">
-            Filters <span id="seg-filter-count" class="seg-filter-count">{countLabel}</span>
+            {filterBarTitle} <span id="seg-filter-count" class="seg-filter-count">{countLabel}</span>
         </span>
-        <button id="seg-filter-add-btn" class="btn btn-sm" on:click={addCondition}>+ Add Condition</button>
+        <button id="seg-filter-add-btn" class="btn btn-sm" on:click={addCondition}>{addConditionLabel}</button>
         <button
             id="seg-filter-clear-btn"
             class="btn btn-sm btn-cancel"
             hidden={count === 0}
-            on:click={clearAll}>Clear All</button>
+            on:click={clearAll}>{clearAllLabel}</button>
         <span id="seg-filter-status" class="seg-filter-status">{statusText}</span>
     </div>
     <div id="seg-filter-rows" class="seg-filter-rows">

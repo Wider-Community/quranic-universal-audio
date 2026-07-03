@@ -17,6 +17,8 @@
      */
 
     import { flagGuideExample, type GuideFlagPayload } from '../../../../lib/api/guide-flags';
+    import { i18n } from '../../../../lib/i18n/locale.svelte';
+    import * as m from '../../../../lib/paraglide/messages';
     import { currentUser } from '../../../../lib/stores/current-user';
     import type { EditOp } from '../../../../lib/types/view-models';
     import { ALL_CATEGORIES, IssueRegistry } from '../../domain/registry';
@@ -141,6 +143,19 @@
             saving = false;
         }
     }
+
+    const flagButtonLabel = $derived((i18n.locale, saved ? m.segments_guide_flag_button_flagged_label() : m.segments_guide_flag_button_label()));
+    const flagButtonTitle = $derived((i18n.locale, m.segments_guide_flag_button_title()));
+    const metaCount = $derived((i18n.locale, m.segments_guide_flag_meta_count({ count: group.length })));
+    const metaRenderWord = $derived((i18n.locale, render === 'edit_chain' ? m.segments_guide_flag_meta_chain_word() : m.segments_guide_flag_meta_op_word()));
+    const categoryLabel = $derived((i18n.locale, m.segments_guide_flag_category_label()));
+    const noteLabel = $derived((i18n.locale, m.segments_guide_flag_note_label()));
+    const notePlaceholder = $derived((i18n.locale, m.segments_guide_flag_note_placeholder()));
+    const exampleIdLabel = $derived((i18n.locale, m.segments_guide_flag_example_id_label()));
+    const exampleIdPlaceholder = $derived((i18n.locale, m.segments_guide_flag_example_id_placeholder()));
+    const savingLabel = $derived((i18n.locale, m.segments_guide_flag_saving_label()));
+    const submitLabel = $derived((i18n.locale, m.segments_guide_flag_submit_button()));
+    const cancelLabel = $derived((i18n.locale, m.common_action_cancel()));
 </script>
 
 {#if $currentUser.dev_mode && batchId && $selectedReciter}
@@ -150,17 +165,17 @@
         class="guide-flag-btn"
         class:saved
         onclick={toggle}
-        title="Flag this edit for an accordion-guide example"
-    >{saved ? '🚩 flagged' : '🚩 guide'}</button>
+        title={flagButtonTitle}
+    >{flagButtonLabel}</button>
 
     {#if open}
         <div bind:this={popEl} use:portal class="guide-flag-pop" style={popStyle}>
             <div class="guide-flag-meta">
-                {render === 'edit_chain' ? 'chain' : 'op'} · {group.length} op{group.length > 1 ? 's' : ''}
+                {metaRenderWord} · {metaCount}
                 {#if matchedRef}· {matchedRef}{/if}
             </div>
             <label>
-                <span>Guide category</span>
+                <span>{categoryLabel}</span>
                 <select bind:value={category}>
                     {#each ALL_CATEGORIES as cat}
                         <option value={cat}>{IssueRegistry[cat]?.displayTitle ?? cat}</option>
@@ -168,22 +183,22 @@
                 </select>
             </label>
             <label>
-                <span>Note — teaching point</span>
+                <span>{noteLabel}</span>
                 <textarea
                     bind:value={note}
                     rows="3"
-                    placeholder="What should the reader learn from this edit?"
+                    placeholder={notePlaceholder}
                 ></textarea>
             </label>
             <label>
-                <span>Example id (optional)</span>
-                <input bind:value={exampleId} placeholder="e.g. low_conf_trim_timing" />
+                <span>{exampleIdLabel}</span>
+                <input bind:value={exampleId} placeholder={exampleIdPlaceholder} />
             </label>
             {#if error}<p class="guide-flag-err">{error}</p>{/if}
             <div class="guide-flag-actions">
-                <button type="button" onclick={() => (open = false)} disabled={saving}>Cancel</button>
+                <button type="button" onclick={() => (open = false)} disabled={saving}>{cancelLabel}</button>
                 <button type="button" class="primary" onclick={submit} disabled={saving || !category}>
-                    {saving ? 'Saving…' : 'Flag'}
+                    {saving ? savingLabel : submitLabel}
                 </button>
             </div>
         </div>

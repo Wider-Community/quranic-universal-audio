@@ -14,6 +14,7 @@
  * lifecycle), independent of counts.
  */
 
+import * as m from '../paraglide/messages';
 import type { PublicDelivery } from '../types/generated/schemas';
 import { BUCKET_PRIORITY, PUBLIC_BUCKET_LABELS, type PublicBucket } from '../types/public-bucket';
 import { titleCaseSlug } from '../utils/delivery-label';
@@ -81,43 +82,43 @@ export function buildSchemaDescriptor(deliveries: readonly PublicDelivery[]): Sc
     const axes: Axis[] = [
         {
             key: 'status',
-            label: 'Status',
+            label: m.dashboard_facet_axis_status(),
             tagsOf: (d) => [d.bucket],
-            options: STATUS_ORDER.map((b) => ({ key: b, label: STATUS_LABELS[b] })),
+            options: STATUS_ORDER.map((b) => ({ key: b, label: STATUS_LABELS[b]() })),
         },
         {
             key: 'riwayah',
-            label: 'Riwayah',
+            label: m.dashboard_facet_axis_riwayah(),
             tagsOf: (d) => [d.riwayah],
             options: optionsByCount(riwayahCounts),
         },
         {
             key: 'style',
-            label: 'Style',
+            label: m.dashboard_facet_axis_style(),
             tagsOf: (d) => [d.style],
             options: optionsByCount(styleCounts),
         },
         {
             key: 'coverage',
-            label: 'Mushaf coverage',
+            label: m.dashboard_facet_axis_coverage(),
             tagsOf: (d) => [d.coverage_kind],
             options: [
-                { key: 'full', label: 'Full mushaf' },
-                { key: 'partial', label: 'Partial' },
+                { key: 'full', label: m.dashboard_facet_coverage_full() },
+                { key: 'partial', label: m.dashboard_facet_coverage_partial() },
             ],
         },
     ];
     if (contextCounts.size > 0) {
         axes.push({
             key: 'recording_context',
-            label: 'Recording context',
+            label: m.dashboard_facet_axis_recording_context(),
             tagsOf: (d) => (d.recording_context ? [d.recording_context] : []),
             options: optionsByCount(contextCounts),
         });
     }
     axes.push({
         key: 'channel',
-        label: 'Channel',
+        label: m.dashboard_facet_axis_channel(),
         tagsOf: (d) => [d.channel],
         options: optionsByCount(channelCounts, channelNames),
     });

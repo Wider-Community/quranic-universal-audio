@@ -5,6 +5,7 @@ bucket-shaped local tree so the inspector can serve them via TS_DEV_FIXTURES
 without ever hitting the bucket. Backfill to v5 afterwards with
 ``backfill_cells.py --local-root inspector/dev_fixtures``.
 """
+
 from __future__ import annotations
 
 import sys
@@ -24,7 +25,7 @@ bucket = bs.BUCKETS["prod"]
 
 
 def _read(path: str) -> bytes:
-    for attempt in range(6):
+    for _attempt in range(6):
         try:
             return fs.read_bytes(path)
         except Exception as e:  # noqa: BLE001

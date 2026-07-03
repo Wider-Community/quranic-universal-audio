@@ -17,6 +17,8 @@
      * (so a returning visitor re-loads fresh server state) and passed via the
      * `manageToken` prop when the modal is opened from an email "manage" link.
      */
+    import { i18n } from '../../../lib/i18n/locale.svelte';
+    import * as m from '../../../lib/paraglide/messages';
     import {
         type EmailPrefs,
         type EmailScope,
@@ -30,7 +32,7 @@
     import Toggle from '../../../lib/components/Toggle.svelte';
     import { pushToast } from '../../../lib/stores/toast';
     import type { SelectOption } from '../../../lib/types/ui';
-    import { titleCaseSlug } from '../../../lib/utils/delivery-label';
+    import { vocabLabel } from '../../../lib/i18n/vocab';
     import { catalogData, loadCatalog } from '../stores/catalog-data';
 
     interface Props {
@@ -40,6 +42,9 @@
         manageToken?: string | null;
     }
     let { open, onclose, manageToken = null }: Props = $props();
+
+    // Reading i18n.locale keeps the component's m.*() calls reactive on switch.
+    const closeLabel = $derived((i18n.locale, m.common_action_close()));
 
     let working = $state<EmailPrefs | null>(null);
     let baseline = $state('');
@@ -67,11 +72,11 @@
         }
     }
 
-    const SCOPE_OPTS: { value: EmailScope; label: string }[] = [
-        { value: 'off', label: 'Off' },
-        { value: 'all', label: 'All' },
-        { value: 'selected', label: 'Choose' },
-    ];
+    const SCOPE_OPTS = $derived<{ value: EmailScope; label: string }[]>([
+        { value: 'off', label: (i18n.locale, m.dashboard_email_prefs_scope_off()) },
+        { value: 'all', label: m.dashboard_email_prefs_scope_all() },
+        { value: 'selected', label: m.dashboard_email_prefs_scope_choose() },
+    ]);
 
     const reciterOptions = $derived<SelectOption[]>(
         [...$catalogData.reciters]
@@ -82,7 +87,7 @@
     const riwayahOptions = $derived.by<SelectOption[]>(() => {
         const set = new Set<string>();
         for (const r of $catalogData.reciters) for (const rw of r.riwayat) set.add(rw);
-        return [...set].sort().map((v) => ({ value: v, label: titleCaseSlug(v) }));
+        return [...set].sort().map((v) => ({ value: v, label: vocabLabel('riwayah', v) }));
     });
 
     const dirty = $derived(working ? JSON.stringify(working) !== baseline : false);
@@ -130,7 +135,7 @@
             baseline = JSON.stringify(loaded.prefs);
             cacheToken(loaded.manageToken);
         } catch (e) {
-            loadError = (e as Error).message ?? 'Could not load your preferences.';
+            loadError = (e as Error).message ?? m.dashboard_email_prefs_load_error_fallback();
             working = null;
         } finally {
             loading = false;
@@ -146,10 +151,10 @@
             working = saved.prefs;
             baseline = JSON.stringify(saved.prefs);
             cacheToken(saved.manageToken);
-            pushToast({ kind: 'success', text: 'Email preferences saved' });
+            pushToast({ kind: 'success', text: m.dashboard_email_prefs_saved_toast() });
             onclose();
         } catch (e) {
-            saveError = (e as Error).message ?? 'Could not save. Try again.';
+            saveError = (e as Error).message ?? m.dashboard_email_prefs_save_error_fallback();
         } finally {
             saving = false;
         }
@@ -160,7 +165,7 @@
     }
 </script>
 
-<Modal {open} title="Email notifications" size="narrow" closeLabel="Close" on:close={onclose}>
+<Modal {open} title={m.dashboard_email_prefs_modal_title()} size="narrow" {closeLabel} on:close={onclose}>
     {#if loading}
         <div class="pad">
             <div class="skel-intro"></div>
@@ -177,14 +182,14 @@
     {:else if loadError}
         <div class="pad state-block">
             <p class="state-msg">{loadError}</p>
-            <button type="button" class="btn-default" onclick={() => void load()}>Try again</button>
+            <button type="button" class="btn-default" onclick={() => void load()}>{m.common_action_try_again()}</button>
         </div>
     {:else if working}
         <div class="pad">
-            <p class="intro">Get an email when something you follow changes.</p>
+            <p class="intro">{m.dashboard_email_prefs_intro()}</p>
 
             <div class="email-field">
-                <label class="email-label" for="emailpref-send-to">Send to</label>
+                <label class="email-label" for="emailpref-send-to">{m.dashboard_email_prefs_send_to_label()}</label>
                 <input
                     id="emailpref-send-to"
                     class="email-input"
@@ -192,29 +197,29 @@
                     type="email"
                     inputmode="email"
                     autocomplete="email"
-                    placeholder="you@example.com"
+                    placeholder={m.dashboard_email_prefs_email_placeholder()}
                     bind:value={working.email} />
                 {#if emailFilled && !isValidEmail(working.email)}
-                    <p class="email-note error">Enter a valid email address.</p>
+                    <p class="email-note error">{m.dashboard_email_prefs_email_invalid()}</p>
                 {:else if anyEnabled && !emailFilled}
-                    <p class="email-note error">Add an address to receive these emails.</p>
+                    <p class="email-note error">{m.dashboard_email_prefs_email_required()}</p>
                 {:else}
-                    <p class="email-note">Used only for the notifications below.</p>
+                    <p class="email-note">{m.dashboard_email_prefs_email_help()}</p>
                 {/if}
             </div>
 
             <!-- Your contributions -->
             <section class="group">
-                <h3 class="group-title">Your contributions</h3>
+                <h3 class="group-title">{m.dashboard_email_prefs_group_contributions()}</h3>
                 <div class="row">
                     <div class="row-text">
-                        <p class="row-title">Your request is processed</p>
-                        <p class="row-desc">A reciter you requested is ready to review.</p>
+                        <p class="row-title">{m.dashboard_email_prefs_request_processed_title()}</p>
+                        <p class="row-desc">{m.dashboard_email_prefs_request_processed_desc()}</p>
                     </div>
                     <div class="row-ctrl">
                         <Toggle
                             checked={working.request_aligned}
-                            label="Email me when my request is processed"
+                            label={m.dashboard_email_prefs_request_processed_toggle_label()}
                             onchange={(v) => working && (working.request_aligned = v)} />
                     </div>
                 </div>
@@ -222,31 +227,31 @@
 
             <!-- Publishing -->
             <section class="group">
-                <h3 class="group-title">Publishing</h3>
+                <h3 class="group-title">{m.dashboard_email_prefs_group_publishing()}</h3>
                 <div class="row">
                     <div class="row-text">
-                        <p class="row-title">A recitation is published</p>
-                        <p class="row-desc">When a recitation gets timestamps.</p>
+                        <p class="row-title">{m.dashboard_email_prefs_recitation_published_title()}</p>
+                        <p class="row-desc">{m.dashboard_email_prefs_recitation_published_desc()}</p>
                     </div>
                     <div class="row-ctrl">
                         <Segmented
                             options={SCOPE_OPTS}
                             value={working.recitation_published}
-                            ariaLabel="When a recitation is published"
+                            ariaLabel={m.dashboard_email_prefs_recitation_published_aria()}
                             onchange={(v) => setScope('recitation_published', v)} />
                     </div>
                 </div>
 
                 <div class="row">
                     <div class="row-text">
-                        <p class="row-title">Timestamps are regenerated</p>
-                        <p class="row-desc">A reciter's word timings are rebuilt.</p>
+                        <p class="row-title">{m.dashboard_email_prefs_timestamps_regenerated_title()}</p>
+                        <p class="row-desc">{m.dashboard_email_prefs_timestamps_regenerated_desc()}</p>
                     </div>
                     <div class="row-ctrl">
                         <Segmented
                             options={SCOPE_OPTS}
                             value={working.timestamps_regenerated}
-                            ariaLabel="When timestamps are regenerated"
+                            ariaLabel={m.dashboard_email_prefs_timestamps_regenerated_aria()}
                             onchange={(v) => setScope('timestamps_regenerated', v)} />
                     </div>
                 </div>
@@ -254,31 +259,31 @@
                 {#if anyReciterScopeChooses}
                     <div class="subpanel">
                         <div class="sub-head">
-                            <span class="sub-label">Chosen reciters</span>
-                            <span class="sub-help">Used by both “Choose” settings above.</span>
+                            <span class="sub-label">{m.dashboard_email_prefs_chosen_reciters_label()}</span>
+                            <span class="sub-help">{m.dashboard_email_prefs_chosen_reciters_help()}</span>
                         </div>
                         <ChipMultiSelect
                             options={reciterOptions}
                             selected={working.reciters}
-                            placeholder="Add a reciter…"
-                            ariaLabel="Chosen reciters"
-                            emptyHint="Search by name to add reciters."
+                            placeholder={m.dashboard_email_prefs_add_reciter_placeholder()}
+                            ariaLabel={m.dashboard_email_prefs_chosen_reciters_aria()}
+                            emptyHint={m.dashboard_email_prefs_chosen_reciters_empty_hint()}
                             onchange={(next) => working && (working.reciters = next)} />
                         {#if working.reciters.length === 0}
-                            <p class="warn">Add a reciter, or these stay off.</p>
+                            <p class="warn">{m.dashboard_email_prefs_reciters_warn()}</p>
                         {/if}
                     </div>
                 {/if}
 
                 <div class="row">
                     <div class="row-text">
-                        <p class="row-title">A new GitHub release</p>
-                        <p class="row-desc">A dataset release is cut and published.</p>
+                        <p class="row-title">{m.dashboard_email_prefs_github_release_title()}</p>
+                        <p class="row-desc">{m.dashboard_email_prefs_github_release_desc()}</p>
                     </div>
                     <div class="row-ctrl">
                         <Toggle
                             checked={working.github_release}
-                            label="Email me on a new GitHub release"
+                            label={m.dashboard_email_prefs_github_release_toggle_label()}
                             onchange={(v) => working && (working.github_release = v)} />
                     </div>
                 </div>
@@ -286,45 +291,45 @@
 
             <!-- Riwayahs you follow -->
             <section class="group">
-                <h3 class="group-title">Riwayahs you follow</h3>
+                <h3 class="group-title">{m.dashboard_email_prefs_group_riwayahs()}</h3>
                 <div class="subpanel flush">
                     <ChipMultiSelect
                         options={riwayahOptions}
                         selected={working.riwayahs}
-                        placeholder="Add a riwayah…"
-                        ariaLabel="Riwayahs you follow"
-                        emptyHint="Add a riwayah to choose what you're emailed about."
+                        placeholder={m.dashboard_email_prefs_add_riwayah_placeholder()}
+                        ariaLabel={m.dashboard_email_prefs_riwayahs_aria()}
+                        emptyHint={m.dashboard_email_prefs_riwayahs_empty_hint()}
                         onchange={(next) => working && (working.riwayahs = next)} />
                 </div>
 
                 <div class="row">
                     <div class="row-text">
-                        <p class="row-title">A new recitation is published</p>
-                        <p class="row-desc">In any riwayah you follow.</p>
+                        <p class="row-title">{m.dashboard_email_prefs_riwayah_new_recitation_title()}</p>
+                        <p class="row-desc">{m.dashboard_email_prefs_riwayah_new_recitation_desc()}</p>
                     </div>
                     <div class="row-ctrl">
                         <Toggle
                             checked={working.riwayah_new_recitation}
-                            label="Email me on a new recitation in a followed riwayah"
+                            label={m.dashboard_email_prefs_riwayah_new_recitation_toggle_label()}
                             onchange={(v) => working && (working.riwayah_new_recitation = v)} />
                     </div>
                 </div>
 
                 <div class="row">
                     <div class="row-text">
-                        <p class="row-title">A riwayah becomes available</p>
-                        <p class="row-desc">Its first ever recitation is published. Sent once.</p>
+                        <p class="row-title">{m.dashboard_email_prefs_riwayah_first_available_title()}</p>
+                        <p class="row-desc">{m.dashboard_email_prefs_riwayah_first_available_desc()}</p>
                     </div>
                     <div class="row-ctrl">
                         <Toggle
                             checked={working.riwayah_first_available}
-                            label="Email me when a followed riwayah first becomes available"
+                            label={m.dashboard_email_prefs_riwayah_first_available_toggle_label()}
                             onchange={(v) => working && (working.riwayah_first_available = v)} />
                     </div>
                 </div>
 
                 {#if anyRiwayahEvent && working.riwayahs.length === 0}
-                    <p class="warn">Add a riwayah above for these to take effect.</p>
+                    <p class="warn">{m.dashboard_email_prefs_riwayahs_warn()}</p>
                 {/if}
             </section>
         </div>
@@ -335,15 +340,15 @@
             {#if saveError}
                 <span class="foot-err">{saveError}</span>
             {:else if dirty}
-                <span class="dot" aria-hidden="true"></span>Unsaved changes
+                <span class="dot" aria-hidden="true"></span>{m.dashboard_email_prefs_unsaved_changes()}
             {:else if working}
-                All changes saved
+                {m.dashboard_email_prefs_all_saved()}
             {/if}
         </span>
         <span class="foot-actions">
-            <button type="button" class="btn-ghost" onclick={onclose}>Cancel</button>
+            <button type="button" class="btn-ghost" onclick={onclose}>{m.common_action_cancel()}</button>
             <button type="button" class="btn-primary" disabled={!canSave} onclick={() => void save()}>
-                {saving ? 'Saving…' : 'Save changes'}
+                {saving ? m.common_status_saving() : m.dashboard_email_prefs_save_button()}
             </button>
         </span>
     </svelte:fragment>

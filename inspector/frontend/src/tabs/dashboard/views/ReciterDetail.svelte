@@ -13,6 +13,10 @@
 
     import { fetchPublicReciter } from '../../../lib/api/public-reciter-detail';
     import { undiscardReciter } from '../../../lib/api/requests';
+    import { localizeDigits } from '../../../lib/i18n/format';
+    import { localeStore, tr } from '../../../lib/i18n/locale-store';
+    import { vocabLabel } from '../../../lib/i18n/vocab';
+    import * as m from '../../../lib/paraglide/messages';
     import Modal from '../../../lib/components/Modal.svelte';
     import StatePill from '../../../lib/components/StatePill.svelte';
     import { SIGN_IN_MESSAGES } from '../../../lib/sign-in-messages';
@@ -32,7 +36,6 @@
         channelDisplay,
         countryName,
         coverageLabel,
-        titleCaseSlug,
         totalHoursLabel,
     } from '../../../lib/utils/delivery-label';
     import { compareDeliveries } from '../../../lib/utils/delivery-sort';
@@ -121,20 +124,20 @@
 
     async function onUndiscard(d: AdminDiscardedDelivery): Promise<void> {
         const reason = window.prompt(
-            'Reason (≥10 characters) for un-discarding this combination — recorded in the audit log:',
+            m.dashboard_detail_undiscard_prompt(),
             '',
         );
         if (reason === null) return;
         const trimmed = reason.trim();
         if (trimmed.length < 10) {
-            window.alert('Reason must be at least 10 characters.');
+            window.alert(m.dashboard_detail_reason_too_short());
             return;
         }
         try {
             await undiscardReciter(d.slug, trimmed);
             await onFormResolved();
         } catch (e) {
-            window.alert(`Un-discard failed: ${(e as Error).message}`);
+            window.alert(m.dashboard_detail_undiscard_failed({ message: (e as Error).message }));
         }
     }
 
@@ -179,7 +182,7 @@
             }
         } catch (e) {
             if ((e as Error).name === 'AbortError') return;
-            error = (e as Error).message ?? 'Failed to load reciter';
+            error = (e as Error).message ?? m.dashboard_detail_load_error_fallback();
         } finally {
             loading = false;
         }
@@ -189,21 +192,21 @@
 
     interface ColSpec {
         key: 'riwayah' | 'style' | 'context' | 'year' | 'category' | 'coverage' | 'channel' | 'bitrate' | 'hours';
-        label: string;
+        label: () => string;
         present: (_d: PublicDelivery) => boolean;
         value: (_d: PublicDelivery) => string;
     }
 
     const ALL_COLS: ColSpec[] = [
-        { key: 'riwayah', label: 'Riwayah', present: (d) => !!d.riwayah, value: (d) => titleCaseSlug(d.riwayah) },
-        { key: 'style',   label: 'Style',   present: (d) => !!d.style,   value: (d) => titleCaseSlug(d.style) },
-        { key: 'context', label: 'Context', present: (d) => !!d.recording_context, value: (d) => titleCaseSlug(d.recording_context!) },
-        { key: 'year',    label: 'Year',    present: (d) => d.recording_year != null, value: (d) => String(d.recording_year ?? '') },
-        { key: 'category', label: 'Category', present: (d) => !!d.audio_category, value: (d) => categoryLabel(d) },
-        { key: 'coverage', label: 'Coverage', present: (d) => d.chapter_count > 0, value: (d) => coverageLabel(d) },
-        { key: 'channel', label: 'Channel', present: (d) => !!d.channel, value: (d) => channelDisplay(d) },
-        { key: 'bitrate', label: 'Bitrate', present: (d) => d.bitrate_kbps_nominal != null || !!d.bitrate_mode, value: (d) => bitrateLabel(d) },
-        { key: 'hours',   label: 'Total hours', present: (d) => d.total_duration_sec != null, value: (d) => totalHoursLabel(d) },
+        { key: 'riwayah', label: m.dashboard_detail_col_riwayah, present: (d) => !!d.riwayah, value: (d) => vocabLabel('riwayah', d.riwayah) },
+        { key: 'style',   label: m.dashboard_detail_col_style,   present: (d) => !!d.style,   value: (d) => vocabLabel('style', d.style) },
+        { key: 'context', label: m.dashboard_detail_col_context, present: (d) => !!d.recording_context, value: (d) => vocabLabel('context', d.recording_context) },
+        { key: 'year',    label: m.dashboard_detail_col_year,    present: (d) => d.recording_year != null, value: (d) => (d.recording_year != null ? localizeDigits(d.recording_year) : '') },
+        { key: 'category', label: m.dashboard_detail_col_category, present: (d) => !!d.audio_category, value: (d) => categoryLabel(d) },
+        { key: 'coverage', label: m.dashboard_detail_col_coverage, present: (d) => d.chapter_count > 0, value: (d) => coverageLabel(d) },
+        { key: 'channel', label: m.dashboard_detail_col_channel, present: (d) => !!d.channel, value: (d) => channelDisplay(d) },
+        { key: 'bitrate', label: m.dashboard_detail_col_bitrate, present: (d) => d.bitrate_kbps_nominal != null || !!d.bitrate_mode, value: (d) => bitrateLabel(d) },
+        { key: 'hours',   label: m.dashboard_detail_col_hours, present: (d) => d.total_duration_sec != null, value: (d) => totalHoursLabel(d) },
     ];
 
     $: visibleCols = reciter
@@ -286,20 +289,43 @@
     }
 
     $: open = detailId !== null;
+
+    // Locale-reactive chrome strings (legacy Svelte-4 `$:` idiom).
+    $: lang = $localeStore;
+    $: loadingLabel = tr(lang, m.common_state_loading());
+    $: regionAriaLabel = tr(lang, m.dashboard_detail_region_aria_label());
+    $: notFoundLabel = tr(lang, m.dashboard_detail_not_found());
+    $: retryLabel = tr(lang, m.common_action_retry());
+    $: noCombinationsLabel = tr(lang, m.dashboard_detail_no_combinations());
+    $: playColAriaLabel = tr(lang, m.dashboard_detail_col_play_aria_label());
+    $: stateColLabel = tr(lang, m.dashboard_detail_col_state());
+    $: groupMatchingLabel = tr(lang, m.dashboard_detail_group_matching());
+    $: groupOtherLabel = tr(lang, m.dashboard_detail_group_other());
+    $: playCombinationAriaLabel = tr(lang, m.dashboard_detail_play_combination_aria_label());
+    $: openSourceTitle = tr(lang, m.dashboard_detail_open_source_title());
+    $: requestButtonLabel = tr(lang, m.dashboard_detail_request_button());
+    $: reviewRequestTitle = tr(lang, m.dashboard_detail_review_request_title());
+    $: claimReviewTitle = tr(lang, m.dashboard_detail_claim_review_title());
+    $: claimReviewButtonLabel = tr(lang, m.dashboard_detail_claim_review_button());
+    $: discardedAriaLabel = tr(lang, m.dashboard_detail_discarded_aria_label());
+    $: discardedHeadingLabel = tr(lang, m.dashboard_detail_discarded_heading());
+    $: discardedNoteVisibility = tr(lang, m.dashboard_detail_discarded_note_visibility());
+    $: discardedNoteOwner = tr(lang, m.dashboard_detail_discarded_note_owner());
+    $: undiscardButtonLabel = tr(lang, m.dashboard_detail_undiscard_button());
 </script>
 
 <Modal {open} title={null} on:close={closeDetail}>
-    <div class="detail" role="region" aria-label="Reciter detail">
+    <div class="detail" role="region" aria-label={regionAriaLabel}>
         {#if loading}
-            <div class="state">Loading…</div>
+            <div class="state">{loadingLabel}</div>
         {:else if notFound}
             <div class="state">
-                <p>Reciter not found.</p>
+                <p>{notFoundLabel}</p>
             </div>
         {:else if error}
             <div class="state error">
                 <p>{error}</p>
-                <button class="link" on:click={() => { lastFetched = null; void maybeReload(detailId); }}>Retry</button>
+                <button class="link" on:click={() => { lastFetched = null; void maybeReload(detailId); }}>{retryLabel}</button>
             </div>
         {:else if reciter}
             <header class="head">
@@ -310,7 +336,7 @@
                     {/if}
                 </div>
                 {#if reciter.country}
-                    <div class="country">{countryName(reciter.country)}</div>
+                    <div class="country">{countryName(reciter.country, lang)}</div>
                 {/if}
             </header>
 
@@ -319,25 +345,25 @@
             </div>
 
             {#if reciter.deliveries.length === 0}
-                <div class="state">No combinations available.</div>
+                <div class="state">{noCombinationsLabel}</div>
             {:else}
                 <div class="table-wrap">
                     <table class="combinations">
                         <thead>
                             <tr>
-                                <th class="col-play" aria-label="Play"></th>
+                                <th class="col-play" aria-label={playColAriaLabel}></th>
                                 {#each visibleCols as col (col.key)}
-                                    <th>{col.label}</th>
+                                    <th>{tr(lang, col.label())}</th>
                                 {/each}
-                                <th class="col-state">State</th>
+                                <th class="col-state">{stateColLabel}</th>
                             </tr>
                         </thead>
                         {#if hasFacetFilters && partition.matching.length > 0}
                             <tbody>
                                 <tr class="group-head">
                                     <td colspan={visibleCols.length + 2}>
-                                        Matching your filters
-                                        <span class="group-count">{partition.matching.length}</span>
+                                        {groupMatchingLabel}
+                                        <span class="group-count">{tr(lang, localizeDigits(partition.matching.length))}</span>
                                     </td>
                                 </tr>
                                 {#each partition.matching as d (d.slug)}
@@ -351,13 +377,13 @@
                                                 <button
                                                     type="button"
                                                     class="play"
-                                                    aria-label="Play this combination"
+                                                    aria-label={playCombinationAriaLabel}
                                                     on:click={(e) => playDelivery(d, e)}
                                                 >▶</button>
                                             {/if}
                                         </td>
                                         {#each visibleCols as col (col.key)}
-                                            <td class={`cell cell-${col.key}`}>{#if col.key === 'channel' && d.source_url}<a class="source-link" href={d.source_url} target="_blank" rel="noopener noreferrer" title="Open source" on:click|stopPropagation>{col.value(d)}</a>{:else}{col.value(d)}{/if}</td>
+                                            <td class={`cell cell-${col.key}`}>{#if col.key === 'channel' && d.source_url}<a class="source-link" href={d.source_url} target="_blank" rel="noopener noreferrer" title={openSourceTitle} on:click|stopPropagation>{col.value(d)}</a>{:else}{col.value(d)}{/if}</td>
                                         {/each}
                                         <td class="col-state">
                                             {#if d.bucket === 'available_for_request'}
@@ -365,21 +391,21 @@
                                                     type="button"
                                                     class="request-btn"
                                                     on:click|stopPropagation={() => openRequest(d)}
-                                                >Request</button>
+                                                >{requestButtonLabel}</button>
                                             {:else if d.bucket === 'requested' && $isAdmin}
                                                 <button
                                                     type="button"
                                                     class="pill-as-btn"
-                                                    title="Review submitted request"
+                                                    title={reviewRequestTitle}
                                                     on:click|stopPropagation={() => openReview(d)}
                                                 ><StatePill state={d.bucket} size="sm" /></button>
                                             {:else if d.bucket === 'available_for_review'}
                                                 <button
                                                     type="button"
                                                     class="request-btn"
-                                                    title="Claim this reciter to review and edit its segments"
+                                                    title={claimReviewTitle}
                                                     on:click|stopPropagation={() => claimReview(d)}
-                                                >Claim review</button>
+                                                >{claimReviewButtonLabel}</button>
                                             {:else}
                                                 <StatePill state={d.bucket} size="sm" />
                                             {/if}
@@ -391,8 +417,8 @@
                                 <tbody>
                                     <tr class="group-head other">
                                         <td colspan={visibleCols.length + 2}>
-                                            Other combinations
-                                            <span class="group-count">{partition.other.length}</span>
+                                            {groupOtherLabel}
+                                            <span class="group-count">{tr(lang, localizeDigits(partition.other.length))}</span>
                                         </td>
                                     </tr>
                                     {#each partition.other as d (d.slug)}
@@ -406,13 +432,13 @@
                                                     <button
                                                         type="button"
                                                         class="play"
-                                                        aria-label="Play this combination"
+                                                        aria-label={playCombinationAriaLabel}
                                                         on:click={(e) => playDelivery(d, e)}
                                                     >▶</button>
                                                 {/if}
                                             </td>
                                             {#each visibleCols as col (col.key)}
-                                                <td class={`cell cell-${col.key}`}>{#if col.key === 'channel' && d.source_url}<a class="source-link" href={d.source_url} target="_blank" rel="noopener noreferrer" title="Open source" on:click|stopPropagation>{col.value(d)}</a>{:else}{col.value(d)}{/if}</td>
+                                                <td class={`cell cell-${col.key}`}>{#if col.key === 'channel' && d.source_url}<a class="source-link" href={d.source_url} target="_blank" rel="noopener noreferrer" title={openSourceTitle} on:click|stopPropagation>{col.value(d)}</a>{:else}{col.value(d)}{/if}</td>
                                             {/each}
                                             <td class="col-state">
                                                 <StatePill state={d.bucket} size="sm" />
@@ -434,13 +460,13 @@
                                                 <button
                                                     type="button"
                                                     class="play"
-                                                    aria-label="Play this combination"
+                                                    aria-label={playCombinationAriaLabel}
                                                     on:click={(e) => playDelivery(d, e)}
                                                 >▶</button>
                                             {/if}
                                         </td>
                                         {#each visibleCols as col (col.key)}
-                                            <td class={`cell cell-${col.key}`}>{#if col.key === 'channel' && d.source_url}<a class="source-link" href={d.source_url} target="_blank" rel="noopener noreferrer" title="Open source" on:click|stopPropagation>{col.value(d)}</a>{:else}{col.value(d)}{/if}</td>
+                                            <td class={`cell cell-${col.key}`}>{#if col.key === 'channel' && d.source_url}<a class="source-link" href={d.source_url} target="_blank" rel="noopener noreferrer" title={openSourceTitle} on:click|stopPropagation>{col.value(d)}</a>{:else}{col.value(d)}{/if}</td>
                                         {/each}
                                         <td class="col-state">
                                             {#if d.bucket === 'available_for_request'}
@@ -448,21 +474,21 @@
                                                     type="button"
                                                     class="request-btn"
                                                     on:click|stopPropagation={() => openRequest(d)}
-                                                >Request</button>
+                                                >{requestButtonLabel}</button>
                                             {:else if d.bucket === 'requested' && $isAdmin}
                                                 <button
                                                     type="button"
                                                     class="pill-as-btn"
-                                                    title="Review submitted request"
+                                                    title={reviewRequestTitle}
                                                     on:click|stopPropagation={() => openReview(d)}
                                                 ><StatePill state={d.bucket} size="sm" /></button>
                                             {:else if d.bucket === 'available_for_review'}
                                                 <button
                                                     type="button"
                                                     class="request-btn"
-                                                    title="Claim this reciter to review and edit its segments"
+                                                    title={claimReviewTitle}
                                                     on:click|stopPropagation={() => claimReview(d)}
-                                                >Claim review</button>
+                                                >{claimReviewButtonLabel}</button>
                                             {:else}
                                                 <StatePill state={d.bucket} size="sm" />
                                             {/if}
@@ -476,22 +502,22 @@
             {/if}
 
             {#if $isAdmin && reciter.discarded_deliveries && reciter.discarded_deliveries.length > 0}
-                <section class="discarded-section" aria-label="Discarded combinations">
+                <section class="discarded-section" aria-label={discardedAriaLabel}>
                     <h3>
-                        Discarded combinations
-                        <span class="count">{reciter.discarded_deliveries.length}</span>
+                        {discardedHeadingLabel}
+                        <span class="count">{tr(lang, localizeDigits(reciter.discarded_deliveries.length))}</span>
                     </h3>
                     <p class="note">
-                        Hidden from public view. Maintainers + owners only.
-                        {#if $isOwner}Owners can un-discard.{/if}
+                        {discardedNoteVisibility}
+                        {#if $isOwner}{discardedNoteOwner}{/if}
                     </p>
                     <ul class="discarded-list">
                         {#each reciter.discarded_deliveries as d (d.slug)}
                             <li>
                                 <div class="d-row">
                                     <span class="d-combo">
-                                        {titleCaseSlug(d.riwayah)} · {titleCaseSlug(d.style)}
-                                        {#if d.recording_context}· {titleCaseSlug(d.recording_context)}{/if}
+                                        {vocabLabel('riwayah', d.riwayah)} · {vocabLabel('style', d.style)}
+                                        {#if d.recording_context}· {vocabLabel('context', d.recording_context)}{/if}
                                         {#if d.recording_year}· {d.recording_year}{/if}
                                     </span>
                                     <StatePill state={'discarded'} size="sm" />
@@ -504,7 +530,7 @@
                                         type="button"
                                         class="undiscard-btn"
                                         on:click={() => onUndiscard(d)}
-                                    >Un-discard</button>
+                                    >{undiscardButtonLabel}</button>
                                 {/if}
                             </li>
                         {/each}
@@ -600,8 +626,8 @@
         background: var(--canvas);
         padding-bottom: var(--s-2);
         margin: 0 calc(var(--s-6) * -1) var(--s-3);
-        padding-left: var(--s-6);
-        padding-right: var(--s-6);
+        padding-inline-start: var(--s-6);
+        padding-inline-end: var(--s-6);
         border-bottom: 1px solid var(--border-quiet);
     }
 
@@ -612,7 +638,7 @@
         font-size: var(--fs-meta);
     }
     .combinations thead th {
-        text-align: left;
+        text-align: start;
         font-weight: 500;
         color: var(--text-muted);
         text-transform: uppercase;
@@ -648,14 +674,14 @@
         border-bottom: 1px solid var(--border-quiet);
     }
     .group-count {
-        margin-left: var(--s-2);
+        margin-inline-start: var(--s-2);
         color: var(--text-faint);
         font-variant-numeric: tabular-nums;
         font-family: var(--font-mono);
         text-transform: none;
     }
     .col-play { width: 36px; }
-    .col-state { text-align: left; }
+    .col-state { text-align: start; }
     .cell-coverage,
     .cell-bitrate,
     .cell-hours,
@@ -726,7 +752,7 @@
         margin: 0 0 var(--s-1);
     }
     .discarded-section .count {
-        margin-left: var(--s-2);
+        margin-inline-start: var(--s-2);
         color: var(--text-faint);
         font-weight: 400;
         font-size: var(--fs-meta);

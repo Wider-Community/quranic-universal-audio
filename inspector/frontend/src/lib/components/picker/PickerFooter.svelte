@@ -2,17 +2,27 @@
     /** Keyboard-hints footer. */
     import { createEventDispatcher } from 'svelte';
 
+    import { localeStore, tr } from '../../i18n/locale-store';
+    import * as m from '../../paraglide/messages';
+
     const dispatch = createEventDispatcher<{ cancel: void }>();
+
+    // Trailing hint words + the cancel action — re-read on locale switch.
+    $: navigateHint = tr($localeStore, m.common_picker_hint_navigate());
+    $: selectHint = tr($localeStore, m.common_picker_hint_select());
+    $: closeHint = tr($localeStore, m.common_picker_hint_close());
+    $: searchHint = tr($localeStore, m.common_picker_hint_search());
+    $: cancelLabel = tr($localeStore, m.common_action_cancel());
 </script>
 
 <div class="row">
     <div class="hints">
-        <span class="hint"><span class="key">↑↓</span> navigate</span>
-        <span class="hint"><span class="key">↵</span> select</span>
-        <span class="hint"><span class="key">Esc</span> close</span>
-        <span class="hint"><span class="key">/</span> search</span>
+        <span class="hint"><span class="key">↑↓</span> {navigateHint}</span>
+        <span class="hint"><span class="key">↵</span> {selectHint}</span>
+        <span class="hint"><span class="key">Esc</span> {closeHint}</span>
+        <span class="hint"><span class="key">/</span> {searchHint}</span>
     </div>
-    <button type="button" class="cancel" on:click={() => dispatch('cancel')}>Cancel</button>
+    <button type="button" class="cancel" on:click={() => dispatch('cancel')}>{cancelLabel}</button>
 </div>
 
 <style>
@@ -35,7 +45,7 @@
         font-family: var(--font-mono);
         font-size: 10.5px;
         color: var(--text-secondary);
-        margin-right: 4px;
+        margin-inline-end: 4px;
     }
     .cancel {
         background: transparent;

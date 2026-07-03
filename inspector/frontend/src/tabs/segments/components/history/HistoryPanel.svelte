@@ -30,6 +30,8 @@
     import { onDestroy, onMount } from 'svelte';
 
     import AudioElement from '../../../../lib/components/AudioElement.svelte';
+    import { localeStore, tr } from '../../../../lib/i18n/locale-store';
+    import * as m from '../../../../lib/paraglide/messages';
     import {
         buildDisplayItems,
         computeFilteredSummary,
@@ -80,7 +82,7 @@
 
     // Summary derivation ------------------------------------------------------
     interface SummaryCard { value: number | string; label: string }
-    $: summary = computeSummary(displayEntries);
+    $: summary = tr($localeStore, computeSummary(displayEntries));
 
     function computeSummary(entries: DisplayEntry[]): SummaryCard[] | null {
         if (!$historyData || !$historyData.batches || $historyData.batches.length === 0) {
@@ -89,9 +91,9 @@
         if (hasFilters) {
             const fs: FilteredItemSummary = computeFilteredSummary(entries);
             return [
-                { value: fs.total_operations, label: 'Operations' },
-                { value: fs.chapters_edited, label: 'Chapters' },
-                { value: fs.verses_edited, label: 'Verses' },
+                { value: fs.total_operations, label: m.segments_history_stat_operations() },
+                { value: fs.chapters_edited, label: m.segments_history_stat_chapters() },
+                { value: fs.verses_edited, label: m.segments_history_stat_verses() },
             ];
         }
         // Unfiltered summary comes from server-computed data.summary, with
@@ -99,9 +101,9 @@
         const s = $historyData.summary;
         const versesEdited = countVersesFromBatches($historyData.batches);
         return [
-            { value: s?.total_operations ?? 0, label: 'Operations' },
-            { value: s?.chapters_edited ?? 0, label: 'Chapters' },
-            { value: versesEdited, label: 'Verses' },
+            { value: s?.total_operations ?? 0, label: m.segments_history_stat_operations() },
+            { value: s?.chapters_edited ?? 0, label: m.segments_history_stat_chapters() },
+            { value: versesEdited, label: m.segments_history_stat_verses() },
         ];
     }
 
@@ -112,6 +114,11 @@
         }
         return `op:${di.item.batchId ?? 'p'}:${di.item.batchIdx}:${di.item.groupIdx}:${di.item.type}`;
     }
+
+    $: loadingLabel = tr($localeStore, m.segments_history_loading());
+    $: loadErrorLabel = tr($localeStore, m.segments_history_load_error());
+    $: noHistoryLabel = tr($localeStore, m.segments_history_no_history());
+    $: noFilterMatchesLabel = tr($localeStore, m.segments_history_no_filter_matches());
 
     // Preview playback context — owns one hidden <audio> element and one
     // AudioRange instance. SegmentRow children with `readOnly + previewCtx`
@@ -303,13 +310,13 @@
         on:scroll={onScroll}
     >
         {#if $historyLoadState === 'loading'}
-            <div class="seg-history-empty">Loading edit history...</div>
+            <div class="seg-history-empty">{loadingLabel}</div>
         {:else if $historyLoadState === 'error'}
-            <div class="seg-history-empty">Could not load edit history.</div>
+            <div class="seg-history-empty">{loadErrorLabel}</div>
         {:else if $historyLoadState === 'empty'}
-            <div class="seg-history-empty">No edit history yet.</div>
+            <div class="seg-history-empty">{noHistoryLabel}</div>
         {:else if displayEntries.length === 0 && hasFilters}
-            <div class="seg-history-empty">No edits match the active filters.</div>
+            <div class="seg-history-empty">{noFilterMatchesLabel}</div>
         {:else}
             {#if topSpacerPx > 0}
                 <div class="seg-history-spacer" style="height: {topSpacerPx}px" aria-hidden="true"></div>

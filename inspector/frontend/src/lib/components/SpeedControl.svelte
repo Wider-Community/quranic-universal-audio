@@ -1,6 +1,9 @@
 <script lang="ts">
     import { onMount } from 'svelte';
 
+    import { localizeDigits } from '$lib/i18n/format';
+    import { localeStore, tr } from '$lib/i18n/locale-store';
+    import * as m from '$lib/paraglide/messages';
     import { DEFAULT_SPEED,SPEEDS } from '../utils/speed-control';
 
     /** The audio element whose playbackRate this widget controls. */
@@ -48,13 +51,15 @@
         const newSpeed = speeds[next];
         if (newSpeed !== undefined) applySpeed(newSpeed);
     }
+
+    $: speedLabel = tr($localeStore, m.common_speed_control_label());
 </script>
 
 <label class="speed-label">
-    Speed:
+    {speedLabel}
     <select id={selectId} class="speed-select" value={selected} on:change={onChange}>
         {#each speeds as s}
-            <option value={s}>{s}x</option>
+            <option value={s}>{tr($localeStore, localizeDigits(`${s}x`))}</option>
         {/each}
     </select>
 </label>

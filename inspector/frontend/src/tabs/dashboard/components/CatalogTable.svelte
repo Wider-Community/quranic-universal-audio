@@ -22,6 +22,8 @@
      */
     import { createEventDispatcher, onDestroy, onMount } from 'svelte';
 
+    import { localeStore, tr } from '$lib/i18n/locale-store';
+    import * as m from '$lib/paraglide/messages';
     import ReciterRow from '../../../lib/components/ReciterRow.svelte';
     import {
         bottomSpacerValue,
@@ -43,6 +45,8 @@
     function isPlayable(d: PublicDelivery): boolean {
         return d.audio_category !== 'by_ayah';
     }
+
+    $: noMatchLabel = tr($localeStore, m.dashboard_catalog_no_match());
 
     // ---- Virtualization ---------------------------------------------------
     /** Fallback row height (px) before any row mounts and we measure the real
@@ -176,7 +180,7 @@
 
 {#if rows.length === 0}
     <div class="empty">
-        <p>No reciters match the current filters.</p>
+        <p>{noMatchLabel}</p>
     </div>
 {:else}
     <div class="catalog" bind:this={listEl} on:scroll={onScroll}>

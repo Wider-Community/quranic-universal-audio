@@ -20,14 +20,17 @@
     import { createEventDispatcher, onMount, tick } from 'svelte';
     import { get } from 'svelte/store';
 
+    import * as m from '$lib/paraglide/messages';
     import { clickOutside } from '../../../../lib/actions/click-outside';
+    import { localizeDigits } from '../../../../lib/i18n/format';
+    import { localeStore, tr } from '../../../../lib/i18n/locale-store';
     import { markReadyBypass } from '../../../../lib/api/claims-client';
     import type { ReciterTask } from '../../../../lib/api/reciter-task';
     import ClaimButton from '../../../../lib/components/ClaimButton.svelte';
     import type { CombinationSelection } from '../../../../lib/components/picker/combination-picker-types';
     import CombinationPicker from '../../../../lib/components/picker/CombinationPicker.svelte';
     import LoadingSpinner from '../../../../lib/components/player/LoadingSpinner.svelte';
-    import SurahPopover from '../../../../lib/components/player/SurahPopover.svelte';
+    import SurahPicker from '../../../../lib/components/player/SurahPicker.svelte';
     import ReciterChip from '../../../../lib/components/ReciterChip.svelte';
     import Icon from '../../../../lib/icons/Icon.svelte';
     import type { IconName } from '../../../../lib/icons/index';
@@ -35,7 +38,7 @@
     import type { PublicBucket } from '../../../../lib/types/public-bucket';
     import { displayTimeMs } from '../../../../lib/playback/audio-graph';
     import { LS_KEYS } from '../../../../lib/utils/constants';
-    import { titleCaseSlug } from '../../../../lib/utils/delivery-label';
+    import { vocabLabel } from '../../../../lib/i18n/vocab';
     import { getSurahInfo, surahInfoReady } from '../../../../lib/utils/surah-info';
     import { SEGMENTS_SPEEDS } from '../../../../lib/utils/speed-control';
     import { autoSaveEnabled, toggleAutoSave } from '../../stores/autosave';
@@ -242,11 +245,18 @@
 
     let _surahMap: ReturnType<typeof getSurahInfo> = {};
     void surahInfoReady.then(() => { _surahMap = getSurahInfo(); });
-    $: displaySurahName = _surahMap[String(displaySurahNum)]?.name_en ?? null;
+    $: displaySurahName = ((): string | null => {
+        const info = _surahMap[String(displaySurahNum)];
+        if (!info) return null;
+        return $localeStore === 'ar' && info.name_ar ? info.name_ar.replace(/^سُورَةُ\s*/, '') : info.name_en;
+    })();
 
-    $: chipMeta = [titleCaseSlug(contextRiwayah), titleCaseSlug(contextStyle)]
-        .filter(Boolean)
-        .join(' · ');
+    $: chipMeta = tr(
+        $localeStore,
+        [vocabLabel('riwayah', contextRiwayah), vocabLabel('style', contextStyle)]
+            .filter(Boolean)
+            .join(' · '),
+    );
 
     // Filtered to surahs the reciter actually has in their audio manifest.
     // Manifest keys are either "<surah>" or "<surah>:<ayah>" — take the
@@ -268,11 +278,11 @@
         ? $verseOptions.filter((v) => String(v).startsWith(ayahQuery.trim()))
         : $verseOptions;
 
-    $: historyButtonLabel = $historyVisible
-        ? 'Back'
+    $: historyButtonLabel = tr($localeStore, $historyVisible
+        ? m.segments_footer_history_back()
         : $historyLoadState === 'loading'
-          ? 'History…'
-          : 'History';
+          ? m.segments_footer_history_loading()
+          : m.segments_footer_history_label());
 
     // ---- Progress bar -----------------------------------------------
     // % through the currently-loaded CHAPTER audio. Under chapter-continuous
@@ -312,14 +322,15 @@
     $: progressVisible = chapterDurationMs > 0;
 
     // ---- Live verse tracking ----------------------------------------
-    // The Surah/Ayah cells light up accent-coloured while playback is
-    // in flight. Comparing against the *current* selection rather than
-    // mutating it preserves the user's manual filter when they jump
-    // ahead via the picker (`selectedVerse` and `livePlayingVerse` then
-    // diverge — both are visible: the user's pick on the chrome, the
-    // playing verse in accent).
+    // The Ayah cell mirrors whichever segment is actually playing —
+    // main-list or accordion — the same way `displaySurahNum` mirrors
+    // `pickerDisplayChapter`. Falls back to the user's manual
+    // `selectedVerse` pick once playback stops so a paused/idle picker
+    // still reflects their last explicit choice.
     $: surahLive = !!$livePlayingVerse && $isMainAudioPlaying;
-    $: ayahLive = surahLive && String($livePlayingVerse?.verse ?? '') === $selectedVerse;
+    $: ayahLive = surahLive;
+    $: displayVerseStr =
+        surahLive && $livePlayingVerse ? String($livePlayingVerse.verse) : $selectedVerse;
 
     // ---- Player handlers --------------------------------------------
     // Pure delegate — every play/pause click (footer ▶ + spacebar shortcut)
@@ -393,14 +404,15 @@
         pickerOpen = false;
     }
 
-    function onSurahPick(ev: CustomEvent<number>): void {
+    function onSurahPick(n: number): void {
         surahOpen = false;
-        dispatch('chapterChange', String(ev.detail));
+        dispatch('chapterChange', String(n));
     }
 
     async function openAyah(): Promise<void> {
         if (!$selectedChapter) return;
         ayahQuery = '';
+        surahOpen = false;
         ayahOpen = true;
         await tick();
         ayahFilterInput?.focus();
@@ -460,11 +472,11 @@
     $: writeable = $editingMode.kind !== 'view';
     $: showSavePreview = $savePreviewVisible;
     $: saveDisabled = $autoSaveEnabled || !$isDirtyStore;
-    $: saveLabel = $isDirtyStore
+    $: saveLabel = tr($localeStore, $isDirtyStore
         ? $autoSaveEnabled && get(saveButtonLabel) === 'Save'
-            ? 'Saving…'
+            ? m.segments_footer_save_saving()
             : $saveButtonLabel
-        : 'Saved';
+        : m.segments_footer_save_saved());
 
     // Play button glyph: pause when normal-mode audio is playing OR an
     // edit-mode preview loop is in its "play" state. `editPreviewPlaying`
@@ -474,6 +486,48 @@
     $: playGlyph = ($isMainAudioPlaying || $editPreviewPlaying ? 'pause' : 'play') as IconName;
 
     $: canPlay = $segPortReady && !!($segData?.audio_url || $playingSegmentIndex);
+
+    $: identityTitle = tr($localeStore, hasReciter ? m.segments_footer_switch_reciter_title() : m.segments_footer_pick_reciter_title());
+    $: pickReciterLabel = tr($localeStore, m.segments_footer_pick_reciter_title());
+    $: awaitingAdminTitle = tr($localeStore, m.segments_footer_awaiting_admin_title());
+    $: markedReadyPill = tr($localeStore, m.segments_footer_marked_ready_pill());
+    $: markedReadyHint = tr($localeStore, m.segments_footer_marked_ready_hint());
+    $: markReadyTitle = tr($localeStore, reciterTask?.predicates.can_skip_mark_ready_gates
+        ? m.segments_footer_mark_ready_owner_title()
+        : m.segments_footer_mark_ready_review_title());
+    $: markReadyButtonLabel = tr($localeStore, m.segments_footer_mark_ready_button());
+    $: unclaimButtonLabel = tr($localeStore, m.segments_footer_unclaim_button());
+    $: speedTitle = tr($localeStore, m.segments_footer_speed_title());
+    $: cancelLabel = tr($localeStore, m.common_action_cancel());
+    $: speedAriaLabel = tr($localeStore, m.segments_footer_speed_aria_label({ speed: $playbackSpeed }));
+    $: speedLabel = tr($localeStore, localizeDigits(`${$playbackSpeed}×`));
+    $: autoplayTitle = tr($localeStore, m.segments_footer_autoplay_title());
+    $: autoscrollTitle = tr($localeStore, m.segments_footer_autoscroll_title());
+    $: playPauseAriaLabel = tr($localeStore, $segAudioBuffering
+        ? m.segments_footer_loading_audio_aria_label()
+        : playGlyph === 'pause' ? m.segments_footer_pause_aria_label() : m.segments_footer_play_aria_label());
+    $: surahEmptyLabel = tr($localeStore, m.segments_footer_surah_label());
+    $: surahTriggerLabel = displaySurahNum
+        ? (displaySurahName ?? localizeDigits(displaySurahNum))
+        : surahEmptyLabel;
+    $: ayahLabel = tr($localeStore, m.segments_footer_ayah_label());
+    $: ayahAllLabel = tr($localeStore, m.segments_footer_ayah_all());
+    $: ayahSearchPlaceholder = tr($localeStore, m.segments_footer_ayah_search_placeholder());
+    $: ayahPickerAriaLabel = tr($localeStore, m.segments_footer_ayah_picker_aria_label());
+    $: ayahNoMatchesLabel = tr($localeStore, m.segments_footer_ayah_no_matches());
+    $: progressAriaLabel = tr($localeStore, m.segments_footer_progress_aria_label());
+    $: historyToggleTitle = tr($localeStore, $historyVisible
+        ? m.segments_footer_history_back_title()
+        : m.segments_footer_history_label());
+    $: historyBackLabel = tr($localeStore, m.segments_footer_history_back());
+    $: historyLabel = tr($localeStore, m.segments_footer_history_label());
+    $: autosaveTitle = tr($localeStore, $autoSaveEnabled
+        ? m.segments_footer_autosave_on_title()
+        : m.segments_footer_autosave_off_title());
+    $: autosaveLabel = tr($localeStore, m.segments_footer_autosave_label());
+    $: savedGlyphLabel = tr($localeStore, m.segments_footer_save_saved());
+    $: autosavingLabel = tr($localeStore, m.segments_footer_save_autosaving());
+    $: saveConfirmLabel = tr($localeStore, m.segments_footer_save_confirm());
 
     // Time display for the progress row.
     function fmt(ms: number): string {
@@ -489,7 +543,9 @@
 </script>
 
 <div class="segs-footer" class:is-empty={!hasReciter} bind:this={footerEl}>
-    <div class="progress" class:active={progressVisible}>
+    <!-- dir="ltr" island: the scrub bar is a time axis (fill width %, pointer math
+         from the left edge) — must run left→right even under RTL. -->
+    <div class="progress" dir="ltr" class:active={progressVisible}>
         <span class="time pos">{fmt(elapsedMs)}</span>
         <div
             class="bar"
@@ -497,7 +553,7 @@
             on:keydown={onProgressKey}
             role="slider"
             tabindex="0"
-            aria-label="Segment playback progress"
+            aria-label={progressAriaLabel}
             aria-valuemin="0"
             aria-valuemax="100"
             aria-valuenow={Math.round(progressPct)}
@@ -518,7 +574,7 @@
                 class:placeholder={!hasReciter}
                 on:click={() => (pickerOpen = true)}
                 aria-haspopup="dialog"
-                title={hasReciter ? 'Switch reciter' : 'Pick a reciter'}
+                title={identityTitle}
             >
                 {#if hasReciter && contextName}
                     <ReciterChip
@@ -530,7 +586,7 @@
                         switchable={true}
                     />
                 {:else}
-                    <span class="identity-placeholder-label">Pick a reciter</span>
+                    <span class="identity-placeholder-label">{pickReciterLabel}</span>
                     <span class="identity-switch" aria-hidden="true">⇄</span>
                 {/if}
             </button>
@@ -538,9 +594,9 @@
             {#if hasReciter && !showSavePreview}
                 <div class="reciter-actions">
                     {#if reciterTask?.row.marked_ready}
-                        <span class="status-pill marked-ready" title="Awaiting admin review">
-                            <span class="pill-main">Marked ready · awaiting admin</span>
-                            <span class="pill-hint">You can claim a different reciter</span>
+                        <span class="status-pill marked-ready" title={awaitingAdminTitle}>
+                            <span class="pill-main">{markedReadyPill}</span>
+                            <span class="pill-hint">{markedReadyHint}</span>
                         </span>
                     {:else}
                         <ClaimButton slug={$selectedReciter || ''} task={reciterTask} {onClaimed} />
@@ -549,10 +605,8 @@
                                 type="button"
                                 class="action ghost-accent"
                                 disabled={chipActionBusy !== ''}
-                                title={reciterTask?.predicates.can_skip_mark_ready_gates
-                                    ? 'Mark ready as owner — skips the checklist and validation gates'
-                                    : 'Submit the mark-ready form for an admin to review'}
-                                on:click={onMarkReady}>Mark ready</button
+                                title={markReadyTitle}
+                                on:click={onMarkReady}>{markReadyButtonLabel}</button
                             >
                         {/if}
                         {#if reciterTask?.predicates.can_release}
@@ -560,7 +614,7 @@
                                 type="button"
                                 class="action ghost"
                                 disabled={chipActionBusy !== ''}
-                                on:click={onUnclaim}>Unclaim</button
+                                on:click={onUnclaim}>{unclaimButtonLabel}</button
                             >
                         {/if}
                     {/if}
@@ -573,7 +627,9 @@
              center; secondary controls flank it symmetrically. -->
         <div class="controls">
             {#if hasReciter}
-                <div class="transport" use:clickOutside={() => { surahOpen = false; ayahOpen = false; }}>
+                <!-- dir="ltr": media transport keeps its stable order (prefs · play ·
+                     location) even under RTL, matching the transport-stays-LTR decision. -->
+                <div class="transport" dir="ltr" use:clickOutside={() => { surahOpen = false; ayahOpen = false; }}>
                     <div class="transport-left">
                         <ShortcutsGuide />
                         <button
@@ -581,15 +637,15 @@
                             class="speed-cell"
                             class:boosted={$playbackSpeed !== 1}
                             on:click={cyclePlaybackSpeed}
-                            title="Playback speed (click to cycle)"
-                            aria-label="Playback speed {$playbackSpeed}×">{$playbackSpeed}×</button
+                            title={speedTitle}
+                            aria-label={speedAriaLabel}>{speedLabel}</button
                         >
                         <button
                             type="button"
                             class="pref-cell"
                             class:on={$autoPlayEnabled}
                             aria-pressed={$autoPlayEnabled}
-                            title="Autoplay — when ON, play continues through the whole chapter (or advances card-to-card inside an open accordion); when OFF, stops at the end of each segment"
+                            title={autoplayTitle}
                             on:click={handleAutoPlayToggle}
                         ><Icon name="autoplay" size={16} /></button>
                         <button
@@ -597,7 +653,7 @@
                             class="pref-cell"
                             class:on={$autoScrollEnabled}
                             aria-pressed={$autoScrollEnabled}
-                            title="Auto-scroll the list to follow the playing segment"
+                            title={autoscrollTitle}
                             on:click={handleAutoScrollToggle}
                         ><Icon name="autoscroll" size={16} /></button>
                     </div>
@@ -609,46 +665,37 @@
                         disabled={!canPlay}
                         on:click={handlePlayClick}
                         aria-busy={$segAudioBuffering}
-                        aria-label={$segAudioBuffering ? 'Loading audio' : playGlyph === 'pause' ? 'Pause' : 'Play'}
+                        aria-label={playPauseAriaLabel}
                     >{#if $segAudioBuffering}<LoadingSpinner color="var(--accent-fg)" />{:else}<Icon name={playGlyph} size={18} />{/if}</button>
 
                     <div class="transport-right">
-                        <button
-                            type="button"
-                            class="loc-cell surah-cell"
-                            class:has-value={!!displaySurahNum}
-                            class:live={surahLive}
-                            on:click={() => { surahOpen = !surahOpen; ayahOpen = false; }}
-                            aria-haspopup="dialog"
-                            aria-expanded={surahOpen}
-                        >
-                            {#if displaySurahNum}<span class="loc-value">{displaySurahName ?? displaySurahNum}</span
-                            >{:else}<span class="loc-empty">Surah</span>{/if}
-                            <Icon name="caret-down" size={10} />
-                        </button>
+                        <SurahPicker
+                            compact
+                            surahNums={allSurahs}
+                            value={displaySurahNum}
+                            label={surahTriggerLabel}
+                            hasValue={!!displaySurahNum}
+                            live={surahLive}
+                            open={surahOpen}
+                            ontoggle={() => { surahOpen = !surahOpen; ayahOpen = false; }}
+                            onchange={onSurahPick}
+                        />
                         <button
                             type="button"
                             class="loc-cell"
-                            class:has-value={!!$selectedVerse}
+                            class:has-value={!!displayVerseStr}
                             class:live={ayahLive}
                             disabled={!$selectedChapter}
                             on:click={openAyah}
                             aria-haspopup="dialog"
                             aria-expanded={ayahOpen}
                         >
-                            <span class="loc-label">Ayah</span>
-                            {#if $selectedVerse}<span class="loc-value">{$selectedVerse}</span
-                            >{:else}<span class="loc-empty">all</span>{/if}
-                            <Icon name="caret-down" size={10} />
+                            <span class="loc-label">{ayahLabel}</span>
+                            {#if displayVerseStr}<span class="loc-value">{tr($localeStore, localizeDigits(displayVerseStr))}</span
+                            >{:else}<span class="loc-empty">{ayahAllLabel}</span>{/if}
                         </button>
-
-                        {#if surahOpen}
-                            <div class="pop pop-surah">
-                                <SurahPopover surahNums={allSurahs} value={displaySurahNum} on:change={onSurahPick} />
-                            </div>
-                        {/if}
                         {#if ayahOpen}
-                            <div class="pop pop-ayah" role="dialog" aria-label="Ayah picker">
+                            <div class="pop pop-ayah" role="dialog" aria-label={ayahPickerAriaLabel}>
                                 <input
                                     bind:this={ayahFilterInput}
                                     bind:value={ayahQuery}
@@ -656,17 +703,17 @@
                                     class="ayah-search"
                                     type="text"
                                     inputmode="numeric"
-                                    placeholder="Jump to ayah…"
+                                    placeholder={ayahSearchPlaceholder}
                                     autocomplete="off"
                                 />
                                 <div class="ayah-grid" role="listbox">
                                     {#each filteredAyahs as v (v)}
                                         <button type="button" class="ayah-cell"
-                                            class:active={String(v) === $selectedVerse}
-                                            role="option" aria-selected={String(v) === $selectedVerse}
-                                            on:click={() => onAyahPick(v)}>{v}</button>
+                                            class:active={String(v) === displayVerseStr}
+                                            role="option" aria-selected={String(v) === displayVerseStr}
+                                            on:click={() => onAyahPick(v)}>{tr($localeStore, localizeDigits(v))}</button>
                                     {:else}
-                                        <div class="empty">No matches</div>
+                                        <div class="empty">{ayahNoMatchesLabel}</div>
                                     {/each}
                                 </div>
                             </div>
@@ -681,23 +728,23 @@
             <div class="save-cluster">
                 {#if hasReciter}
                     {#if showSavePreview}
-                        <button class="action ghost" on:click={() => hideSavePreview()}>Cancel</button>
-                        <button class="action primary" on:click={confirmSaveFromPreview}>Confirm save</button>
+                        <button class="action ghost" on:click={() => hideSavePreview()}>{cancelLabel}</button>
+                        <button class="action primary" on:click={confirmSaveFromPreview}>{saveConfirmLabel}</button>
                     {:else}
                         <button
                             type="button"
                             class="utility"
                             class:on={$historyVisible}
-                            title={$historyVisible ? 'Back to segments' : 'History'}
+                            title={historyToggleTitle}
                             aria-label={historyButtonLabel}
                             on:click={toggleHistory}
                         >
                             {#if $historyVisible}
                                 <Icon name="arrow-left" size={14} />
-                                <span class="util-label">Back</span>
+                                <span class="util-label">{historyBackLabel}</span>
                             {:else}
                                 <Icon name="history" size={14} />
-                                <span class="util-label">History</span>
+                                <span class="util-label">{historyLabel}</span>
                             {/if}
                         </button>
 
@@ -708,13 +755,11 @@
                                     class="autosave-toggle"
                                     class:on={$autoSaveEnabled}
                                     aria-pressed={$autoSaveEnabled}
-                                    title={$autoSaveEnabled
-                                        ? 'Auto-save on — click to disable'
-                                        : 'Auto-save off — click to enable'}
+                                    title={autosaveTitle}
                                     on:click={() => toggleAutoSave(!$autoSaveEnabled)}
                                 >
                                     <Icon name="bolt" size={12} />
-                                    <span>Auto</span>
+                                    <span>{autosaveLabel}</span>
                                 </button>
 
                                 <button
@@ -728,10 +773,10 @@
                                 >
                                     {#if !$isDirtyStore}
                                         <span class="save-glyph" aria-hidden="true">✓</span>
-                                        <span>Saved</span>
+                                        <span>{savedGlyphLabel}</span>
                                     {:else if $autoSaveEnabled}
                                         <span class="save-pulse" aria-hidden="true"></span>
-                                        <span>Auto-saving…</span>
+                                        <span>{autosavingLabel}</span>
                                     {:else}
                                         <span>{saveLabel}</span>
                                     {/if}
@@ -750,7 +795,7 @@
 {#if pickerOpen}
     <CombinationPicker
         open={pickerOpen}
-        title="Switch reciter"
+        title={m.common_picker_switch_reciter_title()}
         on:select={onPickerSelect}
         on:close={() => (pickerOpen = false)}
     />
@@ -1075,15 +1120,6 @@
         font-variant-numeric: tabular-nums;
         color: var(--text-primary);
     }
-    .loc-cell.surah-cell .loc-value {
-        font-family: var(--font-sans);
-        font-variant-numeric: normal;
-        font-size: 12px;
-        white-space: nowrap;
-    }
-    .loc-cell.surah-cell {
-        min-width: 80px;
-    }
     .loc-cell .loc-empty {
         font-style: italic;
         font-size: 11px;
@@ -1111,14 +1147,6 @@
         box-shadow: var(--shadow-pop);
         padding: var(--s-2);
         z-index: 50;
-    }
-    /* Clip the surah popover to the player-stack row width (38 + 96 + 96
-     * + 4*2 gaps = 238px) so the dropup never sprawls beyond the row it
-     * anchors to. The inner SurahPopover is width:100% and clamps to it. */
-    .pop-surah {
-        left: 50%;
-        transform: translateX(-50%);
-        width: min(700px, calc(100vw - var(--s-4) * 2));
     }
     .pop-ayah {
         left: 50%;
@@ -1337,7 +1365,6 @@
         }
         .zone-left  { justify-content: flex-start; flex-wrap: wrap; }
         .zone-right { justify-content: flex-start; flex-wrap: wrap; }
-        .pop-surah,
         .pop-ayah {
             left: 0;
             right: 0;

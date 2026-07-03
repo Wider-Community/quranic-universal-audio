@@ -158,10 +158,18 @@ def test_build_rows_repeated_pivot_segments_no_overlap():
         ]
     }
     words = [
-        [1, 100, 1000], [2, 1000, 1900], [3, 1900, 2700], [4, 2700, 3500],
-        [5, 3500, 4300], [6, 4300, 5000],            # word 6, first occurrence
-        [6, 5010, 5800], [7, 5800, 6400], [8, 6400, 7000], [9, 7000, 7600],
-        [10, 7600, 8200], [11, 8200, 9000],          # word 6, second occurrence
+        [1, 100, 1000],
+        [2, 1000, 1900],
+        [3, 1900, 2700],
+        [4, 2700, 3500],
+        [5, 3500, 4300],
+        [6, 4300, 5000],  # word 6, first occurrence
+        [6, 5010, 5800],
+        [7, 5800, 6400],
+        [8, 6400, 7000],
+        [9, 7000, 7600],
+        [10, 7600, 8200],
+        [11, 8200, 9000],  # word 6, second occurrence
     ]
     timestamps = {
         "1:1": {
@@ -170,10 +178,24 @@ def test_build_rows_repeated_pivot_segments_no_overlap():
             "verse_start_ms": 100,
             "verse_end_ms": 9000,
             "seg_spans": [
-                {"ref": "1:1", "w_from": 1, "w_to": 6, "occ_start": 0, "occ_end": 6,
-                 "start_ms": 100, "end_ms": 5000},
-                {"ref": "1:1", "w_from": 6, "w_to": 11, "occ_start": 6, "occ_end": 12,
-                 "start_ms": 5010, "end_ms": 9000},
+                {
+                    "ref": "1:1",
+                    "w_from": 1,
+                    "w_to": 6,
+                    "occ_start": 0,
+                    "occ_end": 6,
+                    "start_ms": 100,
+                    "end_ms": 5000,
+                },
+                {
+                    "ref": "1:1",
+                    "w_from": 6,
+                    "w_to": 11,
+                    "occ_start": 6,
+                    "occ_end": 12,
+                    "start_ms": 5010,
+                    "end_ms": 9000,
+                },
             ],
         }
     }

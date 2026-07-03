@@ -11,6 +11,9 @@
     import { onMount } from 'svelte';
     import { fade } from 'svelte/transition';
 
+    import { localeStore, tr } from '$lib/i18n/locale-store';
+    import { vocabLabel } from '$lib/i18n/vocab';
+    import * as m from '$lib/paraglide/messages';
     import { loadCatalogJson } from '../../../../lib/resources/catalog';
     import { catalogData } from '../../stores/catalog-data';
     import { submitWizard } from '../../stores/submit-wizard';
@@ -54,6 +57,31 @@
 
     $: state = $submitWizard;
 
+    $: lang = $localeStore;
+    $: lede = tr(lang, m.dashboard_submit_details_lede());
+    $: riwayahLabel = tr(lang, m.dashboard_request_field_riwayah());
+    $: pickOne = tr(lang, m.dashboard_submit_pick_one_option());
+    $: styleLabel = tr(lang, m.dashboard_request_field_style());
+    $: contextLabel = tr(lang, m.dashboard_request_field_recording_context());
+    $: optionalLabel = tr(lang, m.common_label_optional());
+    $: contextBlank = tr(lang, m.dashboard_submit_context_blank_option());
+    $: yearLabel = tr(lang, m.dashboard_request_field_recording_year());
+    $: yearPlaceholder = tr(lang, m.dashboard_submit_year_placeholder_dash());
+    $: yearBoundsMsg = tr(lang, m.dashboard_request_year_out_of_bounds({ min: MIN_YEAR, max: MAX_YEAR }));
+    $: nonHafsCallout = tr(lang, m.dashboard_request_non_hafs_callout());
+    $: commentsLabel = tr(lang, m.dashboard_request_field_comments());
+    $: commentsPlaceholder = tr(lang, m.dashboard_submit_comments_placeholder());
+    $: autoClaimLabel = tr(lang, m.dashboard_submit_auto_claim_label());
+    $: autoClaimHint = tr(lang, m.dashboard_submit_auto_claim_hint());
+    $: conflictWarning = tr(
+        lang,
+        m.dashboard_submit_details_conflict_warning({
+            name: pickedReciter?.name ?? '',
+            riwayah: vocabLabel('riwayah', state.combination.riwayah),
+            style: vocabLabel('style', state.combination.style),
+        }),
+    );
+
     onMount(async () => {
         try {
             const cat = await loadCatalogJson();
@@ -76,61 +104,61 @@
 </script>
 
 <div class="step" in:fade={{ duration: 180 }}>
-    <p class="lede">A little metadata so we know what we're aligning.</p>
+    <p class="lede">{lede}</p>
 
     <div class="grid">
         <label>
-            <span>Riwayah</span>
+            <span>{riwayahLabel}</span>
             <select
                 value={state.combination.riwayah}
                 on:change={(e) => update('riwayah', (e.currentTarget as HTMLSelectElement).value)}
             >
-                <option value="" disabled>Pick one…</option>
+                <option value="" disabled>{pickOne}</option>
                 {#each riwayatOptions as r (r.slug)}
-                    <option value={r.slug}>{r.name}</option>
+                    <option value={r.slug}>{tr(lang, vocabLabel('riwayah', r.slug))}</option>
                 {/each}
             </select>
         </label>
 
         <label>
-            <span>Style</span>
+            <span>{styleLabel}</span>
             <select
                 value={state.combination.style}
                 on:change={(e) => update('style', (e.currentTarget as HTMLSelectElement).value)}
             >
-                <option value="" disabled>Pick one…</option>
+                <option value="" disabled>{pickOne}</option>
                 {#each styleOptions as s (s.slug)}
-                    <option value={s.slug}>{s.name}</option>
+                    <option value={s.slug}>{tr(lang, vocabLabel('style', s.slug))}</option>
                 {/each}
             </select>
         </label>
 
         <label>
-            <span>Recording context <span class="hint">optional</span></span>
+            <span>{contextLabel} <span class="hint">{optionalLabel}</span></span>
             <select
                 value={state.combination.recording_context}
                 on:change={(e) => update('recording_context', (e.currentTarget as HTMLSelectElement).value)}
             >
-                <option value="">—</option>
+                <option value="">{contextBlank}</option>
                 {#each contextOptions as c (c.slug)}
-                    <option value={c.slug}>{c.name}</option>
+                    <option value={c.slug}>{tr(lang, vocabLabel('context', c.slug))}</option>
                 {/each}
             </select>
         </label>
 
         <label>
-            <span>Recording year <span class="hint">optional</span></span>
+            <span>{yearLabel} <span class="hint">{optionalLabel}</span></span>
             <input
                 type="number"
                 min={MIN_YEAR}
                 max={MAX_YEAR}
-                placeholder="—"
+                placeholder={yearPlaceholder}
                 value={state.combination.recording_year === '' ? '' : String(state.combination.recording_year)}
                 on:input={onYear}
             />
             {#if yearOutOfBounds}
                 <span class="field-hint warn">
-                    Year must be between {MIN_YEAR} and {MAX_YEAR}.
+                    {yearBoundsMsg}
                 </span>
             {/if}
         </label>
@@ -138,25 +166,22 @@
 
     {#if nonHafsRiwayah}
         <p class="callout" transition:fade={{ duration: 160 }}>
-            Non-hafs riwayahs are not supported at the moment, we aim to have this ready
-            soon inshallah. You can still make the request.
+            {nonHafsCallout}
         </p>
     {/if}
 
     {#if conflict}
         <p class="warning" transition:fade={{ duration: 160 }}>
-            Heads up: {pickedReciter?.name} already has
-            ({state.combination.riwayah} · {state.combination.style}). Submission is still
-            allowed — the admin will review and decide.
+            {conflictWarning}
         </p>
     {/if}
 
     <label class="comments">
-        <span>Comments <span class="hint">optional</span></span>
+        <span>{commentsLabel} <span class="hint">{optionalLabel}</span></span>
         <textarea
             rows="3"
             maxlength="1000"
-            placeholder="Anything the reviewer should know…"
+            placeholder={commentsPlaceholder}
             value={state.comments}
             on:input={(e) => submitWizard.update((s) => ({ ...s, comments: (e.currentTarget as HTMLTextAreaElement).value }))}
         ></textarea>
@@ -169,8 +194,8 @@
             on:change={(e) => submitWizard.update((s) => ({ ...s, autoClaim: (e.currentTarget as HTMLInputElement).checked }))}
         />
         <span class="ac-text">
-            <span class="ac-label">Auto-claim me as reviewer once alignment finishes</span>
-            <span class="ac-hint">You hold one claim at a time. Skipped if you're already holding one.</span>
+            <span class="ac-label">{autoClaimLabel}</span>
+            <span class="ac-hint">{autoClaimHint}</span>
         </span>
     </label>
 </div>
@@ -201,7 +226,7 @@
     }
     .hint {
         color: var(--text-faint);
-        margin-left: 6px;
+        margin-inline-start: 6px;
         text-transform: lowercase;
         font-size: 10.5px;
     }

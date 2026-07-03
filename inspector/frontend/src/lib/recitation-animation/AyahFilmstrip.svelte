@@ -40,6 +40,9 @@
      * Surface-agnostic: fed `units` + a prebuilt `FilmstripModel` + a time
      * accessor + an onSeek cb.
      */
+    import * as m from '$lib/paraglide/messages';
+    import { i18n } from '$lib/i18n/locale.svelte';
+    import { toArabicNumeral } from '../utils/arabic-text';
     import { type RecitationAnimConfig } from './config';
     import { createStripScroller, GLIDE_MIN_MS, glideDur } from './filmstrip-scroll.svelte';
     import type { ActiveCellInfo, CellMissing, FilmstripModel } from './filmstrip-model';
@@ -103,6 +106,9 @@
     let containerEl = $state<HTMLDivElement | undefined>(undefined);
     let cw = $state(0); // container width
     let dragging = $state(false);
+
+    // Reading i18n.locale makes this $derived re-run on switch.
+    const scrubberAriaLabel = $derived((i18n.locale, m.common_player_filmstrip_scrubber_aria_label()));
 
     // Recitation-driven playback state (written by the rAF driver / refresh).
     let activeIdx = $state(-1); // cell of the recited word; holds during silence
@@ -273,10 +279,13 @@
     }
 
     function missingTitle(c: Cell): string | undefined {
-        if (c.missing === 'full') return 'Not recited';
+        void i18n.locale; // re-evaluate the label on locale switch
+        if (c.missing === 'full') return m.common_filmstrip_not_recited();
         if (c.missing !== 'words') return undefined;
-        const m = missingWordsByAyah?.get(c.ayah);
-        return m && m.length ? `Missing words: ${m.join(', ')}` : 'Missing words';
+        const mw = missingWordsByAyah?.get(c.ayah);
+        if (!mw || !mw.length) return m.common_filmstrip_missing_words();
+        const list = i18n.locale === 'ar' ? mw.map(toArabicNumeral).join('، ') : mw.join(', ');
+        return m.common_filmstrip_missing_words_list({ indices: list });
     }
 
     const sorted = $derived(buildSortedIntervals(units));
@@ -764,14 +773,17 @@
 </script>
 
 {#if config.filmstripShow && cells.length}
+    <!-- dir="ltr" island: a time-proportional scrubber (track translateX, needle
+         pinned by %) — the strip must run left→right even under RTL. -->
     <div
         class="filmstrip"
+        dir="ltr"
         bind:this={containerEl}
         bind:clientWidth={cw}
         style:height="{config.filmstripHeightPx}px"
         role="slider"
         tabindex="0"
-        aria-label="Ayah scrubber"
+        aria-label={scrubberAriaLabel}
         aria-valuemin={cells[0]!.ayah}
         aria-valuemax={cells[cells.length - 1]!.ayah}
         aria-valuenow={cells[activeIdx]?.ayah ?? cells[0]!.ayah}
@@ -818,7 +830,7 @@
                     {#if c.missing !== 'full'}
                         <div class="cell-fill" class:glide={jumping && i === fillIdx}></div>
                     {/if}
-                    <span class="cell-num">{c.ayah}</span>
+                    <span class="cell-num">{i18n.locale === 'ar' ? toArabicNumeral(c.ayah) : c.ayah}</span>
                 </div>
             {/each}
             <div class="pad" style:width="{pad}px"></div>

@@ -29,6 +29,8 @@
     import { afterUpdate, onDestroy, tick } from 'svelte';
     import { get } from 'svelte/store';
 
+    import { localeStore, tr } from '../../../../lib/i18n/locale-store';
+    import * as m from '../../../../lib/paraglide/messages';
     import { shadowPrewarm } from '../../../../lib/playback/shadow-audio';
     import { can } from '../../../../lib/stores/capabilities';
     import { currentUser } from '../../../../lib/stores/current-user';
@@ -40,6 +42,7 @@
     import { IssueRegistry } from '../../domain/registry';
     import { SORT_META, sortItems, type SortOption } from '../../domain/sorting';
     import { hasAccordionGuide, isGuideRead } from '../../guides/registry';
+    import { VALIDATION_TITLE } from '../../i18n/validation-labels';
     import { accordionPin, clearAccordionPin, pinAccordion } from '../../stores/accordion-pin';
     import { autoSplitMap, ensureAutoSplitMap } from '../../stores/auto-split';
     import { segAllData, selectedReciter } from '../../stores/chapter';
@@ -360,19 +363,23 @@
     let _baseMemoVal: SegValidateResponse | null = null;
     let _baseMemoSegData: typeof $segAllData = null;
     let _baseMemoChapter: number | null = null;
+    let _baseMemoLocale: string | null = null;
     let _baseMemoResult: BaseDescriptor[] = [];
 
     function buildBaseDescriptors(
         data: SegValidateResponse | null,
         segDataRef: typeof $segAllData,
         chapterFilter: number | null,
+        locale: string,
     ): BaseDescriptor[] {
-        if (data === _baseMemoVal && segDataRef === _baseMemoSegData && chapterFilter === _baseMemoChapter) {
+        if (data === _baseMemoVal && segDataRef === _baseMemoSegData && chapterFilter === _baseMemoChapter
+            && locale === _baseMemoLocale) {
             return _baseMemoResult;
         }
         _baseMemoVal = data;
         _baseMemoSegData = segDataRef;
         _baseMemoChapter = chapterFilter;
+        _baseMemoLocale = locale;
 
         if (!data) {
             _baseMemoResult = [];
@@ -420,7 +427,7 @@
             }
 
             return {
-                name: defn.displayTitle,
+                name: (VALIDATION_TITLE[defn.kind] ?? (() => defn.displayTitle))(),
                 kind: defn.kind,
                 countClass: _countClassFor(defn.kind),
                 items,
@@ -491,7 +498,7 @@
         return out;
     }
 
-    $: _baseDescriptors = buildBaseDescriptors($segValidation, $segAllData, chapter);
+    $: _baseDescriptors = buildBaseDescriptors($segValidation, $segAllData, chapter, $localeStore);
     $: categories = projectVisible(_baseDescriptors, lcThreshold, activeQalqalaLetter, qalqalaEndOfVerse, $valSortPrefs, $autoSplitMap);
     // Filter signature: the subset of inputs that change the displayed list —
     // narrowing (chapter / LC threshold / qalqala letter / end-of-verse) plus
@@ -581,6 +588,16 @@
                 ?.scrollIntoView({ block: 'center', behavior: 'smooth' });
         });
     }
+
+    $: flaggedTitle = tr($localeStore, m.segments_validation_flagged_title());
+    $: flaggedGuideAriaLabel = tr($localeStore, m.segments_validation_flagged_guide_aria_label());
+    $: flaggedGuideTitle = tr($localeStore, m.segments_validation_flagged_guide_title());
+    $: sortLabel = tr($localeStore, m.segments_validation_sort_label());
+    $: showConfidenceLabel = tr($localeStore, m.segments_validation_show_confidence_label());
+    $: filterByLetterLabel = tr($localeStore, m.segments_validation_filter_by_letter_label());
+    $: qalqalaEovButtonLabel = tr($localeStore, m.segments_validation_qalqala_eov_button());
+    $: qalqalaEovTitle = tr($localeStore, m.segments_validation_qalqala_eov_title());
+    $: showHideContextAllLabel = tr($localeStore, m.segments_validation_show_hide_context_all_button());
 
     // ---- Virtualization window for the open category ----
     $: openCat = categories.find((c) => c.type === openCategory) ?? null;
@@ -979,12 +996,12 @@
                         class="val-guide-btn"
                         class:unread={$currentUser.hf_user_id != null
                             && !isGuideRead($currentUser.guides_read, 'flagging')}
-                        aria-label="Open guide for Flagged Issues"
-                        title="Open guide for Flagged Issues"
+                        aria-label={flaggedGuideAriaLabel}
+                        title={flaggedGuideTitle}
                         on:click={(e) => openGuide(e, 'flagging')}
                     >?</button>
                     <span class="val-summary-main">
-                        <span class="val-summary-title">Flagged Issues</span>
+                        <span class="val-summary-title">{flaggedTitle}</span>
                         <span class="val-count flagged-count">{flaggedSegs.length}</span>
                     </span>
                 </summary>
@@ -1012,8 +1029,8 @@
                             class="val-guide-btn"
                             class:unread={$currentUser.hf_user_id != null
                                 && !isGuideRead($currentUser.guides_read, cat.type)}
-                            aria-label={`Open guide for ${cat.name}`}
-                            title={`Open guide for ${cat.name}`}
+                            aria-label={m.segments_validation_open_guide_aria_label({ name: cat.name })}
+                            title={m.segments_validation_open_guide_title({ name: cat.name })}
                             on:click={(e) => openGuide(e, cat.type)}
                         >?</button>
                     {/if}
@@ -1029,7 +1046,7 @@
                 {#if cat.sorts && cat.sorts.length > 0}
                     {@const active = resolveSort($valSortPrefs, cat.type)}
                     <div class="lc-slider-row val-sort-row">
-                        <span class="lc-slider-label">Sort:</span>
+                        <span class="lc-slider-label">{sortLabel}</span>
                         {#each cat.sorts as opt (opt.kind)}
                             {@const isActive = active?.kind === opt.kind}
                             <button
@@ -1037,10 +1054,10 @@
                                 class:active={isActive}
                                 aria-pressed={isActive}
                                 title={isActive
-                                    ? `Sorted by ${SORT_META[opt.kind].label} — click to reverse`
-                                    : `Sort by ${SORT_META[opt.kind].label}`}
+                                    ? m.segments_validation_sort_pill_active_title({ label: SORT_META[opt.kind].label() })
+                                    : m.segments_validation_sort_pill_title({ label: SORT_META[opt.kind].label() })}
                                 on:click={() => (isActive ? toggleDir(cat.type) : selectSort(cat.type, opt.kind))}
-                            >{SORT_META[opt.kind].label}{#if isActive && active}<span class="val-sort-arrow">{active.dir === 'asc' ? '▲' : '▼'}</span>{/if}</button>
+                            >{SORT_META[opt.kind].label()}{#if isActive && active}<span class="val-sort-arrow">{active.dir === 'asc' ? '▲' : '▼'}</span>{/if}</button>
                         {/each}
                     </div>
                 {/if}
@@ -1050,7 +1067,7 @@
                     <div class="lc-slider-row">
                         <!-- svelte-ignore a11y-label-has-associated-control -->
                         <label class="lc-slider-label">
-                            Show confidence &lt;
+                            {showConfidenceLabel}
                             <span class="lc-slider-val">{lcSliderRaw}%</span>
                         </label>
                         <input
@@ -1068,12 +1085,12 @@
                 <!-- Qalqala letter filter -->
                 {#if cat.isQalqala && cat.qalqalaLetters.length > 0}
                     <div class="lc-slider-row qalqala-filter-row">
-                        <span class="lc-slider-label">Filter by letter:</span>
+                        <span class="lc-slider-label">{filterByLetterLabel}</span>
                         {#each cat.qalqalaLetters as letter}
                             <button
                                 class="val-btn val-cross qalqala-letter-btn"
                                 class:active={activeQalqalaLetter === letter}
-                                title="Show only segments ending with {letter}"
+                                title={m.segments_validation_qalqala_letter_title({ letter })}
                                 data-letter={letter}
                                 on:click={() => {
                                     activeQalqalaLetter = activeQalqalaLetter === letter ? null : letter;
@@ -1083,9 +1100,9 @@
                         <button
                             class="val-btn val-cross qalqala-eov-btn"
                             class:active={qalqalaEndOfVerse}
-                            title="Show only segments that end at a verse boundary"
+                            title={qalqalaEovTitle}
                             on:click={() => { qalqalaEndOfVerse = !qalqalaEndOfVerse; }}
-                        >End of verse</button>
+                        >{qalqalaEovButtonLabel}</button>
                     </div>
                 {/if}
 
@@ -1095,7 +1112,7 @@
                         <button
                             class="val-action-btn val-action-btn-muted"
                             on:click={() => handleShowAllContext(cat.type)}
-                        >Show/Hide All Context</button>
+                        >{showHideContextAllLabel}</button>
                     </div>
 
                     <div
@@ -1134,7 +1151,7 @@
         align-items: center;
         justify-content: center;
         min-width: 18px;
-        margin-left: 4px;
+        margin-inline-start: 4px;
         padding: 1px 7px;
         font-family: var(--font-mono);
         font-size: 11px;

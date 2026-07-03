@@ -27,6 +27,10 @@ export const LS_KEYS = {
     // NOTE: the literal 'insp_theme' is ALSO duplicated in index.html's inline
     // flash-free init script (which can't import this module) — keep in sync.
     THEME:           'insp_theme',
+    // Owned by Paraglide's localStorage strategy (`localStorageKey` in
+    // vite.config.ts) — keep in sync. Present = explicit locale override; absent
+    // = auto-detect from the browser (the `preferredLanguage` strategy).
+    LOCALE:          'insp_locale',
 } as const;
 
 export const PLACEHOLDER_SELECT = '-- select --';

@@ -13,6 +13,8 @@
     import { fetchJson } from '../../lib/api';
     import { release } from '../../lib/api/claims-client';
     import { getReciterTaskStore, type ReciterTask,refreshReciterTask } from '../../lib/api/reciter-task';
+    import { localeStore, tr } from '../../lib/i18n/locale-store';
+    import * as m from '../../lib/paraglide/messages';
     import { loadQuranRefs } from '../../lib/refs/quran-refs';
     import { currentUser, loadCurrentUser } from '../../lib/stores/current-user';
     import { setEditingMode, syncEditingMode } from '../../lib/stores/editing-mode';
@@ -64,6 +66,9 @@
     // `segAudioElement` store. EditOverlay still wants the raw element as
     // a marker prop, so we subscribe instead of binding directly.
     $: segAudioEl = $segAudioElement;
+
+    $: guideEntryLabel = tr($localeStore, m.segments_guide_entry_label());
+    $: guideUnreadAriaLabel = tr($localeStore, m.segments_guide_unread_aria_label());
 
     // Reciter-task subscription: bound to the selected reciter. The store
     // self-polls every 30 s while subscribed; we replace the binding when
@@ -408,9 +413,9 @@
                 on:click={() => openGuidesGate('browse')}
             >
                 <span class="seg-guide-entry-icon" aria-hidden="true">📖</span>
-                <span>Editing guide</span>
+                <span>{guideEntryLabel}</span>
                 {#if $currentUser.hf_user_id != null && !allGuidesRead($currentUser.guides_read)}
-                    <span class="seg-guide-entry-dot" aria-label="Unread guides"></span>
+                    <span class="seg-guide-entry-dot" aria-label={guideUnreadAriaLabel}></span>
                 {/if}
             </button>
         </div>

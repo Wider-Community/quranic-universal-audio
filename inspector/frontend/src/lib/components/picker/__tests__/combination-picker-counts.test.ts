@@ -1,6 +1,7 @@
 import { render, waitFor } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
 
+import * as m from '$lib/paraglide/messages';
 import type { PublicDelivery, PublicReciter } from '../../../types/generated/schemas';
 import type { PublicBucket } from '../../../types/public-bucket';
 import CombinationPicker from '../CombinationPicker.svelte';
@@ -96,7 +97,7 @@ function tabCounts(root: HTMLElement): Record<string, number> {
 describe('CombinationPicker state-tab counts', () => {
     it('counts deliveries per bucket, not reciters by primary_bucket', async () => {
         const { baseElement } = render(CombinationPicker, {
-            props: { open: true, title: 'Switch reciter' },
+            props: { open: true, title: m.common_picker_switch_reciter_title() },
         });
 
         await waitFor(() => {
@@ -112,7 +113,7 @@ describe('CombinationPicker state-tab counts', () => {
 
     it('makes the Published tab pill agree with the Published group head-count', async () => {
         const { baseElement } = render(CombinationPicker, {
-            props: { open: true, title: 'Switch reciter' },
+            props: { open: true, title: m.common_picker_switch_reciter_title() },
         });
 
         await waitFor(() => {

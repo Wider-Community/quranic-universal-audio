@@ -61,7 +61,7 @@
 .seg-validation summary::before {
     content: '\25B6';
     display: inline-block;
-    margin-right: 8px;
+    margin-inline-end: 8px;
     font-size: 0.65rem;
     transition: transform 0.15s;
 }
@@ -72,7 +72,7 @@
 
 .seg-validation summary .val-count {
     font-weight: bold;
-    margin-left: 4px;
+    margin-inline-start: 4px;
 }
 
 .seg-validation summary .val-count.has-errors { color: var(--bad-fg); }
@@ -228,7 +228,7 @@
     color: var(--text-primary);
 }
 .val-sort-arrow {
-    margin-left: 4px;
+    margin-inline-start: 4px;
     font-size: 0.85em;
 }
 
@@ -362,7 +362,7 @@
     font-size: 0.7rem;
     color: var(--text-muted);
     padding: 3px 4px 0;
-    text-align: left;
+    text-align: start;
     white-space: pre-line;
     line-height: 1.4;
     margin-top: 2px;

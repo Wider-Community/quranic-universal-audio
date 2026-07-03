@@ -13,6 +13,8 @@
     import { onDestroy, tick } from 'svelte';
     import { fade, fly } from 'svelte/transition';
 
+    import { localeStore, tr } from '$lib/i18n/locale-store';
+    import * as m from '$lib/paraglide/messages';
     import { submitIntake } from '../../../../lib/api/submit-recitation';
     import { pushToast } from '../../../../lib/stores/toast';
     import type { IntakeSubmission } from '../../../../lib/types/generated/schemas';
@@ -37,6 +39,25 @@
     $: state = $submitWizard;
     $: open = state.open;
     $: void manageOpen(open);
+
+    $: lang = $localeStore;
+    $: closeLabel = tr(lang, m.common_action_close());
+    $: backLabel = tr(lang, m.common_action_back());
+    $: cancelLabel = tr(lang, m.common_action_cancel());
+    $: continueLabel = tr(lang, m.common_action_continue());
+    $: submitLabel = tr(lang, submitting ? m.common_status_submitting() : m.common_action_submit());
+    $: wizardAria = tr(lang, m.dashboard_submit_wizard_aria());
+    $: wizardTitle = tr(lang, m.dashboard_submit_wizard_title());
+    $: stepperAria = tr(lang, m.dashboard_submit_stepper_aria());
+    $: requestLabel = tr(lang, m.dashboard_submit_request_button());
+    $: stepLabel = ((_l: unknown) => (n: number): string =>
+        n === 1
+            ? m.dashboard_submit_step_reciter()
+            : n === 2
+              ? m.dashboard_submit_step_source()
+              : n === 3
+                ? m.dashboard_submit_step_details()
+                : m.dashboard_submit_step_confirm())(lang);
 
     async function manageOpen(o: boolean): Promise<void> {
         if (o) {
@@ -220,7 +241,7 @@
         try {
             const result = await submitIntake(buildPayload());
             if (!result.ok) {
-                submitErrors = result.errors ?? ['Submission failed.'];
+                submitErrors = result.errors ?? [m.dashboard_submit_failed_fallback()];
                 return;
             }
             for (const w of result.warnings) {
@@ -228,11 +249,11 @@
             }
             pushToast({
                 kind: 'success',
-                text: 'Thanks — your submission is queued for review.',
+                text: m.dashboard_submit_queued_toast(),
             });
             closeSubmitWizard();
         } catch (e) {
-            submitErrors = [e instanceof Error ? e.message : 'Submission failed.'];
+            submitErrors = [e instanceof Error ? e.message : m.dashboard_submit_failed_fallback()];
         } finally {
             submitting = false;
         }
@@ -254,23 +275,23 @@
             bind:this={modalEl}
             role="dialog"
             aria-modal="true"
-            aria-label="Submit a recitation"
+            aria-label={wizardAria}
             tabindex="-1"
             in:fly={{ y: 12, duration: 280, opacity: 0 }}
             out:fly={{ y: 6, duration: 180, opacity: 0 }}
         >
             <header>
                 <div class="title-row">
-                    <h2>Submit a recitation</h2>
+                    <h2>{wizardTitle}</h2>
                     <button
                         type="button"
                         class="close"
-                        aria-label="Close"
+                        aria-label={closeLabel}
                         on:click={closeSubmitWizard}
                     >×</button>
                 </div>
                 {#if !skipSourceAndDetails}
-                    <ol class="stepper" aria-label="Progress">
+                    <ol class="stepper" aria-label={stepperAria}>
                         {#each [1, 2, 3, 4] as n (n)}
                             <li
                                 class="dot"
@@ -286,9 +307,7 @@
                                     on:click={() => goToStep(n)}
                                 >
                                     <span class="dot-num">{n}</span>
-                                    <span class="dot-label">
-                                        {n === 1 ? 'Reciter' : n === 2 ? 'Source' : n === 3 ? 'Details' : 'Confirm'}
-                                    </span>
+                                    <span class="dot-label">{stepLabel(n)}</span>
                                 </button>
                             </li>
                         {/each}
@@ -328,11 +347,11 @@
             <footer>
                 <div class="left">
                     {#if step > 1}
-                        <button type="button" class="ghost" on:click={back} disabled={submitting}>← Back</button>
+                        <button type="button" class="ghost" on:click={back} disabled={submitting}>{backLabel}</button>
                     {/if}
                 </div>
                 <div class="right">
-                    <button type="button" class="ghost" on:click={closeSubmitWizard}>Cancel</button>
+                    <button type="button" class="ghost" on:click={closeSubmitWizard}>{cancelLabel}</button>
                     {#if skipSourceAndDetails}
                         <!-- existing_combo mode: skip steps 2-4 and hand off
                              straight to the RequestForm hosted by ReciterDetail
@@ -343,7 +362,7 @@
                             on:click={requestExistingCombo}
                             disabled={!canAdvanceStep1}
                         >
-                            Request
+                            {requestLabel}
                             <span class="primary-glyph" aria-hidden="true">›</span>
                         </button>
                     {:else if step < 4}
@@ -357,7 +376,7 @@
                                   ? !canAdvanceStep2
                                   : !canAdvanceStep3}
                         >
-                            Continue
+                            {continueLabel}
                             <span class="primary-glyph" aria-hidden="true">›</span>
                         </button>
                     {:else}
@@ -367,7 +386,7 @@
                             on:click={submit}
                             disabled={!canSubmit || submitting}
                         >
-                            {submitting ? 'Submitting…' : 'Submit'}
+                            {submitLabel}
                         </button>
                     {/if}
                 </div>
@@ -446,7 +465,7 @@
     .stepper-track {
         position: absolute;
         bottom: -3px;
-        left: 0;
+        inset-inline-start: 0;
         width: calc(100% / 4);
         height: 2px;
         background: var(--accent);
@@ -456,6 +475,11 @@
     .stepper-track[data-step='2'] { transform: translateX(100%); }
     .stepper-track[data-step='3'] { transform: translateX(200%); }
     .stepper-track[data-step='4'] { transform: translateX(300%); }
+    /* Under RTL the track starts at the logical (right) edge, so later steps
+       advance toward the left — negate the slide. */
+    :global([dir='rtl']) .stepper-track[data-step='2'] { transform: translateX(-100%); }
+    :global([dir='rtl']) .stepper-track[data-step='3'] { transform: translateX(-200%); }
+    :global([dir='rtl']) .stepper-track[data-step='4'] { transform: translateX(-300%); }
     .dot {
         display: flex;
         align-items: center;

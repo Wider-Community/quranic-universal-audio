@@ -89,12 +89,12 @@ export const ARABIC_DIGITS: readonly string[] = [
     '٥', '٦', '٧', '٨', '٩',
 ];
 
-/** Convert a non-negative integer to Arabic-Indic numerals (e.g. 12 → ١٢).
- *  Mirrors `tabs/segments/utils/data/references.ts::_toArabicNumeral`; lives
- *  here so the shared recitation-animation lib stays free of `tabs/*` imports. */
-export function toArabicNumeral(n: number): string {
-    return String(n)
-        .split('')
-        .map((d) => ARABIC_DIGITS[+d] ?? d)
-        .join('');
+/** Map the ASCII digits in a value to Arabic-Indic numerals (e.g. 12 → ١٢,
+ *  "1.5×" → "١٫٥×"). Non-digit characters pass through untouched, so decimals,
+ *  separators, and units localize in place. The locale-aware entry point is
+ *  `lib/i18n/format.ts::localizeDigits`; this is the raw transform. */
+export function toArabicNumeral(n: number | string): string {
+    // Match ASCII digits only — a char-by-char `+d` maps whitespace to 0 (a
+    // space coerces to 0), turning spaces into ٠ and mangling multi-word strings.
+    return String(n).replace(/[0-9]/g, (d) => ARABIC_DIGITS[+d]!);
 }

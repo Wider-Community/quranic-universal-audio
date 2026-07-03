@@ -11,7 +11,9 @@
      * is customised.
      */
     import { clickOutside } from '../../../../lib/actions/click-outside';
+    import { i18n } from '../../../../lib/i18n/locale.svelte';
     import Icon from '../../../../lib/icons/Icon.svelte';
+    import * as m from '../../../../lib/paraglide/messages';
     import {
         actionById,
         SHORTCUT_SECTIONS,
@@ -59,9 +61,9 @@
             capturingId = null;
             note = null;
         } else if (res.conflict) {
-            note = `${prettyKey(token)} is already “${res.conflict.label}”`;
+            note = m.segments_shortcuts_conflict_note({ key: prettyKey(token), label: res.conflict.label() });
         } else {
-            note = 'That key can’t be used here';
+            note = m.segments_shortcuts_key_unusable_note();
         }
     }
 
@@ -72,6 +74,12 @@
         window.addEventListener('keydown', onCaptureKey, true);
         return () => window.removeEventListener('keydown', onCaptureKey, true);
     });
+
+    const triggerTitle = $derived((i18n.locale, m.segments_shortcuts_trigger_title()));
+    const resetLabel = $derived((i18n.locale, m.segments_shortcuts_reset_button()));
+    const rebindTitle = $derived((i18n.locale, m.segments_shortcuts_rebind_title()));
+    const capturingLabel = $derived((i18n.locale, m.segments_shortcuts_capturing_label()));
+    const hintDefault = $derived((i18n.locale, m.segments_shortcuts_hint_default()));
 </script>
 
 <div class="sg-wrap" use:clickOutside={close}>
@@ -81,19 +89,19 @@
         class:on={open}
         aria-haspopup="dialog"
         aria-expanded={open}
-        title="Keyboard shortcuts"
+        title={triggerTitle}
         onclick={() => (open ? close() : (open = true))}
     >
         <Icon name="keyboard" size={16} />
     </button>
 
     {#if open}
-        <div class="sg-pop" role="dialog" aria-label="Keyboard shortcuts">
+        <div class="sg-pop" role="dialog" aria-label={triggerTitle}>
             <div class="sg-head">
-                <h3>Keyboard shortcuts</h3>
+                <h3>{triggerTitle}</h3>
                 {#if hasCustomBindings()}
                     <button type="button" class="sg-reset" onclick={() => { resetAll(); note = null; }}>
-                        Reset to defaults
+                        {resetLabel}
                     </button>
                 {/if}
             </div>
@@ -102,25 +110,25 @@
                 {#each SHORTCUT_SECTIONS as sec (sec.title)}
                     <section class="sg-sec">
                         <header class="sg-sec-head">
-                            <h4>{sec.title}</h4>
-                            <p>{sec.hint}</p>
+                            <h4>{sec.title()}</h4>
+                            <p>{sec.hint()}</p>
                         </header>
                         <ul>
                             {#each sec.ids as id (id)}
                                 {@const a = actionById(id)}
                                 {#if a}
                                     <li class="sg-row">
-                                        <span class="sg-label">{a.label}</span>
+                                        <span class="sg-label">{a.label()}</span>
                                         {#if a.rebindable}
                                             <button
                                                 type="button"
                                                 class="sg-key sg-key-edit"
                                                 class:listening={capturingId === id}
                                                 class:custom={isCustom(id)}
-                                                title="Click to rebind"
+                                                title={rebindTitle}
                                                 onclick={() => startCapture(a)}
                                             >
-                                                {capturingId === id ? 'Press a key…' : prettyKey(keyFor(id))}
+                                                {capturingId === id ? capturingLabel : prettyKey(keyFor(id))}
                                             </button>
                                         {:else}
                                             <kbd class="sg-key sg-key-fixed">{prettyKey(keyFor(id))}</kbd>
@@ -137,7 +145,7 @@
                 {#if note}
                     <span class="sg-note">{note}</span>
                 {:else}
-                    <span class="sg-hint">Click a key to rebind · Esc to cancel</span>
+                    <span class="sg-hint">{hintDefault}</span>
                 {/if}
             </div>
         </div>

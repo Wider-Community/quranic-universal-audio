@@ -43,12 +43,18 @@ def _check_secret() -> tuple[bool, tuple]:
     """
     secret = os.environ.get("INSPECTOR_WEBHOOK_SECRET", "").strip()
     if not secret:
-        return False, (jsonify(ErrorEnvelope(error="internal endpoints disabled").model_dump(
-            exclude_none=True
-        )), 503)
+        return False, (
+            jsonify(
+                ErrorEnvelope(error="internal endpoints disabled").model_dump(exclude_none=True)
+            ),
+            503,
+        )
     provided = request.headers.get(_SECRET_HEADER, "")
     if not provided or not hmac.compare_digest(provided, secret):
-        return False, (jsonify(ErrorEnvelope(error="unauthorized").model_dump(exclude_none=True)), 401)
+        return False, (
+            jsonify(ErrorEnvelope(error="unauthorized").model_dump(exclude_none=True)),
+            401,
+        )
     return True, (None, None)
 
 
@@ -68,18 +74,18 @@ def ts_refreshed():
     try:
         body = TsRefreshedRequest.model_validate(request.get_json(silent=True) or {})
     except ValidationError as exc:
-        return jsonify(ErrorEnvelope(error="invalid body", detail=str(exc)).model_dump(
-            exclude_none=True
-        )), 400
+        return jsonify(
+            ErrorEnvelope(error="invalid body", detail=str(exc)).model_dump(exclude_none=True)
+        ), 400
 
     at = datetime.now(UTC)
     if body.produced_at:
         try:
             at = datetime.fromisoformat(body.produced_at.replace("Z", "+00:00"))
         except ValueError:
-            return jsonify(ErrorEnvelope(error="produced_at is not ISO-8601").model_dump(
-                exclude_none=True
-            )), 400
+            return jsonify(
+                ErrorEnvelope(error="produced_at is not ISO-8601").model_dump(exclude_none=True)
+            ), 400
 
     from services.db import repo_releases
     from services.db.sync import durable_transaction

@@ -176,7 +176,9 @@ def test_batch_timing_word_fires_one_owner_notification(flask_client, seed_role)
     seed_role("owner-1", login="owner", role="owner")
     items = [_timing_item(i) for i in range(6)]  # 6 cells, same word
     assert _post_batch(flask_client, items).status_code == 201
-    notes = [n for n in repo_notifications.list_active("owner-1") if n["event"] == "ts_report.created"]
+    notes = [
+        n for n in repo_notifications.list_active("owner-1") if n["event"] == "ts_report.created"
+    ]
     assert len(notes) == 1
 
 
@@ -184,7 +186,9 @@ def test_batch_tajweed_fires_per_cell_notification(flask_client, seed_role):
     seed_role("owner-1", login="owner", role="owner")
     items = [_tajweed_item(i) for i in range(3)]
     assert _post_batch(flask_client, items).status_code == 201
-    notes = [n for n in repo_notifications.list_active("owner-1") if n["event"] == "ts_report.created"]
+    notes = [
+        n for n in repo_notifications.list_active("owner-1") if n["event"] == "ts_report.created"
+    ]
     assert len(notes) == 3
 
 
@@ -193,7 +197,9 @@ def test_batch_mixed_notification_counts(flask_client, seed_role):
     items = [_timing_item(0), _timing_item(1), _timing_item(2), _timing_item(3)]
     items += [_tajweed_item(0), _tajweed_item(1)]
     assert _post_batch(flask_client, items).status_code == 201
-    notes = [n for n in repo_notifications.list_active("owner-1") if n["event"] == "ts_report.created"]
+    notes = [
+        n for n in repo_notifications.list_active("owner-1") if n["event"] == "ts_report.created"
+    ]
     assert len(notes) == 3  # 1 timing word + 2 tajweed cells
 
 
@@ -213,13 +219,17 @@ def test_batch_tajweed_same_cell_both_subtypes_fire_two_notifications(flask_clie
     assert _post_batch(flask_client, items).status_code == 201
     rows = flask_client.get(f"/api/ts/{_SLUG}/reports/2:45?anon_token=anon-1").get_json()["reports"]
     assert {r["subtype"] for r in rows} == {"wrong_rule", "missing_rule"}
-    notes = [n for n in repo_notifications.list_active("owner-1") if n["event"] == "ts_report.created"]
+    notes = [
+        n for n in repo_notifications.list_active("owner-1") if n["event"] == "ts_report.created"
+    ]
     assert len(notes) == 2
 
 
 def test_batch_tajweed_selected_rule_tags_roundtrip(flask_client):
     assert _post_batch(flask_client, [_tajweed_item(0)]).status_code == 201
-    rep = flask_client.get(f"/api/ts/{_SLUG}/reports/2:45?anon_token=anon-1").get_json()["reports"][0]
+    rep = flask_client.get(f"/api/ts/{_SLUG}/reports/2:45?anon_token=anon-1").get_json()["reports"][
+        0
+    ]
     assert rep["selected_rule_tags"] == ["qalqala"]
 
 
@@ -234,7 +244,9 @@ def test_batch_phoneme_word_fires_one_owner_notification(flask_client, seed_role
     seed_role("owner-1", login="owner", role="owner")
     items = [_phoneme_item(i) for i in range(4)]  # 4 phonemes, same word
     assert _post_batch(flask_client, items).status_code == 201
-    notes = [n for n in repo_notifications.list_active("owner-1") if n["event"] == "ts_report.created"]
+    notes = [
+        n for n in repo_notifications.list_active("owner-1") if n["event"] == "ts_report.created"
+    ]
     assert len(notes) == 1
 
 
@@ -254,7 +266,9 @@ def test_nonpublic_reports_hidden_from_other_anon_viewer(flask_client):
     items = [_timing_item(0), _tajweed_item(1), _phoneme_item(2)]
     assert _post_batch(flask_client, items).status_code == 201
     # A different anonymous viewer gets only the public timing report + count.
-    other = flask_client.get(f"/api/ts/{_SLUG}/reports/2:45?anon_token=anon-2").get_json()["reports"]
+    other = flask_client.get(f"/api/ts/{_SLUG}/reports/2:45?anon_token=anon-2").get_json()[
+        "reports"
+    ]
     assert {r["category"] for r in other} == {"timing"}
     counts = flask_client.get(f"/api/ts/{_SLUG}/reports?anon_token=anon-2").get_json()["reports"]
     assert counts == [{"verse_key": "2:45", "open_count": 1, "resolved_count": 0}]
@@ -265,7 +279,10 @@ def test_nonpublic_reports_hidden_from_other_anon_viewer(flask_client):
 
 def test_nonpublic_reports_visible_to_capable_owner_only(signed_in_client):
     reporter, _ = signed_in_client(role="contributor")
-    assert _post_batch(reporter, [_timing_item(0), _tajweed_item(1), _phoneme_item(2)]).status_code == 201
+    assert (
+        _post_batch(reporter, [_timing_item(0), _tajweed_item(1), _phoneme_item(2)]).status_code
+        == 201
+    )
     # Owner holds timestamps.view_nonpublic_reports → sees every category.
     owner, _ = signed_in_client(hf_user_id="owner-1", login="owner", role="owner")
     seen = owner.get(f"/api/ts/{_SLUG}/reports/2:45").get_json()["reports"]
@@ -295,7 +312,9 @@ def test_resolve_word_group_non_owner_forbidden(signed_in_client):
 
 def test_resolve_word_group_resolves_and_notifies_reporter(signed_in_client):
     reporter, ruser = signed_in_client(role="contributor")
-    assert _post_batch(reporter, [_timing_item(0), _timing_item(1)], anon_token="").status_code == 201
+    assert (
+        _post_batch(reporter, [_timing_item(0), _timing_item(1)], anon_token="").status_code == 201
+    )
 
     owner, _ = signed_in_client(hf_user_id="owner-1", login="owner", role="owner")
     resp = owner.post(
@@ -309,6 +328,8 @@ def test_resolve_word_group_resolves_and_notifies_reporter(signed_in_client):
     assert all(r["status"] == "resolved" for r in body["reports"])
 
     notes = [
-        n for n in repo_notifications.list_active(ruser["hf_user_id"]) if n["event"] == "ts_report.resolved"
+        n
+        for n in repo_notifications.list_active(ruser["hf_user_id"])
+        if n["event"] == "ts_report.resolved"
     ]
     assert len(notes) == 1

@@ -131,13 +131,17 @@ def _bridge_doc() -> dict:
     # word 0 "نْ" whose tail phone merges (idgham) into word 1 — the merger phone
     # carries a bridge rule (row slot 5) and renders before word 1 (k>0 → target=1).
     w0 = [
-        0, 0, 10,
+        0,
+        0,
+        10,
         [["ن", 0, 5]],
         [["n", 0, 5], ["m̃", 5, 10, False, False, "idgham_ghunnah"]],
         [["ن", "base", "present", [0], 0, None, None]],
     ]
     w1 = [
-        1, 10, 20,
+        1,
+        10,
+        20,
         [["م", 10, 20]],
         [["m", 10, 20]],
         [["م", "base", "present", [0], 0, None, None]],
@@ -186,7 +190,14 @@ def _two_word_doc(*, gap: bool) -> dict:
     (contiguous, no gap)."""
     w0 = [0, 0, 20, [["ب", 0, 20]], [["b", 0, 20]], [["ب", "base", "present", [0], 0, None, None]]]
     s1 = 30 if gap else 20
-    w1 = [1, s1, s1 + 20, [["ت", s1, s1 + 20]], [["t", s1, s1 + 20]], [["ت", "base", "present", [0], 0, None, None]]]
+    w1 = [
+        1,
+        s1,
+        s1 + 20,
+        [["ت", s1, s1 + 20]],
+        [["t", s1, s1 + 20]],
+        [["ت", "base", "present", [0], 0, None, None]],
+    ]
     return {
         "_meta": {"schema_version": 9, "chapter": 2, "audio_category": "by_ayah_audio"},
         "segments": [{"ref": "2:45", "t": [0, s1 + 20], "words": [w0, w1]}],

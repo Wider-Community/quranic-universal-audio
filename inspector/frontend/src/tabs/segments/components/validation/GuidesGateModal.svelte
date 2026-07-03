@@ -16,6 +16,8 @@
      * This is the edge-case fix: guides open directly here, independent of
      * whether the current reciter surfaces that category's accordion at all.
      */
+    import { i18n } from '../../../../lib/i18n/locale.svelte';
+    import * as m from '../../../../lib/paraglide/messages';
     import { currentUser } from '../../../../lib/stores/current-user';
     import { closeGuidesGate, guidesGate } from '../../../../lib/stores/guides-gate';
     import { openInfoModal } from '../../../../lib/stores/info-modal';
@@ -28,13 +30,16 @@
     } from '../../guides/registry';
     import { openGuideModal } from '../../stores/guides';
 
-    // Guide display titles derived from each guide's own H1 — computed once
-    // (sources are static module imports). Falls back to the raw key.
-    const GUIDE_TITLES: Record<string, string> = Object.fromEntries(
-        REQUIRED_GUIDE_KEYS.map((key) => {
-            const src = getAccordionGuide(key);
-            return [key, src ? guideTitleFromBlocks(parseGuideSource(src), key) : key];
-        }),
+    // Guide display titles derived from each guide's own H1. Gated on the
+    // current locale so a switch re-selects the translated H1 and re-renders
+    // the checklist. Falls back to the raw key.
+    const GUIDE_TITLES = $derived(
+        Object.fromEntries(
+            REQUIRED_GUIDE_KEYS.map((key) => {
+                const src = getAccordionGuide(key, i18n.locale);
+                return [key, src ? guideTitleFromBlocks(parseGuideSource(src), key) : key];
+            }),
+        ),
     );
 
     const open = $derived($guidesGate.open);
@@ -72,6 +77,11 @@
     function onBackdropClick(ev: MouseEvent): void {
         if (ev.target === ev.currentTarget) closeGuidesGate();
     }
+
+    const gateKicker = $derived((i18n.locale, mode === 'gate' ? m.segments_guides_gate_kicker_gate() : m.segments_guides_gate_kicker_browse()));
+    const progressLabel = $derived((i18n.locale, m.segments_guides_gate_progress_label({ count: readCount, total: REQUIRED_GUIDE_KEYS.length })));
+    const doneLabel = $derived((i18n.locale, mode === 'gate' ? m.segments_guides_gate_done_gate() : m.segments_guides_gate_done_browse()));
+    const dismissLabel = $derived((i18n.locale, done && mode === 'gate' ? m.segments_guides_gate_start_editing_button() : m.common_action_close()));
 </script>
 
 <svelte:window onkeydown={onKeydown} />
@@ -88,16 +98,16 @@
             <header class="guides-gate-header">
                 <div>
                     <div class="guides-gate-kicker">
-                        {mode === 'gate' ? 'Before you edit' : 'Review guides'}
+                        {gateKicker}
                     </div>
                     <h2 id="guides-gate-title">
-                        {mode === 'gate' ? 'Read the review guides first' : 'Review guides'}
+                        {mode === 'gate' ? m.segments_guides_gate_title_gate() : m.segments_guides_gate_title_browse()}
                     </h2>
                 </div>
                 <button
                     type="button"
                     class="guides-gate-close"
-                    aria-label="Close"
+                    aria-label={m.common_action_close()}
                     onclick={closeGuidesGate}
                 >&times;</button>
             </header>
@@ -113,7 +123,7 @@
                     ></div>
                 </div>
                 <div class="guides-gate-progress-label">
-                    {readCount} / {REQUIRED_GUIDE_KEYS.length} read
+                    {progressLabel}
                 </div>
 
                 <ul class="guides-gate-list">
@@ -129,7 +139,7 @@
                                 class:primary={!item.read}
                                 onclick={(e) => read(item.key, e)}
                             >
-                                {item.read ? 'Re-read' : 'Read'}
+                                {item.read ? m.segments_guides_gate_reread_button() : m.segments_guides_gate_read_button()}
                             </button>
                         </li>
                     {/each}
@@ -139,7 +149,7 @@
             <footer class="guides-gate-footer">
                 {#if done}
                     <span class="guides-gate-done">
-                        {mode === 'gate' ? "You're all set — editing is unlocked." : 'All guides read.'}
+                        {doneLabel}
                     </span>
                 {/if}
                 <button
@@ -148,7 +158,7 @@
                     class:primary={done}
                     onclick={closeGuidesGate}
                 >
-                    {done && mode === 'gate' ? 'Start editing' : 'Close'}
+                    {dismissLabel}
                 </button>
             </footer>
         </div>

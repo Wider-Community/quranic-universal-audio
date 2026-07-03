@@ -1,3 +1,5 @@
+import type { Locale } from '$lib/i18n/locale-store';
+
 import basmalaAminGuide from './accordion/basmala_amin.guide';
 import boundaryAdjGuide from './accordion/boundary_adj.guide';
 import crossVerseGuide from './accordion/cross_verse.guide';
@@ -30,7 +32,47 @@ const accordionGuides: Readonly<Record<string, string>> = Object.freeze({
     flagging: flaggingGuide,
 });
 
-export function getAccordionGuide(category: string): string | null {
+// Locale-variant guide sources (translate-as-documents). Each translated guide
+// is a sibling `accordion/<category>.<locale>.guide.ts` that default-exports the
+// same source-string shape as its English base, with only prose/headings
+// translated (directives/`::example` ids/audio refs stay byte-identical). We
+// discover them with an eager glob so Vite bundles whatever exists — a category
+// with no `.ar` sibling simply falls back to English. To add a translation a
+// translator only drops in the new file; no edit here is required.
+//
+// Glob keys look like `./accordion/muqattaat.ar.guide.ts`; we index by
+// `{ locale: { category: source } }`.
+const localeGuideModules = import.meta.glob<{ default: string }>(
+    './accordion/*.*.guide.ts',
+    { eager: true },
+);
+
+const accordionGuidesByLocale: Readonly<Record<string, Record<string, string>>> = Object.freeze(
+    (() => {
+        const byLocale: Record<string, Record<string, string>> = {};
+        const re = /\.\/accordion\/(.+)\.([a-z]{2})\.guide\.ts$/;
+        for (const [path, mod] of Object.entries(localeGuideModules)) {
+            const match = re.exec(path);
+            if (!match) continue;
+            const [, category, locale] = match;
+            if (!category || !locale) continue;
+            (byLocale[locale] ??= {})[category] = mod.default;
+        }
+        return byLocale;
+    })(),
+);
+
+/**
+ * The guide source for `category`, in `locale` when a translated sibling exists,
+ * else the English base (null if the category is unknown). Locale-aware callers
+ * must invoke this reactively — resolve it at open time or gate a `$derived` on
+ * the current locale — so a switch re-selects the source.
+ */
+export function getAccordionGuide(category: string, locale?: Locale): string | null {
+    if (locale && locale !== 'en') {
+        const localized = accordionGuidesByLocale[locale]?.[category];
+        if (localized != null) return localized;
+    }
     return accordionGuides[category] ?? null;
 }
 

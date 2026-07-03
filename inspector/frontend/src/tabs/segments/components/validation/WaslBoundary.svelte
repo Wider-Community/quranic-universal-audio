@@ -39,6 +39,8 @@
     import { tick } from 'svelte';
 
     import { editGate } from '../../../../lib/actions/editGate';
+    import { localeStore, tr } from '../../../../lib/i18n/locale-store';
+    import * as m from '../../../../lib/paraglide/messages';
     import type { EditOp, Segment } from '../../../../lib/types/view-models';
     import { refreshSegInStore } from '../../stores/chapter';
     import {
@@ -149,6 +151,10 @@
         }
     }
 
+    $: boundaryAriaLabel = tr($localeStore, m.segments_validation_wasl_boundary_aria_label());
+    $: waslButtonTitle = tr($localeStore, m.segments_validation_wasl_button_title());
+    $: waqfButtonTitle = tr($localeStore, m.segments_validation_waqf_button_title());
+
     function _findPendingSplitFor(chapter: number, uid: string): EditOp | null {
         for (const op of getChapterOps(chapter)) {
             if (op.op_type !== 'split_segment') continue;
@@ -169,7 +175,7 @@
         class:is-wasl={!isPending && isWasl}
         class:is-waqf={!isPending && !isWasl}
         role="group"
-        aria-label="Boundary annotation: wasl or waqf"
+        aria-label={boundaryAriaLabel}
     >
         <span class="rule" aria-hidden="true"></span>
         <span class="picker">
@@ -180,7 +186,7 @@
                 class:active={!isPending && isWasl}
                 class:highlighted={isPending && highlighted === 'wasl'}
                 aria-pressed={!isPending && isWasl}
-                title="Wasl — continuous recitation across this boundary"
+                title={waslButtonTitle}
                 use:editGate
                 on:keydown={onPickerKeydown}
                 on:click={() => commit(true)}
@@ -193,7 +199,7 @@
                 class:active={!isPending && !isWasl}
                 class:highlighted={isPending && highlighted === 'waqf'}
                 aria-pressed={!isPending && !isWasl}
-                title="Waqf — the reciter stopped at this boundary"
+                title={waqfButtonTitle}
                 use:editGate
                 on:keydown={onPickerKeydown}
                 on:click={() => commit(false)}

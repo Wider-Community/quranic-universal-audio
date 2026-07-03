@@ -13,12 +13,16 @@
      */
     import { get } from 'svelte/store';
 
+    import { i18n } from '$lib/i18n/locale.svelte';
+
     import { recordGuideViewed } from '../../api/guide-views';
     import { currentUser, markGuideReadLocally } from '../../stores/current-user';
     import { closeInfoModal, infoModalOpen } from '../../stores/info-modal';
     import Modal from '../Modal.svelte';
-    import { overviewDoc } from './overview';
+    import { getOverviewDoc } from './overview';
     import OverviewContent from './OverviewContent.svelte';
+
+    const overviewDoc = $derived(getOverviewDoc(i18n.locale));
 
     $effect(() => {
         if ($infoModalOpen) void recordOverviewRead();
@@ -48,7 +52,7 @@
         min-width: 0;
         /* Mirror the 32px close button on the right so the title centers across
          * the whole header, not just the space to its left. */
-        padding-left: 32px;
+        padding-inline-start: 32px;
     }
     .info-title {
         margin: 0;

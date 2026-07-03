@@ -958,9 +958,12 @@
     }
 </script>
 
+<!-- dir="ltr" island: the waveform + its overlays (boundaries, playhead) are a
+     left→right time axis positioned by %; must not mirror under RTL. -->
 <div
     bind:this={containerEl}
     class="visualization"
+    dir="ltr"
     on:click={onCanvasClick}
     on:mousedown={onMouseDown}
     on:mousemove={onCanvasMove}

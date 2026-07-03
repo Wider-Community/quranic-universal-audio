@@ -15,6 +15,8 @@
 
     import { createEventDispatcher } from 'svelte';
 
+    import { localeStore, tr } from '../../../../lib/i18n/locale-store';
+    import * as m from '../../../../lib/paraglide/messages';
     import { activeFilters } from '../../stores/filters';
     import {
         backBannerVisible,
@@ -32,12 +34,14 @@
     function onBackClick(): void {
         dispatch('restore');
     }
+
+    $: backToFiltersLabel = tr($localeStore, m.segments_nav_back_to_filters_button());
 </script>
 
 {#if $backBannerVisible}
     <div class="seg-back-banner">
         <button class="btn btn-sm seg-back-btn" on:click={onBackClick}>
-            &larr; Back to filter results
+            {backToFiltersLabel}
         </button>
     </div>
 {/if}

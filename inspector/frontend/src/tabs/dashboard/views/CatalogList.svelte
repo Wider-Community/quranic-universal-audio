@@ -10,6 +10,8 @@
         buildSchemaDescriptor,
         type SchemaDescriptor,
     } from '../../../lib/catalog/schema-descriptor';
+    import { localeStore, tr } from '../../../lib/i18n/locale-store';
+    import * as m from '../../../lib/paraglide/messages';
     import PickerFilterRail from '../../../lib/components/picker/PickerFilterRail.svelte';
     import SearchInput from '../../../lib/components/SearchInput.svelte';
     import { openInfoModal } from '../../../lib/stores/info-modal';
@@ -196,6 +198,22 @@
 
     const tagLabel = (axisKey: string, tag: string): string => tagLabelOf(descriptor, axisKey, tag);
     const axisLabel = (axisKey: string): string => axisLabelOf(descriptor, axisKey);
+
+    // Locale-reactive chrome strings (legacy Svelte-4 `$:` idiom).
+    $: searchPlaceholder = tr($localeStore, m.dashboard_catalog_search_placeholder());
+    $: submitRecitationLabel = tr($localeStore, m.dashboard_catalog_submit_recitation_button());
+    $: aboutAriaLabel = tr($localeStore, m.dashboard_catalog_about_aria_label());
+    $: aboutTitle = tr($localeStore, m.dashboard_catalog_about_title());
+    $: sortLabel = tr($localeStore, m.dashboard_catalog_sort_label());
+    $: sortStatusLabel = tr($localeStore, m.dashboard_catalog_sort_status());
+    $: sortRecentLabel = tr($localeStore, m.dashboard_catalog_sort_recent());
+    $: sortAlphabeticalLabel = tr($localeStore, m.dashboard_catalog_sort_alphabetical());
+    $: sortCombinationsLabel = tr($localeStore, m.dashboard_catalog_sort_combinations());
+    $: loadingLabel = tr($localeStore, m.dashboard_catalog_loading());
+    $: filtersLabel = tr($localeStore, m.dashboard_catalog_filters_label());
+    $: clearFilterAriaLabel = tr($localeStore, m.dashboard_catalog_clear_filter_aria_label());
+    $: clearSearchAriaLabel = tr($localeStore, m.dashboard_catalog_clear_search_aria_label());
+    $: clearAllLabel = tr($localeStore, m.common_action_clear_all());
 </script>
 
 <div class="grid" bind:this={gridEl}>
@@ -218,7 +236,7 @@
                 <div class="search">
                     <SearchInput
                         value={$dashboardState.search}
-                        placeholder="Search reciters"
+                        placeholder={searchPlaceholder}
                         count={sorted.length}
                         total={totalReciters}
                         debounceMs={120}
@@ -231,13 +249,13 @@
                     on:click={openSubmitWizard}
                 >
                     <span class="sr-glyph" aria-hidden="true">+</span>
-                    <span class="sr-label">Submit recitation</span>
+                    <span class="sr-label">{submitRecitationLabel}</span>
                 </button>
                 <button
                     type="button"
                     class="info-btn"
-                    aria-label="About this project"
-                    title="About this project"
+                    aria-label={aboutAriaLabel}
+                    title={aboutTitle}
                     on:click={openInfoModal}
                 >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -249,43 +267,43 @@
             </div>
             <div class="sort">
                 <label>
-                    <span class="sort-label">Sort</span>
+                    <span class="sort-label">{sortLabel}</span>
                     <select
                         value={$dashboardState.sort}
                         on:change={onSortChange}
                     >
-                        <option value="status">State</option>
-                        <option value="recent">Recently updated</option>
-                        <option value="alphabetical">A → Z</option>
-                        <option value="combinations">Most combinations</option>
+                        <option value="status">{sortStatusLabel}</option>
+                        <option value="recent">{sortRecentLabel}</option>
+                        <option value="alphabetical">{sortAlphabeticalLabel}</option>
+                        <option value="combinations">{sortCombinationsLabel}</option>
                     </select>
                 </label>
             </div>
         </div>
         {#if $catalogData.loading}
-            <div class="state">Loading reciters…</div>
+            <div class="state">{loadingLabel}</div>
         {:else if $catalogData.error}
             <div class="state error">{$catalogData.error}</div>
         {:else}
             <div class="chips-bar" class:empty={!hasFilters}>
-                <span class="chips-label">Filters</span>
+                <span class="chips-label">{filtersLabel}</span>
                 {#each Object.entries($dashboardState.activeFilters) as [axisKey, tags]}
                     {#each [...tags] as tag (axisKey + ':' + tag)}
                         <span class="chip">
                             <span class="chip-axis">{axisLabel(axisKey)}:</span>
                             {tagLabel(axisKey, tag)}
-                            <button class="chip-close" aria-label="Clear filter" on:click={() => toggleFacet(axisKey, tag)}>×</button>
+                            <button class="chip-close" aria-label={clearFilterAriaLabel} on:click={() => toggleFacet(axisKey, tag)}>×</button>
                         </span>
                     {/each}
                 {/each}
                 {#if $dashboardState.search}
                     <span class="chip">
                         “{$dashboardState.search}”
-                        <button class="chip-close" aria-label="Clear search" on:click={() => setSearch('')}>×</button>
+                        <button class="chip-close" aria-label={clearSearchAriaLabel} on:click={() => setSearch('')}>×</button>
                     </span>
                 {/if}
                 {#if hasFilters}
-                    <button class="clear" on:click={clearAllFilters}>Clear all</button>
+                    <button class="clear" on:click={clearAllFilters}>{clearAllLabel}</button>
                 {/if}
             </div>
 
@@ -323,7 +341,7 @@
         max-width: 210px;
     }
     .sort {
-        margin-left: auto;
+        margin-inline-start: auto;
     }
     .sort label { display: inline-flex; align-items: center; gap: var(--s-2); }
     .sort-label {
@@ -481,7 +499,7 @@
         font-size: var(--fs-meta);
         text-transform: uppercase;
         letter-spacing: 0.08em;
-        margin-right: var(--s-2);
+        margin-inline-end: var(--s-2);
     }
     .chip {
         display: inline-flex;
@@ -512,7 +530,7 @@
     .clear {
         background: transparent;
         border: 0;
-        margin-left: auto;
+        margin-inline-start: auto;
         color: var(--text-muted);
         font-size: var(--fs-meta);
         text-decoration: underline;

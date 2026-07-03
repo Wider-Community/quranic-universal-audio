@@ -20,6 +20,7 @@
         AdminRequestsResponse,
         ProbeResult,
     } from '../../../../lib/types/generated/schemas';
+    import { vocabLabel } from '../../../../lib/i18n/vocab';
     import { titleCaseSlug } from '../../../../lib/utils/delivery-label';
     import { relativeTime } from '../../../../lib/utils/relative-time';
     import { visiblePoll } from '../../../../lib/utils/visible-poll';
@@ -176,8 +177,8 @@
     }
 
     function comboLabel(row: AdminRequestRow): string {
-        const r = row.riwayah ? titleCaseSlug(row.riwayah) : '';
-        const s = row.style ? titleCaseSlug(row.style) : '';
+        const r = vocabLabel('riwayah', row.riwayah);
+        const s = vocabLabel('style', row.style);
         return [r, s].filter(Boolean).join(' · ');
     }
 

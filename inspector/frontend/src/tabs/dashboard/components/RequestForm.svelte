@@ -16,7 +16,11 @@
      * with another delivery of the same reciter — admin gets full agency.
      */
     import { createEventDispatcher, onMount } from 'svelte';
+    import { get } from 'svelte/store';
 
+    import { localeStore, tr } from '../../../lib/i18n/locale-store';
+    import { vocabLabel } from '../../../lib/i18n/vocab';
+    import * as m from '../../../lib/paraglide/messages';
     import {
         fetchPendingRequest,
         type PendingRequest,
@@ -25,14 +29,15 @@
         rejectRequestSoft,
         submitRequest,
     } from '../../../lib/api/requests';
+    import CountryPicker from '../../../lib/components/CountryPicker.svelte';
     import { loadCatalogJson } from '../../../lib/resources/catalog';
     import { isOwner } from '../../../lib/stores/current-user';
     import type {
         PublicDelivery,
         PublicReciter,
     } from '../../../lib/types/generated/schemas';
+    import { countryName as countryLabel } from '../../../lib/utils/delivery-label';
     import {
-        COUNTRIES,
         countryByCode,
         countryByName,
         normalizeCountry as resolveCountry,
@@ -76,7 +81,7 @@
     let countryName: string = (() => {
         const code = resolveCountry(reciter.country);
         const known = countryByCode(code);
-        if (known) return known.name;
+        if (known) return countryLabel(known.code, get(localeStore));
         return reciter.country ?? '';
     })();
     let recording_context = delivery.recording_context ?? '';
@@ -124,7 +129,7 @@
                     if (incoming != null) {
                         const code = resolveCountry(incoming);
                         const known = countryByCode(code);
-                        countryName = known ? known.name : incoming;
+                        countryName = known ? countryLabel(known.code, get(localeStore)) : incoming;
                     }
                 }
                 recording_context =
@@ -133,8 +138,7 @@
                 comments = pending.comments ?? '';
                 autoClaim = pending.auto_claim;
             } else {
-                pendingError =
-                    'No pending request for this combination (it may have been cleared).';
+                pendingError = m.dashboard_request_pending_cleared();
             }
         } catch (e) {
             pendingError = (e as Error).message;
@@ -143,33 +147,11 @@
 
     /** Resolved ISO-2 code for the currently-typed name. Empty when blank
      *  or unrecognised — the label suffix uses this to render `(SA)` etc. */
-    $: countryCode = countryByName(countryName)?.code ?? '';
+    $: countryCode = countryByName(countryName, lang)?.code ?? '';
     /** True iff the user typed a country that doesn't match any ISO-2 entry.
      *  Blank is fine (truly unknown is allowed); only a populated-but-invalid
      *  value blocks submission. */
     $: invalidCountry = !!countryName && !countryCode;
-
-    /**
-     * Focus/blur dance: clicking into the field temporarily blanks it so
-     * the datalist drops the unfiltered list (Chromium otherwise filters
-     * to the option exactly matching the current value, which is useless
-     * for browsing). On blur, if the user didn't pick or type anything,
-     * restore the previous value — so an accidental click + click-away
-     * is a no-op rather than a destroying-the-selection trap.
-     */
-    let countryFocusStash: string | null = null;
-    function onCountryFocus(): void {
-        if (readOnly) return;
-        countryFocusStash = countryName;
-        countryName = '';
-    }
-    function onCountryBlur(): void {
-        if (readOnly) return;
-        if (!countryName && countryFocusStash != null) {
-            countryName = countryFocusStash;
-        }
-        countryFocusStash = null;
-    }
 
     /**
      * Compute the proposed_edits patch: only include fields the user
@@ -186,7 +168,7 @@
         // full-name catalog value doesn't surface as a phantom edit when the
         // user hasn't touched the field.
         {
-            const submittedCode = countryByName(countryName)?.code ?? '';
+            const submittedCode = countryByName(countryName, lang)?.code ?? '';
             const originalCode = resolveCountry(reciter.country);
             if (submittedCode !== originalCode) {
                 out.country = submittedCode || null;
@@ -227,7 +209,7 @@
     async function onSubmit(): Promise<void> {
         if (busy) return;
         if (invalidCountry) {
-            formError = 'Country must match a name from the dropdown, or be left blank.';
+            formError = m.dashboard_request_country_invalid();
             return;
         }
         formError = null;
@@ -258,15 +240,18 @@
 
     async function runReject(kind: 'soft' | 'hard'): Promise<void> {
         if (busy) return;
-        const verb = kind === 'soft' ? 'send back' : 'discard';
+        const verb =
+            kind === 'soft'
+                ? m.dashboard_request_reject_verb_send_back()
+                : m.dashboard_request_reject_verb_discard();
         const reason = window.prompt(
-            `Reason (≥10 chars) for ${verb}ing this request — recorded in the audit log:`,
+            m.dashboard_request_reject_reason_prompt({ verb }),
             '',
         );
         if (reason === null) return;
         const trimmed = reason.trim();
         if (trimmed.length < 10) {
-            window.alert('Reason must be at least 10 characters.');
+            window.alert(m.dashboard_request_reject_reason_too_short());
             return;
         }
         formError = null;
@@ -286,50 +271,83 @@
     }
 
     $: readOnly = mode === 'review';
-    $: title =
+    $: title = tr(
+        $localeStore,
         mode === 'create'
-            ? `Request ${reciter.name} (${delivery.riwayah} · ${delivery.style})`
-            : `Review request for ${reciter.name}`;
+            ? m.dashboard_request_title_create({
+                  name: reciter.name,
+                  riwayah: vocabLabel('riwayah', delivery.riwayah),
+                  style: vocabLabel('style', delivery.style),
+              })
+            : m.dashboard_request_title_review({ name: reciter.name }),
+    );
+
+    // Static chrome labels — bound through `tr($localeStore, …)` so they
+    // re-evaluate when the locale switches (legacy Svelte-4 reactivity).
+    $: lang = $localeStore;
+    $: closeLabel = tr(lang, m.common_action_close());
+    $: guidelinesHeading = tr(lang, m.dashboard_request_guidelines_heading());
+    $: guidelineVerifyAudio = tr(lang, m.dashboard_request_guideline_verify_audio());
+    $: guidelinePickBest = tr(lang, m.dashboard_request_guideline_pick_best());
+    $: guidelineReview = tr(lang, m.dashboard_request_guideline_review());
+    $: fieldRiwayah = tr(lang, m.dashboard_request_field_riwayah());
+    $: fieldStyle = tr(lang, m.dashboard_request_field_style());
+    $: fieldEnglishName = tr(lang, m.dashboard_request_field_english_name());
+    $: fieldArabicName = tr(lang, m.dashboard_request_field_arabic_name());
+    $: fieldCountry = tr(lang, m.dashboard_request_field_country());
+    $: countryUnknown = tr(lang, m.dashboard_request_country_unknown());
+    $: countryPlaceholder = tr(lang, m.dashboard_request_country_placeholder());
+    $: fieldRecordingContext = tr(lang, m.dashboard_request_field_recording_context());
+    $: contextBlankOption = tr(lang, m.dashboard_request_context_blank_option());
+    $: fieldRecordingYear = tr(lang, m.dashboard_request_field_recording_year());
+    $: yearPlaceholder = tr(lang, m.dashboard_request_year_placeholder());
+    $: fieldComments = tr(lang, m.dashboard_request_field_comments());
+    $: optionalParen = tr(lang, m.common_label_optional_paren());
+    $: commentsPlaceholder = tr(lang, m.dashboard_request_comments_placeholder());
+    $: autoClaimLabel = tr(lang, m.dashboard_request_auto_claim_label());
+    $: autoClaimHintUnchecked = tr(lang, m.dashboard_request_auto_claim_hint_unchecked());
+    $: autoClaimHintOneAtATime = tr(lang, m.dashboard_request_auto_claim_hint_one_at_a_time());
+    $: nonHafsCallout = tr(lang, m.dashboard_request_non_hafs_callout());
+    $: cancelLabel = tr(lang, m.common_action_cancel());
+    $: submitInvalidCountryTitle = tr(lang, m.dashboard_request_submit_invalid_country_title());
+    $: submittingLabel = tr(lang, m.common_status_submitting());
+    $: submitButton = tr(lang, m.dashboard_request_submit_button());
+    $: rejectSoftButton = tr(lang, m.dashboard_request_reject_soft_button());
+    $: rejectHardButton = tr(lang, m.dashboard_request_reject_hard_button());
 </script>
 
 <section class="request-form" aria-label={title}>
     <header>
         <h3>{title}</h3>
-        <button class="close" type="button" on:click={() => dispatch('close')}>×</button>
+        <button
+            class="close"
+            type="button"
+            aria-label={closeLabel}
+            on:click={() => dispatch('close')}>×</button>
     </header>
 
     <div class="body">
     {#if mode === 'create'}
         <div class="intro">
-            <p class="intro-heading">Request Guidelines</p>
+            <p class="intro-heading">{guidelinesHeading}</p>
             <ul class="rules">
-                <li>
-                    Listen to some quick audio samples and verify the audio
-                    belongs to the correct reciter, style, and riwayah —
-                    and that quality is decent. Verify accurate metadata for this reciter combination
-                    and edit anything that looks wrong.
-                </li>
-                <li>
-                    If multiple combinations of this riwayah / style /
-                    context exist, pick the one with the highest coverage,
-                    followed by best channel audio quality, followed by highest bitrate.
-                    (Different channels may be serving the same
-                    recording or a different one — listen to compare.)
-                </li>
-                <li>
-                    An admin will review your submission. State changes to Available for Review / Under Review
-                    automatically once the alignment pipeline finishes.
-                </li>
+                <li>{guidelineVerifyAudio}</li>
+                <li>{guidelinePickBest}</li>
+                <li>{guidelineReview}</li>
             </ul>
         </div>
     {:else if pending && $isOwner}
         <p class="intro">
-            Submitted by <strong>@{pending.requester_login}</strong>
-            on {new Date(pending.submitted_at).toLocaleString()}.
+            {tr(lang, m.dashboard_request_submitted_by_owner({
+                login: pending.requester_login ?? '',
+                date: new Date(pending.submitted_at).toLocaleString(),
+            }))}
         </p>
     {:else if pending}
         <p class="intro">
-            Submitted on {new Date(pending.submitted_at).toLocaleString()}.
+            {tr(lang, m.dashboard_request_submitted_on({
+                date: new Date(pending.submitted_at).toLocaleString(),
+            }))}
         </p>
     {/if}
 
@@ -339,105 +357,97 @@
 
     <div class="grid">
         <label>
-            <span>Riwayah</span>
+            <span>{fieldRiwayah}</span>
             <select bind:value={riwayah} disabled={readOnly}>
                 {#each riwayatOptions as r (r.slug)}
-                    <option value={r.slug}>{r.name}</option>
+                    <option value={r.slug}>{tr(lang, vocabLabel('riwayah', r.slug))}</option>
                 {/each}
                 {#if !riwayatOptions.some((r) => r.slug === riwayah)}
-                    <option value={riwayah}>{riwayah}</option>
+                    <option value={riwayah}>{tr(lang, vocabLabel('riwayah', riwayah))}</option>
                 {/if}
             </select>
         </label>
 
         <label>
-            <span>Style</span>
+            <span>{fieldStyle}</span>
             <select bind:value={style} disabled={readOnly}>
                 {#each styleOptions as s (s.slug)}
-                    <option value={s.slug}>{s.name}</option>
+                    <option value={s.slug}>{tr(lang, vocabLabel('style', s.slug))}</option>
                 {/each}
                 {#if !styleOptions.some((s) => s.slug === style)}
-                    <option value={style}>{style}</option>
+                    <option value={style}>{tr(lang, vocabLabel('style', style))}</option>
                 {/if}
             </select>
         </label>
 
         <label>
-            <span>English name</span>
+            <span>{fieldEnglishName}</span>
             <input type="text" bind:value={name_en} disabled={readOnly} />
         </label>
 
         <label class="rtl">
-            <span>Arabic name</span>
+            <span>{fieldArabicName}</span>
             <input type="text" bind:value={name_ar} dir="rtl" disabled={readOnly} />
         </label>
 
         <label>
             <span>
-                Country
+                {fieldCountry}
                 {#if countryCode}
                     <span class="label-meta">({countryCode})</span>
                 {:else if countryName}
-                    <span class="label-meta warn">(unknown)</span>
+                    <span class="label-meta warn">{countryUnknown}</span>
                 {/if}
             </span>
-            <input
-                type="text"
-                list="request-form-countries"
+            <CountryPicker
                 bind:value={countryName}
-                placeholder="Start typing a country name…"
+                locale={lang}
+                placeholder={countryPlaceholder}
                 disabled={readOnly}
-                on:focus={onCountryFocus}
-                on:blur={onCountryBlur}
             />
         </label>
 
         <label>
-            <span>Recording context</span>
+            <span>{fieldRecordingContext}</span>
             <select bind:value={recording_context} disabled={readOnly}>
-                <option value="">— Leave blank if unsure</option>
+                <option value="">{contextBlankOption}</option>
                 {#each contextOptions as c (c.slug)}
-                    <option value={c.slug}>{c.name}</option>
+                    <option value={c.slug}>{tr(lang, vocabLabel('context', c.slug))}</option>
                 {/each}
                 {#if recording_context && !contextOptions.some((c) => c.slug === recording_context)}
-                    <option value={recording_context}>{recording_context}</option>
+                    <option value={recording_context}>{tr(lang, vocabLabel('context', recording_context))}</option>
                 {/if}
             </select>
         </label>
 
         <label>
-            <span>Recording year</span>
+            <span>{fieldRecordingYear}</span>
             <input
                 type="number"
                 min={MIN_RECORDING_YEAR}
                 max={MAX_RECORDING_YEAR}
-                placeholder="Leave blank if unsure"
+                placeholder={yearPlaceholder}
                 bind:value={recording_year}
                 disabled={readOnly}
             />
             {#if recording_year !== '' && (recording_year < MIN_RECORDING_YEAR || recording_year > MAX_RECORDING_YEAR)}
                 <span class="field-hint warn">
-                    Year must be between {MIN_RECORDING_YEAR} and {MAX_RECORDING_YEAR}.
+                    {tr(lang, m.dashboard_request_year_out_of_bounds({
+                        min: MIN_RECORDING_YEAR,
+                        max: MAX_RECORDING_YEAR,
+                    }))}
                 </span>
             {/if}
         </label>
     </div>
 
-    <datalist id="request-form-countries">
-        {#each COUNTRIES as c (c.code)}
-            <option value={c.name} label={c.code}></option>
-        {/each}
-    </datalist>
-
     <label class="comments">
-        <span>Comments {mode === 'create' ? '(optional)' : ''}</span>
+        <span>{fieldComments} {mode === 'create' ? optionalParen : ''}</span>
         <textarea
             bind:value={comments}
             maxlength="1000"
             rows="3"
-            placeholder={mode === 'create'
-                ? 'Anything the admin should know...'
-                : ''}
+            placeholder={mode === 'create' ? commentsPlaceholder : ''}
             disabled={readOnly}
         ></textarea>
     </label>
@@ -449,32 +459,23 @@
             disabled={readOnly}
         />
         <span class="auto-claim-text">
-            <span class="auto-claim-label">
-                Automatically assign me as reviewer to fix errors once
-                alignment is complete
-            </span>
-            <span class="auto-claim-hint">
-                If unchecked, another contributor can claim the reviewing.
-            </span>
-            <span class="auto-claim-hint">
-                You can hold one claim at a time — if you already have one
-                when alignment completes, this auto-claim is skipped.
-            </span>
+            <span class="auto-claim-label">{autoClaimLabel}</span>
+            <span class="auto-claim-hint">{autoClaimHintUnchecked}</span>
+            <span class="auto-claim-hint">{autoClaimHintOneAtATime}</span>
         </span>
     </label>
 
     {#if mode === 'create' && nonHafsRiwayah}
-        <p class="callout">
-            Non-hafs riwayahs are not supported at the moment, we aim to have this
-            ready soon inshallah. You can still make the request.
-        </p>
+        <p class="callout">{nonHafsCallout}</p>
     {/if}
 
     {#if conflict}
         <p class="warning">
-            Heads up: another delivery of {reciter.name} already uses
-            ({riwayah} · {style}). Submission is still allowed — the admin
-            will review and decide.
+            {tr(lang, m.dashboard_request_conflict_warning({
+                name: reciter.name,
+                riwayah: vocabLabel('riwayah', riwayah),
+                style: vocabLabel('style', style),
+            }))}
         </p>
     {/if}
 
@@ -485,7 +486,7 @@
 
     <footer>
         <button type="button" class="ghost" on:click={() => dispatch('close')}>
-            {mode === 'create' ? 'Cancel' : 'Close'}
+            {mode === 'create' ? cancelLabel : closeLabel}
         </button>
         {#if mode === 'create'}
             <button
@@ -493,9 +494,9 @@
                 class="primary"
                 on:click={onSubmit}
                 disabled={busy || invalidCountry}
-                title={invalidCountry ? 'Fix the country field first' : ''}
+                title={invalidCountry ? submitInvalidCountryTitle : ''}
             >
-                {busy ? 'Submitting…' : 'Submit request'}
+                {busy ? submittingLabel : submitButton}
             </button>
         {:else if pending && $isOwner}
             <div class="admin-actions">
@@ -505,7 +506,7 @@
                     on:click={onRejectSoft}
                     disabled={busy}
                 >
-                    Send back
+                    {rejectSoftButton}
                 </button>
                 <button
                     type="button"
@@ -513,7 +514,7 @@
                     on:click={onRejectHard}
                     disabled={busy}
                 >
-                    Discard
+                    {rejectHardButton}
                 </button>
             </div>
         {/if}
@@ -583,7 +584,7 @@
     }
     .rules {
         margin: 0;
-        padding-left: var(--s-4);
+        padding-inline-start: var(--s-4);
         display: flex;
         flex-direction: column;
         gap: var(--s-1);
@@ -603,7 +604,7 @@
        typed value doesn't match any entry) rides alongside the label so
        the input itself stays a plain text box at its natural width. */
     .label-meta {
-        margin-left: 4px;
+        margin-inline-start: 4px;
         font-size: 10.5px;
         color: var(--text-faint);
         font-variant-numeric: tabular-nums;
@@ -626,7 +627,7 @@
     label span {
         color: var(--text-muted);
     }
-    label.rtl input { text-align: right; }
+    label.rtl input { text-align: end; }
     input, select, textarea {
         background: var(--panel);
         border: 1px solid var(--border-default);

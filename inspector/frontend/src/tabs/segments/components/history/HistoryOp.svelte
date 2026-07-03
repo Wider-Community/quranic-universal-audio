@@ -12,6 +12,8 @@
     import { afterUpdate } from 'svelte';
 
     import { editGate } from '../../../../lib/actions/editGate';
+    import { localeStore, tr } from '../../../../lib/i18n/locale-store';
+    import * as m from '../../../../lib/paraglide/messages';
     import { editingMode } from '../../../../lib/stores/editing-mode';
     import type { EditOp } from '../../../../lib/types/view-models';
     import {
@@ -20,7 +22,7 @@
     } from '../../stores/history';
     import { undoPending } from '../../stores/undo-pending';
     import type { MergeHighlight, TrimHighlight } from '../../types/segments-waveform';
-    import { EDIT_OP_LABELS } from '../../utils/constants';
+    import { editOpLabel } from '../../i18n/history-labels';
     import type { PreviewPlaybackContext } from '../../utils/playback/preview';
     import { onOpUndoClick } from '../../utils/save/undo';
     import SegmentRow from '../list/SegmentRow.svelte';
@@ -140,6 +142,9 @@
         arrowsBefore = beforeCardEls.filter((e): e is HTMLElement => !!e);
         arrowsAfter = afterCardEls.filter((e): e is HTMLElement => !!e);
     });
+
+    $: undoButtonLabel = tr($localeStore, isOpUndoing ? m.segments_history_op_undoing_button() : m.segments_history_op_undo_button());
+    $: deletedPlaceholder = tr($localeStore, m.segments_history_deleted_placeholder());
 </script>
 
 <div class="seg-history-op" class:seg-history-grouped-op={isGroup}>
@@ -147,12 +152,12 @@
         <div class="seg-history-op-label">
             {#if primary}
                 <span class="seg-history-op-type-badge">
-                    {EDIT_OP_LABELS[primary.op_type] || primary.op_type}
+                    {tr($localeStore, editOpLabel(primary.op_type))}
                 </span>
             {/if}
             {#each Object.entries(followUp) as [t, count]}
                 <span class="seg-history-op-type-badge secondary">
-                    + {EDIT_OP_LABELS[t] || t}{count > 1 ? ` \u00d7${count}` : ''}
+                    {tr($localeStore, m.segments_history_followup_badge({ opLabel: editOpLabel(t), countSuffix: count > 1 ? ` \u00d7${count}` : '' }))}
                 </span>
             {/each}
             {#each fixKinds as fk}
@@ -164,12 +169,14 @@
                     use:editGate
                     on:click|stopPropagation={handleOpUndoClick}
                     disabled={isOpUndoing}
-                >{isOpUndoing ? 'Undoing…' : 'Undo'}</button>
+                >{undoButtonLabel}</button>
             {/if}
         </div>
     {/if}
 
-    <div class="seg-history-diff">
+    <!-- dir="ltr" island: before → arrows → after is a left→right change axis
+         (SVG arrows point right); the diff geometry must not mirror under RTL. -->
+    <div class="seg-history-diff" dir="ltr">
         <div class="seg-history-before">
             {#each diff.before as snap, i (snap.segment_uid ?? i)}
                 <div bind:this={beforeCardEls[i]}>
@@ -198,7 +205,7 @@
 
         <div class="seg-history-after">
             {#if diff.after.length === 0}
-                <div class="seg-history-empty" bind:this={emptyEl}>(deleted)</div>
+                <div class="seg-history-empty" bind:this={emptyEl}>{deletedPlaceholder}</div>
             {:else}
                 {#each diff.after as snap, i (snap.segment_uid ?? i)}
                     <div bind:this={afterCardEls[i]}>

@@ -25,9 +25,7 @@ from pathlib import Path
 
 
 def _git(*args: str, cwd: Path | None = None) -> str:
-    out = subprocess.run(
-        ["git", *args], cwd=cwd, capture_output=True, text=True, check=True
-    )
+    out = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, check=True)
     return out.stdout.strip()
 
 
@@ -43,8 +41,20 @@ def _copy_dir(src: Path, dst: Path) -> None:
     if sys.platform == "win32":
         # robocopy exit codes 0-7 are success (8+ is a real failure).
         code = subprocess.run(
-            ["robocopy", str(src), str(dst), "/E", "/MT:16",
-             "/NFL", "/NDL", "/NJH", "/NJS", "/NP", "/R:1", "/W:1"],
+            [
+                "robocopy",
+                str(src),
+                str(dst),
+                "/E",
+                "/MT:16",
+                "/NFL",
+                "/NDL",
+                "/NJH",
+                "/NJS",
+                "/NP",
+                "/R:1",
+                "/W:1",
+            ],
         ).returncode
         if code >= 8:
             raise RuntimeError(f"robocopy failed ({code}) copying {src} -> {dst}")

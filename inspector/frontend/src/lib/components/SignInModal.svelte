@@ -10,6 +10,9 @@
     block auto-opening tabs). See `embedded-auth.ts` for the constraints.
 -->
 <script lang="ts">
+    import { localeStore, tr } from '$lib/i18n/locale-store';
+    import * as m from '$lib/paraglide/messages';
+
     import { signIn } from '../api/auth-client';
     import {
         beginEmbeddedSignIn,
@@ -21,8 +24,11 @@
     } from '../api/embedded-auth';
     import { closeSignInModal, signInModal } from '../stores/sign-in-modal';
 
-    $: title = $signInModal.context?.title ?? 'Sign in to contribute';
-    $: body = $signInModal.context?.body ?? 'Sign in with your Hugging Face account to claim a reciter and edit segments. We only read your username and avatar — nothing else.';
+    $: lang = $localeStore;
+    $: title = $signInModal.context?.title ?? tr(lang, m.common_signin_default_title());
+    $: body = $signInModal.context?.body ?? tr(lang, m.common_signin_default_body());
+    $: continueLabel = tr(lang, m.common_auth_continue_with_hf());
+    $: cancelLabel = tr(lang, m.common_action_cancel());
     $: returnPath = $signInModal.returnPath ?? '/';
     $: phase = $embeddedAuth.phase;
     $: embedded = isEmbedded();
@@ -64,35 +70,47 @@
             aria-labelledby="sign-in-title"
         >
             {#if embedded && phase === 'trying'}
-                <h2 id="sign-in-title" class="sign-in-title">Signing in…</h2>
+                <h2 id="sign-in-title" class="sign-in-title">
+                    {tr(lang, m.common_signin_embedded_signing_in())}
+                </h2>
             {:else if embedded && phase === 'need-tab'}
-                <h2 id="sign-in-title" class="sign-in-title">Continue in a new tab</h2>
+                <h2 id="sign-in-title" class="sign-in-title">
+                    {tr(lang, m.common_signin_embedded_need_tab_title())}
+                </h2>
                 <p class="sign-in-body">
-                    This browser blocks sign-in inside embedded pages.
+                    {tr(lang, m.common_signin_embedded_need_tab_body())}
                 </p>
                 <div class="sign-in-actions">
                     <button type="button" class="sign-in-cta" on:click={continueInTab}>
-                        Open new tab
+                        {tr(lang, m.common_signin_embedded_open_tab())}
                     </button>
-                    <button type="button" class="sign-in-dismiss" on:click={_close}>Cancel</button>
+                    <button type="button" class="sign-in-dismiss" on:click={_close}>
+                        {cancelLabel}
+                    </button>
                 </div>
             {:else if embedded && phase === 'awaiting-tab'}
-                <h2 id="sign-in-title" class="sign-in-title">Waiting for sign-in</h2>
-                <p class="sign-in-body">Finish in the other tab.</p>
+                <h2 id="sign-in-title" class="sign-in-title">
+                    {tr(lang, m.common_signin_embedded_awaiting_title())}
+                </h2>
+                <p class="sign-in-body">{tr(lang, m.common_signin_embedded_awaiting_body())}</p>
                 <div class="sign-in-actions">
                     <button type="button" class="sign-in-cta" on:click={() => void recheckSession()}>
-                        Recheck
+                        {tr(lang, m.common_signin_embedded_recheck())}
                     </button>
-                    <button type="button" class="sign-in-dismiss" on:click={_close}>Cancel</button>
+                    <button type="button" class="sign-in-dismiss" on:click={_close}>
+                        {cancelLabel}
+                    </button>
                 </div>
             {:else}
                 <h2 id="sign-in-title" class="sign-in-title">{title}</h2>
                 <p class="sign-in-body">{body}</p>
                 <div class="sign-in-actions">
                     <button type="button" class="sign-in-cta" on:click={_onContinue}>
-                        Continue with Hugging Face
+                        {continueLabel}
                     </button>
-                    <button type="button" class="sign-in-dismiss" on:click={_close}>Cancel</button>
+                    <button type="button" class="sign-in-dismiss" on:click={_close}>
+                        {cancelLabel}
+                    </button>
                 </div>
             {/if}
         </div>

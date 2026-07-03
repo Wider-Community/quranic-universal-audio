@@ -869,8 +869,13 @@ def _result(
 
 
 def publish_slug(
-    slug: str, job_id: str, *, sync_card: bool = True,
-    pad_start: int = 100, pad_end: int = 300, min_gap: int = 100,
+    slug: str,
+    job_id: str,
+    *,
+    sync_card: bool = True,
+    pad_start: int = 100,
+    pad_end: int = 300,
+    min_gap: int = 100,
 ) -> dict:
     """Publish one recitation to the HF dataset. Returns a result dict; never
     posts a webhook or raises (the caller — single or batch — owns reporting).
@@ -1119,11 +1124,18 @@ def main() -> int:
     job_id = os.environ.get("JOB_ID", "").strip() or "unknown"
     pads = pad_params_from_env()
     pad_start, pad_end, min_gap = pads["pad_start"], pads["pad_end"], pads["min_gap"]
-    log.info("publish_hf: slug=%s job=%s pads=(start=%d,end=%d,gap=%d)",
-             slug, job_id, pad_start, pad_end, min_gap)
+    log.info(
+        "publish_hf: slug=%s job=%s pads=(start=%d,end=%d,gap=%d)",
+        slug,
+        job_id,
+        pad_start,
+        pad_end,
+        min_gap,
+    )
 
-    result = publish_slug(slug, job_id, sync_card=True,
-                          pad_start=pad_start, pad_end=pad_end, min_gap=min_gap)
+    result = publish_slug(
+        slug, job_id, sync_card=True, pad_start=pad_start, pad_end=pad_end, min_gap=min_gap
+    )
     _post_webhook(
         slug=slug,
         job_id=job_id,

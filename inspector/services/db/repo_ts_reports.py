@@ -457,7 +457,9 @@ def resolve_group(
     return [_row_to_dict(r) for r in rows]
 
 
-def resolve_auto(*, report_id: int, reason: str, at: datetime | None = None) -> dict[str, Any] | None:
+def resolve_auto(
+    *, report_id: int, reason: str, at: datetime | None = None
+) -> dict[str, Any] | None:
     """System-resolve an open report on regen (no human resolver).
 
     Used by the silence auto-resolve path when a re-stamp introduced/removed the

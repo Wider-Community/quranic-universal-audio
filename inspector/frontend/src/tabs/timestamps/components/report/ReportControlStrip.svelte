@@ -10,6 +10,8 @@
      * selection. Cancel discards, Submit persists the batch. The grid below stays
      * the click surface; this strip never blocks it.
      */
+    import * as m from '$lib/paraglide/messages';
+    import { i18n } from '$lib/i18n/locale.svelte';
     import {
         exitReportMode,
         focusCell,
@@ -37,14 +39,17 @@
     const stagedList = $derived([...$staged.values()]);
 
     function ruleLabel(tag: string): string {
-        return badgeForTag(tag)?.tooltip ?? silentTooltip(tag) ?? tag;
+        return badgeForTag(tag)?.tooltip() ?? silentTooltip(tag) ?? tag;
     }
 
     function cellLabel(a: StagedAnnotation): string {
         const w = (a.target.word_index ?? 0) + 1;
-        if (a.target.kind === 'gap') return `Pause after word ${w}`;
-        if (a.target.kind === 'word') return `Word ${w}`;
-        return `W${w}·cell ${a.target.cell_index ?? a.target.source_letter_index ?? '?'}`;
+        if (a.target.kind === 'gap') return m.ts_report_strip_gap_pause_label({ w });
+        if (a.target.kind === 'word') return m.ts_report_strip_word_label({ w });
+        return m.ts_report_strip_cell_label({
+            w,
+            cell: a.target.cell_index ?? a.target.source_letter_index ?? '?',
+        });
     }
 
     /** Phonemes group by word: one strip row per word, each flagged phoneme a chip
@@ -65,6 +70,20 @@
         if (a.glyph) return a.glyph;
         return (a.target.phoneme_flat_index ?? -1) < 0 ? 'merger' : '•';
     }
+    // Attribute/text labels gated on i18n.locale so they re-render on a locale switch.
+    const groupAriaLabel = $derived((i18n.locale, m.ts_report_strip_group_aria_label()));
+    const cancelLabel = $derived((i18n.locale, m.common_action_cancel()));
+    const removePhonemeTitle = $derived((i18n.locale, m.ts_report_strip_remove_phoneme_title()));
+    const startBoundaryAriaLabel = $derived((i18n.locale, m.ts_report_strip_start_boundary_aria_label()));
+    const endBoundaryAriaLabel = $derived((i18n.locale, m.ts_report_strip_end_boundary_aria_label()));
+    const axisStartLabel = $derived((i18n.locale, m.ts_report_strip_axis_start_label()));
+    const axisEndLabel = $derived((i18n.locale, m.ts_report_strip_axis_end_label()));
+    const axisEarlyOption = $derived((i18n.locale, m.ts_report_strip_axis_early_option()));
+    const axisLateOption = $derived((i18n.locale, m.ts_report_strip_axis_late_option()));
+    const existingLabel = $derived((i18n.locale, m.ts_report_strip_existing_label()));
+    const commentRequiredPlaceholder = $derived((i18n.locale, m.ts_report_strip_comment_required_placeholder()));
+    const noteOptionalPlaceholder = $derived((i18n.locale, m.ts_report_strip_note_optional_placeholder()));
+    const removeAriaLabel = $derived((i18n.locale, m.ts_report_strip_remove_aria_label()));
 
     const removedIds = $derived.by(() => {
         const cat = mode.kind === 'inactive' ? '' : mode.kind;
@@ -117,9 +136,9 @@
         removeStaged(a.cellKey);
     }
 
-    const SUBTEXT: Partial<Record<string, string>> = {
-        timing: 'This helps us improve our timing model',
-        silence: 'This helps us improve our pause detection pipeline',
+    const SUBTEXT: Partial<Record<string, () => string>> = {
+        timing: m.ts_report_thanks_subtext_timing,
+        silence: m.ts_report_thanks_subtext_silence,
     };
 
     async function submit(): Promise<void> {
@@ -134,72 +153,72 @@
             await loadVerseReports(ctx.slug, ctx.verseKey);
             await loadReciterReports(ctx.slug);
             if (stagedList.length > 0) {
-                const sub = SUBTEXT[mode.kind] ?? '';
-                pushToast({ kind: 'success', text: `Thank you for the feedback!${sub ? ' ' + sub : ''}` });
+                const sub = SUBTEXT[mode.kind]?.() ?? '';
+                pushToast({ kind: 'success', text: `${m.ts_report_thanks_toast()}${sub ? ' ' + sub : ''}` });
             }
             exitReportMode();
         } else {
-            error = res.error ?? 'Failed to submit';
+            error = res.error ?? m.ts_report_submit_failed_fallback();
         }
     }
 
-    const SILENCE_LABELS: Record<string, string> = {
-        pause_boundary: 'Pause timing off',
-        pause_wasl: "Shouldn't be here",
-        pause_missed: 'Missing pause',
+    const SILENCE_LABELS: Record<string, () => string> = {
+        pause_boundary: m.ts_report_silence_pause_boundary_label,
+        pause_wasl: m.ts_report_silence_pause_wasl_label,
+        pause_missed: m.ts_report_silence_pause_missed_label,
     };
     const subtypeLabel = $derived(
         mode.kind === 'tajweed'
             ? mode.subtype === 'wrong_rule'
-                ? 'Wrong rule'
-                : 'Missing rule'
+                ? m.ts_report_tajweed_wrong_rule_label()
+                : m.ts_report_tajweed_missing_rule_label()
             : mode.kind === 'silence'
-              ? SILENCE_LABELS[mode.subtype]
+              ? (SILENCE_LABELS[mode.subtype]?.() ?? '')
               : '',
     );
     const headTitle = $derived(
         mode.kind === 'tajweed'
-            ? 'Report a tajweed issue'
+            ? m.ts_report_strip_head_title_tajweed()
             : mode.kind === 'phonemes'
-              ? 'Report a phoneme issue'
+              ? m.ts_report_strip_head_title_phonemes()
               : mode.kind === 'silence'
-                ? 'Report a pause issue'
-                : 'Report a timing issue',
+                ? m.ts_report_strip_head_title_silence()
+                : m.ts_report_strip_head_title_timing(),
     );
-    const SILENCE_INSTRUCTIONS: Record<string, string> = {
-        pause_boundary: 'Click a highlighted pause, then mark how its start and/or end is off.',
-        pause_wasl: "Click any pause that shouldn't be there (the words should connect).",
-        pause_missed: 'Click where a pause is missing — a slot between words where the reciter stops.',
+    const SILENCE_INSTRUCTIONS: Record<string, () => string> = {
+        pause_boundary: m.ts_report_strip_instruction_pause_boundary,
+        pause_wasl: m.ts_report_strip_instruction_pause_wasl,
+        pause_missed: m.ts_report_strip_instruction_pause_missed,
     };
     const instruction = $derived(
         mode.kind === 'timing'
-            ? 'Click a letter or word, then mark how its start and/or end is off.'
+            ? m.ts_report_strip_instruction_timing()
             : mode.kind === 'phonemes'
-              ? 'Click any phonemes that are wrong or mislabeled. Click again to remove.'
+              ? m.ts_report_strip_instruction_phonemes()
               : mode.kind === 'silence'
-                ? SILENCE_INSTRUCTIONS[mode.subtype]
+                ? (SILENCE_INSTRUCTIONS[mode.subtype]?.() ?? '')
                 : mode.kind === 'tajweed' && mode.subtype === 'wrong_rule'
-                  ? 'Highlighted cells carry a rule — click one to flag the wrong rule.'
-                  : 'Click any cell where a rule should apply but is missing.',
+                  ? m.ts_report_strip_instruction_tajweed_wrong_rule()
+                  : m.ts_report_strip_instruction_tajweed_missing_rule(),
     );
     const emptyText = $derived(
         mode.kind === 'phonemes'
-            ? 'No phonemes flagged yet.'
+            ? m.ts_report_strip_empty_phonemes()
             : mode.kind === 'silence'
-              ? 'No pauses flagged yet.'
-              : 'Nothing flagged yet.',
+              ? m.ts_report_strip_empty_silence()
+              : m.ts_report_strip_empty_default(),
     );
     const submitCount = $derived(stagedList.length + removedIds.length);
     const submitLabel = $derived(
         busy
-            ? 'Saving…'
+            ? m.ts_report_strip_saving_label()
             : stagedList.length === 0 && removedIds.length > 0
-              ? `Confirm delete${removedIds.length > 1 ? ` ${removedIds.length}` : ''}`
-              : `Submit${submitCount ? ` ${submitCount}` : ''}`,
+              ? m.ts_report_strip_confirm_delete_label({ count: removedIds.length })
+              : m.ts_report_strip_submit_label({ count: submitCount }),
     );
 </script>
 
-<div class="strip" role="group" aria-label="Report controls">
+<div class="strip" role="group" aria-label={groupAriaLabel}>
     <header class="head">
         <div class="title-wrap">
             <span class="flag-ic"><ReportIcon name="flag" size={15} /></span>
@@ -207,7 +226,7 @@
             {#if subtypeLabel}<span class="subtype">{subtypeLabel}</span>{/if}
         </div>
         <div class="actions">
-            <button type="button" class="btn ghost" onclick={exitReportMode} disabled={busy}>Cancel</button>
+            <button type="button" class="btn ghost" onclick={exitReportMode} disabled={busy}>{cancelLabel}</button>
             <button type="button" class="btn primary" onclick={submit} disabled={!canSubmit || busy}>
                 {submitLabel}
             </button>
@@ -224,14 +243,14 @@
             <div class="rows" role="list">
                 {#each phonemeGroups as g (g.wordIndex)}
                     <div class="prow" role="listitem">
-                        <span class="cell-lbl">Word {g.wordIndex + 1}</span>
+                        <span class="cell-lbl">{m.ts_report_strip_word_label({ w: g.wordIndex + 1 })}</span>
                         <div class="chips">
                             {#each g.items as a (a.cellKey)}
                                 <button
                                     type="button"
                                     class="ph-chip"
-                                    title="Remove phoneme"
-                                    aria-label="Remove phoneme {chipLabel(a)}"
+                                    title={removePhonemeTitle}
+                                    aria-label={m.ts_report_strip_remove_phoneme_aria_label({ glyph: chipLabel(a) })}
                                     onclick={(e) => removeRow(a, e)}
                                 >
                                     <span class="ph-g">{chipLabel(a)}</span>
@@ -254,26 +273,26 @@
                         {#if a.kind !== 'phonemes'}
                             <div class="ctl">
                                 {#if a.kind === 'timing' || (a.kind === 'silence' && a.subtype === 'pause_boundary')}
-                                    <span class="axis-cap">Start</span>
-                                    <div class="seg" role="group" aria-label="Start boundary">
+                                    <span class="axis-cap">{axisStartLabel}</span>
+                                    <div class="seg" role="group" aria-label={startBoundaryAriaLabel}>
                                         <button type="button" class="opt" class:on={a.onset === 'early'}
-                                            aria-pressed={a.onset === 'early'} onclick={() => setAxis(a, 'onset', 'early')}>early</button>
+                                            aria-pressed={a.onset === 'early'} onclick={() => setAxis(a, 'onset', 'early')}>{axisEarlyOption}</button>
                                         <button type="button" class="opt" class:on={a.onset === 'late'}
-                                            aria-pressed={a.onset === 'late'} onclick={() => setAxis(a, 'onset', 'late')}>late</button>
+                                            aria-pressed={a.onset === 'late'} onclick={() => setAxis(a, 'onset', 'late')}>{axisLateOption}</button>
                                     </div>
-                                    <span class="axis-cap">End</span>
-                                    <div class="seg" role="group" aria-label="End boundary">
+                                    <span class="axis-cap">{axisEndLabel}</span>
+                                    <div class="seg" role="group" aria-label={endBoundaryAriaLabel}>
                                         <button type="button" class="opt" class:on={a.offset === 'early'}
-                                            aria-pressed={a.offset === 'early'} onclick={() => setAxis(a, 'offset', 'early')}>early</button>
+                                            aria-pressed={a.offset === 'early'} onclick={() => setAxis(a, 'offset', 'early')}>{axisEarlyOption}</button>
                                         <button type="button" class="opt" class:on={a.offset === 'late'}
-                                            aria-pressed={a.offset === 'late'} onclick={() => setAxis(a, 'offset', 'late')}>late</button>
+                                            aria-pressed={a.offset === 'late'} onclick={() => setAxis(a, 'offset', 'late')}>{axisLateOption}</button>
                                     </div>
                                     {#if a.onset || a.offset}
                                         <span class="derived">{timingLabel(a.onset, a.offset)}</span>
                                     {/if}
                                 {:else if a.kind === 'silence'}
                                     <!-- Binary subtypes (waṣl / missed) — no control, just the stance. -->
-                                    <span class="derived">{SILENCE_LABELS[a.subtype]}</span>
+                                    <span class="derived">{SILENCE_LABELS[a.subtype]?.() ?? ''}</span>
                                 {:else if a.subtype === 'wrong_rule' && a.ruleOptions.length > 0}
                                     {#each a.ruleOptions as tag (tag)}
                                         <button
@@ -284,7 +303,7 @@
                                     {/each}
                                 {:else if a.subtype === 'missing_rule' && a.ruleOptions.length > 0}
                                     <!-- Read-only context: the rules already on the cell. -->
-                                    <span class="existing-lbl">Existing:</span>
+                                    <span class="existing-lbl">{existingLabel}</span>
                                     {#each a.ruleOptions as tag (tag)}
                                         <span class="rule-chip">{ruleLabel(tag)}</span>
                                     {/each}
@@ -294,13 +313,13 @@
                                 <!-- Silence reports carry no comment (selection-only). -->
                                 <input
                                     class="cmt" type="text"
-                                    placeholder={a.kind === 'tajweed' ? 'Comment (required)…' : 'Note (optional)…'}
+                                    placeholder={a.kind === 'tajweed' ? commentRequiredPlaceholder : noteOptionalPlaceholder}
                                     value={a.comment}
                                     oninput={(e) => editComment(a, e.currentTarget.value)}
                                 />
                             {/if}
                         {/if}
-                        <button type="button" class="row-x" aria-label="Remove" onclick={(e) => removeRow(a, e)}>
+                        <button type="button" class="row-x" aria-label={removeAriaLabel} onclick={(e) => removeRow(a, e)}>
                             <ReportIcon name="trash" size={13} />
                         </button>
                     </div>
@@ -333,7 +352,7 @@
         padding: 2px var(--s-2); font-size: var(--fs-meta); font-weight: 600; color: var(--accent);
         background: var(--accent-tint); border-radius: var(--r-2);
     }
-    .actions { margin-left: auto; display: inline-flex; gap: var(--s-2); }
+    .actions { margin-inline-start: auto; display: inline-flex; gap: var(--s-2); }
 
     .btn {
         padding: 5px var(--s-3); border-radius: var(--r-2); font: inherit; font-size: var(--fs-meta);
@@ -352,11 +371,11 @@
     .rows { display: flex; flex-direction: column; gap: var(--s-2); }
     .row {
         display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-2);
-        padding: var(--s-2); border: 1px solid var(--border-default); border-left: 3px solid var(--border-default);
+        padding: var(--s-2); border: 1px solid var(--border-default); border-inline-start: 3px solid var(--border-default);
         border-radius: var(--r-2); background: var(--panel-2);
     }
-    .row.focused { border-color: var(--accent); border-left-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-tint); }
-    .row.invalid { border-left-color: var(--state-missing-fg); }
+    .row.focused { border-color: var(--accent); border-inline-start-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-tint); }
+    .row.invalid { border-inline-start-color: var(--state-missing-fg); }
     .cell-lbl { font-size: var(--fs-meta); font-weight: 600; color: var(--text-primary); white-space: nowrap; }
 
     /* Phonemes: a compact word row of removable chips (not one row per phoneme). */

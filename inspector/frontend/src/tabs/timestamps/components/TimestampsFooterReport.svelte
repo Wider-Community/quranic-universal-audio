@@ -13,6 +13,8 @@
      * verse already carries open reports.
      */
     import { clickOutside } from '../../../lib/actions/click-outside';
+    import { i18n } from '../../../lib/i18n/locale.svelte';
+    import * as m from '../../../lib/paraglide/messages';
     import { can } from '../../../lib/stores/capabilities';
     import { playerContext } from '../../../lib/stores/player-context';
     import type { TsReport } from '../../../lib/types/generated/schemas';
@@ -43,6 +45,14 @@
     const curVerse = $derived($selectedVerse);
     const disabled = $derived(!curSlug || !curVerse);
     const isReported = $derived(!!curVerse && $openReportedVerseKeys.has(curVerse));
+
+    // Reading i18n.locale makes these re-run on switch.
+    const reportAriaLabel = $derived(
+        (i18n.locale,
+        curVerse ? m.ts_footer_report_aria_label({ verse: curVerse }) : m.ts_footer_report_aria_label_plain()),
+    );
+    const reportTitle = $derived((i18n.locale, m.ts_footer_report_title()));
+    const reportButtonLabel = $derived((i18n.locale, m.ts_footer_report_button()));
 
     // Keep the reciter-level reported-verse counts (button highlight) in sync
     // with the playing reciter.
@@ -114,15 +124,23 @@
         else enterTajweed(snapSlug, snapVerse, (subtype as TajweedSubtype) ?? 'wrong_rule');
     }
 
-    // Shift a left-anchored drop-up back on-screen if it overflows the right
-    // edge on a narrow window.
+    // Shift a start-anchored drop-up back on-screen if it overflows the far
+    // edge on a narrow window. Direction-aware: in LTR it's anchored left and
+    // can overflow right; in RTL it's anchored right and can overflow left.
     function keepInView(node: HTMLElement) {
         const margin = 8;
         const place = (): void => {
-            node.style.left = '0px';
+            const rtl = getComputedStyle(node).direction === 'rtl';
+            const anchor = rtl ? 'right' : 'left';
+            const other = rtl ? 'left' : 'right';
+            node.style[other] = 'auto';
+            node.style[anchor] = '0px';
             node.style.maxWidth = '';
-            const overflow = node.getBoundingClientRect().right - (window.innerWidth - margin);
-            if (overflow > 0) node.style.left = `${-overflow}px`;
+            const rect = node.getBoundingClientRect();
+            const overflow = rtl
+                ? margin - rect.left
+                : rect.right - (window.innerWidth - margin);
+            if (overflow > 0) node.style[anchor] = `${-overflow}px`;
             node.style.maxWidth = `${window.innerWidth - margin * 2}px`;
         };
         place();
@@ -143,11 +161,11 @@
             onpointerenter={prewarm}
             aria-haspopup="menu"
             aria-expanded={open}
-            aria-label={`Report a timestamps issue${curVerse ? ` on verse ${curVerse}` : ''}`}
-            title="Report a timestamps issue"
+            aria-label={reportAriaLabel}
+            title={reportTitle}
         >
             <ReportIcon name="flag" size={14} />
-            <span>Report</span>
+            <span>{reportButtonLabel}</span>
         </button>
 
         {#if open}
@@ -211,7 +229,7 @@
     .report-pop {
         position: absolute;
         bottom: calc(100% + var(--s-2));
-        left: 0;
+        inset-inline-start: 0;
         width: max-content;
         max-width: min(380px, calc(100vw - 16px));
         max-height: min(640px, 70vh);

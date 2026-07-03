@@ -22,6 +22,8 @@
      */
 
     import Icon from '../../../../lib/icons/Icon.svelte';
+    import { localeStore, tr } from '../../../../lib/i18n/locale-store';
+    import * as m from '../../../../lib/paraglide/messages';
     import type { Segment } from '../../../../lib/types/view-models';
     import { activeTrimBoundary, editStatusText, trimWindow } from '../../stores/edit';
     import type { SegCanvas } from '../../types/segments-waveform';
@@ -55,44 +57,57 @@
     function nudgeStartFwd():  void { nudgeTrimBoundary('start',  EDIT_NUDGE_MS); }
     function nudgeEndBack():   void { nudgeTrimBoundary('end',   -EDIT_NUDGE_MS); }
     function nudgeEndFwd():    void { nudgeTrimBoundary('end',    EDIT_NUDGE_MS); }
+
+    $: startGroupAriaLabel = tr($localeStore, m.segments_trim_start_group_aria_label());
+    $: startBackTitle = tr($localeStore, m.segments_trim_start_back_title({ ms: EDIT_NUDGE_MS }));
+    $: startFwdTitle = tr($localeStore, m.segments_trim_start_fwd_title({ ms: EDIT_NUDGE_MS }));
+    $: replayTitle = tr($localeStore, m.segments_trim_replay_title());
+    $: replayAriaLabel = tr($localeStore, m.segments_trim_replay_aria_label());
+    $: endGroupAriaLabel = tr($localeStore, m.segments_trim_end_group_aria_label());
+    $: endBackTitle = tr($localeStore, m.segments_trim_end_back_title({ ms: EDIT_NUDGE_MS }));
+    $: endFwdTitle = tr($localeStore, m.segments_trim_end_fwd_title({ ms: EDIT_NUDGE_MS }));
+    $: applyLabel = tr($localeStore, m.segments_trim_apply_button());
+    $: cancelLabel = tr($localeStore, m.common_action_cancel());
 </script>
 
-<div class="seg-edit-inline">
+<!-- dir="ltr" island: start/end nudgers map to the left/right trim handles on
+     the left→right waveform; their order must mirror the waveform, not the RTL frame. -->
+<div class="seg-edit-inline" dir="ltr">
     <div class="seg-edit-buttons">
-        <button class="btn btn-sm btn-cancel" on:click={exitEditMode}>Cancel</button>
+        <button class="btn btn-sm btn-cancel" on:click={exitEditMode}>{cancelLabel}</button>
 
-        <div class="seg-nudge-pair seg-nudge-start" class:kb-active={$activeTrimBoundary === 'start'} role="group" aria-label="Trim start">
+        <div class="seg-nudge-pair seg-nudge-start" class:kb-active={$activeTrimBoundary === 'start'} role="group" aria-label={startGroupAriaLabel}>
             <button class="seg-nudge"
-                title="Move start back {EDIT_NUDGE_MS} ms"
+                title={startBackTitle}
                 disabled={startBackDisabled}
                 on:click={nudgeStartBack}>&lsaquo;</button>
             <button class="seg-nudge"
-                title="Move start forward {EDIT_NUDGE_MS} ms"
+                title={startFwdTitle}
                 disabled={startFwdDisabled}
                 on:click={nudgeStartFwd}>&rsaquo;</button>
         </div>
 
         <button class="seg-replay"
-            title="Replay trim window from start"
-            aria-label="Replay"
+            title={replayTitle}
+            aria-label={replayAriaLabel}
             disabled={replayDisabled}
             on:click={() => previewTrimAudio(canvas, { mode: 'cold' })}
         >
             <Icon name="replay" size={14} />
         </button>
 
-        <div class="seg-nudge-pair seg-nudge-end" class:kb-active={$activeTrimBoundary === 'end'} role="group" aria-label="Trim end">
+        <div class="seg-nudge-pair seg-nudge-end" class:kb-active={$activeTrimBoundary === 'end'} role="group" aria-label={endGroupAriaLabel}>
             <button class="seg-nudge"
-                title="Move end back {EDIT_NUDGE_MS} ms"
+                title={endBackTitle}
                 disabled={endBackDisabled}
                 on:click={nudgeEndBack}>&lsaquo;</button>
             <button class="seg-nudge"
-                title="Move end forward {EDIT_NUDGE_MS} ms"
+                title={endFwdTitle}
                 disabled={endFwdDisabled}
                 on:click={nudgeEndFwd}>&rsaquo;</button>
         </div>
 
-        <button class="btn btn-sm btn-confirm" on:click={() => confirmTrim(seg, canvas)}>Apply</button>
+        <button class="btn btn-sm btn-confirm" on:click={() => confirmTrim(seg, canvas)}>{applyLabel}</button>
         <span class="seg-edit-status">{$editStatusText}</span>
     </div>
 </div>

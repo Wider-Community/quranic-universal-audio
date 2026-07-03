@@ -18,7 +18,8 @@
     "resolveJsonModule": true,
     "baseUrl": ".",
     "paths": {
-      "@fixtures/*": ["../tests/fixtures/segments/*"]
+      "@fixtures/*": ["../tests/fixtures/segments/*"],
+      "$lib/*": ["src/lib/*"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.svelte", "vite.config.ts"]

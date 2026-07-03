@@ -79,7 +79,7 @@
     cursor: pointer;
     background: transparent;
     border: none;
-    text-align: left;
+    text-align: start;
     transition: background var(--t-fast);
 }
 .combo-row:hover { background: var(--panel); }
@@ -177,7 +177,7 @@
     transition: background var(--t-fast), color var(--t-fast);
 }
 .seg-toggle .opt + .opt {
-    border-left: 1px solid var(--border-default);
+    border-inline-start: 1px solid var(--border-default);
 }
 .seg-toggle .opt:hover { color: var(--text-primary); }
 .seg-toggle .opt.on {

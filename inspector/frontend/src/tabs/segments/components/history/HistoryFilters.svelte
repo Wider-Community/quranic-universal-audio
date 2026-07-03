@@ -15,6 +15,8 @@
      * only when at least one filter is active.
      */
 
+    import { localeStore, tr } from '../../../../lib/i18n/locale-store';
+    import * as m from '../../../../lib/paraglide/messages';
     import {
         buildDisplayItems,
         chainHasWaslAnnotation,
@@ -34,7 +36,9 @@
         toggleTierFilter,
         toggleWaslFilter,
     } from '../../stores/history';
-    import { EDIT_OP_LABELS, ERROR_CAT_LABELS } from '../../utils/constants';
+    import { editOpLabel } from '../../i18n/history-labels';
+    import { VALIDATION_TITLE } from '../../i18n/validation-labels';
+    import { ERROR_CAT_LABELS } from '../../utils/constants';
     import { deriveOpIssueDelta } from '../../utils/validation/classified-issues';
 
     const HISTORY_NEUTRAL_CATEGORIES = new Set(['basmala_amin', 'muqattaat']);
@@ -183,21 +187,32 @@
     $: showTiers = tierStats.pendingAffecting > 0;
 
     function tierLabel(index: number, isCurrent: boolean): string {
-        if (isCurrent) return 'Pending regen';
-        if (index === 0) return 'Initial';
-        return `After gen ${index}`;
+        if (isCurrent) return m.segments_history_tier_pending_regen();
+        if (index === 0) return m.segments_history_tier_initial();
+        return m.segments_history_tier_after_gen({ n: index });
     }
 
     $: showOps = Object.keys(baseOpCounts).length >= 2;
     $: showCats = Object.keys(baseCatCounts).length >= 2;
     $: showWasl = waslCount > 0;
     $: hasAny = showOps || showCats || showWasl || showTiers;
+
+    $: timestampsFilterLabel = tr($localeStore, m.segments_history_filter_timestamps_label());
+    $: timestampsFilterHintTitle = tr($localeStore, m.segments_history_filter_timestamps_hint_title());
+    $: editTypeLabel = tr($localeStore, m.segments_history_filter_edit_type_label());
+    $: issueTypeLabel = tr($localeStore, m.segments_history_filter_issue_type_label());
+    $: annotationLabel = tr($localeStore, m.segments_history_filter_annotation_label());
+    $: waslFilterTitle = tr($localeStore, m.segments_history_filter_wasl_title());
+    $: waslFilterPill = tr($localeStore, m.segments_history_filter_wasl_pill());
+    $: sortByLabel = tr($localeStore, m.segments_history_filter_sort_label());
+    $: sortEditTimeLabel = tr($localeStore, m.segments_history_sort_edit_time());
+    $: sortQuranOrderLabel = tr($localeStore, m.segments_history_sort_quran_order());
 </script>
 
 <div id="seg-history-filters" class="seg-history-filters" class:hidden-none={!hasAny}>
     {#if showTiers}
         <div class="seg-history-filter-section">
-            <span class="seg-history-filter-label" title="Edits partitioned by timestamp generation. The 'Pending regen' tier holds edits not yet reflected in the generated timestamps.">Timestamps:</span>
+            <span class="seg-history-filter-label" title={timestampsFilterHintTitle}>{timestampsFilterLabel}</span>
             <div id="seg-history-filter-tiers" class="seg-history-filter-pills">
                 {#each tierStats.tiers as t}
                     <button
@@ -206,7 +221,7 @@
                         class:tier-pending={t.isCurrent}
                         data-filter-type="tier"
                         data-filter-value={t.index}
-                        title={t.isCurrent ? `${t.affecting} timestamp-affecting edit(s) since the last generation — regenerate to apply` : `Edits in this generation tier`}
+                        title={t.isCurrent ? m.segments_history_tier_pending_title({ count: t.affecting }) : m.segments_history_tier_generic_title()}
                         on:click={() => toggleTierFilter(t.index)}
                     >
                         {t.isCurrent ? '⚠ ' : ''}{tierLabel(t.index, t.isCurrent)} <span class="pill-count">{t.isCurrent ? t.affecting : t.count}</span>
@@ -218,7 +233,7 @@
 
     {#if showOps}
         <div class="seg-history-filter-section">
-            <span class="seg-history-filter-label">Edit type:</span>
+            <span class="seg-history-filter-label">{editTypeLabel}</span>
             <div id="seg-history-filter-ops" class="seg-history-filter-pills">
                 {#each opEntries as [opType, count]}
                     <button
@@ -229,7 +244,7 @@
                         data-filter-value={opType}
                         on:click={() => toggleFilter('op', opType)}
                     >
-                        {EDIT_OP_LABELS[opType] || opType} <span class="pill-count">{count}</span>
+                        {tr($localeStore, editOpLabel(opType))} <span class="pill-count">{count}</span>
                     </button>
                 {/each}
             </div>
@@ -238,7 +253,7 @@
 
     {#if showCats}
         <div class="seg-history-filter-section">
-            <span class="seg-history-filter-label">Issue/flag type:</span>
+            <span class="seg-history-filter-label">{issueTypeLabel}</span>
             <div id="seg-history-filter-cats" class="seg-history-filter-pills">
                 {#each catEntries as [cat, count]}
                     <button
@@ -249,7 +264,7 @@
                         data-filter-value={cat}
                         on:click={() => toggleFilter('cat', cat)}
                     >
-                        {ERROR_CAT_LABELS[cat]} <span class="pill-count">{count}</span>
+                        {tr($localeStore, VALIDATION_TITLE[cat]?.() ?? ERROR_CAT_LABELS[cat] ?? cat)} <span class="pill-count">{count}</span>
                     </button>
                 {/each}
             </div>
@@ -258,37 +273,37 @@
 
     {#if showWasl}
         <div class="seg-history-filter-section">
-            <span class="seg-history-filter-label">Annotation:</span>
+            <span class="seg-history-filter-label">{annotationLabel}</span>
             <div id="seg-history-filter-wasl" class="seg-history-filter-pills">
                 <button
                     class="seg-history-filter-pill"
                     class:active={$filterHasWasl}
                     data-filter-type="wasl"
                     data-filter-value="wasl"
-                    title="Show only edits that mark a boundary as WASL"
+                    title={waslFilterTitle}
                     on:click={() => toggleWaslFilter()}
                 >
-                    Wasl <span class="pill-count">{waslCount}</span>
+                    {waslFilterPill} <span class="pill-count">{waslCount}</span>
                 </button>
             </div>
         </div>
     {/if}
 
     <div class="seg-history-filter-section">
-        <span class="seg-history-filter-label">Sort by:</span>
+        <span class="seg-history-filter-label">{sortByLabel}</span>
         <div class="seg-history-filter-pills">
             <button
                 id="seg-history-sort-time"
                 class="seg-history-filter-pill"
                 class:active={$sortMode === 'time'}
                 on:click={() => setSortMode('time')}
-            >Edit time</button>
+            >{sortEditTimeLabel}</button>
             <button
                 id="seg-history-sort-quran"
                 class="seg-history-filter-pill"
                 class:active={$sortMode === 'quran'}
                 on:click={() => setSortMode('quran')}
-            >Quran order</button>
+            >{sortQuranOrderLabel}</button>
         </div>
     </div>
 

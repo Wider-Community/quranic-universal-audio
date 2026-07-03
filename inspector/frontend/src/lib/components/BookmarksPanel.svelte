@@ -14,6 +14,9 @@
      */
     import { onMount } from 'svelte';
 
+    import { i18n } from '$lib/i18n/locale.svelte';
+    import * as m from '$lib/paraglide/messages';
+
     import { devConnectQf } from '../api/bookmarks-client';
     import {
         bookmarks,
@@ -78,59 +81,80 @@
     }
 
     function label(surah: number): string {
-        return surahOptionText(surah);
+        return surahOptionText(surah, i18n.locale);
     }
+
+    // Reading i18n.locale here makes every derived message re-run on locale switch.
+    const t = $derived.by(() => {
+        void i18n.locale;
+        return {
+            panelAria: m.common_bookmarks_panel_aria_label(),
+            heading: m.common_bookmarks_heading(),
+            close: m.common_action_close(),
+            devStubTitle: m.common_bookmarks_conn_dev_stub_title(),
+            devStubLabel: m.common_bookmarks_conn_dev_stub_label(),
+            syncedTitle: m.common_bookmarks_conn_synced_title(),
+            syncedLabel: m.common_bookmarks_conn_synced_label(),
+            disconnect: m.common_bookmarks_disconnect(),
+            connectDevStub: m.common_bookmarks_connect_dev_stub(),
+            connHintDev: m.common_bookmarks_conn_hint_dev(),
+            connectQf: m.common_bookmarks_connect_qf(),
+            connHintAnon: m.common_bookmarks_conn_hint_anon(),
+            empty: m.common_bookmarks_empty(),
+            remove: m.common_bookmarks_remove_title(),
+        };
+    });
 </script>
 
-<aside id="bookmarks-panel" class="bookmarks-panel" hidden={!$bookmarksVisible} aria-label="Bookmarks">
+<aside id="bookmarks-panel" class="bookmarks-panel" hidden={!$bookmarksVisible} aria-label={t.panelAria}>
     <header class="bm-header">
-        <h2>Bookmarks</h2>
-        <button class="bm-close" type="button" title="Close" onclick={() => bookmarksVisible.set(false)}>×</button>
+        <h2>{t.heading}</h2>
+        <button class="bm-close" type="button" title={t.close} onclick={() => bookmarksVisible.set(false)}>×</button>
     </header>
 
     <div class="bm-conn">
         {#if $qfConnected}
             <div class="bm-conn-row">
                 {#if $qfDev}
-                    <span class="bm-conn-dev" title="Local dev stub — NOT a real Quran.Foundation login. No account or token involved.">
-                        ⚙ Dev stub (local only)
+                    <span class="bm-conn-dev" title={t.devStubTitle}>
+                        {t.devStubLabel}
                     </span>
                 {:else}
-                    <span class="bm-conn-on" title="Synced with Quran.Foundation">
-                        ● Synced{$qfLogin ? ` · ${$qfLogin}` : ''}
+                    <span class="bm-conn-on" title={t.syncedTitle}>
+                        {t.syncedLabel}{$qfLogin ? ` · ${$qfLogin}` : ''}
                     </span>
                 {/if}
                 <button class="bm-disconnect" type="button" onclick={() => disconnectQf()}>
-                    Disconnect
+                    {t.disconnect}
                 </button>
             </div>
         {:else if $currentUser.dev_mode}
             <button class="bm-connect" type="button" onclick={devConnect}>
-                Connect (dev stub)
+                {t.connectDevStub}
             </button>
-            <p class="bm-conn-hint">Saved locally. Connect to sync across Quran.com apps.</p>
+            <p class="bm-conn-hint">{t.connHintDev}</p>
         {:else}
             <a class="bm-connect" href={loginHref} target="_blank" rel="noopener" onclick={armConnect}>
-                Connect Quran.Foundation
+                {t.connectQf}
             </a>
-            <p class="bm-conn-hint">Opens a new tab to sign in. Bookmarks are saved locally until then.</p>
+            <p class="bm-conn-hint">{t.connHintAnon}</p>
         {/if}
     </div>
 
     {#if $bookmarks.length === 0}
-        <p class="bm-empty">No bookmarks yet. Open a verse in Timestamps and tap ☆ to save it.</p>
+        <p class="bm-empty">{t.empty}</p>
     {:else}
         <ul class="bm-list">
             {#each $bookmarks as b (b.key)}
                 <li class="bm-item">
                     <button class="bm-open" type="button" onclick={() => open(b.surah, b.ayah)}>
-                        <span class="bm-verse">{ready ? label(b.surah) : `Surah ${b.surah}`}</span>
-                        <span class="bm-ayah">Ayah {b.ayah}</span>
+                        <span class="bm-verse">{ready ? label(b.surah) : m.common_bookmarks_item_surah_fallback({ surah: b.surah })}</span>
+                        <span class="bm-ayah">{m.common_bookmarks_item_ayah({ ayah: b.ayah })}</span>
                     </button>
                     <button
                         class="bm-remove"
                         type="button"
-                        title="Remove bookmark"
+                        title={t.remove}
                         onclick={() => removeBookmark(b.key)}
                     >×</button>
                 </li>
@@ -143,12 +167,12 @@
     .bookmarks-panel {
         position: fixed;
         top: 0;
-        left: 0;
+        inset-inline-start: 0;
         width: 340px;
         max-width: 90vw;
         height: 100vh;
         background: var(--panel-sidebar);
-        border-right: 1px solid var(--border-default);
+        border-inline-end: 1px solid var(--border-default);
         box-shadow: var(--shadow-pop);
         z-index: 1000;
         display: flex;
@@ -219,7 +243,7 @@
     }
     .bm-open {
         flex: 1;
-        text-align: right;
+        text-align: end;
         background: none;
         border: 0;
         color: var(--text-secondary);
@@ -235,7 +259,7 @@
     .bm-remove {
         background: none;
         border: 0;
-        border-left: 1px solid var(--border-default);
+        border-inline-start: 1px solid var(--border-default);
         color: var(--text-muted);
         font-size: 1.2rem;
         padding: 0 12px;

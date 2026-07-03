@@ -19,6 +19,7 @@
  * runtime by the settings store).
  */
 
+import * as m from '$lib/paraglide/messages';
 import type { TajweedRule } from '../../../lib/types/generated/schemas';
 
 export type StackLayer = 'base' | 'merge' | 'top';
@@ -49,8 +50,9 @@ interface RuleDef {
     /** the `--tj-*` custom property backing this rule's colour. */
     colorVar: string;
     /** hover tooltip name — may differ between tags sharing a legendKey
-     *  (qalqala ṣughrā vs kubrā, mutajānisayn kāmil vs nāqiṣ). */
-    tooltip: string;
+     *  (qalqala ṣughrā vs kubrā, mutajānisayn kāmil vs nāqiṣ). Message-function
+     *  reference, called at the render site so a locale switch re-evaluates it. */
+    tooltip: () => string;
     /** which underline bar this rule occupies when stacked (bottom→top):
      *  `base` (the cell's own rule, e.g. ghunnah) < `merge` (a cross-word idgham
      *  riding ON the target, e.g. mutajānisayn over a ghunnah) < `top` (tafkheem). */
@@ -63,56 +65,57 @@ interface RuleDef {
  *  while preserving the literal key set for the completeness check below. */
 const COLOR_RULES = {
     // ── Ghunnah / nasalization ────────────────────────────────────────────────
-    noon_ghunnah: { legendKey: 'ghunnah', colorVar: '--tj-ghunnah', tooltip: 'Ghunnah', stack: 'base' },
-    meem_ghunnah: { legendKey: 'ghunnah', colorVar: '--tj-ghunnah', tooltip: 'Ghunnah', stack: 'base' },
-    ikhfaa_noon: { legendKey: 'ikhfaa', colorVar: '--tj-ikhfaa', tooltip: 'Ikhfaa', stack: 'base' },
-    ikhfaa_tanween: { legendKey: 'ikhfaa', colorVar: '--tj-ikhfaa', tooltip: 'Ikhfaa', stack: 'base' },
-    ikhfaa_shafawi: { legendKey: 'ikhfaa_shafawi', colorVar: '--tj-ikhfaa-shafawi', tooltip: 'Ikhfaa Shafawi', stack: 'base' },
-    iqlab_noon: { legendKey: 'iqlab', colorVar: '--tj-iqlab', tooltip: 'Iqlab', stack: 'base' },
-    iqlab_tanween: { legendKey: 'iqlab', colorVar: '--tj-iqlab', tooltip: 'Iqlab', stack: 'base' },
-    idgham_ghunnah_noon: { legendKey: 'idgham_ghunnah', colorVar: '--tj-idgham-ghunnah', tooltip: 'Idgham Ghunnah', stack: 'base' },
-    idgham_ghunnah_tanween: { legendKey: 'idgham_ghunnah', colorVar: '--tj-idgham-ghunnah', tooltip: 'Idgham Ghunnah', stack: 'base' },
-    idgham_shafawi: { legendKey: 'idgham_shafawi', colorVar: '--tj-idgham-shafawi', tooltip: 'Idgham Shafawi', stack: 'base' },
+    noon_ghunnah: { legendKey: 'ghunnah', colorVar: '--tj-ghunnah', tooltip: m.ts_tajweed_rule_ghunnah, stack: 'base' },
+    meem_ghunnah: { legendKey: 'ghunnah', colorVar: '--tj-ghunnah', tooltip: m.ts_tajweed_rule_ghunnah, stack: 'base' },
+    ikhfaa_noon: { legendKey: 'ikhfaa', colorVar: '--tj-ikhfaa', tooltip: m.ts_tajweed_rule_ikhfaa, stack: 'base' },
+    ikhfaa_tanween: { legendKey: 'ikhfaa', colorVar: '--tj-ikhfaa', tooltip: m.ts_tajweed_rule_ikhfaa, stack: 'base' },
+    ikhfaa_shafawi: { legendKey: 'ikhfaa_shafawi', colorVar: '--tj-ikhfaa-shafawi', tooltip: m.ts_tajweed_rule_ikhfaa_shafawi, stack: 'base' },
+    iqlab_noon: { legendKey: 'iqlab', colorVar: '--tj-iqlab', tooltip: m.ts_tajweed_rule_iqlab, stack: 'base' },
+    iqlab_tanween: { legendKey: 'iqlab', colorVar: '--tj-iqlab', tooltip: m.ts_tajweed_rule_iqlab, stack: 'base' },
+    idgham_ghunnah_noon: { legendKey: 'idgham_ghunnah', colorVar: '--tj-idgham-ghunnah', tooltip: m.ts_tajweed_rule_idgham_ghunnah, stack: 'base' },
+    idgham_ghunnah_tanween: { legendKey: 'idgham_ghunnah', colorVar: '--tj-idgham-ghunnah', tooltip: m.ts_tajweed_rule_idgham_ghunnah, stack: 'base' },
+    idgham_shafawi: { legendKey: 'idgham_shafawi', colorVar: '--tj-idgham-shafawi', tooltip: m.ts_tajweed_rule_idgham_shafawi, stack: 'base' },
     // ── Madd ──────────────────────────────────────────────────────────────────
-    madd_lazim: { legendKey: 'madd_lazim', colorVar: '--tj-madd-lazim', tooltip: 'Madd Lazim', stack: 'base' },
-    madd_wajib_muttasil: { legendKey: 'madd_wajib', colorVar: '--tj-madd-wajib', tooltip: 'Madd Wajib Muttassil', stack: 'base' },
-    madd_jaiz_munfasil: { legendKey: 'madd_jaiz', colorVar: '--tj-madd-jaiz', tooltip: "Madd Ja'iz Munfassil", stack: 'base' },
-    madd_arid_lissukun: { legendKey: 'madd_arid', colorVar: '--tj-madd-arid', tooltip: "Madd 'Arid-lissukun", stack: 'base' },
-    madd_leen: { legendKey: 'madd_leen', colorVar: '--tj-madd-leen', tooltip: 'Madd Leen', stack: 'base' },
+    madd_lazim: { legendKey: 'madd_lazim', colorVar: '--tj-madd-lazim', tooltip: m.ts_tajweed_rule_madd_lazim, stack: 'base' },
+    madd_wajib_muttasil: { legendKey: 'madd_wajib', colorVar: '--tj-madd-wajib', tooltip: m.ts_tajweed_rule_madd_wajib, stack: 'base' },
+    madd_jaiz_munfasil: { legendKey: 'madd_jaiz', colorVar: '--tj-madd-jaiz', tooltip: m.ts_tajweed_rule_madd_jaiz, stack: 'base' },
+    madd_arid_lissukun: { legendKey: 'madd_arid', colorVar: '--tj-madd-arid', tooltip: m.ts_tajweed_rule_madd_arid, stack: 'base' },
+    madd_leen: { legendKey: 'madd_leen', colorVar: '--tj-madd-leen', tooltip: m.ts_tajweed_rule_madd_leen, stack: 'base' },
     // ṭabīʿī + its structural aliases (the dagger-alef of Allah, the ʿiwaḍ alef)
-    madd_tabii: { legendKey: 'madd_tabii', colorVar: '--tj-madd-tabii', tooltip: "Madd Tabi'i", stack: 'base' },
-    allah_dagger_alef: { legendKey: 'madd_tabii', colorVar: '--tj-madd-tabii', tooltip: "Madd Tabi'i", stack: 'base' },
-    madd_iwad: { legendKey: 'madd_tabii', colorVar: '--tj-madd-tabii', tooltip: "Madd 'Iwad", stack: 'base' },
+    madd_tabii: { legendKey: 'madd_tabii', colorVar: '--tj-madd-tabii', tooltip: m.ts_tajweed_rule_madd_tabii, stack: 'base' },
+    allah_dagger_alef: { legendKey: 'madd_tabii', colorVar: '--tj-madd-tabii', tooltip: m.ts_tajweed_rule_madd_tabii, stack: 'base' },
+    madd_iwad: { legendKey: 'madd_tabii', colorVar: '--tj-madd-tabii', tooltip: m.ts_tajweed_rule_madd_iwad, stack: 'base' },
     // ── Heaviness ─────────────────────────────────────────────────────────────
-    tafkheem: { legendKey: 'tafkheem', colorVar: '--tj-tafkheem', tooltip: 'Tafkheem', stack: 'top' },
-    qalqala_sughra: { legendKey: 'qalqala', colorVar: '--tj-qalqala', tooltip: 'Qalqala Sughra', stack: 'base' },
-    qalqala_kubra: { legendKey: 'qalqala', colorVar: '--tj-qalqala', tooltip: 'Qalqala Kubra', stack: 'base' },
+    tafkheem: { legendKey: 'tafkheem', colorVar: '--tj-tafkheem', tooltip: m.ts_tajweed_rule_tafkheem, stack: 'top' },
+    qalqala_sughra: { legendKey: 'qalqala', colorVar: '--tj-qalqala', tooltip: m.ts_tajweed_rule_qalqala_sughra, stack: 'base' },
+    qalqala_kubra: { legendKey: 'qalqala', colorVar: '--tj-qalqala', tooltip: m.ts_tajweed_rule_qalqala_kubra, stack: 'base' },
     // ── Idgham (silent merges) ────────────────────────────────────────────────
-    idgham_bila_ghunnah_noon: { legendKey: 'idgham_bila', colorVar: '--tj-idgham-bila', tooltip: 'Idgham bila Ghunnah', stack: 'base' },
-    idgham_bila_ghunnah_tanween: { legendKey: 'idgham_bila', colorVar: '--tj-idgham-bila', tooltip: 'Idgham bila Ghunnah', stack: 'base' },
+    idgham_bila_ghunnah_noon: { legendKey: 'idgham_bila', colorVar: '--tj-idgham-bila', tooltip: m.ts_tajweed_rule_idgham_bila_ghunnah, stack: 'base' },
+    idgham_bila_ghunnah_tanween: { legendKey: 'idgham_bila', colorVar: '--tj-idgham-bila', tooltip: m.ts_tajweed_rule_idgham_bila_ghunnah, stack: 'base' },
     // The consonant idghams ride the `merge` layer — they sit ABOVE the target's own
     // base rule (e.g. a ghunnah on the receiving mīm of ٱرْكَب مَّعَنَا) and below tafkheem.
-    idgham_mutamathilayn: { legendKey: 'mutamathilayn', colorVar: '--tj-mutamathilayn', tooltip: 'Idgham Mutamathilayn', stack: 'merge' },
-    idgham_mutaqaribayn: { legendKey: 'mutaqaribayn', colorVar: '--tj-mutaqaribayn', tooltip: 'Idgham Mutaqaribayn', stack: 'merge' },
-    idgham_mutajanisayn_kamil: { legendKey: 'mutajanisayn', colorVar: '--tj-mutajanisayn', tooltip: 'Idgham Mutajanisayn Kamil', stack: 'merge' },
-    idgham_mutajanisayn_naqis: { legendKey: 'mutajanisayn', colorVar: '--tj-mutajanisayn', tooltip: 'Idgham Mutajanisayn Naqis', stack: 'merge' },
+    idgham_mutamathilayn: { legendKey: 'mutamathilayn', colorVar: '--tj-mutamathilayn', tooltip: m.ts_tajweed_rule_idgham_mutamathilayn, stack: 'merge' },
+    idgham_mutaqaribayn: { legendKey: 'mutaqaribayn', colorVar: '--tj-mutaqaribayn', tooltip: m.ts_tajweed_rule_idgham_mutaqaribayn, stack: 'merge' },
+    idgham_mutajanisayn_kamil: { legendKey: 'mutajanisayn', colorVar: '--tj-mutajanisayn', tooltip: m.ts_tajweed_rule_idgham_mutajanisayn_kamil, stack: 'merge' },
+    idgham_mutajanisayn_naqis: { legendKey: 'mutajanisayn', colorVar: '--tj-mutajanisayn', tooltip: m.ts_tajweed_rule_idgham_mutajanisayn_naqis, stack: 'merge' },
     // ── Iẓhar (FE-synthesized fallback for a sounding sākin noon/meem/tanwīn) ──
-    izhar_halqi: { legendKey: 'izhar', colorVar: '--tj-izhar-halqi', tooltip: 'Izhar Halqi', stack: 'base' },
-    izhar_shafawi: { legendKey: 'izhar_shafawi', colorVar: '--tj-izhar-shafawi', tooltip: 'Izhar Shafawi', stack: 'base' },
+    izhar_halqi: { legendKey: 'izhar', colorVar: '--tj-izhar-halqi', tooltip: m.ts_tajweed_rule_izhar_halqi, stack: 'base' },
+    izhar_shafawi: { legendKey: 'izhar_shafawi', colorVar: '--tj-izhar-shafawi', tooltip: m.ts_tajweed_rule_izhar_shafawi, stack: 'base' },
 } satisfies Partial<Record<TajweedTag, RuleDef>>;
 
-/** Silent rules — hover tooltip only, no colour and no legend row. */
+/** Silent rules — hover tooltip only, no colour and no legend row. Message-function
+ *  references, called at the render site so a locale switch re-evaluates them. */
 const SILENT_TOOLTIPS = {
-    vowel_silent: 'Silent vowel',
-    hamza_wasl_silent: 'Hamzat-al-wasl (silent)',
-    lam_shamsiyah: 'Lam Shamsiyyah',
-    silent_iltiqaa_sakinayn: "Iltiqa' 'as-sakinayn",
-    iltiqaa_kasra: "Iltiqa' 'as-sakinayn",
-    iltiqaa: "Iltiqa' 'as-sakinayn",
+    vowel_silent: m.ts_tajweed_rule_silent_vowel,
+    hamza_wasl_silent: m.ts_tajweed_rule_silent_hamza_wasl,
+    lam_shamsiyah: m.ts_tajweed_rule_silent_lam_shamsiyah,
+    silent_iltiqaa_sakinayn: m.ts_tajweed_rule_silent_iltiqaa,
+    iltiqaa_kasra: m.ts_tajweed_rule_silent_iltiqaa,
+    iltiqaa: m.ts_tajweed_rule_silent_iltiqaa,
     // The ن of an iqlab noon falls silent (the synthesized mini-meem owns the
     // nasal + the lone underline) — name it on hover, draw no bar.
-    iqlab_silent_noon: 'Iqlab',
-} satisfies Partial<Record<TajweedTag, string>>;
+    iqlab_silent_noon: m.ts_tajweed_rule_iqlab,
+} satisfies Partial<Record<TajweedTag, () => string>>;
 
 // Compile-time completeness: every phonemizer rule must be classified — either
 // rendered (a COLOR_RULES / SILENT_TOOLTIPS entry) or explicitly pipeline-only
@@ -136,7 +139,8 @@ void _assertAllRulesClassified;
 export interface TjBadge {
     legendKey: string;
     colorVar: string; // bare custom-property name, e.g. '--tj-tafkheem'
-    tooltip: string;
+    /** Message-function reference — call at the render site so a locale switch re-evaluates it. */
+    tooltip: () => string;
     stack: StackLayer;
     /** qalqala kubrā — draws a taller (≈30% cell-height) fill instead of a thin bar. */
     kubra: boolean;
@@ -175,7 +179,8 @@ export function badgesForTags(tags: (string | null | undefined)[]): TjBadge[] {
 /** The silent-rule hover name for a tag (the named silent rules + the iltiqaa
  *  kasra), or null. Independent of the colour/legend set. */
 export function silentTooltip(tag: string | null | undefined): string | null {
-    return tag ? ((SILENT_TOOLTIPS as Partial<Record<string, string>>)[tag] ?? null) : null;
+    const fn = tag ? (SILENT_TOOLTIPS as Partial<Record<string, () => string>>)[tag] : undefined;
+    return fn ? fn() : null;
 }
 
 /** A tag the report rule-picker can present — it has a human label (coloured
@@ -240,7 +245,7 @@ export function tjRuleNames(
     // Dedup so a name carried by BOTH a (toggle-gated) badge and an always-on silent
     // name — the madd-ʿiwaḍ alef — collapses to one line.
     const names = [...new Set([
-        ...badges.filter((b) => isEnabled(b.legendKey)).map((b) => b.tooltip),
+        ...badges.filter((b) => isEnabled(b.legendKey)).map((b) => b.tooltip()),
         ...silent,
     ])];
     return names.join('\n');
@@ -250,7 +255,8 @@ export function tjRuleNames(
 
 export interface LegendRow {
     legendKey: string;
-    label: string;
+    /** Message-function reference — call at the render site so a locale switch re-evaluates it. */
+    label: () => string;
     colorVar: string;
     /** length in ḥarakāt (e.g. '2', '4/5'); omitted for rules with no count. */
     duration?: string;
@@ -262,13 +268,13 @@ export interface LegendRow {
 
 /** A labelled sub-section within a column (the Noon / Meem split). */
 export interface LegendSubgroup {
-    title: string;
+    title: () => string;
     rows: LegendRow[];
 }
 
 export interface LegendGroup {
     category: RuleCategory;
-    title: string;
+    title: () => string;
     /** Flat row list (Madd, Other). Mutually exclusive with `subgroups`. */
     rows?: LegendRow[];
     /** Labelled sub-sections (Noon / Meem) stacked within one column. */
@@ -287,40 +293,39 @@ export function legendRows(group: LegendGroup): LegendRow[] {
  *  sub-sections; the two rows couple colour + toggle via the shared `ghunnah`
  *  legendKey, exactly like qalqala ṣughrā / kubrā). */
 export const LEGEND: LegendGroup[] = [
-    { category: 'noon_meem', title: 'Noon / Meem', subgroups: [
-        { title: 'Noon', rows: [
-            { legendKey: 'ghunnah', label: 'Ghunnah', colorVar: '--tj-ghunnah', duration: '2' },
-            { legendKey: 'ikhfaa', label: 'Ikhfaa', colorVar: '--tj-ikhfaa', duration: '2' },
-            { legendKey: 'iqlab', label: 'Iqlab', colorVar: '--tj-iqlab', duration: '2' },
-            { legendKey: 'idgham_ghunnah', label: 'Idgham Ghunnah', colorVar: '--tj-idgham-ghunnah', duration: '2' },
-            { legendKey: 'idgham_bila', label: 'Idgham bila Ghunnah', colorVar: '--tj-idgham-bila', duration: '1' },
-            { legendKey: 'izhar', label: 'Izhar Halqi', colorVar: '--tj-izhar-halqi', duration: '1' },
+    { category: 'noon_meem', title: m.ts_tajweed_panel_group_title_noon_meem, subgroups: [
+        { title: m.ts_tajweed_panel_group_title_noon, rows: [
+            { legendKey: 'ghunnah', label: m.ts_tajweed_rule_ghunnah, colorVar: '--tj-ghunnah', duration: '2' },
+            { legendKey: 'ikhfaa', label: m.ts_tajweed_rule_ikhfaa, colorVar: '--tj-ikhfaa', duration: '2' },
+            { legendKey: 'iqlab', label: m.ts_tajweed_rule_iqlab, colorVar: '--tj-iqlab', duration: '2' },
+            { legendKey: 'idgham_ghunnah', label: m.ts_tajweed_rule_idgham_ghunnah, colorVar: '--tj-idgham-ghunnah', duration: '2' },
+            { legendKey: 'idgham_bila', label: m.ts_tajweed_rule_idgham_bila_ghunnah, colorVar: '--tj-idgham-bila', duration: '1' },
+            { legendKey: 'izhar', label: m.ts_tajweed_rule_izhar_halqi, colorVar: '--tj-izhar-halqi', duration: '1' },
         ] },
-        { title: 'Meem', rows: [
-            { legendKey: 'ghunnah', label: 'Ghunnah', colorVar: '--tj-ghunnah', duration: '2' },
-            { legendKey: 'ikhfaa_shafawi', label: 'Ikhfaa Shafawi', colorVar: '--tj-ikhfaa-shafawi', duration: '2' },
-            { legendKey: 'idgham_shafawi', label: 'Idgham Shafawi', colorVar: '--tj-idgham-shafawi', duration: '2' },
-            { legendKey: 'izhar_shafawi', label: 'Izhar Shafawi', colorVar: '--tj-izhar-shafawi', duration: '1' },
+        { title: m.ts_tajweed_panel_group_title_meem, rows: [
+            { legendKey: 'ghunnah', label: m.ts_tajweed_rule_ghunnah, colorVar: '--tj-ghunnah', duration: '2' },
+            { legendKey: 'ikhfaa_shafawi', label: m.ts_tajweed_rule_ikhfaa_shafawi, colorVar: '--tj-ikhfaa-shafawi', duration: '2' },
+            { legendKey: 'idgham_shafawi', label: m.ts_tajweed_rule_idgham_shafawi, colorVar: '--tj-idgham-shafawi', duration: '2' },
+            { legendKey: 'izhar_shafawi', label: m.ts_tajweed_rule_izhar_shafawi, colorVar: '--tj-izhar-shafawi', duration: '1' },
         ] },
     ] },
-    // Labels drop the "Madd" prefix — the group title already carries it.
-    { category: 'madd', title: 'Madd', rows: [
-        { legendKey: 'madd_lazim', label: 'Lazim', colorVar: '--tj-madd-lazim', duration: '6' },
-        { legendKey: 'madd_wajib', label: 'Wajib Muttassil', colorVar: '--tj-madd-wajib', duration: '4/5' },
-        { legendKey: 'madd_jaiz', label: "Ja'iz Munfassil", colorVar: '--tj-madd-jaiz', duration: '2/4/5' },
-        { legendKey: 'madd_arid', label: "'Arid-lissukun", colorVar: '--tj-madd-arid', duration: '2/4/6' },
-        { legendKey: 'madd_leen', label: 'Leen', colorVar: '--tj-madd-leen', duration: '2/4/6' },
-        { legendKey: 'madd_tabii', label: "Tabi'i", colorVar: '--tj-madd-tabii', duration: '2' },
+    { category: 'madd', title: m.ts_tajweed_panel_group_title_madd, rows: [
+        { legendKey: 'madd_lazim', label: m.ts_tajweed_rule_madd_lazim, colorVar: '--tj-madd-lazim', duration: '6' },
+        { legendKey: 'madd_wajib', label: m.ts_tajweed_rule_madd_wajib, colorVar: '--tj-madd-wajib', duration: '4/5' },
+        { legendKey: 'madd_jaiz', label: m.ts_tajweed_rule_madd_jaiz, colorVar: '--tj-madd-jaiz', duration: '2/4/5' },
+        { legendKey: 'madd_arid', label: m.ts_tajweed_rule_madd_arid, colorVar: '--tj-madd-arid', duration: '2/4/6' },
+        { legendKey: 'madd_leen', label: m.ts_tajweed_rule_madd_leen, colorVar: '--tj-madd-leen', duration: '2/4/6' },
+        { legendKey: 'madd_tabii', label: m.ts_tajweed_rule_madd_tabii, colorVar: '--tj-madd-tabii', duration: '2' },
     ] },
     // Qalqala is two rows (ṣughrā / kubrā) coupled by the shared `qalqala` legendKey —
     // one colour + one toggle drive both; the kubrā row's swatch previews the wrap.
-    { category: 'other', title: 'Other rules', rows: [
-        { legendKey: 'tafkheem', label: 'Tafkheem', colorVar: '--tj-tafkheem' },
-        { legendKey: 'qalqala', label: 'Qalqala Sughra', colorVar: '--tj-qalqala' },
-        { legendKey: 'qalqala', label: 'Qalqala Kubra', colorVar: '--tj-qalqala', kubra: true },
-        { legendKey: 'mutamathilayn', label: 'Idgham Mutamathilayn', colorVar: '--tj-mutamathilayn' },
-        { legendKey: 'mutaqaribayn', label: 'Idgham Mutaqaribayn', colorVar: '--tj-mutaqaribayn' },
-        { legendKey: 'mutajanisayn', label: 'Idgham Mutajanisayn', colorVar: '--tj-mutajanisayn' },
+    { category: 'other', title: m.ts_tajweed_panel_group_title_other, rows: [
+        { legendKey: 'tafkheem', label: m.ts_tajweed_rule_tafkheem, colorVar: '--tj-tafkheem' },
+        { legendKey: 'qalqala', label: m.ts_tajweed_rule_qalqala_sughra, colorVar: '--tj-qalqala' },
+        { legendKey: 'qalqala', label: m.ts_tajweed_rule_qalqala_kubra, colorVar: '--tj-qalqala', kubra: true },
+        { legendKey: 'mutamathilayn', label: m.ts_tajweed_rule_idgham_mutamathilayn, colorVar: '--tj-mutamathilayn' },
+        { legendKey: 'mutaqaribayn', label: m.ts_tajweed_rule_idgham_mutaqaribayn, colorVar: '--tj-mutaqaribayn' },
+        { legendKey: 'mutajanisayn', label: m.ts_tajweed_rule_idgham_mutajanisayn, colorVar: '--tj-mutajanisayn' },
     ] },
 ];
 

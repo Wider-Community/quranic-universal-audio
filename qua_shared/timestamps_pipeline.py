@@ -812,17 +812,20 @@ def _shift_word_times(w: dict, delta_sec: float) -> dict:
     """Shift a recovered word (+ its letters/phones) by ``delta`` seconds, so a
     verse-local time becomes the segment-local time ``_normalize_from_results``
     re-bases by ``seg.time_start``. Null letter start/end (degraded) stay null."""
+
     def _s(v):
         return None if v is None else round(v + delta_sec, 4)
 
     nw = dict(w)
     nw["start"], nw["end"] = _s(w.get("start")), _s(w.get("end"))
     if w.get("letters"):
-        nw["letters"] = [{**lt, "start": _s(lt.get("start")), "end": _s(lt.get("end"))}
-                         for lt in w["letters"]]
+        nw["letters"] = [
+            {**lt, "start": _s(lt.get("start")), "end": _s(lt.get("end"))} for lt in w["letters"]
+        ]
     if w.get("phones"):
-        nw["phones"] = [{**p, "start": _s(p.get("start")), "end": _s(p.get("end"))}
-                        for p in w["phones"]]
+        nw["phones"] = [
+            {**p, "start": _s(p.get("start")), "end": _s(p.get("end"))} for p in w["phones"]
+        ]
     return nw
 
 
@@ -842,10 +845,13 @@ def _group_verse_items(segments: list, refresh_ayahs: set | None = None) -> list
     silence (psil). Indices are into ``segments``.
     """
     kept = [
-        si for si, seg in enumerate(segments)
+        si
+        for si, seg in enumerate(segments)
         if build_mfa_ref(seg) is not None
-        and (refresh_ayahs is None
-             or (_seg_covered_ayahs(seg.get("matched_ref", "")) & refresh_ayahs))
+        and (
+            refresh_ayahs is None
+            or (_seg_covered_ayahs(seg.get("matched_ref", "")) & refresh_ayahs)
+        )
     ]
     kept.sort(key=lambda si: segments[si].get("time_start", 0))
     items: list[dict] = []
@@ -872,8 +878,14 @@ def _group_verse_items(segments: list, refresh_ayahs: set | None = None) -> list
 
 
 def _align_chapter_whole_verse(
-    aligner, chapter: dict, beams: list[int], *, padding: str, wb,
-    refresh_ayahs: set | None, sample_rate: int = 16000,
+    aligner,
+    chapter: dict,
+    beams: list[int],
+    *,
+    padding: str,
+    wb,
+    refresh_ayahs: set | None,
+    sample_rate: int = 16000,
 ) -> dict[int, list]:
     """Whole-verse align ONE chapter → ``{beam: [(seg_idx, result), ...]}``.
 
@@ -907,44 +919,74 @@ def _align_chapter_whole_verse(
     for it in items:
         sidx = it["seg_idxs"]
         wasl_after = it.get("wasl_after") or [False] * (len(sidx) - 1)
+        n_sidx = len(sidx)
+
         # Per-segment occurrence flag: does this segment continue into the next
         # via waṣl? (the last segment of an item never does). Stamped on the
         # shard so the FE reconstructs waṣl groups per-occurrence (retake-safe).
-        def _wasl_of(j, _wa=wasl_after, _n=len(sidx)):
+        def _wasl_of(j, _wa=wasl_after, _n=n_sidx):
             return bool(_wa[j]) if j < _n - 1 else False
+
         t0 = int(segments[sidx[0]].get("time_start", 0))
         t1 = int(segments[sidx[-1]].get("time_end", t0))
-        span = audio_f[int(t0 * sample_rate / 1000): int(t1 * sample_rate / 1000)]
+        span = audio_f[int(t0 * sample_rate / 1000) : int(t1 * sample_rate / 1000)]
         refs = [build_mfa_ref(segments[si]) for si in sidx]
         too_short = len(span) < sample_rate // 50
         for b in beams:
             if too_short:
-                rows = [(si, {"status": "error", "error": "empty span", "wasl": _wasl_of(j)})
-                        for j, si in enumerate(sidx)]
+                rows = [
+                    (si, {"status": "error", "error": "empty span", "wasl": _wasl_of(j)})
+                    for j, si in enumerate(sidx)
+                ]
             else:
                 try:
                     vres = aligner.align_verse(
-                        refs, span, sample_rate, beam=b, retry_beam=b,
-                        include_letters=True, padding=padding,
-                        wasl_after=wasl_after, wb_allocation_resolved=wb)
+                        refs,
+                        span,
+                        sample_rate,
+                        beam=b,
+                        retry_beam=b,
+                        include_letters=True,
+                        padding=padding,
+                        wasl_after=wasl_after,
+                        wb_allocation_resolved=wb,
+                    )
                 except Exception as e:
-                    rows = [(si, {"status": "error", "error": f"{type(e).__name__}: {e}",
-                                  "wasl": _wasl_of(j)})
-                            for j, si in enumerate(sidx)]
+                    rows = [
+                        (
+                            si,
+                            {
+                                "status": "error",
+                                "error": f"{type(e).__name__}: {e}",
+                                "wasl": _wasl_of(j),
+                            },
+                        )
+                        for j, si in enumerate(sidx)
+                    ]
                 else:
                     rows = []
                     for j, si in enumerate(sidx):
                         words = vres[j]["words"] if j < len(vres) else []
                         delta = (t0 - int(segments[si].get("time_start", 0))) / 1000.0
                         shifted = [_shift_word_times(w, delta) for w in words]
-                        rows.append((si, {"status": "ok" if shifted else "error",
-                                          "words": shifted, "wasl": _wasl_of(j),
-                                          **({} if shifted else {"error": "no words"})}))
+                        rows.append(
+                            (
+                                si,
+                                {
+                                    "status": "ok" if shifted else "error",
+                                    "words": shifted,
+                                    "wasl": _wasl_of(j),
+                                    **({} if shifted else {"error": "no words"}),
+                                },
+                            )
+                        )
             out[b].extend(rows)
     return out
 
 
-def _worker_align_chapter(chapter, beams, padding, word_boundary_allocation, refresh_ayahs, sample_rate):
+def _worker_align_chapter(
+    chapter, beams, padding, word_boundary_allocation, refresh_ayahs, sample_rate
+):
     """ProcessPoolExecutor task: whole-verse align one chapter on the worker's
     own aligner (built once by ``_init_worker``)."""
     from qua_sdk.components.timing.lib import resolve_word_boundary_allocation
@@ -954,8 +996,14 @@ def _worker_align_chapter(chapter, beams, padding, word_boundary_allocation, ref
         raise RuntimeError("Worker not initialized; missing MFA aligner.")
     wb = resolve_word_boundary_allocation(word_boundary_allocation)
     return _align_chapter_whole_verse(
-        aligner, chapter, beams, padding=padding, wb=wb,
-        refresh_ayahs=refresh_ayahs, sample_rate=sample_rate)
+        aligner,
+        chapter,
+        beams,
+        padding=padding,
+        wb=wb,
+        refresh_ayahs=refresh_ayahs,
+        sample_rate=sample_rate,
+    )
 
 
 def _align_whole_verse(
@@ -986,30 +1034,50 @@ def _align_whole_verse(
     n_workers = max(1, min(int(workers), len(chapters_to_process)))
 
     if n_workers <= 1:
-        aligner = MfaLocalAligner(str(mfa_model_path), str(mfa_dictionary_path),
-                                  num_threads=1, use_pool=False)
-        log.info("whole-verse aligner (serial): supports_psil=%s keep_q=%s",
-                 aligner.supports_psil, aligner.keep_q)
+        aligner = MfaLocalAligner(
+            str(mfa_model_path), str(mfa_dictionary_path), num_threads=1, use_pool=False
+        )
+        log.info(
+            "whole-verse aligner (serial): supports_psil=%s keep_q=%s",
+            aligner.supports_psil,
+            aligner.keep_q,
+        )
         wb = resolve_word_boundary_allocation(word_boundary_allocation)
         for ch_idx, chapter in chapters_to_process:
             out = _align_chapter_whole_verse(
-                aligner, chapter, beams, padding=padding, wb=wb,
-                refresh_ayahs=refresh_ayahs, sample_rate=sample_rate)
+                aligner,
+                chapter,
+                beams,
+                padding=padding,
+                wb=wb,
+                refresh_ayahs=refresh_ayahs,
+                sample_rate=sample_rate,
+            )
             for b in beams:
                 if out[b]:
                     results_by_beam[b].setdefault(ch_idx, []).extend(out[b])
         return results_by_beam
 
-    log.info("whole-verse aligner (parallel): %d workers over %d chapters",
-             n_workers, len(chapters_to_process))
+    log.info(
+        "whole-verse aligner (parallel): %d workers over %d chapters",
+        n_workers,
+        len(chapters_to_process),
+    )
     with ProcessPoolExecutor(
         max_workers=n_workers,
         initializer=_init_worker,
         initargs=(str(mfa_model_path), str(mfa_dictionary_path)),
     ) as pool:
         futs = {
-            pool.submit(_worker_align_chapter, chapter, beams, padding,
-                        word_boundary_allocation, refresh_ayahs, sample_rate): ch_idx
+            pool.submit(
+                _worker_align_chapter,
+                chapter,
+                beams,
+                padding,
+                word_boundary_allocation,
+                refresh_ayahs,
+                sample_rate,
+            ): ch_idx
             for ch_idx, chapter in chapters_to_process
         }
         for fut in as_completed(futs):
@@ -1054,6 +1122,7 @@ def _finalize_shards(
     from qua_sdk.components.timing.lib.cells import (
         annotate_v2_doc,  # lazy: keep phonemizer off the inspector import path
     )
+
     from qua_shared.timestamps_dedup import build_raw_v2  # lazy: avoid import cycle
 
     ts_dir = output_dir / "timestamps"
@@ -1089,8 +1158,12 @@ def _finalize_shards(
     n_shards, n_fail = _emit_segment_shards(canonical_results)
     if n_fail:
         log.warning("Canonical beam %d: %d MFA failures", canonical_beam, n_fail)
-    log.info("Wrote %d segment-array timestamps shard(s) (beam=%d) -> %s",
-             n_shards, canonical_beam, ts_dir)
+    log.info(
+        "Wrote %d segment-array timestamps shard(s) (beam=%d) -> %s",
+        n_shards,
+        canonical_beam,
+        ts_dir,
+    )
 
     ts_validation = build_ts_validation(
         chapters, results_by_beam, beams, reciter=reciter, method=method
@@ -1102,8 +1175,11 @@ def _finalize_shards(
     (output_dir / "ts_validation.json").write_text(
         json.dumps(ts_validation, ensure_ascii=False), encoding="utf-8"
     )
-    log.info("Wrote ts_validation.json: %d flagged verse(s) across beams %s",
-             len(ts_validation["verses"]), ts_validation["_meta"]["beams"])
+    log.info(
+        "Wrote ts_validation.json: %d flagged verse(s) across beams %s",
+        len(ts_validation["verses"]),
+        ts_validation["_meta"]["beams"],
+    )
 
     _cleanup([], tmp_dir)
     return output_dir
@@ -1307,17 +1383,30 @@ def process(
         if not (mfa_model_path and mfa_dictionary_path):
             raise ValueError("whole_verse requires mfa_model_path + mfa_dictionary_path")
         results_by_beam = _align_whole_verse(
-            chapters_to_process, beams,
-            mfa_model_path=mfa_model_path, mfa_dictionary_path=mfa_dictionary_path,
-            padding=padding, word_boundary_allocation=word_boundary_allocation,
-            refresh_ayahs=refresh_ayahs, workers=workers,
+            chapters_to_process,
+            beams,
+            mfa_model_path=mfa_model_path,
+            mfa_dictionary_path=mfa_dictionary_path,
+            padding=padding,
+            word_boundary_allocation=word_boundary_allocation,
+            refresh_ayahs=refresh_ayahs,
+            workers=workers,
         )
         return _finalize_shards(
-            results_by_beam, chapters=chapters, canonical_beam=canonical_beam,
-            beams=beams, output_dir=output_dir, audio_category=audio_category,
-            audio_source=audio_source, method=method, shared_cmvn=shared_cmvn,
-            padding=padding, reciter=reciter, refresh_chapters=refresh_chapters,
-            existing_data=existing_data, tmp_dir=tmp_dir,
+            results_by_beam,
+            chapters=chapters,
+            canonical_beam=canonical_beam,
+            beams=beams,
+            output_dir=output_dir,
+            audio_category=audio_category,
+            audio_source=audio_source,
+            method=method,
+            shared_cmvn=shared_cmvn,
+            padding=padding,
+            reciter=reciter,
+            refresh_chapters=refresh_chapters,
+            existing_data=existing_data,
+            tmp_dir=tmp_dir,
         )
 
     # --- Producer-consumer pipeline ---
@@ -1631,11 +1720,20 @@ def process(
                     pass
 
     return _finalize_shards(
-        results_by_beam, chapters=chapters, canonical_beam=canonical_beam,
-        beams=beams, output_dir=output_dir, audio_category=audio_category,
-        audio_source=audio_source, method=method, shared_cmvn=shared_cmvn,
-        padding=padding, reciter=reciter, refresh_chapters=refresh_chapters,
-        existing_data=existing_data, tmp_dir=tmp_dir,
+        results_by_beam,
+        chapters=chapters,
+        canonical_beam=canonical_beam,
+        beams=beams,
+        output_dir=output_dir,
+        audio_category=audio_category,
+        audio_source=audio_source,
+        method=method,
+        shared_cmvn=shared_cmvn,
+        padding=padding,
+        reciter=reciter,
+        refresh_chapters=refresh_chapters,
+        existing_data=existing_data,
+        tmp_dir=tmp_dir,
     )
 
 

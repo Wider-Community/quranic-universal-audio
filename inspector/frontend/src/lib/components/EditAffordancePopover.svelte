@@ -7,6 +7,8 @@
     import { onDestroy, onMount, tick } from 'svelte';
     import { get } from 'svelte/store';
 
+    import { localeStore, tr } from '../i18n/locale-store';
+    import * as m from '../paraglide/messages';
     import { selectedReciter } from '../../tabs/segments/stores/chapter';
     import { refreshReciterTask } from '../api/reciter-task';
     import { openClaimConfirm } from '../stores/claim-confirm-modal';
@@ -21,8 +23,8 @@
 
     $: state = $editPopover;
 
-    $: title = state ? _titleFor(state.mode.viewReason) : '';
-    $: body = state ? _bodyFor(state.mode.viewReason) : '';
+    $: title = state ? tr($localeStore, _titleFor(state.mode.viewReason)) : '';
+    $: body = state ? tr($localeStore, _bodyFor(state.mode.viewReason)) : '';
 
     // The popover only fires inside the Segments tab, so the current reciter
     // is the segments `selectedReciter`. The `claimable` reason gets a
@@ -38,42 +40,42 @@
     function _titleFor(reason: string | undefined): string {
         switch (reason) {
             case 'claimable':
-                return 'Claim to edit';
+                return m.common_edit_gate_title_claimable();
             case 'holds-other-claim':
-                return 'Finish your current claim first';
+                return m.common_edit_gate_title_holds_other_claim();
             case 'wrong-assignee':
-                return 'Being edited by someone else';
+                return m.common_edit_gate_title_wrong_assignee();
             case 'marked_ready':
-                return 'Locked for publish';
+                return m.common_edit_gate_title_marked_ready();
             case 'published':
-                return 'Already published';
+                return m.common_edit_gate_title_published();
             case 'not-available':
-                return 'Not ready to edit yet';
+                return m.common_edit_gate_title_not_available();
             case 'discarded':
-                return 'Reciter unavailable';
+                return m.common_edit_gate_title_discarded();
             default:
-                return 'Not available for editing';
+                return m.common_edit_gate_title_default();
         }
     }
 
     function _bodyFor(reason: string | undefined): string {
         switch (reason) {
             case 'claimable':
-                return 'This reciter is available to work on. Claim it (button below) to start editing its segments.';
+                return m.common_edit_gate_body_claimable();
             case 'holds-other-claim':
-                return 'This reciter is available, but you can work on one claim at a time. Unclaim your current reciter (or mark it ready) before claiming this one.';
+                return m.common_edit_gate_body_holds_other_claim();
             case 'wrong-assignee':
-                return 'Another contributor currently holds this reciter. You can browse it read-only, or claim a different one from the dashboard.';
+                return m.common_edit_gate_body_wrong_assignee();
             case 'marked_ready':
-                return "You marked this reciter ready for publish, so it's locked. Choose “Continue editing” in the banner to make changes.";
+                return m.common_edit_gate_body_marked_ready();
             case 'published':
-                return 'This reciter is published and read-only. View its word timestamps on the Timestamps tab.';
+                return m.common_edit_gate_body_published();
             case 'not-available':
-                return "This reciter hasn't been prepared for editing yet. It'll open once its recitation has been processed.";
+                return m.common_edit_gate_body_not_available();
             case 'discarded':
-                return 'This reciter has been discarded and is not available for editing.';
+                return m.common_edit_gate_body_discarded();
             default:
-                return 'This reciter is not available for editing.';
+                return m.common_edit_gate_body_default();
         }
     }
 
@@ -146,7 +148,7 @@
                     class="edit-popover__cta"
                     on:click={_onClaimReview}
                 >
-                    Claim review
+                    {tr($localeStore, m.common_claim_button_label())}
                 </button>
             {/if}
             <button

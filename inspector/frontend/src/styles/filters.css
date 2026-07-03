@@ -10,7 +10,7 @@
 .seg-filter-header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .seg-filter-title  { font-size: 0.85rem; color: var(--text-secondary); font-weight: 600; }
 .seg-filter-count  { color: var(--accent); font-size: 0.8rem; }
-.seg-filter-status { margin-left: auto; font-size: 0.8rem; color: var(--text-muted); }
+.seg-filter-status { margin-inline-start: auto; font-size: 0.8rem; color: var(--text-muted); }
 .seg-filter-rows   { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .seg-filter-row    { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 

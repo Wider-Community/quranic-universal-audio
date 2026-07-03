@@ -11,12 +11,17 @@
      */
     import { createEventDispatcher, onDestroy, tick } from 'svelte';
 
+    import { localeStore, tr } from '$lib/i18n/locale-store';
+    import * as m from '$lib/paraglide/messages';
+
     import { portal } from '../actions/portal';
 
     export let open = false;
     export let title: string | null = null;
-    /** Accessible label for the close button. */
-    export let closeLabel = 'Close';
+    /** Accessible label for the close button. Defaults to the localized "Close". */
+    export let closeLabel: string | null = null;
+
+    $: effectiveCloseLabel = closeLabel ?? tr($localeStore, m.common_action_close());
     /** ``'wide'`` gives a near-fullscreen shell (admin dashboard);
      * ``'narrow'`` hugs its content (reading-width info / prose modals).
      * Default leaves every existing caller unchanged. */
@@ -122,7 +127,7 @@
             bind:this={modalEl}
             role="dialog"
             aria-modal="true"
-            aria-label={title ?? closeLabel}
+            aria-label={title ?? effectiveCloseLabel}
             tabindex="-1"
         >
             {#if title || $$slots.header}
@@ -135,7 +140,7 @@
                     <button
                         type="button"
                         class="modal-close"
-                        aria-label={closeLabel}
+                        aria-label={effectiveCloseLabel}
                         on:click={() => dispatch('close')}
                     >×</button>
                 </header>

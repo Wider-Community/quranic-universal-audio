@@ -255,7 +255,9 @@ EMAIL_APP_BASE_URL = (
 # window. Not cross-event — the two never merge. The flush daemon sweeps the
 # buffer on this interval; opt out with INSPECTOR_EMAIL_DIGEST_FLUSH=0.
 EMAIL_DIGEST_WINDOW_MINUTES = int(os.getenv("INSPECTOR_EMAIL_DIGEST_WINDOW_MINUTES", "60"))
-EMAIL_DIGEST_FLUSH_INTERVAL_SECONDS = int(os.getenv("INSPECTOR_EMAIL_DIGEST_FLUSH_INTERVAL_S", "60"))
+EMAIL_DIGEST_FLUSH_INTERVAL_SECONDS = int(
+    os.getenv("INSPECTOR_EMAIL_DIGEST_FLUSH_INTERVAL_S", "60")
+)
 
 # Audio MIME types (shared between app.py and audio_proxy)
 AUDIO_MIME_TYPES = {

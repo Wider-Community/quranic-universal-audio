@@ -11,6 +11,8 @@
     import { onMount } from 'svelte';
 
     import { clickOutside } from '../../../lib/actions/click-outside';
+    import { i18n } from '../../../lib/i18n/locale.svelte';
+    import * as m from '../../../lib/paraglide/messages';
     import { ControlIcon } from '../../../lib/recitation-animation';
     import { LS_KEYS } from '../../../lib/utils/constants';
     import { loadWbwLanguages, type WbwLanguage } from '../services/ts_client';
@@ -30,6 +32,9 @@
         ...languages.filter((l) => !l.complete),
     ]);
     const firstPartial = $derived(ordered.findIndex((l) => !l.complete));
+
+    // Reading i18n.locale here re-renders the localized chrome on a locale switch.
+    const partialGroupLabel = $derived((i18n.locale, m.ts_translation_group_partial()));
 
     function persist(key: string, v: string): void {
         try { localStorage.setItem(key, v); } catch { /* ignore */ }
@@ -53,18 +58,18 @@
     <button
         type="button" class="tg-btn" class:on={$showTranslations}
         aria-haspopup="listbox" aria-expanded={open}
-        title="Translations" onclick={() => (open = !open)}
+        title={m.ts_globe_button_title()} onclick={() => (open = !open)}
     ><ControlIcon name="globe" /></button>
 
     {#if open}
-        <div class="tg-menu" role="listbox" aria-label="Translation language">
+        <div class="tg-menu" role="listbox" aria-label={m.ts_globe_menu_aria_label()}>
             <button
                 type="button" class="tg-opt" class:sel={!$showTranslations}
                 role="option" aria-selected={!$showTranslations} onclick={turnOff}
-            >Off</button>
+            >{m.ts_globe_option_off()}</button>
             {#each ordered as l, i (l.code)}
                 {#if i === firstPartial && firstPartial > 0}
-                    <div class="tg-group" role="presentation">Partial · English mixed in</div>
+                    <div class="tg-group" role="presentation">{partialGroupLabel}</div>
                 {/if}
                 <button
                     type="button" class="tg-opt"
@@ -73,7 +78,7 @@
                     onclick={() => pick(l.code)}
                 >
                     <span class="tg-label">{l.label}</span>
-                    {#if !l.complete}<span class="tg-pill">partial</span>{/if}
+                    {#if !l.complete}<span class="tg-pill">{m.ts_translation_pill_partial()}</span>{/if}
                 </button>
             {/each}
         </div>
@@ -100,7 +105,7 @@
     .tg-menu {
         position: absolute;
         bottom: calc(100% + 4px);
-        left: 0;
+        inset-inline-start: 0;
         z-index: 200;
         min-width: 160px;
         max-height: 300px;
@@ -124,7 +129,7 @@
         color: var(--text-secondary);
         font: inherit;
         font-size: var(--fs-meta);
-        text-align: left;
+        text-align: start;
         cursor: pointer;
     }
     .tg-opt:hover { background: var(--panel-2); color: var(--text-primary); }
