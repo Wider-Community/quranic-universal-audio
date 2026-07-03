@@ -16,7 +16,7 @@
      * (datalist + focus-stash dance + ISO-2 resolution) so the UX matches.
      * TODO: extract to a shared CountryField component.
      */
-    import { writable } from 'svelte/store';
+    import { get, writable } from 'svelte/store';
     import { fade, fly } from 'svelte/transition';
 
     import { localeStore, tr } from '$lib/i18n/locale-store';
@@ -133,7 +133,9 @@
 
     // Country picker: CountryPicker two-way binds `countryInput`; push changes back
     // into the wizard store (guarded so a redundant tick doesn't churn the store).
-    let countryInput = state.newReciter.countryName;
+    // Seed from the store synchronously — the reactive `state` is still undefined
+    // during this top-level init, so reading `state.newReciter` here would throw.
+    let countryInput = get(submitWizard).newReciter.countryName;
     $: if (countryInput !== state.newReciter.countryName) updateNew('countryName', countryInput);
     $: countryCode = countryByName(countryInput, lang)?.code ?? '';
 </script>
