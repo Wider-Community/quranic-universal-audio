@@ -94,8 +94,7 @@ export const ARABIC_DIGITS: readonly string[] = [
  *  separators, and units localize in place. The locale-aware entry point is
  *  `lib/i18n/format.ts::localizeDigits`; this is the raw transform. */
 export function toArabicNumeral(n: number | string): string {
-    return String(n)
-        .split('')
-        .map((d) => ARABIC_DIGITS[+d] ?? d)
-        .join('');
+    // Match ASCII digits only — a char-by-char `+d` maps whitespace to 0 (a
+    // space coerces to 0), turning spaces into ٠ and mangling multi-word strings.
+    return String(n).replace(/[0-9]/g, (d) => ARABIC_DIGITS[+d]!);
 }
