@@ -17,9 +17,10 @@
 # --- Stage 1: build frontend ---
 FROM node:24-alpine AS frontend-build
 WORKDIR /app
-COPY inspector/frontend/package.json inspector/frontend/package-lock.json ./
-RUN npm ci
+# Copy the full frontend before `npm ci`: the root `postinstall` hook runs
+# `paraglide:compile`, which needs `project.inlang/` + the message sources.
 COPY inspector/frontend ./
+RUN npm ci
 RUN npm run build
 
 
