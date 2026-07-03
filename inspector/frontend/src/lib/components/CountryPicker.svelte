@@ -14,9 +14,12 @@
      * Two-way binds `value` as the display label (localized). Callers resolve the
      * ISO-2 code from `value` via `countryByName(value, locale)`; the stored wire
      * value stays the code, so the display language never changes what's persisted.
-     * Mirrors the old focus-stash dance: focusing blanks the field to reveal the
-     * full list, and an untouched blur restores the prior selection.
+     *
+     * The bound `value` is never mutated except by an explicit selection or the
+     * user's own typing — focusing just opens the list (full list until the user
+     * types, then filtered), so a committed country is never transiently blanked.
      */
+    import { clickOutside } from '$lib/actions/click-outside';
     import { filterCountries, type CountryOption } from '$lib/utils/countries';
 
     interface Props {
@@ -35,37 +38,40 @@
     }: Props = $props();
 
     let open = $state(false);
+    // Has the user typed since focusing? Until they do, show the full list so a
+    // committed value can be re-picked; once typing, filter by the input text.
+    let dirty = $state(false);
     let activeIdx = $state(0);
-    let stash: string | null = null;
     const listboxId = `country-listbox-${_seq++}`;
 
-    const options = $derived<CountryOption[]>(filterCountries(value, locale));
+    const options = $derived<CountryOption[]>(
+        open && !dirty ? filterCountries('', locale) : filterCountries(value, locale),
+    );
 
-    function select(opt: CountryOption): void {
+    function commit(opt: CountryOption): void {
         value = opt.label;
-        stash = null;
+        dirty = false;
         open = false;
     }
     function onFocus(): void {
         if (disabled) return;
-        stash = value;
-        value = '';
-        open = true;
+        dirty = false;
         activeIdx = 0;
-    }
-    function onBlur(): void {
-        // Delay so a pointer selection lands before the list unmounts.
-        setTimeout(() => {
-            if (!value && stash != null) value = stash;
-            stash = null;
-            open = false;
-        }, 120);
+        open = true;
     }
     function onInput(): void {
-        open = true;
+        dirty = true;
         activeIdx = 0;
+        open = true;
+    }
+    function close(): void {
+        open = false;
     }
     function onKeydown(e: KeyboardEvent): void {
+        if (!open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+            open = true;
+            return;
+        }
         if (!open) return;
         if (e.key === 'ArrowDown') {
             activeIdx = Math.min(activeIdx + 1, options.length - 1);
@@ -76,7 +82,7 @@
         } else if (e.key === 'Enter') {
             const opt = options[activeIdx];
             if (opt) {
-                select(opt);
+                commit(opt);
                 e.preventDefault();
             }
         } else if (e.key === 'Escape') {
@@ -85,10 +91,11 @@
     }
 </script>
 
-<div class="country-combo">
+<div class="country-combo" use:clickOutside={close}>
     <input
         {id}
         type="text"
+        class="country-input"
         role="combobox"
         aria-controls={listboxId}
         aria-expanded={open}
@@ -98,8 +105,8 @@
         {disabled}
         bind:value
         onfocus={onFocus}
-        onblur={onBlur}
         oninput={onInput}
+        onblur={close}
         onkeydown={onKeydown}
     />
     {#if open && options.length > 0}
@@ -112,7 +119,11 @@
                         aria-selected={i === activeIdx}
                         class="country-opt"
                         class:active={i === activeIdx}
-                        onpointerdown={() => select(opt)}
+                        onpointerdown={(e) => {
+                            // Keep the input focused (no blur→close race) and commit.
+                            e.preventDefault();
+                            commit(opt);
+                        }}
                         onmouseenter={() => (activeIdx = i)}
                     >
                         <span class="country-opt-name">{opt.label}</span>
@@ -127,6 +138,33 @@
 <style>
     .country-combo {
         position: relative;
+    }
+    /* Match the app's text inputs (the native box this replaced inherited the
+       parent form's `input` rule, which scoped styles can't cross into here). */
+    .country-input {
+        width: 100%;
+        box-sizing: border-box;
+        background: var(--panel);
+        border: 1px solid var(--border-default);
+        color: var(--text-primary);
+        border-radius: var(--r-2);
+        padding: 8px 10px;
+        font: inherit;
+        transition:
+            border-color var(--t-fast),
+            background var(--t-fast);
+    }
+    .country-input::placeholder {
+        color: var(--text-faint);
+    }
+    .country-input:focus {
+        outline: none;
+        border-color: var(--accent);
+        background: var(--panel-2);
+    }
+    .country-input:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
     }
     .country-list {
         position: absolute;
