@@ -24,7 +24,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install graphifyy
+      - run: pip install graphify==0.6.0
       - name: Rebuild structural graph (AST only — no API key)
         run: graphify update . --force
       - name: Publish graph artifact
