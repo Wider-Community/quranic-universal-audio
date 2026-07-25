@@ -271,14 +271,6 @@ CAPABILITIES: tuple[Capability, ...] = (
         maintainer=False,
     ),
     _c(
-        "intake.accept",
-        G_REQUESTS,
-        "Accept an intake",
-        "Approve a new-combination / new-reciter intake for offline ingest.",
-        contributor=False,
-        maintainer=False,
-    ),
-    _c(
         "intake.probe",
         G_REQUESTS,
         "Probe an intake source",

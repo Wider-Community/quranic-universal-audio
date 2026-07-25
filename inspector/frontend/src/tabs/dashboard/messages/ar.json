@@ -263,7 +263,7 @@
   "dashboard_request_reject_soft_button": "أعد",
   "dashboard_request_reject_hard_button": "أهمل",
   "dashboard_submit_failed_fallback": "فشل التقديم.",
-  "dashboard_submit_queued_toast": "شكرا — تم وضع ما قدمته في قائمة المراجعة.",
+  "dashboard_submit_queued_toast": "شكرا — تم استلام ما قدمته وستتم معالجته قريبا. فعّل إشعارات البريد الإلكتروني لتصلك رسالة عند جهوز التلاوة.",
   "dashboard_submit_wizard_aria": "قدم تلاوة",
   "dashboard_submit_wizard_title": "قدم تلاوة",
   "dashboard_submit_stepper_aria": "التقدم",

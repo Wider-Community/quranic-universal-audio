@@ -13,12 +13,6 @@ export type RequestStatus = 'open' | 'accepted' | 'returned' | 'discarded';
 
 const _JSON = { 'Content-Type': 'application/json' };
 
-/** Owner input for accepting an intake request — only the canonical reciter_id,
- * and only for a new reciter. Source/channel/slug are determined at ingest. */
-export interface AcceptIntakeFields {
-    reciter_id?: string;
-}
-
 export async function fetchRequests(
     status: RequestStatus,
     signal?: AbortSignal,
@@ -29,6 +23,10 @@ export async function fetchRequests(
 }
 
 // ---- Intake (slugless new-combo / new-reciter) owner actions ----------------
+//
+// No accept action: a submission is directly ingest-actionable (aligning it via
+// the offline pipeline is the acceptance). Owners can still probe / return /
+// discard a pending submission.
 
 async function _post(url: string, body?: unknown): Promise<Record<string, unknown>> {
     const res = await fetch(url, {
@@ -41,11 +39,6 @@ async function _post(url: string, body?: unknown): Promise<Record<string, unknow
         throw new Error((json.error as string) ?? `HTTP ${res.status}`);
     }
     return json;
-}
-
-/** Approve an intake request + queue it for offline ingest. */
-export async function acceptRequest(id: string, fields: AcceptIntakeFields = {}): Promise<void> {
-    await _post(`/api/admin/requests/${id}/accept`, fields);
 }
 
 /** Reachability-probe an intake request's audio source (owner-only). */

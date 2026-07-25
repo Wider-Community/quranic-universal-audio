@@ -247,7 +247,7 @@
   "dashboard_request_reject_soft_button": "Send back",
   "dashboard_request_reject_hard_button": "Discard",
   "dashboard_submit_failed_fallback": "Submission failed.",
-  "dashboard_submit_queued_toast": "Thanks — your submission is queued for review.",
+  "dashboard_submit_queued_toast": "Thanks — your submission was received and will be processed soon. Turn on email notifications to be told when the recitation is ready.",
   "dashboard_submit_wizard_aria": "Submit a recitation",
   "dashboard_submit_wizard_title": "Submit a recitation",
   "dashboard_submit_stepper_aria": "Progress",
