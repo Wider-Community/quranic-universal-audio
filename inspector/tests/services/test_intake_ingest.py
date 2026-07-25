@@ -281,7 +281,9 @@ def test_ingest_is_idempotent_when_slug_already_set(fs_backend):
     assert second["slug"] == "rec_x_hafs_ch1"
 
 
-def test_ingest_rejects_non_accepted_request(fs_backend):
+def test_ingest_rejects_resolved_request(fs_backend):
+    """A pending submission is ingestable (aligning it is the acceptance), but a
+    request already resolved to a terminal status (discarded/returned) is not."""
     from services import db
 
     requester = Actor(hf_user_id="u-1", login_at_time="alice", role=Role.CONTRIBUTOR)
@@ -292,7 +294,7 @@ def test_ingest_rejects_non_accepted_request(fs_backend):
             kind="new_reciter",
             extra_payload={"reciter_id": "x", "source": {"method": "links", "links": []}},
         )
-    # Still pending → not an accepted intake.
+        repo_requests.resolve_by_id(request_id=rid, status="discarded", transitioned_by=OWNER)
     with pytest.raises(intake_service.IngestBadRequest):
         intake_service.ingest(
             rid,

@@ -250,6 +250,7 @@
             pushToast({
                 kind: 'success',
                 text: m.dashboard_submit_queued_toast(),
+                ttl: 9000,
             });
             closeSubmitWizard();
         } catch (e) {

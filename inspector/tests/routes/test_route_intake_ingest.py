@@ -72,6 +72,22 @@ def _seed_accepted_intake() -> str:
     return rid
 
 
+def _seed_pending_intake() -> str:
+    """A fresh submission, never separately accepted (no accept step exists)."""
+    from services import db
+    from services.db import repo_requests
+
+    requester = Actor(hf_user_id="u-1", login_at_time="alice", role=Role.CONTRIBUTOR)
+    with db.transaction():
+        rid = repo_requests.submit(
+            slug=None,
+            requester=requester,
+            kind="existing_reciter_new_combo",
+            extra_payload={"reciter_id": "rec_x", "source": {"method": "links", "links": []}},
+        )
+    return rid
+
+
 def _body(slug="rec_x_hafs_ch1"):
     return {
         "reciter": None,
@@ -123,6 +139,23 @@ def test_ingest_owner_cookie_happy_path(signed_in_client):
     body = json.loads(res.data)
     assert body["ok"] and body["slug"] == "rec_x_hafs_ch1"
     assert body["state"] == "awaiting_alignment"
+
+
+def test_ingest_pending_intake_no_accept_needed(signed_in_client):
+    """A pending submission is directly ingestable — aligning it is the accept.
+    Ingest mints the delivery, seeds alignment, and flips the row to accepted."""
+    rid = _seed_pending_intake()
+    client, _ = signed_in_client(role="owner", hf_user_id="u-O", login="owner")
+    res = client.post(f"/api/admin/intake/{rid}/ingest", headers=_HEADERS, data=json.dumps(_body()))
+    assert res.status_code == 200, res.data
+    body = json.loads(res.data)
+    assert body["ok"] and body["slug"] == "rec_x_hafs_ch1"
+    assert body["state"] == "awaiting_alignment"
+
+    from services.db import repo_requests
+
+    row = repo_requests.get_by_id(rid)
+    assert row["status"] == "accepted" and row["slug"] == "rec_x_hafs_ch1"
 
 
 def test_ingest_anonymous_401(flask_client):

@@ -24,7 +24,6 @@
     import { titleCaseSlug } from '../../../../lib/utils/delivery-label';
     import { relativeTime } from '../../../../lib/utils/relative-time';
     import { visiblePoll } from '../../../../lib/utils/visible-poll';
-    import AcceptIntakeDialog from './AcceptIntakeDialog.svelte';
 
     const INTAKE_KINDS = ['existing_reciter_new_combo', 'new_reciter'];
     function isIntake(row: AdminRequestRow): boolean {
@@ -49,10 +48,9 @@
     let busyId = $state<string | null>(null);
     let actionError = $state<string | null>(null);
 
-    // Intake-only: reachability probe + accept dialog.
+    // Intake-only: reachability probe.
     let probeBusyId = $state<string | null>(null);
     let probeResults = $state<Record<string, ProbeResult[]>>({});
-    let acceptRow = $state<AdminRequestRow | null>(null);
 
     function applyResult(r: AdminRequestsResponse): void {
         resp = r;
@@ -136,12 +134,6 @@
         } finally {
             probeBusyId = null;
         }
-    }
-
-    function onAccepted(): void {
-        acceptRow = null;
-        expandedId = null;
-        fetchRequests(status).then(applyResult).catch(() => {});
     }
 
     function probeFor(row: AdminRequestRow): ProbeResult[] {
@@ -392,7 +384,7 @@
                                         <p class="notice">
                                             {#if isIntake(row)}
                                                 {row.name_en ?? 'This reciter'} already has a delivery with
-                                                this riwayah · style. Accepting creates another.
+                                                this riwayah · style. Ingesting creates another.
                                             {:else}
                                                 Another delivery of {row.name_en ?? 'this reciter'} already uses
                                                 this riwayah · style. The edit still applies on acceptance.
@@ -404,11 +396,11 @@
                                         {#if $isOwner}
                                             <div class="resolve">
                                                 {#if isIntake(row)}
-                                                    <button
-                                                        class="btn accept"
-                                                        disabled={busyId === row.id}
-                                                        onclick={() => (acceptRow = row)}
-                                                    >Accept &amp; queue for ingest</button>
+                                                    <p class="ingest-note">
+                                                        Ingested offline by the alignment pipeline — aligning
+                                                        this submission is the acceptance; no action needed here.
+                                                        Send back or discard below to reject it.
+                                                    </p>
                                                 {/if}
                                                 <textarea
                                                     bind:value={reason}
@@ -466,10 +458,6 @@
         </ol>
     {/if}
 </div>
-
-{#if acceptRow}
-    <AcceptIntakeDialog row={acceptRow} onClose={() => (acceptRow = null)} onAccepted={onAccepted} />
-{/if}
 
 <style>
     .reqs { display: flex; flex-direction: column; height: 100%; min-height: 0; }
@@ -613,8 +601,16 @@
     .ln-reach.none { color: var(--text-faint); font-weight: 400; }
 
     .btn.tiny { padding: 3px 9px; font-size: 10.5px; }
-    .btn.accept { align-self: stretch; color: var(--accent); border-color: var(--accent); background: var(--accent-tint); }
-    .btn.accept:hover:not(:disabled) { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+    .ingest-note {
+        margin: 0 0 var(--s-2);
+        padding: var(--s-2) var(--s-3);
+        background: var(--accent-tint);
+        border: 1px solid var(--border-quiet);
+        border-radius: var(--r-2);
+        font-size: var(--fs-meta);
+        line-height: var(--lh-normal);
+        color: var(--text-secondary);
+    }
 
     .review-side { display: flex; flex-direction: column; gap: var(--s-4); }
     .submitted-by { margin: 0; font-size: var(--fs-meta); color: var(--text-muted); }

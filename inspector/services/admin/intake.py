@@ -1,24 +1,26 @@
 """Submit-recitation **intake** service (slugless new-combo / new-reciter).
 
-Submit, owner-accept, and owner-resolve for the two contribution types that
-have no catalogued delivery yet. Distinct from ``services.pending_requests``
-(the slug-based edit-request flow) — but resolution funnels through the same
-``repo_requests`` core (``resolve`` / ``resolve_by_id``).
+Submit and owner-resolve for the two contribution types that have no catalogued
+delivery yet. Distinct from ``services.pending_requests`` (the slug-based
+edit-request flow) — but resolution funnels through the same ``repo_requests``
+core (``resolve`` / ``resolve_by_id``).
 
-**Accept does NOT create the catalog delivery.** A delivery requires valid
+**There is no separate owner "accept" step.** A submission lands ``pending`` and
+is immediately ingest-actionable: the owner's decision to *align* it (running the
+offline ingest pipeline over the row) IS the acceptance. A delivery requires valid
 ``source`` / ``channel`` vocab FKs, plus codec/bitrate/duration — all of which
-are *probed from the actual audio* and only become known (and valid) once the
-offline ingest pipeline fetches it. An arbitrary contributor link may not map to
-any existing vocab at all, so a human can't classify it at accept time. The
-slug's mandatory ``channel_short`` suffix has the same problem.
+are *probed from the actual audio* and only become known (and valid) once that
+pipeline fetches it. For a ``new_reciter`` the canonical ``reciter_id`` (the one
+genuinely human decision — a curated slug) is supplied by the operator at ingest
+time (``ingest_intake.py --reciter-id``), not stamped up front.
 
-So acceptance is a lightweight approval: it records the owner's canonical
-``reciter_id`` (new reciters only — the one genuinely human decision) and flips
-the request to ``accepted``. The request row already carries the audio source +
-proposed metadata; the offline pipeline reads accepted slugless requests, fetches
-+ probes the audio, then creates the reciter + delivery (with correct
-source/channel/slug) and back-fills ``requests.slug``. Local alignment + ingest
-stay offline.
+The offline pipeline reads slugless intake requests (``pending`` or already
+``accepted`` but slug-less), fetches + probes the audio, creates the reciter +
+delivery (with correct source/channel/slug), seeds alignment, and back-fills
+``requests.slug`` — flipping the row to ``accepted`` at that point (so
+``accepted`` now means *ingested*). Local alignment + ingest stay offline. An
+owner can still ``resolve`` (send back / discard) a pending submission they don't
+want.
 """
 
 from __future__ import annotations
@@ -186,50 +188,6 @@ def _append_dedup_warning(sub: IntakeSubmission, validation: IntakeValidation) -
                 return
 
 
-# ---- Accept (owner) ---------------------------------------------------------
-
-
-def accept(request_id: str, *, actor: Actor, reciter_id: str | None = None) -> str:
-    """Approve a pending intake request and queue it for offline ingest.
-
-    Does **not** touch the catalog. For ``new_reciter`` the owner-confirmed
-    ``reciter_id`` (the one human decision — a canonical curated slug) is stamped
-    into the payload so ingest creates the reciter under it; for
-    ``existing_reciter_new_combo`` the ``reciter_id`` is already on the payload.
-    The request flips to ``accepted`` (slug stays ``NULL`` until ingest mints the
-    delivery). Source/channel/bitrate/slug are deferred to the offline pipeline,
-    which is the only place they can be validly determined.
-
-    Raises :class:`NotIntakeRequest` for a bad id and :class:`IntakeError` for a
-    missing/invalid ``reciter_id`` on a new-reciter request.
-    """
-    row = _require_pending_intake(request_id)
-    kind = row["kind"]
-    payload = _serde.json_loads(row["payload"]) or {}
-
-    if kind == "new_reciter":
-        rid = (reciter_id or "").strip()
-        if not rid:
-            raise IntakeError("reciter_id is required to accept a new-reciter request.")
-        if not SLUG_RE.match(rid):
-            raise IntakeError(
-                f"invalid reciter_id {rid!r} — lowercase letters, digits, and "
-                "single underscores only."
-            )
-        payload["reciter_id"] = rid
-
-    with _sync.durable_transaction():
-        if kind == "new_reciter":
-            repo_requests.set_payload(request_id, payload)
-        repo_requests.resolve_by_id(
-            request_id=request_id,
-            status="accepted",
-            transitioned_by=actor,
-        )
-    _invalidate()
-    return request_id
-
-
 # ---- Ingest (owner / offline pipeline) --------------------------------------
 
 
@@ -241,9 +199,12 @@ def ingest(request_id: str, payload: dict, actor: Actor) -> dict:
     has fetched + probed the contributor audio and uploaded ``reciters/<slug>/``
     content to the bucket. Steps (all atomic):
 
-    1. Validate the request row is ``status='accepted'``, ``slug IS NULL``, and
-       a slugless intake kind. (Idempotent: a row that already has ``slug`` set
-       was already ingested → 200 no-op with the existing slug.)
+    1. Validate the request row is a slugless intake kind, ``slug IS NULL``, and
+       not-yet-ingested (``status`` in ``pending`` / ``accepted``). There is no
+       separate accept gate — a fresh ``pending`` submission is directly
+       ingestable; ingest itself flips the row to ``accepted`` when it back-fills
+       the slug (step 7). (Idempotent: a row that already has ``slug`` set was
+       already ingested → 200 no-op with the existing slug.)
     2. Apply ``vocab_additions`` (idempotent ``add_source`` / ``add_channel``) so
        the delivery's source/channel FKs resolve.
     3. ``catalog.add_reciter`` when ``reciter`` is provided and new (idempotent on
@@ -273,8 +234,11 @@ def ingest(request_id: str, payload: dict, actor: Actor) -> dict:
         raise IngestBadRequest(
             f"request {request_id} is kind {row['kind']!r}, not a slugless intake"
         )
-    if row["status"] != "accepted":
-        raise IngestBadRequest(f"request {request_id} is {row['status']!r}, not an accepted intake")
+    if row["status"] not in ("pending", "accepted"):
+        raise IngestBadRequest(
+            f"request {request_id} is {row['status']!r}, not an ingestable intake "
+            "(expected pending or accepted)"
+        )
     # Idempotent: already ingested (slug back-filled) → no-op.
     if row["slug"]:
         existing_slug = row["slug"]
