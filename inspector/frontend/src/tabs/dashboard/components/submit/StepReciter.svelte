@@ -67,10 +67,27 @@
         ? (reciters.find((r) => r.reciter_id === state.existingReciterSlug) ?? null)
         : null;
 
-    function computeFiltered(rs: typeof reciters, q: string): typeof reciters {
-        return filterByFields(rs, q, (r) => [r.name, r.name_ar]).slice(0, 80);
+    // Cap the rendered rows (the list isn't virtualized); the FULL catalog stays
+    // searchable. Sort the matches alphabetically so the un-searched preview is a
+    // neutral slice of the WHOLE catalog — the catalog API returns reciters in
+    // activity order (aligned/covered first), so an unsorted head would only ever
+    // show the ~aligned subset and the 1000+ un-aligned reciters would look
+    // absent until you searched.
+    const RESULT_CAP = 80;
+    function computeMatched(rs: typeof reciters, q: string): typeof reciters {
+        const matched = filterByFields(rs, q, (r) => [r.name, r.name_ar]);
+        matched.sort((a, b) => a.name.localeCompare(b.name));
+        return matched;
     }
-    $: filtered = computeFiltered(reciters, $queryStore);
+    $: matched = computeMatched(reciters, $queryStore);
+    $: filtered = matched.slice(0, RESULT_CAP);
+    $: listHint =
+        matched.length > filtered.length
+            ? tr(lang, m.dashboard_submit_reciter_list_hint({
+                  shown: filtered.length,
+                  total: matched.length,
+              }))
+            : null;
 
     function setMode(next: typeof mode): void {
         submitWizard.update((s) => ({
@@ -307,6 +324,9 @@
                         {/each}
                     {/if}
                 </ul>
+                {#if listHint}
+                    <p class="list-hint">{listHint}</p>
+                {/if}
             {/if}
         </div>
     {:else}
@@ -558,6 +578,12 @@
         font-size: var(--fs-meta);
         color: var(--text-faint);
         text-align: center;
+    }
+    .list-hint {
+        margin: 0;
+        padding: 2px 4px;
+        font-size: 10.5px;
+        color: var(--text-faint);
     }
     .result {
         width: 100%;
