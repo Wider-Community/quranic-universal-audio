@@ -3,13 +3,16 @@
   sibling of ThemeToggle in the header.
 
   It shows ONE language at a time (its endonym), never a segmented pair. 'Auto'
-  (the default) follows the browser's language and is marked by the leading globe;
-  an explicit choice pins the locale (Paraglide's `insp_locale` key) and drops the
-  globe, leaving just the word. Fully token-driven so it re-skins for light AND dark.
+  (the default) follows the browser's language and shows the resolved language
+  marked by a small corner monitor badge — the same "following the device"
+  affordance ThemeToggle uses; an explicit choice pins the locale (Paraglide's
+  `insp_locale` key) and drops the badge, leaving just the word. Fully
+  token-driven so it re-skins for light AND dark.
 -->
 <script lang="ts">
     import * as m from '$lib/paraglide/messages';
     import { i18n, type Locale } from '$lib/i18n/locale.svelte';
+    import AutoBadge from './AutoBadge.svelte';
 
     // Each language in its own name — data, not translated by the active UI locale.
     const ENDONYMS: Record<Locale, string> = { en: 'English', ar: 'عربي' };
@@ -39,20 +42,15 @@
     aria-label={label}
     onclick={() => i18n.cycle()}
 >
-    {#if isAuto}
-        <!-- globe = following the browser (auto); dropped once a locale is pinned -->
-        <svg class="glyph" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <circle cx="12" cy="12" r="9" />
-            <path d="M3 12h18" />
-            <path d="M12 3c2.6 2.7 3.9 5.9 3.9 9s-1.3 6.3-3.9 9c-2.6-2.7-3.9-5.9-3.9-9s1.3-6.3 3.9-9z" />
-        </svg>
-    {/if}
     <span class="name" lang={shown}>{ENDONYMS[shown] ?? shown}</span>
+    {#if isAuto}
+        <AutoBadge />
+    {/if}
 </button>
 
 <style>
     .locale-toggle {
+        position: relative;
         display: inline-flex;
         align-items: center;
         gap: 5px;
@@ -79,10 +77,6 @@
     .locale-toggle:focus-visible {
         outline: 2px solid var(--accent);
         outline-offset: 2px;
-    }
-    .glyph {
-        flex: none;
-        opacity: 0.85;
     }
     .name {
         font-weight: 500;
