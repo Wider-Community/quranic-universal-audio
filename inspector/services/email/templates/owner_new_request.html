@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block subject %}New request: {{ reciter_name }}{% endblock %}
+{% block content %}
+<p style="margin:0 0 12px;font-size:15px;line-height:1.6;">
+  A new request came in for <strong>{{ reciter_name }}</strong>{% if body %} — {{ body }}{% endif %}.
+</p>
+<p style="margin:0;font-size:15px;line-height:1.6;">
+  <a href="{{ site_url }}" style="color:#5fd0e0;text-decoration:none;">Open the Requests queue</a>
+</p>
+{% endblock %}

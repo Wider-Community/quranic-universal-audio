@@ -31,9 +31,12 @@
     import Segmented from '../../../lib/components/Segmented.svelte';
     import Toggle from '../../../lib/components/Toggle.svelte';
     import { pushToast } from '../../../lib/stores/toast';
+    import { can } from '../../../lib/stores/capabilities';
     import type { SelectOption } from '../../../lib/types/ui';
     import { vocabLabel } from '../../../lib/i18n/vocab';
     import { catalogData, loadCatalog } from '../stores/catalog-data';
+
+    const canOwnerRequestEmails = can('notify.owner_request_emails');
 
     interface Props {
         open: boolean;
@@ -105,6 +108,7 @@
                 working.recitation_published !== 'off' ||
                 working.timestamps_regenerated !== 'off' ||
                 working.github_release ||
+                working.owner_new_request ||
                 anyRiwayahEvent),
     );
     const emailFilled = $derived(!!working && working.email.trim() !== '');
@@ -207,6 +211,25 @@
                     <p class="email-note">{m.dashboard_email_prefs_email_help()}</p>
                 {/if}
             </div>
+
+            {#if $canOwnerRequestEmails}
+                <!-- Owner: new request alerts -->
+                <section class="group">
+                    <h3 class="group-title">{m.dashboard_email_prefs_group_owner()}</h3>
+                    <div class="row">
+                        <div class="row-text">
+                            <p class="row-title">{m.dashboard_email_prefs_owner_new_request_title()}</p>
+                            <p class="row-desc">{m.dashboard_email_prefs_owner_new_request_desc()}</p>
+                        </div>
+                        <div class="row-ctrl">
+                            <Toggle
+                                checked={working.owner_new_request}
+                                label={m.dashboard_email_prefs_owner_new_request_toggle_label()}
+                                onchange={(v) => working && (working.owner_new_request = v)} />
+                        </div>
+                    </div>
+                </section>
+            {/if}
 
             <!-- Your contributions -->
             <section class="group">

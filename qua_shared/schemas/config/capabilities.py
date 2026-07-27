@@ -578,6 +578,18 @@ CAPABILITIES: tuple[Capability, ...] = (
         contributor=True,
         maintainer=True,
     ),
+    _c(
+        "notify.owner_request_emails",
+        G_SUBSCRIPTIONS,
+        "Email me on new requests",
+        "Get a no-reply email when a new request or submission arrives — an "
+        "existing-delivery edit request, or a new/existing-reciter intake "
+        "submission. Owner-only by default; delegate to maintainers to share "
+        "triage. Toggled from the same email-notifications modal as the "
+        "public subscriptions, but only visible to holders of this capability.",
+        contributor=False,
+        maintainer=False,
+    ),
 )
 
 
