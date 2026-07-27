@@ -116,7 +116,9 @@ def emit_recitation_published(
             if event == "recitation_published":
                 to_buffer.append(sub)
             else:  # riwayah_new_recitation / riwayah_first_available — immediate
-                _dispatch(sub, event, {"reciter_name": reciter_name, "riwayah_label": riwayah_label})
+                _dispatch(
+                    sub, event, {"reciter_name": reciter_name, "riwayah_label": riwayah_label}
+                )
         if to_buffer:
             with _sync.durable_transaction():
                 for sub in to_buffer:
@@ -139,7 +141,9 @@ def emit_timestamps_regenerated(*, reciter_id: str, reciter_name: str) -> None:
         from services.db import sync as _sync
 
         to_buffer = [
-            sub for sub in _all() if _scope_matches(sub["prefs"], "timestamps_regenerated", reciter_id)
+            sub
+            for sub in _all()
+            if _scope_matches(sub["prefs"], "timestamps_regenerated", reciter_id)
         ]
         if to_buffer:
             with _sync.durable_transaction():
@@ -200,6 +204,34 @@ def notify_request_aligned(slug: str, hf_user_id: str | None) -> None:
         emit_request_aligned(hf_user_id=hf_user_id, reciter_name=catalog.display_name(slug) or slug)
     except Exception:  # noqa: BLE001
         logger.exception("email.notify_request_aligned failed (slug=%s)", slug)
+
+
+def emit_owners_new_request(
+    *, requester_hf_user_id: str | None, reciter_name: str, kind: str, body: str | None
+) -> None:
+    """A new request/submission arrived — email every subscriber opted into
+    ``owner_new_request`` who currently holds the ``notify.owner_request_emails``
+    capability (re-checked at send time, not just at save time, so a revoked
+    delegate stops receiving it without touching their subscription row).
+    Self-suppressed for the requester."""
+    try:
+        from services.auth import capabilities as cap_service
+
+        holders = set(cap_service.users_with_capability("notify.owner_request_emails"))
+        if not holders:
+            return
+        for sub in _all():
+            if not sub["prefs"].get("owner_new_request"):
+                continue
+            if sub["hf_user_id"] not in holders:
+                continue
+            if sub["hf_user_id"] == requester_hf_user_id:
+                continue
+            _dispatch(
+                sub, "owner_new_request", {"reciter_name": reciter_name, "kind": kind, "body": body}
+            )
+    except Exception:  # noqa: BLE001
+        logger.exception("email.emit_owners_new_request failed (kind=%s)", kind)
 
 
 def emit_github_release(*, version: str) -> None:

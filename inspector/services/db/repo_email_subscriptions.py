@@ -31,6 +31,7 @@ _BOOL_EVENTS = (
     "github_release",
     "riwayah_new_recitation",
     "riwayah_first_available",
+    "owner_new_request",
 )
 
 

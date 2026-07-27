@@ -1122,6 +1122,7 @@ export interface EmailPreferences {
   github_release?: boolean;
   riwayah_new_recitation?: boolean;
   riwayah_first_available?: boolean;
+  owner_new_request?: boolean;
   reciters?: string[];
   riwayahs?: string[];
 }
@@ -1140,6 +1141,7 @@ export interface EmailPreferencesSaved {
   github_release?: boolean;
   riwayah_new_recitation?: boolean;
   riwayah_first_available?: boolean;
+  owner_new_request?: boolean;
   reciters?: string[];
   riwayahs?: string[];
   manage_token: string;
