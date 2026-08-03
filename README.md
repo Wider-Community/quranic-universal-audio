@@ -98,7 +98,7 @@ To contribute code to the repo directly, fork the repo and see [inspector/README
 **Coverage + Quality**
 
 - [ ] **100+ recitations** — reach 100+ fully aligned and verified recitations.
-- [ ] **Letter-level precision** — word and letter timestamps are both high quality; close the few minor systematic and timing differences in letter timestamps that depend on context, tajweed, and reciter.
+- [x] **Letter-level precision** — word and letter timestamps are both high quality; close the few minor systematic and timing differences in letter timestamps that depend on context, tajweed, and reciter.
 
 **Generalisation**
 
