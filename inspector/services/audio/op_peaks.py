@@ -21,7 +21,7 @@ from __future__ import annotations
 import base64
 import logging
 import math
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 
 import numpy as np
 
@@ -88,26 +88,21 @@ def resolve_op_url(
     return by_chapter.get(ch)
 
 
-def slice_chapter_peaks_b64(
-    reciter: str,
-    url: str,
+def slice_slim_envelope(
+    env: dict,
     start_ms: int,
     end_ms: int,
 ) -> tuple[str, int, int, int] | None:
-    """Slice the baked chapter peaks for ``url`` over ``[start_ms, end_ms]``.
+    """Slice an already-read slim int8 envelope over ``[start_ms, end_ms]``.
 
-    Reads the slim int8 envelope (``audio_fetch.read_prefetched_peaks``),
-    slices the int8 buckets covering the range, and re-encodes that sub-range
+    Slices the int8 buckets covering the range and re-encodes that sub-range
     as b64 — no dequant, lossless against the baked 10 bps source.
 
     Returns ``(peaks_b64, bps, actual_start_ms, actual_end_ms)`` or ``None``
-    when peaks aren't baked for that chapter / the range is empty. The
-    returned span is the bucket-snapped ACTUAL span so the invariant
+    when the envelope is malformed / the range is empty. The returned span is
+    the bucket-snapped ACTUAL span so the invariant
     ``n == (end - start) * bps / 1000`` holds for the consumer's pps math.
     """
-    env = audio_fetch.read_prefetched_peaks(reciter, url)
-    if not env:
-        return None
     n = int(env.get("n") or 0)
     duration_ms = int(env.get("duration_ms") or 0)
     bps = int(env.get("bps") or 0)
@@ -136,6 +131,25 @@ def slice_chapter_peaks_b64(
     return out_b64, bps, actual_start, actual_end
 
 
+def slice_chapter_peaks_b64(
+    reciter: str,
+    url: str,
+    start_ms: int,
+    end_ms: int,
+) -> tuple[str, int, int, int] | None:
+    """Slice the baked chapter peaks for ``url`` over ``[start_ms, end_ms]``.
+
+    Reads the slim int8 envelope for the chapter behind ``url``
+    (``audio_fetch.read_prefetched_peaks``) and defers to
+    ``slice_slim_envelope``. ``None`` when peaks aren't baked for that
+    chapter.
+    """
+    env = audio_fetch.read_prefetched_peaks(reciter, url)
+    if not env:
+        return None
+    return slice_slim_envelope(env, start_ms, end_ms)
+
+
 def audio_url_by_chapter(reciter: str) -> dict[int, str]:
     """Map ``chapter -> URL`` from the bucket audio_manifest sidecar.
 
@@ -160,13 +174,23 @@ def build_op_records(
     ops: Iterable[dict],
     by_chapter: dict[int, str],
     default_chapter: int | None = None,
+    *,
+    env_provider: Callable[[str], dict | None] | None = None,
 ) -> list[dict]:
     """Build canonical history-peaks records for every op with sliceable peaks.
+
+    ``env_provider`` maps a resolved URL to a slim envelope; it defaults to
+    reading the baked chapter peaks from the bucket. A caller holding
+    envelopes in memory injects its own, keyed by the **raw** URL stamped on
+    the op snapshots — nothing is normalised on the way in, so a proxy-wrapped
+    URL reaches the provider verbatim. Only the emitted record's ``url`` is
+    normalised, which is what readers index by.
 
     Skips (silently, with a debug log) ops missing op_id / range / url, or
     whose chapter peaks aren't baked — those are filled lazily on play. Never
     raises; callers treat peaks as best-effort.
     """
+    read_env = env_provider or (lambda u: audio_fetch.read_prefetched_peaks(reciter, u))
     out: list[dict] = []
     for op in ops or []:
         if not isinstance(op, dict):
@@ -181,7 +205,8 @@ def build_op_records(
         if not url:
             log.debug("[%s] op %s: no resolvable audio_url", reciter, op_id)
             continue
-        sliced = slice_chapter_peaks_b64(reciter, url, rng[0], rng[1])
+        env = read_env(url)
+        sliced = slice_slim_envelope(env, rng[0], rng[1]) if env else None
         if sliced is None:
             log.debug("[%s] op %s: no baked chapter peaks to slice", reciter, op_id)
             continue

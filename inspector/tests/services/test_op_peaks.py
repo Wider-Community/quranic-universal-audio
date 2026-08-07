@@ -10,7 +10,11 @@ import base64
 import numpy as np
 
 from services.audio import op_peaks
-from services.audio.peaks_history import append_peaks_records, load_peaks_records
+from services.audio.peaks_history import (
+    append_peaks_records,
+    load_peaks_records,
+    normalize_audio_url,
+)
 from services.storage import cache
 
 
@@ -32,6 +36,10 @@ def _envelope(n: int, duration_ms: int, bps: int = 10) -> dict:
         "n": n,
         "peaks_b64": base64.b64encode(i8.tobytes()).decode("ascii"),
     }
+
+
+def _unreachable(*_args, **_kwargs):
+    raise AssertionError("audio_fetch.read_prefetched_peaks must not be reached")
 
 
 # -- op_time_range / resolve_op_url -------------------------------------
@@ -74,6 +82,25 @@ def test_resolve_op_url_uses_default_chapter():
         op_peaks.resolve_op_url(op, {7: "https://cat/7.mp3"}, default_chapter=7)
         == "https://cat/7.mp3"
     )
+
+
+# -- slice_slim_envelope ------------------------------------------------
+
+
+def test_slice_slim_envelope_matches_the_fetching_wrapper(monkeypatch):
+    """The pure slicer returns exactly what ``slice_chapter_peaks_b64``
+    returns for the same envelope bytes."""
+    env = _envelope(n=100, duration_ms=10_000, bps=10)
+    monkeypatch.setattr(op_peaks.audio_fetch, "read_prefetched_peaks", lambda r, u: env)
+
+    assert op_peaks.slice_slim_envelope(env, 2000, 3000) == op_peaks.slice_chapter_peaks_b64(
+        "recit", "https://cdn/1.mp3", 2000, 3000
+    )
+
+
+def test_slice_slim_envelope_none_when_range_is_empty():
+    env = _envelope(n=100, duration_ms=10_000, bps=10)
+    assert op_peaks.slice_slim_envelope(env, 3000, 3000) is None
 
 
 # -- slice_chapter_peaks_b64 --------------------------------------------
@@ -124,6 +151,51 @@ def test_build_op_records_skips_unsliceable(monkeypatch):
     recs = op_peaks.build_op_records("recit", ops, {})
     assert [r["op_id"] for r in recs] == ["op-good"]
     assert recs[0]["bps"] == 10 and recs[0]["peaks_b64"]
+
+
+def test_build_op_records_injected_provider_never_reads_the_bucket(monkeypatch):
+    """A caller holding envelopes in memory bypasses ``audio_fetch`` entirely
+    — the peaks it slices are not in the bucket yet."""
+    monkeypatch.setattr(op_peaks.audio_fetch, "read_prefetched_peaks", _unreachable)
+    env = _envelope(n=100, duration_ms=10_000, bps=10)
+    ops = [
+        {
+            "op_id": "op-mem",
+            "targets_before": [
+                {"audio_url": "https://cdn/1.mp3", "time_start": 1000, "time_end": 2000}
+            ],
+        }
+    ]
+
+    recs = op_peaks.build_op_records("recit", ops, {}, env_provider={"https://cdn/1.mp3": env}.get)
+    assert [r["op_id"] for r in recs] == ["op-mem"]
+    assert recs[0]["url"] == "https://cdn/1.mp3"
+
+
+def test_build_op_records_queries_the_provider_with_the_raw_url(monkeypatch):
+    """A proxy-wrapped ``audio_url`` reaches the provider verbatim, so a
+    provider keyed by that same raw string hits. Only the emitted record's
+    ``url`` is normalised."""
+    monkeypatch.setattr(op_peaks.audio_fetch, "read_prefetched_peaks", _unreachable)
+    proxy_url = "/api/seg/audio-proxy/recit?url=https%3A%2F%2Fcdn%2F1.mp3"
+    envs = {proxy_url: _envelope(n=100, duration_ms=10_000, bps=10)}
+    asked: list[str] = []
+
+    def _provider(url: str) -> dict | None:
+        asked.append(url)
+        return envs.get(url)
+
+    ops = [
+        {
+            "op_id": "op-proxy",
+            "targets_before": [{"audio_url": proxy_url, "time_start": 1000, "time_end": 2000}],
+        }
+    ]
+
+    recs = op_peaks.build_op_records("recit", ops, {}, env_provider=_provider)
+    assert asked == [proxy_url]
+    assert [r["op_id"] for r in recs] == ["op-proxy"]
+    assert recs[0]["url"] == normalize_audio_url(proxy_url) == "https://cdn/1.mp3"
 
 
 # -- append_peaks_records dedup -----------------------------------------
