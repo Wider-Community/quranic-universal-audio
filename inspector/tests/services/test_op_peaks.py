@@ -172,6 +172,36 @@ def test_build_op_records_injected_provider_never_reads_the_bucket(monkeypatch):
     assert recs[0]["url"] == "https://cdn/1.mp3"
 
 
+def test_build_op_records_honours_a_falsey_provider(monkeypatch):
+    """Provider selection is by ``is not None`` — a callable that is falsey
+    (an empty envelope map, say) must still be used, not silently swapped for
+    the bucket read that has none of promote's in-memory peaks."""
+    monkeypatch.setattr(op_peaks.audio_fetch, "read_prefetched_peaks", _unreachable)
+
+    class _FalseyProvider:
+        def __init__(self, envs: dict) -> None:
+            self._envs = envs
+
+        def __bool__(self) -> bool:
+            return False
+
+        def __call__(self, url: str) -> dict | None:
+            return self._envs.get(url)
+
+    provider = _FalseyProvider({"https://cdn/1.mp3": _envelope(n=100, duration_ms=10_000, bps=10)})
+    ops = [
+        {
+            "op_id": "op-falsey",
+            "targets_before": [
+                {"audio_url": "https://cdn/1.mp3", "time_start": 1000, "time_end": 2000}
+            ],
+        }
+    ]
+
+    recs = op_peaks.build_op_records("recit", ops, {}, env_provider=provider)
+    assert [r["op_id"] for r in recs] == ["op-falsey"]
+
+
 def test_build_op_records_queries_the_provider_with_the_raw_url(monkeypatch):
     """A proxy-wrapped ``audio_url`` reaches the provider verbatim, so a
     provider keyed by that same raw string hits. Only the emitted record's

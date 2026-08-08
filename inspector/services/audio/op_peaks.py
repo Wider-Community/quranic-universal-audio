@@ -99,9 +99,11 @@ def slice_slim_envelope(
     as b64 — no dequant, lossless against the baked 10 bps source.
 
     Returns ``(peaks_b64, bps, actual_start_ms, actual_end_ms)`` or ``None``
-    when the envelope is malformed / the range is empty. The returned span is
-    the bucket-snapped ACTUAL span so the invariant
-    ``n == (end - start) * bps / 1000`` holds for the consumer's pps math.
+    when a field is missing / out of range, the b64 payload is short, or the
+    range is empty. A non-numeric ``n`` / ``duration_ms`` / ``bps`` propagates
+    the ``int()`` conversion error. The returned span is the bucket-snapped
+    ACTUAL span so the invariant ``n == (end - start) * bps / 1000`` holds for
+    the consumer's pps math.
     """
     n = int(env.get("n") or 0)
     duration_ms = int(env.get("duration_ms") or 0)
@@ -187,10 +189,15 @@ def build_op_records(
     normalised, which is what readers index by.
 
     Skips (silently, with a debug log) ops missing op_id / range / url, or
-    whose chapter peaks aren't baked — those are filled lazily on play. Never
-    raises; callers treat peaks as best-effort.
+    whose chapter peaks aren't baked — those are filled lazily on play. Those
+    skips are the best-effort part; errors raised by ``env_provider`` and by
+    malformed envelope fields propagate to the caller.
     """
-    read_env = env_provider or (lambda u: audio_fetch.read_prefetched_peaks(reciter, u))
+    read_env = (
+        env_provider
+        if env_provider is not None
+        else (lambda u: audio_fetch.read_prefetched_peaks(reciter, u))
+    )
     out: list[dict] = []
     for op in ops or []:
         if not isinstance(op, dict):
