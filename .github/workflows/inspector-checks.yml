@@ -99,6 +99,16 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/inspector
         run: python -m pytest qua_shared/tests --cov=qua_shared --cov-report=term-missing:skip-covered --no-cov-on-fail
 
+      - name: Run bucket-script (scripts/bucket) tests
+        # scripts/bucket/ holds the operational CLIs (promote_run and friends).
+        # Like qua_shared, they need both repo root and inspector/ on the path,
+        # and the inspector run above never collects them. No coverage: the
+        # directory is mostly one-shot CLIs, so the report would be noise.
+        working-directory: ${{ github.workspace }}
+        env:
+          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/inspector
+        run: python -m pytest scripts/bucket/tests
+
       # Ruff (lint + format) is enforced locally by the pre-commit + pre-push
       # git hooks (see .husky/ + scripts/devenv/setup.sh), not in CI — it never
       # gated the build here and the reviewdog PR suggestions were noise.
