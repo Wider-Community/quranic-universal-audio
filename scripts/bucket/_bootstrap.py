@@ -19,7 +19,7 @@ Public surface used by sibling scripts:
   abs_path(bucket_id, sub)          — hf://buckets/<id>/<sub> formatter
   ensure_utf8_stdout()              — Windows cp1252 → utf-8 patch
   rl(fn, *a, **kw)                  — run a bucket op with HF-429 backoff
-  batch_write(bucket_id, files)     — upload many files in ONE Xet batch (fast bulk write)
+  batch_write(bucket_id, files)     — upload many files (bytes or Paths) in ONE Xet batch
   add_notify_args(parser)           — adds --inspector-url for the ts-refreshed callback
   notify_ts_refreshed(args, slug, …) — fire the post-upload TS-refresh callback (best-effort)
 """
@@ -143,15 +143,18 @@ def rl(fn, *args, **kwargs):
     raise RuntimeError("rate-limit retries exhausted")
 
 
-def batch_write(bucket_id: str, files: dict[str, bytes]) -> None:
+def batch_write(bucket_id: str, files: dict[str, bytes | Path]) -> None:
     """Upload many bucket files in ONE Xet batch — the fast bulk-write path.
 
     ``files`` maps a bucket-RELATIVE destination path (e.g.
-    ``reciters/<slug>/timestamps/3.json.gz``) to its bytes. Each blob is staged to
-    a temp FILE and passed to ``batch_bucket_files`` by PATH: passing raw bytes
-    that OVERWRITE existing paths hits a ~25x slower server path, and a per-file
-    ``fs.open()`` write is one commit per file. Retries on HF 429; no-op when
-    ``files`` is empty."""
+    ``reciters/<slug>/timestamps/3.json.gz``) to its bytes, or to a ``Path``
+    that already holds those bytes. A ``bytes`` value is staged to a temp FILE
+    and passed to ``batch_bucket_files`` by PATH: passing raw bytes that
+    OVERWRITE existing paths hits a ~25x slower server path, and a per-file
+    ``fs.open()`` write is one commit per file. A ``Path`` value goes straight
+    into the add list, so a caller publishing gigabytes of chapter audio never
+    materialises it in memory. Retries on HF 429; no-op when ``files`` is
+    empty."""
     if not files:
         return
     import tempfile
@@ -161,8 +164,11 @@ def batch_write(bucket_id: str, files: dict[str, bytes]) -> None:
     with tempfile.TemporaryDirectory() as td:
         adds = []
         for i, (dest, body) in enumerate(files.items()):
-            local = Path(td) / f"f{i}"
-            local.write_bytes(body)
+            if isinstance(body, Path):
+                local = body
+            else:
+                local = Path(td) / f"f{i}"
+                local.write_bytes(body)
             adds.append((str(local), dest.lstrip("/")))
         rl(batch_bucket_files, bucket_id, add=adds)
 
