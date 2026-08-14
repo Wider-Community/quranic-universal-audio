@@ -173,7 +173,7 @@ def _bridge_phone_for_target(seg: dict[str, Any], target_word: int) -> dict[str,
     if src is not None:
         rows = _indexable_phone_rows(src)
         for c in word_cells(src):
-            if c.tag == "iltiqaa_kasra" and c.phoneme_indices:
+            if "iltiqaa_kasra" in c.rules and c.phoneme_indices:
                 pidx = c.phoneme_indices[0]
                 if 0 <= pidx < len(rows):
                     start, end = _row_bounds(rows, pidx)
@@ -187,13 +187,18 @@ def _bridge_phone_for_target(seg: dict[str, Any], target_word: int) -> dict[str,
 
 
 def _cell_snapshot(c: CellRow) -> dict[str, Any]:
+    # ``tag`` + ``secondary_tags`` are two persisted columns holding ONE thing:
+    # the cell's ordered rule list, which the wire re-joins into ``rule_tags``.
+    # The head is not a primary — a cell has no primary rule.
     return {
         "chars": c.chars,
         "role": c.role,
         "status": c.status,
-        "tag": c.tag,
-        "secondary_tags": list(c.secondary_tags) if c.secondary_tags else [],
-        "phoneme_rule_tags": list(c.phoneme_rule_tags) if c.phoneme_rule_tags else [],
+        "tag": c.rules[0] if c.rules else None,
+        "secondary_tags": list(c.rules[1:]),
+        # A cell no longer tags its phones individually; kept so a snapshot taken
+        # when they did still compares unequal and stales its report.
+        "phoneme_rule_tags": [],
         "share_group": c.share_group,
     }
 
@@ -274,11 +279,7 @@ def resolve_target(
         owner = next((c for c in cells if pi in c.phoneme_indices), None)
         if owner is not None:
             snap["role"] = owner.role
-            pos = owner.phoneme_indices.index(pi)
-            rule = None
-            if owner.phoneme_rule_tags and pos < len(owner.phoneme_rule_tags):
-                rule = owner.phoneme_rule_tags[pos]
-            snap["tag"] = rule if rule is not None else owner.tag
+            snap["tag"] = owner.rules[0] if owner.rules else None
         return snap
 
     if kind == "cell_group":
@@ -288,8 +289,7 @@ def resolve_target(
             return None
         snap["chars"] = "".join(c.chars for c in group)
         snap["share_group"] = sg
-        tags = sorted({c.tag for c in group if c.tag})
-        snap["secondary_tags"] = tags
+        snap["secondary_tags"] = sorted({rule for c in group for rule in c.rules})
         bounds = [_letter_bounds(word, c.source_letter_index) for c in group]
         starts = [s for s, _ in bounds if s is not None]
         ends = [e for _, e in bounds if e is not None]

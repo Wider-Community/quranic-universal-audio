@@ -54,41 +54,46 @@ export type SegValAnyItem =
   | SegValBasmalaAminItem;
 export type AudioCategory = "by_surah" | "by_ayah";
 export type CellRole = "base" | "haraka" | "tanween" | "madd";
-export type CellStatus = "present" | "inserted" | "dropped" | "replaced" | "shortened";
+export type CellStatus = "present" | "inserted" | "dropped";
 export type TajweedRule =
-  | "noon_ghunnah"
-  | "meem_ghunnah"
-  | "ikhfaa_noon"
-  | "ikhfaa_tanween"
+  | "ghunnah"
+  | "ikhfaa"
   | "ikhfaa_shafawi"
-  | "iqlab_noon"
-  | "iqlab_tanween"
-  | "idgham_ghunnah_noon"
-  | "idgham_ghunnah_tanween"
+  | "iqlab"
+  | "izhar"
+  | "izhar_shafawi"
+  | "idgham_bi_ghunnah"
+  | "idgham_bila_ghunnah"
   | "idgham_shafawi"
-  | "vowel_silent"
-  | "hamza_wasl_silent"
-  | "lam_shamsiyah"
-  | "idgham_bila_ghunnah_noon"
-  | "idgham_bila_ghunnah_tanween"
   | "idgham_mutamathilayn"
   | "idgham_mutaqaribayn"
   | "idgham_mutajanisayn_kamil"
-  | "silent_iltiqaa_sakinayn"
+  | "idgham_mutajanisayn_naqis"
+  | "madd_tabii"
+  | "madd_wajib_muttasil"
+  | "madd_jaiz_munfasil"
+  | "madd_lazim"
+  | "madd_arid_lil_sukun"
+  | "madd_leen"
+  | "madd_iwad"
   | "tafkheem"
   | "qalqala_sughra"
   | "qalqala_kubra"
   | "hamza_wasl_fatha"
   | "hamza_wasl_kasra"
   | "hamza_wasl_damma"
-  | "iltiqaa_sakinayn_tanween"
-  | "idgham_mutajanisayn_naqis"
-  | "madd_tabii"
-  | "madd_wajib_muttasil"
-  | "madd_jaiz_munfasil"
-  | "madd_lazim"
-  | "madd_arid_lissukun"
-  | "madd_leen";
+  | "hamza_wasl_elision"
+  | "ibdal_hamza"
+  | "tashil"
+  | "imala"
+  | "ishmam"
+  | "lam_shamsiyyah"
+  | "iltiqaa"
+  | "iltiqaa_kasra"
+  | "pausal_sukun"
+  | "pausal_alif"
+  | "taa_marbuta_pausal"
+  | "orthographic_silence";
 /**
  * One encoded word inside a segment — a flat positional tuple.
  *
@@ -2180,7 +2185,7 @@ export interface TsReportResolveRequest {
  * ``CellRole`` / ``CellStatus`` / ``TajweedRule`` as TS string unions for the FE
  * (json2ts drops enums referenced only inside a positional tuple), and documents
  * the row's fields by name. It is never validated against real shard data (the
- * positional ``CellTiming`` is), so typing the rule slots as ``TajweedRule`` is a
+ * positional ``CellTiming`` is), so typing ``rules`` as ``TajweedRule`` is a
  * codegen convenience that does not constrain the byte-pass-through read.
  */
 export interface TsShardCell {
@@ -2189,10 +2194,8 @@ export interface TsShardCell {
   status: CellStatus;
   phoneme_indices: number[];
   source_letter_index: number;
-  tag?: TajweedRule | null;
+  rules?: TajweedRule[];
   share_group?: number | null;
-  phoneme_rule_tags?: (TajweedRule | null)[] | null;
-  secondary_tags?: TajweedRule[] | null;
 }
 /**
  * The decompressed body of one chapter shard: ``_meta`` + ``segments[]``.

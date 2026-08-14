@@ -105,24 +105,29 @@ def _setup_paths_and_env(bucket: str) -> None:
 
 
 def _is_indexable(phone: str) -> bool:
-    from quranic_phonemizer import is_render_only
+    from qua_sdk.integrations.tokens import is_indexable
 
-    return bool(phone) and not is_render_only(phone)
+    return is_indexable(phone)
 
 
-# Ikhfāʾ/iqlab tanwīn nasals the phonemizer does NOT tilde-mark (so
-# ``is_nasalised`` returns False) but which still signal a continuation liaison
-# at a tanwīn — needed so the waqf-tanwīn classification catches e.g. سبقًا (ŋ).
+# Ikhfāʾ/iqlab tanwīn nasals the producer does NOT tilde-mark (so ``is_nasalised``
+# returns False) but which still signal a continuation liaison at a tanwīn —
+# needed so the waqf-tanwīn classification catches e.g. سبقًا (ŋ).
 _IKHFA_NASALS = {"ŋ", "ɴ"}
 
 
 def _is_nasal(phone: str) -> bool:
-    from quranic_phonemizer import is_nasalised
+    from qua_sdk.integrations.tokens import is_nasalised
 
-    try:
-        return bool(phone) and (is_nasalised(phone) or phone in _IKHFA_NASALS)
-    except Exception:  # noqa: BLE001 — predicate is best-effort for classification
-        return False
+    return bool(phone) and (is_nasalised(phone) or phone in _IKHFA_NASALS)
+
+
+def _words_for_ref(ref: str):
+    """The producer's per-word phones for one ref, in the aligner's inventory."""
+    from qua_sdk.integrations.phonemizer import result_for_ref
+    from qua_sdk.integrations.projection import words
+
+    return words(result_for_ref(ref))
 
 
 _SHORT_VOWELS = {"a", "i", "u", "aˤ", "iˤ", "uˤ"}
@@ -270,18 +275,17 @@ def _detect_reattrib(pairs: list[tuple[list[str], list[str]]]) -> set[int]:
     return reattrib
 
 
-def analyze_run(verse_key: str, run: list, mapping_for_ref) -> RunDrift | None:
+def analyze_run(verse_key: str, run: list, words_for_ref) -> RunDrift | None:
     """Compare a gap-run's stored phones against the phonemizer; return a
     ``RunDrift`` if any word diverges (the run's cells would be dropped), else
     ``None``."""
     lo, hi = run[0][0], run[-1][0]
     ref = f"{verse_key}:{lo}" if lo == hi else f"{verse_key}:{lo}-{verse_key}:{hi}"
     try:
-        m = mapping_for_ref(ref)
+        pw = words_for_ref(ref)
     except Exception as e:  # noqa: BLE001
         log.debug("phonemizer error on %s: %s", ref, e)
         return RunDrift(ref=ref, word_count_mismatch=True)
-    pw = m.words
     if len(pw) != len(run):
         return RunDrift(ref=ref, word_count_mismatch=True)
 
@@ -355,7 +359,7 @@ class ReciterReport:
         return [s.chapter for s in self.shards if s.empty_letter_words]
 
 
-def scan_reciter(backend, slug: str, chapters: set[int] | None, mapping_for_ref) -> ReciterReport:
+def scan_reciter(backend, slug: str, chapters: set[int] | None, words_for_ref) -> ReciterReport:
     rep = ReciterReport(slug=slug)
     ts_dir = f"reciters/{slug}/timestamps"
     try:
@@ -389,7 +393,7 @@ def scan_reciter(backend, slug: str, chapters: set[int] | None, mapping_for_ref)
                 # only bother when the run has a word with phones but no cells
                 if not any((len(wd) <= 5 or not wd[5]) and _stored_idx(wd[4]) for wd in run):
                     continue
-                d = analyze_run(verse_key, run, mapping_for_ref)
+                d = analyze_run(verse_key, run, words_for_ref)
                 if d is not None:
                     shard.runs.append(d)
         if shard.has_issue:
@@ -544,7 +548,7 @@ def main() -> int:
     _setup_paths_and_env(args.bucket)
 
     try:
-        from qua_sdk.domain.char_cells import mapping_for_ref
+        _words_for_ref("1:1")
     except Exception as e:  # noqa: BLE001
         raise SystemExit(
             f"qua_sdk / quranic_phonemizer not importable ({e}). This scanner needs "
@@ -567,7 +571,7 @@ def main() -> int:
         {int(c) for c in args.chapters.split(",") if c.strip()} if args.chapters.strip() else None
     )
 
-    reports = [scan_reciter(backend, slug, chapters, mapping_for_ref) for slug in slugs]
+    reports = [scan_reciter(backend, slug, chapters, _words_for_ref) for slug in slugs]
 
     if args.json:
         print(json.dumps(_to_json(reports), indent=2, ensure_ascii=False))

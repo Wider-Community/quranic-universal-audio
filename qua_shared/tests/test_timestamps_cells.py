@@ -1,8 +1,8 @@
-"""Tests for per-character (haraka/tanween) cells — schema v5, the 6th word slot.
+"""Tests for per-character cells — the 6th word slot, a seven-slot row since v11.
 
-The pure accessor (``ts_shard_cells``) and the schema's v4/v5 tolerance are tested
-deterministically; the phonemizer-backed stamping is exercised on the real Nasser
-fixtures when a phonemizer exposing ``character_phoneme_mappings()`` is installed.
+The pure accessor (``ts_shard_cells``) and the schema's v4/v11 tolerance are tested
+deterministically; the producer-backed stamping is exercised on the real Nasser
+fixtures when the SDK's projection reader and the phonemizer are both installed.
 """
 
 from __future__ import annotations
@@ -19,17 +19,17 @@ _ROOT = Path(__file__).resolve().parents[2]
 _FIXTURES = _ROOT / "inspector/frontend/src/lib/recitation-data/__tests__/fixtures"
 
 
-def _has_cpm() -> bool:
+def _has_producer() -> bool:
     try:
-        from quranic_phonemizer import PhonemizeResult
+        import quranic_phonemizer  # noqa: F401
+        from qua_sdk.integrations import cellrows  # noqa: F401
     except ImportError:
         return False
-    return hasattr(PhonemizeResult, "character_phoneme_mappings")
+    return True
 
 
-needs_cpm = pytest.mark.skipif(
-    not _has_cpm(),
-    reason="phonemizer lacks character_phoneme_mappings() (pre-v5 install)",
+needs_producer = pytest.mark.skipif(
+    not _has_producer(), reason="phonemizer / qua_sdk not installed"
 )
 
 
@@ -37,153 +37,92 @@ needs_cpm = pytest.mark.skipif(
 
 
 def test_parse_cell_named():
-    row = ["ِ", "haraka", "present", [1], 0, "iltiqaa", 3]
+    row = ["ِ", "haraka", "present", [1], 0, ["iltiqaa"], 3]
     c = ts_shard_cells.parse_cell(row)
     assert (c.chars, c.role, c.status) == ("ِ", "haraka", "present")
     assert c.phoneme_indices == [1]
     assert c.source_letter_index == 0
-    assert c.tag == "iltiqaa"
+    assert c.rules == ["iltiqaa"]
     assert c.share_group == 3
 
 
-def test_parse_cell_carries_new_open_form_tag():
-    # `tag` is open-form (phonemizer-owned vocabulary): a v7 madd-subtype / plain-
-    # ghunnah tag rides through the accessor unchanged, no enum to extend.
-    assert (
-        ts_shard_cells.parse_cell(["ا", "madd", "present", [3], 1, "madd_lazim", 2]).tag
-        == "madd_lazim"
-    )
-    assert (
-        ts_shard_cells.parse_cell(["ن", "base", "present", [0], 0, "noon_ghunnah", None]).tag
-        == "noon_ghunnah"
-    )
+def test_parse_cell_keeps_every_rule_in_order():
+    # There is no primary tag: a grapheme that fired several rules carries all of
+    # them, in the producer's order, and nothing is demoted or dropped.
+    c = ts_shard_cells.parse_cell(["ا", "madd", "present", [3], 1, ["madd_lazim", "tafkheem"], 2])
+    assert c.rules == ["madd_lazim", "tafkheem"]
+
+
+def test_parse_cell_rules_may_be_empty():
+    c = ts_shard_cells.parse_cell(["س", "base", "present", [0], 0, [], None])
+    assert c.rules == []
+
+
+def test_parse_cell_reads_a_pre_v11_single_tag_as_one_rule():
+    # A shard written before the rule list carried one tag string in slot 5;
+    # splitting it into characters would be silent nonsense.
+    c = ts_shard_cells.parse_cell(["ب", "base", "present", [0], 0, "qalqala_sughra", None])
+    assert c.rules == ["qalqala_sughra"]
 
 
 def test_parse_cell_tolerates_minimal_and_trailing():
-    # 5-slot minimal (tag/share_group default to None)
+    # 5-slot minimal (rules/share_group default to empty/None)
     c = ts_shard_cells.parse_cell(["م", "tanween", "dropped", [], 1])
-    assert c.tag is None and c.share_group is None
-    # a future trailing slot (beyond the 9th) is ignored, not an error
-    c2 = ts_shard_cells.parse_cell(
-        ["م", "tanween", "dropped", [], 1, None, None, None, None, "future"]
-    )
+    assert c.rules == [] and c.share_group is None
+    # a future trailing slot (beyond the 7th) is ignored, not an error
+    c2 = ts_shard_cells.parse_cell(["م", "tanween", "dropped", [], 1, [], None, "future"])
     assert c2.source_letter_index == 1
     with pytest.raises(ValueError):
         ts_shard_cells.parse_cell(["م", "haraka"])  # < 5 slots
 
 
-def test_parse_cell_reads_phoneme_rule_tags_slot():
-    # v8 8th slot: per-phoneme tag list parallel to phoneme_indices.
-    c = ts_shard_cells.parse_cell(
-        [
-            "لٓ",
-            "madd",
-            "present",
-            [0, 1, 2],
-            0,
-            "madd_lazim",
-            4,
-            [None, "madd_lazim", "idgham_shafawi"],
-        ]
-    )
-    assert c.phoneme_rule_tags == [None, "madd_lazim", "idgham_shafawi"]
-
-
-def test_parse_cell_absent_phoneme_rule_tags_is_none():
-    # v5-v7 rows (no 8th slot) parse with phoneme_rule_tags=None.
-    c7 = ts_shard_cells.parse_cell(["ا", "madd", "present", [3], 1, "madd_lazim", 2])
-    assert c7.phoneme_rule_tags is None
-    # an explicit null 8th slot also normalizes to None.
-    c8_null = ts_shard_cells.parse_cell(["ا", "madd", "present", [3], 1, "madd_lazim", 2, None])
-    assert c8_null.phoneme_rule_tags is None
-
-
-def test_parse_cell_reads_secondary_tags_slot():
-    # v9 9th slot: heaviness stacked on the primary tag (a heavy madd/qalqala cell).
-    c = ts_shard_cells.parse_cell(
-        ["ا", "madd", "present", [3], 1, "madd_arid_lissukun", None, None, ["tafkheem"]]
-    )
-    assert c.secondary_tags == ["tafkheem"]
-    # slot 7 padded None (only the secondary present) → phoneme_rule_tags stays None.
-    assert c.phoneme_rule_tags is None
-
-
-def test_parse_cell_absent_secondary_tags_is_none():
-    # v5-v8 rows (no 9th slot) parse with secondary_tags=None; an empty list too.
-    c8 = ts_shard_cells.parse_cell(["ا", "madd", "present", [3], 1, "madd_lazim", 2, None])
-    assert c8.secondary_tags is None
-    c9_empty = ts_shard_cells.parse_cell(
-        ["ا", "madd", "present", [3], 1, "madd_lazim", 2, None, []]
-    )
-    assert c9_empty.secondary_tags is None
-
-
 def test_word_cells_tolerates_missing_slot():
     v4_word = [1, 10, 200, [["ب", 10, 90, False]], [["b", 10, 50]]]
     assert ts_shard_cells.word_cells(v4_word) == []  # no 6th slot (v3/v4)
-    v5_word = v4_word + [[["ِ", "haraka", "present", [], 0, None, None]]]
-    assert len(ts_shard_cells.word_cells(v5_word)) == 1
+    v11_word = v4_word + [[["ِ", "haraka", "present", [], 0, [], None]]]
+    assert len(ts_shard_cells.word_cells(v11_word)) == 1
 
 
 # --- schema tolerates both arities ----------------------------------------
 
 
-def test_schema_accepts_v4_and_v5_words():
+def test_schema_accepts_v4_and_v11_words():
     v4 = [1, 10, 200, [["ب", 10, 90, False]], [["b", 10, 50], ["i", 50, 90]]]
-    v5 = v4 + [[["ِ", "haraka", "present", [1], 0, None, None]]]
+    v11 = v4 + [[["ِ", "haraka", "present", [1], 0, [], None]]]
     assert TsShardWord.model_validate(v4) is not None
-    assert TsShardWord.model_validate(v5) is not None
+    assert TsShardWord.model_validate(v11) is not None
     doc = {
-        "_meta": {"schema_version": 5, "chapter": 101, "audio_category": "by_surah"},
-        "segments": [{"ref": "101:1", "t": [10, 200], "words": [v5]}],
+        "_meta": {"schema_version": 11, "chapter": 101, "audio_category": "by_surah"},
+        "segments": [{"ref": "101:1", "t": [10, 200], "words": [v11]}],
     }
     assert len(TsShardDoc.model_validate(doc).segments[0].words) == 1
 
 
-def test_word_with_v8_phoneme_rule_tags_cell_round_trips():
-    # A muqattaat cell WITH the 8th slot round-trips byte-equal through TsShardWord.
-    cell = [
-        "لٓ",
-        "madd",
-        "present",
-        [0, 1, 2],
-        0,
-        "madd_lazim",
-        4,
-        [None, "madd_lazim", "idgham_shafawi"],
-    ]
-    phones = [["l", 10, 50], ["a:", 50, 150], ["m", 150, 200]]
-    word = [1, 10, 200, [["ل", 10, 90, False]], phones, [cell]]
+def test_word_with_multi_rule_cell_round_trips():
+    # A cell carrying several rules round-trips byte-equal through TsShardWord.
+    cell = ["ا", "madd", "present", [0], 1, ["madd_arid_lil_sukun", "tafkheem"], None]
+    word = [1, 10, 200, [["ا", 10, 90, False]], [["aˤ:", 10, 200]], [cell]]
     model = TsShardWord.model_validate(word)
     # model_dump(mode="json") yields the on-disk list shape (tuples -> lists).
     assert model.model_dump(mode="json") == word
 
 
-def test_word_with_v9_secondary_tags_cell_round_trips():
-    # A heavy cell WITH the 9th slot (slot 8 padded None) round-trips byte-equal.
-    cell = ["ا", "madd", "present", [0], 1, "madd_arid_lissukun", None, None, ["tafkheem"]]
-    word = [1, 10, 200, [["ا", 10, 90, False]], [["aˤ:", 10, 200]], [cell]]
-    model = TsShardWord.model_validate(word)
-    assert model.model_dump(mode="json") == word
-
-
-def test_word_without_phoneme_rule_tags_cell_still_parses():
-    # A v7 cell (no 8th slot) still validates and round-trips unchanged.
-    cell = ["ا", "madd", "present", [3], 1, "madd_lazim", 2]
+def test_word_with_ruleless_cell_round_trips():
+    cell = ["ا", "madd", "present", [3], 1, [], 2]
     word = [1, 10, 200, [["ا", 10, 90, False]], [["a:", 10, 90]], [cell]]
     model = TsShardWord.model_validate(word)
     assert model.model_dump(mode="json") == word
     doc = {
-        "_meta": {"schema_version": 8, "chapter": 101, "audio_category": "by_surah"},
+        "_meta": {"schema_version": 11, "chapter": 101, "audio_category": "by_surah"},
         "segments": [{"ref": "101:1", "t": [10, 200], "words": [word]}],
     }
     assert len(TsShardDoc.model_validate(doc).segments[0].words) == 1
 
 
-# --- phonemizer-backed stamping on the real fixtures -----------------------
+# --- producer-backed stamping on the real fixtures -------------------------
 
 
-@needs_cpm
+@needs_producer
 @pytest.mark.parametrize("chapter", [101, 102])
 def test_cells_stamped_and_valid_on_fixture(chapter):
     fix = _FIXTURES / f"nasser_al_qatami_mp3quran_{chapter}.shard.json"
@@ -204,8 +143,8 @@ def test_cells_stamped_and_valid_on_fixture(chapter):
             n_idx = sum(1 for ph in wd[4] if _is_indexable(ph[0]))
             by_index: dict[int, set] = {}
             for c in ts_shard_cells.word_cells(wd):
-                # base cells are now emitted (the SDK annotator owns the full
-                # per-character breakdown), alongside haraka/tanween/madd.
+                # base cells are emitted alongside haraka/tanween/madd — the
+                # producer owns the full per-character breakdown.
                 if c.role == "base":
                     saw_base = True
                 for i in c.phoneme_indices:
@@ -218,10 +157,34 @@ def test_cells_stamped_and_valid_on_fixture(chapter):
                 if len(groups) > 1:
                     assert None not in groups and len(groups) == 1
     assert total_words > 0
-    assert saw_base, "expected base cells in v5 shard output"
+    assert saw_base, "expected base cells in stamped shard output"
 
 
-@needs_cpm
+@needs_producer
+@pytest.mark.parametrize("chapter", [101, 102])
+def test_stamped_cell_rules_are_known_tags(chapter):
+    """Every rule a stamped cell carries is a ``TajweedRule`` member — the mirror
+    the FE types against, so an unmirrored tag would render with no badge."""
+    from qua_sdk.components.timing.lib.cells import annotate_segment_words
+
+    from qua_shared.schemas.bucket.tajweed_vocab import TajweedRule
+
+    fix = _FIXTURES / f"nasser_al_qatami_mp3quran_{chapter}.shard.json"
+    if not fix.exists():
+        pytest.skip(f"fixture missing: {fix}")
+    known = {r.value for r in TajweedRule}
+    doc = json.loads(fix.read_text(encoding="utf-8"))
+    seen: set[str] = set()
+    for seg in doc["segments"]:
+        annotate_segment_words(seg["ref"], seg["words"])
+        for wd in seg["words"]:
+            for c in ts_shard_cells.word_cells(wd):
+                seen.update(c.rules)
+    assert seen, "expected at least one tagged cell in the fixture"
+    assert seen <= known, f"unmirrored tag(s): {sorted(seen - known)}"
+
+
+@needs_producer
 @pytest.mark.parametrize("chapter", [101, 102])
 def test_cells_only_restamp_preserves_slot3_letters(chapter):
     """A cells-only re-stamp must NOT empty the legacy slot-3 ``letters``.
@@ -231,7 +194,7 @@ def test_cells_only_restamp_preserves_slot3_letters(chapter):
     ``lettersFromCells`` fallback then had to rebuild it). The backfill's
     ``_stamp_doc(restamp=True)`` truncates from the cells slot onward (``wd[5:]``)
     and re-derives cells via the SDK annotator — slot-3 (and its char/timings)
-    must ride through untouched, only growing the v2.6 silent flag.
+    must ride through untouched, only growing the silent flag.
     """
     import scripts.backfills.backfill_cells as bc
 
