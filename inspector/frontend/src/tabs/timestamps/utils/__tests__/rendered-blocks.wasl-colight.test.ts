@@ -14,7 +14,7 @@ function ph(phone: string, start: number, end: number): PhonemeInterval {
     return { phone, start, end };
 }
 function cell(over: Partial<TsCell>): TsCell {
-    return { chars: '', role: 'base', status: 'present', phonemeIndices: [], sourceLetterIndex: 0, tag: null, shareGroup: null, ...over };
+    return { chars: '', role: 'base', status: 'present', phonemeIndices: [], sourceLetterIndex: 0, rules: [], shareGroup: null, ...over };
 }
 function word(location: string, idxs: number[], letters: string, cells: TsCell[]): TsWord {
     const ls: Letter[] = [...letters].map((c) => ({ char: c, start: null, end: null }));
@@ -28,7 +28,7 @@ function shape(secondLocation: string): TsWord[] {
     return [
         word('1:1:2', [0, 1], 'بٍ', [
             cell({ chars: 'ب', phonemeIndices: [0] }),
-            cell({ chars: 'ٍ', role: 'tanween', phonemeIndices: [1], sourceLetterIndex: 1, tag: 'idgham_ghunnah_tanween', shareGroup: 0 }),
+            cell({ chars: 'ٍ', role: 'tanween', phonemeIndices: [1], sourceLetterIndex: 1, rules: ['idgham_bi_ghunnah'], shareGroup: 0 }),
         ]),
         word(secondLocation, [2, 3], 'وج', [
             cell({ chars: 'و', phonemeIndices: [2] }), // receives the w̃ merger head

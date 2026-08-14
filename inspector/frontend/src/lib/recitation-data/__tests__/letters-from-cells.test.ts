@@ -61,7 +61,7 @@ describe('assembleOccasion — letters reconstructed from cells when the slot is
             [
                 ['ق', 'base', 'present', [0], 0],
                 ['َ', 'haraka', 'present', [1], 0, null, 0], // fatha shares the long vowel
-                ['ا', 'madd', 'present', [1], 1, 'madd_tabii', 0], // carrier owns it
+                ['ا', 'madd', 'present', [1], 1, ['madd_tabii'], 0], // carrier owns it
                 ['ل', 'base', 'present', [2], 2],
                 ['َ', 'haraka', 'present', [3], 2],
             ],

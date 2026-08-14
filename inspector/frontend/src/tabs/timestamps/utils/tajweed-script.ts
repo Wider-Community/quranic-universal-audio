@@ -43,13 +43,13 @@ export const OPEN_TANWEEN: Record<string, string> = {
     [KASRATAN]: 'ࣲ',
 };
 
-/** Tags whose tanwīn assimilates → render the OPEN form (else stacked). Mirrors
- *  the phonemizer's `TANWEEN_ASSIMILATES_VALUES`; iẓhar carries no tanwīn tag. The
+/** Rules whose tanwīn assimilates → render the OPEN form (else stacked). Consulted
+ *  only for a `tanween` cell, so the noon half of each rule never reaches it. The
  *  literal array is typed against `TajweedRule` so a rename is a compile error. */
 const OPEN_TANWEEN_RULES: readonly TajweedRule[] = [
-    'idgham_ghunnah_tanween',
-    'idgham_bila_ghunnah_tanween',
-    'ikhfaa_tanween',
+    'idgham_bi_ghunnah',
+    'idgham_bila_ghunnah',
+    'ikhfaa',
 ];
 export const OPEN_TANWEEN_TAGS: ReadonlySet<string> = new Set(OPEN_TANWEEN_RULES);
 
@@ -68,8 +68,8 @@ export function cellSlot(glyph: string): 'top' | 'bottom' {
 }
 
 /** The DK glyph for a SMALL cell — its own mark, or derived for an implicit
- *  graphemeless cell (the phonemizer keeps `chars` empty + carries the tag). */
-export function cellGlyph(chars: string, tag: string | null, phone: string | undefined): string {
+ *  graphemeless cell (the producer keeps `chars` empty + carries the rules). */
+export function cellGlyph(chars: string, rules: readonly string[], phone: string | undefined): string {
     if (chars) {
         // The iqlab mini-meem always DISPLAYS the low-meem glyph (cleaner than the
         // isolated high-meem); pushSmall slots it by the source mark (MEEM_HI →
@@ -77,9 +77,9 @@ export function cellGlyph(chars: string, tag: string | null, phone: string | und
         const mark = firstMark(chars);
         return mark === MEEM_HI ? MEEM_LO : mark;
     }
-    if (tag === 'allah_dagger_alef') return DAGGER;
-    if (tag === 'madd_iwad') return ALEF; // the added alef (full cell)
-    if (tag === 'iltiqaa_kasra' || tag === 'iltiqaa') return KASRA;
+    if (rules.includes('allah_dagger_alef')) return DAGGER;
+    if (rules.includes('madd_iwad')) return ALEF; // the added alef (full cell)
+    if (rules.includes('iltiqaa_kasra') || rules.includes('iltiqaa')) return KASRA;
     // hamza-waṣl connecting vowel: pick the haraka by the sounded vowel. Match the
     // BASE vowel (first char) so the long ibtidaa form (i:/u:, ٱئْتُونِى) maps too.
     const v = phone?.[0];
@@ -87,6 +87,6 @@ export function cellGlyph(chars: string, tag: string | null, phone: string | und
 }
 
 /** The FULL-cell glyph for an implicit madd (chars==='') — dagger / alef. */
-export function implicitMaddGlyph(tag: string | null): string {
-    return tag === 'madd_iwad' ? ALEF : DAGGER;
+export function implicitMaddGlyph(rules: readonly string[]): string {
+    return rules.includes('madd_iwad') ? ALEF : DAGGER;
 }

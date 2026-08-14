@@ -195,15 +195,15 @@ describe('UnifiedDisplay — iltiqaa connecting-kasra borderless bridge', () => 
             { sym: 'l', start: 0.4, end: 0.6 }, // 4 next word lām
         ]);
         const wN = cellWord('2:1:1', [{ char: 'د', start: 0, end: 0.3 }], [
-            { chars: 'د', role: 'base', status: 'present', phonemeIndices: [0], sourceLetterIndex: 0, tag: null, shareGroup: null },
-            { chars: 'ٌ', role: 'tanween', status: 'present', phonemeIndices: [1, 2], sourceLetterIndex: 0, tag: null, shareGroup: null },
-            { chars: '', role: 'haraka', status: 'inserted', phonemeIndices: [3], sourceLetterIndex: 0, tag: 'iltiqaa_kasra', shareGroup: null },
+            { chars: 'د', role: 'base', status: 'present', phonemeIndices: [0], sourceLetterIndex: 0, rules: [], shareGroup: null },
+            { chars: 'ٌ', role: 'tanween', status: 'present', phonemeIndices: [1, 2], sourceLetterIndex: 0, rules: [], shareGroup: null },
+            { chars: '', role: 'haraka', status: 'inserted', phonemeIndices: [3], sourceLetterIndex: 0, rules: ['iltiqaa_kasra'], shareGroup: null },
         ], [0, 1, 2, 3]);
         const wNext = cellWord('2:1:2', [
             { char: 'ٱ', start: 0.4, end: 0.4 }, { char: 'ل', start: 0.4, end: 0.6 },
         ], [
-            { chars: 'ٱ', role: 'base', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 0, tag: null, shareGroup: null },
-            { chars: 'ل', role: 'base', status: 'present', phonemeIndices: [4], sourceLetterIndex: 1, tag: null, shareGroup: null },
+            { chars: 'ٱ', role: 'base', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 0, rules: [], shareGroup: null },
+            { chars: 'ل', role: 'base', status: 'present', phonemeIndices: [4], sourceLetterIndex: 1, rules: [], shareGroup: null },
         ], [4]);
         const { container } = mount([wN, wNext], ivals);
 
@@ -241,19 +241,19 @@ describe('UnifiedDisplay — iltiqaa connecting-kasra borderless bridge', () => 
             { char: 'خ', start: 0, end: 0.2 }, { char: 'ي', start: 0.2, end: 0.3 },
             { char: 'ر', start: 0.3, end: 0.5 }, { char: 'ا', start: 0.5, end: 0.5, silent: true },
         ], [
-            { chars: 'خ', role: 'base', status: 'present', phonemeIndices: [0], sourceLetterIndex: 0, tag: null, shareGroup: null },
-            { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
-            { chars: 'ي', role: 'base', status: 'present', phonemeIndices: [2], sourceLetterIndex: 1, tag: null, shareGroup: null },
-            { chars: 'ر', role: 'base', status: 'present', phonemeIndices: [3], sourceLetterIndex: 2, tag: null, shareGroup: null },
-            { chars: 'ً', role: 'tanween', status: 'present', phonemeIndices: [4, 5], sourceLetterIndex: 2, tag: null, shareGroup: null },
-            { chars: '', role: 'haraka', status: 'inserted', phonemeIndices: [6], sourceLetterIndex: 2, tag: 'iltiqaa_kasra', shareGroup: null },
-            { chars: 'ا', role: 'base', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 3, tag: null, shareGroup: null },
+            { chars: 'خ', role: 'base', status: 'present', phonemeIndices: [0], sourceLetterIndex: 0, rules: [], shareGroup: null },
+            { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: [], shareGroup: null },
+            { chars: 'ي', role: 'base', status: 'present', phonemeIndices: [2], sourceLetterIndex: 1, rules: [], shareGroup: null },
+            { chars: 'ر', role: 'base', status: 'present', phonemeIndices: [3], sourceLetterIndex: 2, rules: [], shareGroup: null },
+            { chars: 'ً', role: 'tanween', status: 'present', phonemeIndices: [4, 5], sourceLetterIndex: 2, rules: [], shareGroup: null },
+            { chars: '', role: 'haraka', status: 'inserted', phonemeIndices: [6], sourceLetterIndex: 2, rules: ['iltiqaa_kasra'], shareGroup: null },
+            { chars: 'ا', role: 'base', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 3, rules: [], shareGroup: null },
         ], [0, 1, 2, 3, 4, 5, 6]);
         const wNext = cellWord('2:1:2', [
             { char: 'ٱ', start: 0.6, end: 0.6 }, { char: 'ل', start: 0.6, end: 0.8 },
         ], [
-            { chars: 'ٱ', role: 'base', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 0, tag: null, shareGroup: null },
-            { chars: 'ل', role: 'base', status: 'present', phonemeIndices: [7], sourceLetterIndex: 1, tag: null, shareGroup: null },
+            { chars: 'ٱ', role: 'base', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 0, rules: [], shareGroup: null },
+            { chars: 'ل', role: 'base', status: 'present', phonemeIndices: [7], sourceLetterIndex: 1, rules: [], shareGroup: null },
         ], [7]);
         const { container } = mount([wN, wNext], ivals);
 
@@ -289,7 +289,7 @@ describe('UnifiedDisplay — word-unit grouping (justification atoms)', () => {
         return {
             location: loc, text: ch, display_text: ch, start, end, phoneme_indices: idx,
             letters: [{ char: ch, start, end, silent: false }],
-            cells: [{ chars: ch, role: 'base', status: 'present', phonemeIndices: idx, sourceLetterIndex: 0, tag: null, shareGroup: null }],
+            cells: [{ chars: ch, role: 'base', status: 'present', phonemeIndices: idx, sourceLetterIndex: 0, rules: [], shareGroup: null }],
         };
     }
 
@@ -301,15 +301,15 @@ describe('UnifiedDisplay — word-unit grouping (justification atoms)', () => {
             { sym: 'l', start: 0.4, end: 0.6 },
         ]);
         const wN = cellWord('2:1:1', [{ char: 'د', start: 0, end: 0.3 }], [
-            { chars: 'د', role: 'base', status: 'present', phonemeIndices: [0], sourceLetterIndex: 0, tag: null, shareGroup: null },
-            { chars: 'ٌ', role: 'tanween', status: 'present', phonemeIndices: [1, 2], sourceLetterIndex: 0, tag: null, shareGroup: null },
-            { chars: '', role: 'haraka', status: 'inserted', phonemeIndices: [3], sourceLetterIndex: 0, tag: 'iltiqaa_kasra', shareGroup: null },
+            { chars: 'د', role: 'base', status: 'present', phonemeIndices: [0], sourceLetterIndex: 0, rules: [], shareGroup: null },
+            { chars: 'ٌ', role: 'tanween', status: 'present', phonemeIndices: [1, 2], sourceLetterIndex: 0, rules: [], shareGroup: null },
+            { chars: '', role: 'haraka', status: 'inserted', phonemeIndices: [3], sourceLetterIndex: 0, rules: ['iltiqaa_kasra'], shareGroup: null },
         ], [0, 1, 2, 3]);
         const wNext = cellWord('2:1:2', [
             { char: 'ٱ', start: 0.4, end: 0.4 }, { char: 'ل', start: 0.4, end: 0.6 },
         ], [
-            { chars: 'ٱ', role: 'base', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 0, tag: null, shareGroup: null },
-            { chars: 'ل', role: 'base', status: 'present', phonemeIndices: [4], sourceLetterIndex: 1, tag: null, shareGroup: null },
+            { chars: 'ٱ', role: 'base', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 0, rules: [], shareGroup: null },
+            { chars: 'ل', role: 'base', status: 'present', phonemeIndices: [4], sourceLetterIndex: 1, rules: [], shareGroup: null },
         ], [4]);
         const { container } = mount([wN, wNext], ivals);
         const units = container.querySelectorAll<HTMLElement>('.word-unit');

@@ -7,19 +7,25 @@
  */
 
 import { cellGlyph } from './tajweed-script';
-import { badgesForTags, isBridgeTag, silentTooltip } from './tajweed-rules';
+import { badgesForTags, bridgeCellTag, isBridgeTag, silentTooltip } from './tajweed-rules';
 import type { TjBadge } from './tajweed-rules';
 import { harakaRenderStyle } from './haraka-render';
 import { splitWaqf } from '../../../lib/utils/waqf';
 import type { PhonemeInterval, TsCell, TsWord } from '../../../lib/types/ts-client';
-import { QALQALA_TAGS, _izharTag, _nasalUnions, _shareUnions, _voweledSrcSet, cellGroupsFor } from './cell-model';
+import { QALQALA_TAGS, _nasalUnions, _shareUnions, cellGroupsFor } from './cell-model';
 import type { RenderedGroup, RenderedPhoneme } from './cell-model';
-import { HEAVY_VOWEL_PHONES, _buildColumns, _heavyIkhfaaDisplay } from './phoneme-columns';
+import { _buildColumns, _heavyIkhfaaDisplay, _isHeavyIkhfaa } from './phoneme-columns';
 
 /** Rub-el-hizb (U+06DE) and place-of-sajdah (U+06E9) — section markers, not
  *  recited; stripped from the analysis word box so the cell shows only the
  *  recited text. */
 const NON_RECITED_SIGNS = /[۞۩]/g;
+
+/** The cross-word idgham rule a cell fires, or null — a cell carries an ordered
+ *  rule list and at most one member of it is a bridge. */
+function bridgeRuleOf(c: TsCell): string | null {
+    return c.rules.find((t) => isBridgeTag(t)) ?? null;
+}
 
 
 export interface RenderedBridge {
@@ -103,7 +109,7 @@ function _unifyWaslShareGroups(words: TsWord[], intervals: PhonemeInterval[]): v
         const cur = words[wi];
         const next = words[wi + 1];
         if (!cur || !next || verseOf(cur.location) === verseOf(next.location)) continue;
-        const source = (cur.cells ?? []).slice(-2).reverse().find((c) => isBridgeTag(c.tag));
+        const source = (cur.cells ?? []).slice(-2).reverse().find((c) => bridgeRuleOf(c));
         const headPi = next.phoneme_indices?.[0];
         if (!source || source.shareGroup == null || headPi == null || !intervals[headPi]) continue;
         const recv = (next.cells ?? []).find((c) => c.phonemeIndices.includes(headPi));
@@ -145,49 +151,31 @@ export function buildRendered(
     const shareUnions = _shareUnions(allCells, intervals);
     const nasalUnions = _nasalUnions(allCells, intervals);
 
-    // Iẓhar (synthesized): the DEFAULT rule for an untagged sounding sakin
-    // noon/meem/tanwīn. Resolved per-word (sakin-ness needs the word's voweling
-    // context) into a cell→tag map, fed to BOTH the phoneme-badge map (below) and
-    // the letter row (`cellGroupsFor`) so letter + phoneme underline together.
-    const izharCellTag = new Map<TsCell, string>();
-    for (const w of words) {
-        const cells = w?.cells ?? [];
-        const voweled = _voweledSrcSet(cells);
-        for (const c of cells) {
-            const t = _izharTag(c, voweled);
-            if (t) izharCellTag.set(c, t);
-        }
-    }
-
     // Cross-word idgham SOURCE tag by share group, so a merger RECEIVER inherits
     // the idgham underline from its (silent) source across the group.
     const idghamGroupTags = new Map<number, string>();
     for (const c of allCells) {
-        if (isBridgeTag(c.tag) && c.shareGroup != null) idghamGroupTags.set(c.shareGroup, c.tag!);
+        const bridge = bridgeRuleOf(c);
+        if (bridge && c.shareGroup != null) idghamGroupTags.set(c.shareGroup, bridge);
     }
 
     // Every rule tag present ANYWHERE in a share group → so a co-lit partner that
-    // owns no tag (a vowel co-lit with its madd letter, an idgham receiver) is
+    // owns no rule (a vowel co-lit with its madd letter, an idgham receiver) is
     // still reportable as that shared rule. Drives `cellRuleTags` (report
     // targetability), not the visual badge.
     const shareGroupRuleTags = new Map<number, string[]>();
     for (const c of allCells) {
-        if (c.shareGroup == null) continue;
-        const own = [c.tag, ...(c.secondaryTags ?? []), izharCellTag.get(c)].filter(
-            (t): t is string => !!t,
-        );
-        if (!own.length) continue;
+        if (c.shareGroup == null || !c.rules.length) continue;
         const cur = shareGroupRuleTags.get(c.shareGroup) ?? [];
-        for (const t of own) if (!cur.includes(t)) cur.push(t);
+        for (const t of c.rules) if (!cur.includes(t)) cur.push(t);
         shareGroupRuleTags.set(c.shareGroup, cur);
     }
 
     // Per-flat-index underline badges, built verse-wide — the single source for
     // BOTH inline phoneme boxes and the cross-word bridge tile (a merger phone is
-    // the receiver's). A cell contributes its own tag + secondary tafkheem +
-    // synthesized iẓhar + the propagated idgham (group) tag, resolved to the ≤2-bar
-    // stack; a muqattaat cell colours each phoneme by its own per-phoneme rule; a
-    // tanwīn rule underlines only its nasal (the last phone).
+    // the receiver's). A cell contributes its own rules + the propagated idgham
+    // (group) tag, resolved to the badge stack; a tanwīn rule underlines only its
+    // nasal (the last phone).
     // Cross-verse waṣl junctions (merged group only). The offline tagger
     // phonemizes each verse-segment alone, so at a verse boundary the merger
     // phone — realized on the NEXT verse's head — carries no `bridge` tag even
@@ -208,69 +196,50 @@ export function buildRendered(
         if (!cur || !next || _verseOf(cur.location) === _verseOf(next.location)) continue;
         // The merger source is the verse-final tanwīn (last cell, or 2nd-last
         // behind a silent fatḥatan alif) — not a deeper within-word idgham.
-        const source = (cur.cells ?? []).slice(-2).reverse().find((c) => isBridgeTag(c.tag));
+        const source = (cur.cells ?? []).slice(-2).reverse().find((c) => bridgeRuleOf(c));
+        const tag = source ? bridgeRuleOf(source) : null;
         const headPi = next.phoneme_indices?.[0];
-        if (source?.tag && headPi != null && intervals[headPi]) {
-            waslJunctions.push({ target: wi + 1, headPi, tag: source.tag, source });
+        if (source && tag && headPi != null && intervals[headPi]) {
+            waslJunctions.push({ target: wi + 1, headPi, tag, source });
         }
     }
     // The junction source cell is suppressed like any bridge source: its leftover
     // vowel renders inline without a badge (the merger shows in the tile).
     const waslJunctionSources = new Set(waslJunctions.map((j) => j.source));
 
-    // Idgham rules whose merger is realized as a separate bridge phone (every
+    // Cell tags whose merger is realized as a separate bridge phone (every
     // cross-word merger). A source carrying one of these has its merger shown in the
     // bridge tile, so its OWN inline phonemes (a leftover tanwīn vowel, or the lifted
     // nasal) carry no badge. A within-word merger (mutajānisayn nāqiṣ) emits no bridge
     // phone, so its sounding source badges its own phoneme.
     const bridgeRules = new Set(
-        intervals.map((iv) => iv.bridge).filter((r): r is string => !!r),
+        intervals.map((iv) => bridgeCellTag(iv.bridge)).filter((r): r is string => !!r),
     );
     const phonemeBadges = new Map<number, TjBadge[]>();
     for (const c of allCells) {
-        if (c.phonemeRuleTags) {
-            c.phonemeIndices.forEach((fi, i) => {
-                const t = c.phonemeRuleTags![i];
-                // Qalqala on a muqattaat consonant rides its render-only Q echo
-                // (fi+1) — the echo has no shard slot, so the tag travels on the
-                // consonant and the renderer moves it here (regular-path parity).
-                if (QALQALA_TAGS.has(t ?? '') && intervals[fi + 1]?.phone === 'Q') {
-                    const qb = badgesForTags([t]);
-                    if (qb.length) phonemeBadges.set(fi + 1, qb);
-                    return;
-                }
-                // A heavy long vowel (aˤ:) or a heavy ikhfaa nasal (ŋ before an
-                // istiʿlāʾ consonant, shown ŋˤ) stacks a tafkhīm bar above its own
-                // rule — the consonant's tafkhīm already rides its prt tag `t`.
-                const phone = intervals[fi]?.phone;
-                const heavy = HEAVY_VOWEL_PHONES.has(phone ?? '')
-                    || !!_heavyIkhfaaDisplay(phone, intervals[fi + 1]?.phone);
-                const b = badgesForTags(heavy ? [t, 'tafkheem'] : [t]);
-                if (b.length) phonemeBadges.set(fi, b);
-            });
-            continue;
-        }
         // A cross-word idgham source renders its merger as the bridge tile (and
         // colours its own letter via cellBadges) — its own inline phonemes carry no
         // badge: either it's dropped (no phoneme) or its merger is a separate bridge
         // phone. A within-word source (mutajānisayn nāqiṣ ط) has no bridge phone, so
         // it falls through and badges its own sounding phoneme (idgham + its tafkheem).
         if (waslJunctionSources.has(c)) continue;
-        if (isBridgeTag(c.tag) && (!c.phonemeIndices.length || bridgeRules.has(c.tag!))) continue;
+        const bridge = bridgeRuleOf(c);
+        if (bridge && (!c.phonemeIndices.length || bridgeRules.has(bridge))) continue;
         const groupTag = c.shareGroup != null ? idghamGroupTags.get(c.shareGroup) : undefined;
         // Qalqala underlines the render-only echo `Q` (the bounce), NOT the
         // consonant phoneme — its consonant keeps only its other rules (tafkheem).
-        if (QALQALA_TAGS.has(c.tag ?? '') && c.phonemeIndices.length) {
+        const qalqala = c.rules.find((t) => QALQALA_TAGS.has(t));
+        if (qalqala && c.phonemeIndices.length) {
             const echo = Math.max(...c.phonemeIndices) + 1;
             if (intervals[echo]?.phone === 'Q') {
-                const qb = badgesForTags([c.tag]);
+                const qb = badgesForTags([qalqala]);
                 if (qb.length) phonemeBadges.set(echo, qb);
             }
-            const rest = badgesForTags([...(c.secondaryTags ?? []), izharCellTag.get(c), groupTag]);
+            const rest = badgesForTags([...c.rules.filter((t) => t !== qalqala), groupTag]);
             if (rest.length) for (const fi of c.phonemeIndices) phonemeBadges.set(fi, rest);
             continue;
         }
-        const baseTags = [c.tag, ...(c.secondaryTags ?? []), izharCellTag.get(c), groupTag];
+        const baseTags = [...c.rules, groupTag];
         const badges = badgesForTags(baseTags);
         if (!badges.length) continue;
         const idxs = c.role === 'tanween' && c.phonemeIndices.length > 1
@@ -279,7 +248,7 @@ export function buildRendered(
         // A heavy ikhfaa nasal (ŋ before an istiʿlāʾ letter, shown ŋˤ) stacks a
         // tafkheem bar above its ikhfaa underline.
         for (const fi of idxs) {
-            const heavy = !!_heavyIkhfaaDisplay(intervals[fi]?.phone, intervals[fi + 1]?.phone);
+            const heavy = _isHeavyIkhfaa(intervals[fi]?.phone, intervals[fi + 1]?.phone);
             phonemeBadges.set(fi, heavy ? badgesForTags([...baseTags, 'tafkheem']) : badges);
         }
     }
@@ -306,7 +275,8 @@ export function buildRendered(
                 bridgeBeforeBlock.set(target, {
                     phonemes: [{
                         interval: intervals[pi]!, index: pi, wordLocalIndex: -1,
-                        tjBadges: phonemeBadges.get(pi) ?? badgesForTags([intervals[pi]!.bridge]),
+                        tjBadges: phonemeBadges.get(pi)
+                            ?? badgesForTags([bridgeCellTag(intervals[pi]!.bridge)]),
                     }],
                     letter: null,
                 });
@@ -319,13 +289,12 @@ export function buildRendered(
         // phoneme on the phoneme row, between the two words. The silent alef of
         // a fatḥatan+alef word (خَيْرًا) stays in word N, so the bridge naturally
         // sits after it; the lifted i is the word's last phoneme.
-        const kasra = (word?.cells ?? []).find((c) => c.tag === 'iltiqaa_kasra');
+        const kasra = (word?.cells ?? []).find((c) => c.rules.includes('iltiqaa_kasra'));
         const kpi = kasra?.phonemeIndices[0];
         if (kasra && kpi != null && intervals[kpi] && wi + 1 < words.length
             && !bridgeBeforeBlock.has(wi + 1)) {
             const iv = intervals[kpi];
-            const glyph = cellGlyph(kasra.chars, kasra.tag, iv.phone);
-            const sr = silentTooltip(kasra.tag);
+            const glyph = cellGlyph(kasra.chars, kasra.rules, iv.phone);
             bridgeBeforeBlock.set(wi + 1, {
                 phonemes: [{ interval: iv, index: kpi, wordLocalIndex: -1, tjBadges: [] }],
                 letter: {
@@ -334,7 +303,9 @@ export function buildRendered(
                     cellStart: iv.start,
                     cellEnd: iv.end,
                     wordIndex: wi,
-                    silentRules: sr ? [sr] : [],
+                    silentRules: kasra.rules
+                        .map(silentTooltip)
+                        .filter((n): n is string => !!n),
                 },
             });
             excluded.add(kpi);
@@ -385,7 +356,7 @@ export function buildRendered(
             if (indexable) wli++;
         }
 
-        const groups = cellGroupsFor(word, intervals, shareUnions, nasalUnions, idghamGroupTags, shareGroupRuleTags, izharCellTag, liftedIltiqaa.has(wi));
+        const groups = cellGroupsFor(word, intervals, shareUnions, nasalUnions, idghamGroupTags, shareGroupRuleTags, liftedIltiqaa.has(wi));
         _buildColumns(groups, phonemes);
 
         blocks.push({

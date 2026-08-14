@@ -271,4 +271,5 @@
     --tj-mutamathilayn:    oklch(0.500 0.100 105);
     --tj-mutaqaribayn:     oklch(0.560 0.110 105);
     --tj-mutajanisayn:     oklch(0.600 0.140 105);
+    --tj-special:          oklch(0.560 0.170 25);
 }

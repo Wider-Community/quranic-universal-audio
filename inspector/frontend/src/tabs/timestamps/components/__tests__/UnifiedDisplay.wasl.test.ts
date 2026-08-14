@@ -30,7 +30,7 @@ function word(
 }
 
 function cell(over: Partial<TsCell>): TsCell {
-    return { chars: '', role: 'base', status: 'present', phonemeIndices: [], sourceLetterIndex: 0, tag: null, shareGroup: null, ...over };
+    return { chars: '', role: 'base', status: 'present', phonemeIndices: [], sourceLetterIndex: 0, rules: [], shareGroup: null, ...over };
 }
 
 function ph(sym: string, start: number, end: number, bridge?: string): PhonemeInterval {
@@ -57,7 +57,7 @@ function groupData(): TsVerseData {
             word('1:1:1', [0], 'ا', 0, 1, [cell({ chars: 'ا', phonemeIndices: [0] })]),
             word('1:1:2', [1, 2], 'بٍ', 1, 2, [
                 cell({ chars: 'ب', phonemeIndices: [1] }),
-                cell({ chars: 'ٍ', role: 'tanween', phonemeIndices: [2], tag: 'idgham_ghunnah_tanween', shareGroup: 0 }),
+                cell({ chars: 'ٍ', role: 'tanween', phonemeIndices: [2], rules: ['idgham_bi_ghunnah'], shareGroup: 0 }),
             ]),
             word('1:2:1', [3, 4], 'وج', 2, 3, [
                 cell({ chars: 'و', phonemeIndices: [3] }),

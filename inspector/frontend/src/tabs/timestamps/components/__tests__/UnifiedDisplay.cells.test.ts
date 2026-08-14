@@ -36,7 +36,7 @@ function w(letters: Letter[], cells: TsCell[], phoneme_indices: number[]): TsWor
 function base(sourceLetterIndex: number, phonemeIndices: number[], extra: Partial<TsCell> = {}): TsCell {
     return {
         chars: '', role: 'base', status: 'present', phonemeIndices, sourceLetterIndex,
-        tag: null, shareGroup: null, ...extra,
+        rules: [], shareGroup: null, ...extra,
     };
 }
 
@@ -83,9 +83,9 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             ],
             [
                 base(0, [0]),
-                { chars: 'ِ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
+                { chars: 'ِ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: [], shareGroup: null },
                 base(1, [2]),
-                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [3], sourceLetterIndex: 1, tag: null, shareGroup: null },
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [3], sourceLetterIndex: 1, rules: [], shareGroup: null },
             ],
             [0, 1, 2, 3],
         );
@@ -118,7 +118,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [{ char: 'ب', start: 0, end: 0.2, silent: false }],
             [
                 base(0, [0]),
-                { chars: 'ِ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
+                { chars: 'ِ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: [], shareGroup: null },
             ],
             [0, 1],
         );
@@ -144,7 +144,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [{ char: 'م', start: 0, end: 0.2, silent: false }],
             [
                 base(0, [0]),
-                { chars: 'ْ', role: 'haraka', status: 'present', phonemeIndices: [], sourceLetterIndex: 0, tag: null, shareGroup: null },
+                { chars: 'ْ', role: 'haraka', status: 'present', phonemeIndices: [], sourceLetterIndex: 0, rules: [], shareGroup: null },
             ],
             [0],
         );
@@ -160,7 +160,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [{ char: 'م', start: 0, end: 0.2, silent: false }],
             [
                 base(0, [0]),
-                { chars: 'ٌ', role: 'tanween', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 0, tag: null, shareGroup: null },
+                { chars: 'ٌ', role: 'tanween', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 0, rules: [], shareGroup: null },
             ],
             [0],
         );
@@ -171,10 +171,10 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
     });
 
     it('renders iqlab as TWO cells — a normal haraka + a standalone mini-meem', () => {
-        // fatḥatan iqlab → the phonemizer emits a haraka cell (fatḥa, sounds the
-        // vowel) and a separate mini-meem cell (sounds the nasal, carries the iqlab
-        // tag). The meem DISPLAYS the low-meem glyph but, with a ḍamma/fatḥa source
-        // (MEEM_HI), pins to the TOP slot. Both anchor to ب → one group [ب, fatḥa, meem].
+        // fatḥatan iqlab → ONE shard cell sounding [vowel, nasal]. The FE splits it
+        // into the single haraka the mushaf writes and a mini-meem carrying the nasal
+        // + the iqlab rule. The meem DISPLAYS the low-meem glyph but, with a ḍamma/
+        // fatḥa source, pins to the TOP slot. Both anchor to ب → one group.
         const intervals: PhonemeInterval[] = [
             { phone: 'b', start: 0, end: 0.1 },
             { phone: 'a', start: 0.1, end: 0.2 },   // the haraka's vowel
@@ -184,8 +184,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [{ char: 'ب', start: 0, end: 0.1, silent: false }],
             [
                 base(0, [0], { chars: 'ب' }),
-                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
-                { chars: 'ۢ', role: 'tanween', status: 'inserted', phonemeIndices: [2], sourceLetterIndex: 0, tag: 'iqlab_tanween', shareGroup: null },
+                { chars: 'ً', role: 'tanween', status: 'present', phonemeIndices: [1, 2], sourceLetterIndex: 0, rules: ['iqlab'], shareGroup: null },
             ],
             [0, 1, 2],
         );
@@ -209,8 +208,8 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
     });
 
     it('iqlab kasra: the mini-meem-below pins to the bottom slot', () => {
-        // kasratan iqlab → fatḥa-less; the haraka is a kasra (pins bottom) and the
-        // mini-meem is the BELOW form (U+06ED), which also pins bottom.
+        // kasratan iqlab → the split haraka is a kasra (pins bottom) and the mini-meem
+        // is the BELOW form (U+06ED), which also pins bottom.
         const intervals: PhonemeInterval[] = [
             { phone: 'b', start: 0, end: 0.1 },
             { phone: 'i', start: 0.1, end: 0.2 },
@@ -220,12 +219,13 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [{ char: 'ب', start: 0, end: 0.1, silent: false }],
             [
                 base(0, [0], { chars: 'ب' }),
-                { chars: 'ِ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
-                { chars: 'ۭ', role: 'tanween', status: 'inserted', phonemeIndices: [2], sourceLetterIndex: 0, tag: 'iqlab_tanween', shareGroup: null },
+                { chars: 'ٍ', role: 'tanween', status: 'present', phonemeIndices: [1, 2], sourceLetterIndex: 0, rules: ['iqlab'], shareGroup: null },
             ],
             [0, 1, 2],
         );
         const { container } = mount([word], intervals);
+        const smalls = Array.from(container.querySelectorAll<HTMLElement>('.haraka-cell .g'));
+        expect(smalls.map((g) => g.textContent)).toEqual(['ِ', 'ۭ']); // kasra THEN the below-meem
         const meem = Array.from(container.querySelectorAll<HTMLElement>('.haraka-cell'))
             .find((c) => c.querySelector('.g')!.textContent === 'ۭ')!;
         expect(meem).toBeTruthy();
@@ -233,7 +233,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
     });
 
     it('iqlab: the vowel under the haraka is uncoloured; the nasal under the mini-meem is iqlab-coloured', () => {
-        // The iqlab tag rides ONLY the mini-meem cell (the nasal). The haraka cell
+        // The iqlab rule rides ONLY the mini-meem cell (the nasal). The haraka cell
         // (vowel) is uncoloured; the mini-meem cell + its nasal phoneme carry --tj-iqlab.
         const intervals: PhonemeInterval[] = [
             { phone: 'b', start: 0, end: 0.1 },
@@ -244,8 +244,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [{ char: 'ب', start: 0, end: 0.1, silent: false }],
             [
                 base(0, [0], { chars: 'ب' }),
-                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
-                { chars: 'ۢ', role: 'tanween', status: 'inserted', phonemeIndices: [2], sourceLetterIndex: 0, tag: 'iqlab_tanween', shareGroup: null },
+                { chars: 'ً', role: 'tanween', status: 'present', phonemeIndices: [1, 2], sourceLetterIndex: 0, rules: ['iqlab'], shareGroup: null },
             ],
             [0, 1, 2],
         );
@@ -267,8 +266,8 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
     });
 
     it('iqlab noon: the ن falls silent, a synthesized mini-meem owns the nasal + the lone iqlab underline', () => {
-        // مِن before ب: the phonemizer stamps a meem cell only for tanwīn iqlab, so the
-        // FE SYNTHESIZES the mini-meem for noon. The ن renders silent + uncoloured; the
+        // مِن before ب: the shard ships no mini-meem cell, so the FE synthesizes one for
+        // the converted noon too. The ن renders silent + uncoloured; the
         // mini-meem (low-meem glyph, pinned top) owns the nasal phone (the click/loop
         // target) and carries the ONLY iqlab underline.
         const intervals: PhonemeInterval[] = [
@@ -283,8 +282,8 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             ],
             [
                 base(0, [0], { chars: 'م' }),
-                { chars: 'ِ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
-                base(1, [2], { chars: 'ن', tag: 'iqlab_noon' }),
+                { chars: 'ِ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: [], shareGroup: null },
+                base(1, [2], { chars: 'ن', rules: ['iqlab'] }),
             ],
             [0, 1, 2],
         );
@@ -295,7 +294,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(noon).toBeTruthy();
         expect(noon.classList.contains('silent')).toBe(true);
         expect(noon.style.boxShadow).toBe('');
-        // ...but still NAMES "Iqlab" on hover (a silent-only tag, no badge).
+        // ...but still NAMES "Iqlab" on hover (a silent-only rule, no badge).
         expect(noon.dataset.tjRules).toBe('Iqlab');
         // The synthesized mini-meem (low-meem glyph, pinned top) carries the iqlab underline...
         const meem = Array.from(container.querySelectorAll<HTMLElement>('.haraka-cell'))
@@ -321,7 +320,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [{ char: 'ن', start: 0, end: 0.1, silent: false }],
             [
                 base(0, [0]),
-                { chars: '', role: 'madd', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 0, tag: 'madd_iwad', shareGroup: null },
+                { chars: '', role: 'madd', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 0, rules: ['madd_iwad'], shareGroup: null },
             ],
             [0, 1],
         );
@@ -342,7 +341,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [{ char: 'ٱ', start: 0, end: 0.1, silent: false }],
             [
                 base(0, [0]),
-                { chars: '', role: 'haraka', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 0, tag: 'hamza_wasl_vowel', shareGroup: null },
+                { chars: '', role: 'haraka', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 0, rules: ['hamza_wasl_kasra'], shareGroup: null },
             ],
             [0, 1],
         );
@@ -368,8 +367,8 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             ],
             [
                 base(0, [0]),
-                { chars: 'ِ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: 1 },
-                { chars: 'ي', role: 'madd', status: 'present', phonemeIndices: [1], sourceLetterIndex: 1, tag: null, shareGroup: 1 },
+                { chars: 'ِ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: [], shareGroup: 1 },
+                { chars: 'ي', role: 'madd', status: 'present', phonemeIndices: [1], sourceLetterIndex: 1, rules: [], shareGroup: 1 },
             ],
             [0, 1],
         );
@@ -396,10 +395,10 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             ],
             [
                 base(0, [0], { chars: 'ل' }),
-                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: [], shareGroup: null },
                 base(1, [2], { chars: 'ه' }),
-                { chars: 'ُ', role: 'haraka', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 1, tag: null, shareGroup: null },
-                { chars: 'ۥ', role: 'madd', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 1, tag: null, shareGroup: null },
+                { chars: 'ُ', role: 'haraka', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 1, rules: [], shareGroup: null },
+                { chars: 'ۥ', role: 'madd', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 1, rules: [], shareGroup: null },
             ],
             [0, 1, 2],
         );
@@ -422,10 +421,10 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(vowel.querySelector('.haraka-cell')!.classList.contains('dia-dropped')).toBe(true);
     });
 
-    it('silah madd: the maddah relocates off the bearing letter onto the mini-waw carrier', () => {
-        // هُۥٓ (a silah with madd, e.g. حَسْبُهُۥٓ): the phonemizer merges the maddah onto
-        // the haa grapheme (هٓ), but it belongs on the silah carrier. The haa renders
-        // CLEAN (ه) and the mini-waw gains the maddah (ۥٓ).
+    it('silah madd: the maddah cell folds onto the mini-waw carrier, not the bearing letter', () => {
+        // هُۥٓ (a silah with madd, e.g. حَسْبُهُۥٓ): the producer writes the maddah as its
+        // OWN cell after the ṣilah carrier. It rides the letter before it, so the haa
+        // renders CLEAN (ه) and the mini-waw wears the maddah (ۥٓ).
         const MADDAH = 'ٓ';
         const intervals: PhonemeInterval[] = [
             { phone: 'l', start: 0, end: 0.1 },
@@ -439,19 +438,21 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             ],
             [
                 base(0, [0], { chars: 'ل' }),
-                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
-                base(1, [2], { chars: 'ه' + MADDAH }), // the haa with the phonemizer-merged maddah
-                { chars: 'ُ', role: 'haraka', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 1, tag: null, shareGroup: null },
-                { chars: 'ۥ', role: 'madd', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 1, tag: null, shareGroup: null },
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: [], shareGroup: null },
+                base(1, [2], { chars: 'ه' }),
+                { chars: 'ُ', role: 'haraka', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 1, rules: ['pausal_sukun'], shareGroup: null },
+                { chars: 'ۥ', role: 'madd', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 2, rules: ['pausal_sukun'], shareGroup: null },
+                { chars: MADDAH, role: 'madd', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 2, rules: ['orthographic_silence'], shareGroup: null },
             ],
             [0, 1, 2],
         );
         const { container } = mount([word], intervals);
         const letters = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter')).map((l) => l.textContent);
-        // The haa is CLEAN (maddah stripped); the merged form never appears.
+        // The haa is CLEAN; the merged form never appears, and neither does a bare maddah.
         expect(letters).toContain('ه');
         expect(letters).not.toContain('ه' + MADDAH);
-        // The mini-waw carrier now bears the maddah.
+        expect(letters).not.toContain(MADDAH);
+        // The mini-waw carrier bears the maddah.
         expect(letters).toContain('ۥ' + MADDAH);
     });
 
@@ -472,9 +473,9 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             ],
             [
                 base(0, [0], { chars: 'ٱ' }),
-                { chars: 'ِ', role: 'haraka', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 1, tag: 'hamza_wasl_vowel', shareGroup: null },
-                { chars: 'ي', role: 'madd', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 1, tag: 'madd_tabii', shareGroup: null },
-                { chars: 'ْ', role: 'haraka', status: 'present', phonemeIndices: [], sourceLetterIndex: 1, tag: null, shareGroup: null },
+                { chars: 'ِ', role: 'haraka', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 1, rules: ['hamza_wasl_kasra'], shareGroup: null },
+                { chars: 'ي', role: 'madd', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 1, rules: ['madd_tabii'], shareGroup: null },
+                { chars: 'ْ', role: 'haraka', status: 'present', phonemeIndices: [], sourceLetterIndex: 1, rules: [], shareGroup: null },
                 base(2, [2], { chars: 'ت' }),
             ],
             [0, 1, 2],
@@ -524,8 +525,8 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             ],
             [
                 base(0, [0]),
-                { chars: 'ِ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: 1 },
-                { chars: 'ي', role: 'madd', status: 'present', phonemeIndices: [1], sourceLetterIndex: 1, tag: null, shareGroup: 1 },
+                { chars: 'ِ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: [], shareGroup: 1 },
+                { chars: 'ي', role: 'madd', status: 'present', phonemeIndices: [1], sourceLetterIndex: 1, rules: [], shareGroup: 1 },
             ],
             [0, 1],
         );
@@ -561,9 +562,9 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             ],
             [
                 base(0, [0], { chars: 'ر' }),
-                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: [], shareGroup: null },
                 base(1, [2], { chars: 'بّ' }),
-                { chars: 'ِ', role: 'haraka', status: 'present', phonemeIndices: [3], sourceLetterIndex: 1, tag: null, shareGroup: null },
+                { chars: 'ِ', role: 'haraka', status: 'present', phonemeIndices: [3], sourceLetterIndex: 1, rules: [], shareGroup: null },
             ],
             [0, 1, 2, 3],
         );
@@ -599,17 +600,17 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         const cells: TsCell[] = [
             base(0, [], { status: 'dropped', chars: 'ٱ' }),
             base(1, [0], { chars: 'ل' }),
-            { chars: 'ْ', role: 'haraka', status: 'present', phonemeIndices: [], sourceLetterIndex: 1, tag: null, shareGroup: null }, // sukūn — filtered
+            { chars: 'ْ', role: 'haraka', status: 'present', phonemeIndices: [], sourceLetterIndex: 1, rules: [], shareGroup: null }, // sukūn — filtered
             base(2, [1], { chars: 'ع' }),
-            { chars: 'ٰ', role: 'madd', status: 'present', phonemeIndices: [2], sourceLetterIndex: 2, tag: null, shareGroup: 0 },
-            { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [2], sourceLetterIndex: 2, tag: null, shareGroup: 0 },
+            { chars: 'ٰ', role: 'madd', status: 'present', phonemeIndices: [2], sourceLetterIndex: 2, rules: [], shareGroup: 0 },
+            { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [2], sourceLetterIndex: 2, rules: [], shareGroup: 0 },
             base(3, [3], { chars: 'ل' }),
-            { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [4], sourceLetterIndex: 3, tag: null, shareGroup: null },
+            { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [4], sourceLetterIndex: 3, rules: [], shareGroup: null },
             base(4, [5], { chars: 'م' }),
-            { chars: 'ِ', role: 'haraka', status: 'present', phonemeIndices: [6], sourceLetterIndex: 4, tag: null, shareGroup: 1 },
-            { chars: 'ي', role: 'madd', status: 'present', phonemeIndices: [6], sourceLetterIndex: 5, tag: null, shareGroup: 1 },
+            { chars: 'ِ', role: 'haraka', status: 'present', phonemeIndices: [6], sourceLetterIndex: 4, rules: [], shareGroup: 1 },
+            { chars: 'ي', role: 'madd', status: 'present', phonemeIndices: [6], sourceLetterIndex: 5, rules: [], shareGroup: 1 },
             base(6, [7], { chars: 'ن' }),
-            { chars: 'َ', role: 'haraka', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 6, tag: null, shareGroup: null },
+            { chars: 'َ', role: 'haraka', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 6, rules: [], shareGroup: null },
         ];
         const word = w(letters, cells, [0, 1, 2, 3, 4, 5, 6, 7]);
         const { container } = mount([word], intervals);
@@ -636,7 +637,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         const izhar = w(
             [{ char: 'ع', start: 0, end: 0.3, silent: false }],
             [base(0, [0], { chars: 'ع' }),
-             { chars: 'ٌ', role: 'tanween', status: 'present', phonemeIndices: [1, 2], sourceLetterIndex: 0, tag: null, shareGroup: null }],
+             { chars: 'ٌ', role: 'tanween', status: 'present', phonemeIndices: [1, 2], sourceLetterIndex: 0, rules: [], shareGroup: null }],
             [0, 1, 2],
         );
         let { container } = mount([izhar], intervals);
@@ -649,7 +650,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         const idgham = w(
             [{ char: 'ع', start: 0, end: 0.3, silent: false }],
             [base(0, [0], { chars: 'ع' }),
-             { chars: 'ٌ', role: 'tanween', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: 'idgham_ghunnah_tanween', shareGroup: null }],
+             { chars: 'ٌ', role: 'tanween', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: ['idgham_bi_ghunnah'], shareGroup: null }],
             [0, 1],
         );
         ({ container } = mount([idgham], intervals));
@@ -667,8 +668,8 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [{ char: 'ض', start: 0, end: 0.2, silent: false }, { char: 'ا', start: 0.2, end: 0.6, silent: false }],
             [
                 base(0, [0], { chars: 'ض' }),
-                { chars: 'ً', role: 'tanween', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 0, tag: 'madd_iwad', shareGroup: null },
-                { chars: 'ا', role: 'madd', status: 'replaced', phonemeIndices: [1], sourceLetterIndex: 1, tag: 'madd_iwad', shareGroup: null },
+                { chars: 'ً', role: 'tanween', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 0, rules: ['madd_iwad'], shareGroup: null },
+                { chars: 'ا', role: 'madd', status: 'present', phonemeIndices: [1], sourceLetterIndex: 1, rules: ['madd_iwad'], shareGroup: null },
             ],
             [0, 1],
         );
@@ -701,8 +702,8 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [{ char: 'ء', start: 0, end: 0.2, silent: false }],
             [
                 base(0, [0], { chars: 'ء' }),
-                { chars: 'ً', role: 'tanween', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 0, tag: 'madd_iwad', shareGroup: null },
-                { chars: '', role: 'madd', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 0, tag: 'madd_iwad', shareGroup: null },
+                { chars: 'ً', role: 'tanween', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 0, rules: ['madd_iwad'], shareGroup: null },
+                { chars: '', role: 'madd', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 0, rules: ['madd_iwad'], shareGroup: null },
             ],
             [0, 1],
         );
@@ -744,7 +745,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [{ char: 'و', start: 0, end: 0.2, silent: false }],
             [
                 base(0, [0], { chars: 'و' }),
-                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: [], shareGroup: null },
             ],
             [0, 1],
         );
@@ -756,11 +757,11 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             ],
             [
                 base(0, [2], { chars: 'م' }),
-                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [3], sourceLetterIndex: 0, tag: null, shareGroup: 9 },
-                { chars: 'آ', role: 'madd', status: 'present', phonemeIndices: [3], sourceLetterIndex: 1, tag: null, shareGroup: 9 },
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [3], sourceLetterIndex: 0, rules: [], shareGroup: 9 },
+                { chars: 'آ', role: 'madd', status: 'present', phonemeIndices: [3], sourceLetterIndex: 1, rules: [], shareGroup: 9 },
                 base(2, [4], { chars: 'ء' }),
-                { chars: 'ً', role: 'tanween', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 2, tag: 'madd_iwad', shareGroup: null },
-                { chars: '', role: 'madd', status: 'inserted', phonemeIndices: [5], sourceLetterIndex: 2, tag: 'madd_iwad', shareGroup: null },
+                { chars: 'ً', role: 'tanween', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 2, rules: ['madd_iwad'], shareGroup: null },
+                { chars: '', role: 'madd', status: 'inserted', phonemeIndices: [5], sourceLetterIndex: 2, rules: ['madd_iwad'], shareGroup: null },
             ],
             [2, 3, 4, 5],
         );
@@ -787,14 +788,14 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         ];
         const him = w(
             [{ char: 'م', start: 0, end: 0.1, silent: false }],
-            [base(0, [0], { chars: 'م', tag: 'idgham_shafawi', shareGroup: 5 })],
+            [base(0, [0], { chars: 'م', rules: ['idgham_shafawi'], shareGroup: 5 })],
             [0],
         );
         const marad = w(
             [{ char: 'م', start: 0.1, end: 0.25, silent: false }],
             [
                 base(0, [], { chars: 'م', shareGroup: 5 }),
-                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: [], shareGroup: null },
             ],
             [1],
         );
@@ -813,7 +814,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
     it('share group: a tag-less co-lit partner inherits the group rule so report mode can select it', () => {
         // A madd letter (carries the rule) co-lights with its vowel (no own tag)
         // through one share group. In report mode BOTH must be flaggable as that
-        // shared rule — the partner must expose data-has-tj='1' + the rule tag,
+        // shared rule — the partner must expose data-has-tj='1' + the rule rules: [tag],
         // not just the cell that literally owns the tag.
         const intervals: PhonemeInterval[] = [
             { phone: 'a', start: 0, end: 0.1 },
@@ -823,8 +824,8 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [{ char: 'ب', start: 0, end: 0.1, silent: false }, { char: 'ا', start: 0.1, end: 0.4, silent: false }],
             [
                 base(0, [0], { chars: 'ب' }),
-                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [0], sourceLetterIndex: 0, tag: null, shareGroup: 3 },
-                base(1, [1], { chars: 'ا', tag: 'madd_tabii', shareGroup: 3 }),
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [0], sourceLetterIndex: 0, rules: [], shareGroup: 3 },
+                base(1, [1], { chars: 'ا', rules: ['madd_tabii'], shareGroup: 3 }),
             ],
             [0, 1],
         );
@@ -847,14 +848,14 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         ];
         const him = w(
             [{ char: 'م', start: 0, end: 0.1, silent: false }],
-            [base(0, [0], { chars: 'م', tag: 'idgham_shafawi', shareGroup: 5 })],
+            [base(0, [0], { chars: 'م', rules: ['idgham_shafawi'], shareGroup: 5 })],
             [0],
         );
         const marad = w(
             [{ char: 'م', start: 0.1, end: 0.25, silent: false }],
             [
                 base(0, [], { chars: 'م', shareGroup: 5 }),
-                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: [], shareGroup: null },
             ],
             [1],
         );
@@ -881,7 +882,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         ];
         const him = w(
             [{ char: 'م', start: 0, end: 0.2, silent: false }],
-            [base(0, [0], { chars: 'م', tag: 'idgham_shafawi', shareGroup: 5 })],
+            [base(0, [0], { chars: 'م', rules: ['idgham_shafawi'], shareGroup: 5 })],
             [0],
         );
         const maa = w(
@@ -891,8 +892,8 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             ],
             [
                 base(0, [], { chars: 'م', status: 'dropped', shareGroup: 5 }), // receiver: co-lit via union
-                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: 6 },
-                { chars: 'ا', role: 'madd', status: 'present', phonemeIndices: [1], sourceLetterIndex: 1, tag: null, shareGroup: 6 },
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: [], shareGroup: 6 },
+                { chars: 'ا', role: 'madd', status: 'present', phonemeIndices: [1], sourceLetterIndex: 1, rules: [], shareGroup: 6 },
             ],
             [1],
         );
@@ -928,8 +929,8 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [{ char: 'م', start: 0, end: 0.2, silent: false }, { char: 'ن', start: 0.2, end: 0.2, silent: true }],
             [
                 base(0, [0], { chars: 'م' }),
-                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
-                base(1, [], { chars: 'ن', status: 'dropped', tag: 'idgham_ghunnah_noon', shareGroup: 5 }),
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: [], shareGroup: null },
+                base(1, [], { chars: 'ن', status: 'dropped', rules: ['idgham_bi_ghunnah'], shareGroup: 5 }),
             ],
             [0, 1],
         );
@@ -961,8 +962,8 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         const word = w(
             [{ char: 'ق', start: 0, end: 0.1, silent: false }, { char: 'د', start: 0.15, end: 0.3, silent: false }],
             [
-                base(0, [0], { chars: 'ق', tag: 'qalqala_sughra' }), // ق owns only q (idx 0), not Q
-                { chars: 'ْ', role: 'haraka', status: 'present', phonemeIndices: [], sourceLetterIndex: 0, tag: null, shareGroup: null }, // sukūn
+                base(0, [0], { chars: 'ق', rules: ['qalqala_sughra'] }), // ق owns only q (idx 0), not Q
+                { chars: 'ْ', role: 'haraka', status: 'present', phonemeIndices: [], sourceLetterIndex: 0, rules: [], shareGroup: null }, // sukūn
                 base(1, [2], { chars: 'د' }),
             ],
             [0, 2], // Q (idx 1) is rendered but indexed by no cell
@@ -1006,8 +1007,8 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [{ char: 'ل', start: 0, end: 0.5, silent: false }, { char: 'ه', start: 0.5, end: 0.6, silent: false }],
             [
                 base(0, [0], { chars: 'ل' }),
-                { chars: '', role: 'madd', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 0, tag: 'allah_dagger_alef', shareGroup: null },
-                { chars: 'َ', role: 'haraka', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 0, tag: null, shareGroup: null },
+                { chars: '', role: 'madd', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 0, rules: ['allah_dagger_alef'], shareGroup: null },
+                { chars: 'َ', role: 'haraka', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 0, rules: [], shareGroup: null },
             ],
             [0, 1],
         );
@@ -1040,7 +1041,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             ],
             [
                 base(0, [0]),
-                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: [], shareGroup: null },
                 base(1, [2]),
             ],
             [0, 1, 2],
@@ -1068,7 +1069,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [{ char: 'ب', start: 0, end: 0.35, silent: false }],
             [
                 base(0, [0]),
-                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: [], shareGroup: null },
             ],
             [0, 1],
         );
@@ -1099,7 +1100,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
                 [{ char: 'ب', start: 0, end: 0.234, silent: false }],
                 [
                     base(0, [0]),
-                    { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
+                    { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: [], shareGroup: null },
                 ],
                 [0, 1],
             );
@@ -1141,8 +1142,8 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [{ char: 'ض', start: 0, end: 0.1, silent: false }, { char: 'ا', start: 0.1, end: 0.5, silent: false }],
             [
                 base(0, [0], { chars: 'ض' }),
-                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: 0 },
-                { chars: 'ا', role: 'madd', status: 'present', phonemeIndices: [1], sourceLetterIndex: 1, tag: 'madd_wajib_muttasil', shareGroup: 0 },
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: [], shareGroup: 0 },
+                { chars: 'ا', role: 'madd', status: 'present', phonemeIndices: [1], sourceLetterIndex: 1, rules: ['madd_wajib_muttasil'], shareGroup: 0 },
             ],
             [0, 1],
         );
@@ -1168,7 +1169,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [{ char: 'ب', start: 0, end: 0.2, silent: false }],
             [
                 base(0, [0], { chars: 'ب' }),
-                { chars: 'ٍ', role: 'tanween', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: 'idgham_ghunnah_tanween', shareGroup: 7 },
+                { chars: 'ٍ', role: 'tanween', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: ['idgham_bi_ghunnah'], shareGroup: 7 },
             ],
             [0, 1],
         );
@@ -1195,14 +1196,14 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         ];
         const wordN = w(
             [{ char: 'ه', start: 0, end: 0.1, silent: false }, { char: 'م', start: 0.1, end: 0.5, silent: false }],
-            [base(0, [0], { chars: 'ه' }), base(1, [1], { chars: 'م', tag: 'idgham_shafawi', shareGroup: 8 })],
+            [base(0, [0], { chars: 'ه' }), base(1, [1], { chars: 'م', rules: ['idgham_shafawi'], shareGroup: 8 })],
             [0, 1],
         );
         const wordN1 = w(
             [{ char: 'م', start: 0.5, end: 0.6, silent: false }],
             [
                 base(0, [], { chars: 'م', shareGroup: 8 }), // receiver: no phoneme, co-lit via union
-                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [2], sourceLetterIndex: 0, tag: null, shareGroup: null },
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [2], sourceLetterIndex: 0, rules: [], shareGroup: null },
             ],
             [2],
         );
@@ -1224,8 +1225,8 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [{ char: 'ل', start: 0, end: 0.5, silent: false }, { char: 'ه', start: 0.5, end: 0.6, silent: false }],
             [
                 base(0, [0], { chars: 'ل' }),
-                { chars: '', role: 'madd', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 0, tag, shareGroup: null },
-                { chars: 'َ', role: 'haraka', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 0, tag: null, shareGroup: null },
+                { chars: '', role: 'madd', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 0, rules: [tag], shareGroup: null },
+                { chars: 'َ', role: 'haraka', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 0, rules: [], shareGroup: null },
             ],
             [0, 1],
         );
@@ -1233,14 +1234,14 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         let c = mount([mk('allah_dagger_alef')], intervals).container;
         expect(c.querySelector<HTMLElement>('.mega-letter.implicit')!.style.boxShadow).toBe('');
         cleanup();
-        // stopping → madd_arid_lissukun → dagger badged, fatḥa not
-        c = mount([mk('madd_arid_lissukun')], intervals).container;
+        // stopping → madd_arid_lil_sukun → dagger badged, fatḥa not
+        c = mount([mk('madd_arid_lil_sukun')], intervals).container;
         const dagger = c.querySelector<HTMLElement>('.mega-letter.implicit')!;
         expect(dagger.style.boxShadow).not.toBe('');
         expect(dagger.style.boxShadow).toContain('madd-arid');
         // the dropped fatḥa STILL groups + co-lights with the arid dagger (it must NOT
         // fall back to the lām's base group greyed — daggerBySrc keys off the implicit
-        // madd, not the allah_dagger_alef tag, so the arid waqf case still co-lights).
+        // madd, not the allah_dagger_alef rules: [tag], so the arid waqf case still co-lights).
         const vowel = Array.from(c.querySelectorAll<HTMLElement>('.cell-group')).find(
             (g) => g.querySelector('.mega-letter.implicit'),
         )!;
@@ -1260,8 +1261,8 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [{ char: 'ق', start: 0, end: 0.1, silent: false }, { char: 'ا', start: 0.1, end: 0.4, silent: false }],
             [
                 base(0, [0], { chars: 'ق' }),
-                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: 0 },
-                { chars: 'ا', role: 'madd', status: 'present', phonemeIndices: [1], sourceLetterIndex: 1, tag: null, shareGroup: 0 },
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: [], shareGroup: 0 },
+                { chars: 'ا', role: 'madd', status: 'present', phonemeIndices: [1], sourceLetterIndex: 1, rules: [], shareGroup: 0 },
             ],
             [0, 1],
         );
@@ -1277,7 +1278,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [{ char: 'ب', start: 0, end: 0.2, silent: false }],
             [
                 base(0, [0], { chars: 'ب' }),
-                { chars: 'ٍ', role: 'tanween', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: 'idgham_bila_ghunnah_tanween', shareGroup: 7 },
+                { chars: 'ٍ', role: 'tanween', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: ['idgham_bila_ghunnah'], shareGroup: 7 },
             ],
             [0, 1],
         );
@@ -1302,7 +1303,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         ];
         const word = w(
             [{ char: 'ق', start: 0, end: 0.15, silent: false }],
-            [base(0, [0], { chars: 'ق', tag: 'qalqala_sughra', secondaryTags: ['tafkheem'] })],
+            [base(0, [0], { chars: 'ق', rules: ['qalqala_sughra', 'tafkheem'] })],
             [0],
         );
         const { container } = mount([word], iv);
@@ -1322,7 +1323,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         ];
         const word = w(
             [{ char: 'ق', start: 0, end: 0.15, silent: false }],
-            [base(0, [0], { chars: 'ق', tag: 'qalqala_sughra' })],
+            [base(0, [0], { chars: 'ق', rules: ['qalqala_sughra'] })],
             [0, 1], // both the consonant phone and its Q echo render
         );
         const { container } = mount([word], iv);
@@ -1340,7 +1341,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [{ char: 'ن', start: 0, end: 0.2, silent: false }],
             [
                 base(0, [0], { chars: 'ن' }),
-                { chars: 'َ', role: 'haraka', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 0, tag: null, shareGroup: null },
+                { chars: 'َ', role: 'haraka', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 0, rules: ['pausal_sukun'], shareGroup: null },
             ],
             [0],
         );
@@ -1357,14 +1358,14 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [{ char: 'م', start: 0, end: 0.1, silent: false }, { char: 'ا', start: null, end: null, silent: true }],
             [
                 base(0, [0], { chars: 'م' }),
-                { chars: 'ً', role: 'tanween', status: 'present', phonemeIndices: [1, 2], sourceLetterIndex: 0, tag: null, shareGroup: null },
-                { chars: 'ا', role: 'base', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 1, tag: 'silent_unclassified', shareGroup: null },
+                { chars: 'ً', role: 'tanween', status: 'present', phonemeIndices: [1, 2], sourceLetterIndex: 0, rules: [], shareGroup: null },
+                { chars: 'ا', role: 'base', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 1, rules: ['orthographic_silence'], shareGroup: null },
             ],
             [0, 1, 2],
         );
         const { container } = mount([word], iv);
         const alef = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter')).find((e) => e.textContent === 'ا')!;
-        expect(alef.dataset.tjRules).toBe("Madd 'Iwad Wasl");
+        expect(alef.dataset.tjRules).toBe("Silent Letter");
     });
 
     it('a silent-rule letter (lām shamsiyyah) shows a rule tooltip with no underline', () => {
@@ -1372,7 +1373,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         const word = w(
             [{ char: 'ل', start: null, end: null, silent: true }, { char: 'ش', start: 0, end: 0.2, silent: false }],
             [
-                { chars: 'ل', role: 'base', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 0, tag: 'lam_shamsiyah', shareGroup: null },
+                { chars: 'ل', role: 'base', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 0, rules: ['lam_shamsiyyah'], shareGroup: null },
                 base(1, [0], { chars: 'ش' }),
             ],
             [0],
@@ -1383,10 +1384,10 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(lam.dataset.tjRules).toBe('Lam Shamsiyyah');
     });
 
-    it('iẓhar (synthesized): untagged sakin noon badges letter + phoneme in halqi blue', () => {
+    it('iẓhar: a sakin noon badges letter + phoneme in halqi blue', () => {
         setRuleEnabled('izhar', true); // iẓhar is an opt-in (default off) rule
-        // مِنْ — a sakin nūn (no own haraka, just a sukūn) that SOUNDS: untagged →
-        // synthesized izhar_halqi. Both the ن letter and its n phoneme underline.
+        // مِنْ — a sakin nūn (no own haraka, just a sukūn) that SOUNDS: the producer
+        // fires `izhar`. Both the ن letter and its n phoneme underline.
         const intervals: PhonemeInterval[] = [
             { phone: 'm', start: 0, end: 0.1 }, { phone: 'i', start: 0.1, end: 0.2 },
             { phone: 'n', start: 0.2, end: 0.4 },
@@ -1395,9 +1396,9 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [{ char: 'م', start: 0, end: 0.2, silent: false }, { char: 'ن', start: 0.2, end: 0.4, silent: false }],
             [
                 base(0, [0], { chars: 'م' }),
-                { chars: 'ِ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
-                base(1, [2], { chars: 'ن' }),
-                { chars: 'ْ', role: 'haraka', status: 'present', phonemeIndices: [], sourceLetterIndex: 1, tag: null, shareGroup: null },
+                { chars: 'ِ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: [], shareGroup: null },
+                base(1, [2], { chars: 'ن', rules: ['izhar'] }),
+                { chars: 'ْ', role: 'haraka', status: 'present', phonemeIndices: [], sourceLetterIndex: 1, rules: [], shareGroup: null },
             ],
             [0, 1, 2],
         );
@@ -1411,7 +1412,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(nPhone.style.boxShadow).toContain('izhar-halqi');
     });
 
-    it('iẓhar shafawi (synthesized): untagged sakin meem badges in the shafawi blue', () => {
+    it('iẓhar shafawi: a sakin meem badges in the shafawi blue', () => {
         setRuleEnabled('izhar_shafawi', true); // iẓhar shafawi is opt-in (default off)
         const intervals: PhonemeInterval[] = [
             { phone: 'h', start: 0, end: 0.1 }, { phone: 'u', start: 0.1, end: 0.2 },
@@ -1421,9 +1422,9 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [{ char: 'ه', start: 0, end: 0.2, silent: false }, { char: 'م', start: 0.2, end: 0.4, silent: false }],
             [
                 base(0, [0], { chars: 'ه' }),
-                { chars: 'ُ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
-                base(1, [2], { chars: 'م' }),
-                { chars: 'ْ', role: 'haraka', status: 'present', phonemeIndices: [], sourceLetterIndex: 1, tag: null, shareGroup: null },
+                { chars: 'ُ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: [], shareGroup: null },
+                base(1, [2], { chars: 'م', rules: ['izhar_shafawi'] }),
+                { chars: 'ْ', role: 'haraka', status: 'present', phonemeIndices: [], sourceLetterIndex: 1, rules: [], shareGroup: null },
             ],
             [0, 1, 2],
         );
@@ -1434,32 +1435,8 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(meem.style.boxShadow).toContain('izhar-shafawi');
     });
 
-    it('no iẓhar shafawi for a meem carrying a tanwīn (voweled by its ḍammatan, not sakin)', () => {
-        // بُكْمٌ: the final meem carries a tanwīn (مٌ = "mun"), so it is voweled, never a
-        // sakin iẓhar source. The tanwīn lives in a separate `tanween` cell sharing the
-        // meem's source index — that must count as voweling, else the meem falsely badges
-        // izhar_shafawi. (The tanwīn itself keeps its own izhar-ḥalqī, gated separately.)
-        setRuleEnabled('izhar_shafawi', true);
-        const intervals: PhonemeInterval[] = [
-            { phone: 'm', start: 0, end: 0.2 }, { phone: 'u', start: 0.2, end: 0.3 },
-            { phone: 'n', start: 0.3, end: 0.4 },
-        ];
-        const word = w(
-            [{ char: 'م', start: 0, end: 0.4, silent: false }],
-            [
-                base(0, [0], { chars: 'م' }),
-                { chars: 'ٌ', role: 'tanween', status: 'present', phonemeIndices: [1, 2], sourceLetterIndex: 0, tag: null, shareGroup: null },
-            ],
-            [0, 1, 2],
-        );
-        const { container } = mount([word], intervals);
-        const meem = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter'))
-            .find((e) => e.textContent === 'م')!;
-        expect(meem.style.boxShadow).not.toContain('izhar-shafawi');
-    });
-
     it('no iẓhar for a VOWELED noon (not sakin) nor a mushaddad noon (ghunnah)', () => {
-        // نَ : a fatḥa-voweled nūn → not sakin → no izhar.
+        // نَ : a fatḥa-voweled nūn → not sakin → the producer fires no rule at all.
         const intervals: PhonemeInterval[] = [
             { phone: 'n', start: 0, end: 0.1 }, { phone: 'a', start: 0.1, end: 0.2 },
         ];
@@ -1467,7 +1444,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [{ char: 'ن', start: 0, end: 0.2, silent: false }],
             [
                 base(0, [0], { chars: 'ن' }),
-                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: [], shareGroup: null },
             ],
             [0, 1],
         );
@@ -1476,7 +1453,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
 
     it('ghunnah merger bridge: an uncoloured idgham rule whose receiver sounds a nasal still badges the bridge phoneme', () => {
         // ٱرْكَب مَّعَنَا: ب → مّ (idgham_mutajanisayn_kamil, uncoloured). The receiving
-        // مّ carries meem_ghunnah → its lifted m̃ bridge phoneme borrows that hue so
+        // مّ carries ghunnah → its lifted m̃ bridge phoneme borrows that hue so
         // BOTH letter and bridge phoneme underline.
         const intervals: PhonemeInterval[] = [
             { phone: 'b', start: 0, end: 0.1 },
@@ -1485,14 +1462,14 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         ];
         const wordN = w(
             [{ char: 'ب', start: 0, end: 0.1, silent: true }],
-            [base(0, [], { chars: 'ب', tag: 'idgham_mutajanisayn_kamil' })],
+            [base(0, [], { chars: 'ب', rules: ['idgham_mutajanisayn_kamil'] })],
             [],
         );
         const wordN1 = w(
             [{ char: 'م', start: 0.1, end: 0.5, silent: false }],
             [
-                base(0, [1], { chars: 'مّ', tag: 'meem_ghunnah' }),
-                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [2], sourceLetterIndex: 0, tag: null, shareGroup: null },
+                base(0, [1], { chars: 'مّ', rules: ['ghunnah'] }),
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [2], sourceLetterIndex: 0, rules: [], shareGroup: null },
             ],
             [1, 2],
         );
@@ -1518,8 +1495,8 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [{ char: 'ن', start: 0, end: 0.1, silent: false }, { char: 'ا', start: 0.1, end: 0.2, silent: false }],
             [
                 base(0, [0], { chars: 'ن' }),
-                { chars: 'َ', role: 'haraka', status: 'shortened', phonemeIndices: [1], sourceLetterIndex: 0, tag: 'iltiqaa', shareGroup: null },
-                { chars: 'ا', role: 'madd', status: 'shortened', phonemeIndices: [], sourceLetterIndex: 1, tag: 'iltiqaa', shareGroup: null },
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: ['iltiqaa'], shareGroup: null },
+                { chars: 'ا', role: 'madd', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 1, rules: ['iltiqaa'], shareGroup: null },
             ],
             [0, 1],
         );
@@ -1545,15 +1522,15 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
                 [{ char: 'ض', start: 0, end: 0.2, silent: false }, { char: 'ة', start: 0.2, end: 0.34, silent: false }],
                 [
                     base(0, [0], { chars: 'ض' }),
-                    { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
+                    { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: [], shareGroup: null },
                     base(1, [2], { chars: 'ة' }),
-                    { chars: 'ً', role: 'tanween', status: 'present', phonemeIndices: [3, 4], sourceLetterIndex: 1, tag, shareGroup: null },
+                    { chars: 'ً', role: 'tanween', status: 'present', phonemeIndices: [3, 4], sourceLetterIndex: 1, rules: [tag], shareGroup: null },
                 ],
                 [0, 1, 2, 3, 4],
             );
             return mount([word], intervals).container;
         };
-        for (const tag of ['ikhfaa_tanween', 'iqlab_tanween']) {
+        for (const tag of ['ikhfaa', 'iqlab']) {
             const c = mk(tag);
             expect(c.querySelector<HTMLElement>('.mega-phoneme[data-index="4"]')!.style.boxShadow).not.toBe(''); // nasal
             expect(c.querySelector<HTMLElement>('.mega-phoneme[data-index="3"]')!.style.boxShadow).toBe(''); // vowel
@@ -1561,14 +1538,16 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         }
     });
 
-    // --- Muqattaat per-phoneme rule tags (schema v8, phonemeRuleTags) -------
+    // --- Muqattaat: one cell per written mark ------------------------------
+    // A letter name sounds several phones under one glyph. The shard gives the
+    // letter a `base` cell spanning all of them plus a separate `madd` cell for
+    // the maddah, whose narrower `phonemeIndices` pin the madd to the long vowel
+    // it stretches. The letter row folds the maddah back onto its letter.
 
-    it('muqattaat: each phoneme is coloured by its OWN rule, not the cell madd smeared', () => {
-        // الٓمٓ-style lām letter: لٓ sounds [l, aː, m] where the closing mīm merges
-        // into the next mīm (idgham shafawi). The muqattaat carrier is a `madd` cell
-        // (its glyph + underline come from the cell main tag, madd_lazim); a leading
-        // alif base makes this a real multi-cell word. phonemeRuleTags carries the
-        // per-phoneme rule: l → null (uncoloured), aː → madd_lazim, m → idgham_shafawi.
+    it('muqattaat: the maddah cell pins the madd to the vowel it stretches (الٓمٓ lām)', () => {
+        // الٓمٓ lām sounds [l, aː, m]; the closing mīm merges into the next mīm
+        // (idgham shafawi). The lām base carries both rules over all three phones;
+        // its maddah cell carries madd_lazim over the long vowel alone.
         const intervals: PhonemeInterval[] = [
             { phone: 'ʔ', start: 0, end: 0.05 },  // leading alif (base, uncoloured)
             { phone: 'l', start: 0.05, end: 0.1 },
@@ -1576,61 +1555,69 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             { phone: 'm', start: 0.7, end: 1.0 },
         ];
         const word = w(
-            [{ char: 'ا', start: 0, end: 0.05, silent: false }, { char: 'ل', start: 0.05, end: 1.0, silent: false }],
+            [{ char: 'ا', start: 0, end: 0.05, silent: false }, { char: 'لٓ', start: 0.05, end: 1.0, silent: false }],
             [
                 base(0, [0], { chars: 'ا' }),
                 {
-                    chars: 'لٓ', role: 'madd', status: 'present', phonemeIndices: [1, 2, 3],
-                    sourceLetterIndex: 1, tag: 'madd_lazim', shareGroup: null,
-                    phonemeRuleTags: [null, 'madd_lazim', 'idgham_shafawi'],
+                    chars: 'ل', role: 'base', status: 'present', phonemeIndices: [1, 2, 3],
+                    sourceLetterIndex: 1, rules: ['idgham_shafawi', 'madd_lazim'], shareGroup: null,
+                },
+                {
+                    chars: 'ٓ', role: 'madd', status: 'present', phonemeIndices: [2],
+                    sourceLetterIndex: 1, rules: ['madd_lazim'], shareGroup: null,
                 },
             ],
             [0, 1, 2, 3],
         );
         const { container } = mount([word], intervals);
-        // The letter underline uses the cell main tag (madd_lazim) — on the لٓ carrier.
+        // The maddah folds onto its letter — one لٓ cell, not a bare ٓ beside it.
+        const letters = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter'))
+            .map((e) => e.textContent);
+        expect(letters).toEqual(['ا', 'لٓ']);
         const carrier = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter'))
             .find((e) => e.textContent === 'لٓ')!;
         expect(carrier.style.boxShadow).not.toBe('');
-        expect(carrier.style.boxShadow).toContain('madd-lazim');
-        // Per-phoneme colours: l uncoloured, aː = madd-lazim hue, m = idgham-shafawi hue.
+        // The letter takes the FIRST colourable rule the producer listed.
+        expect(carrier.style.boxShadow).toContain('idgham-shafawi');
+        // Per-phoneme: the long vowel is the maddah cell's, the rest the letter's.
         const ph = (i: number) => container.querySelector<HTMLElement>(`.mega-phoneme[data-index="${i}"]`)!;
-        expect(ph(1).style.boxShadow).toBe('');
-        expect(ph(2).style.boxShadow).not.toBe('');
         expect(ph(2).style.boxShadow).toContain('madd-lazim');
-        expect(ph(3).style.boxShadow).not.toBe('');
-        const shafawi = ph(3).style.boxShadow;
-        expect(shafawi).toContain('idgham-shafawi');
+        expect(ph(3).style.boxShadow).toContain('idgham-shafawi');
         // The merged nasal hue is DISTINCT from the long-vowel madd hue.
-        expect(shafawi).not.toBe(ph(2).style.boxShadow);
+        expect(ph(3).style.boxShadow).not.toBe(ph(2).style.boxShadow);
     });
 
-    it('muqattaat: per-phoneme tags each colour their own phoneme (madd ṭabīʿī off by default)', () => {
-        // A muqattaat cell colours each phoneme by its OWN per-phoneme rule. qalqala
-        // and ikhfaa are on by default; madd ṭabīʿī is a default-off rule, so its
-        // phoneme stays bare unless the user enables it.
+    it('muqattaat: a default-off rule leaves its cells bare until enabled (طه)', () => {
+        // طه = ṭā · hā, two 2-count letters. ط is istiʿlāʾ → tafkheem + madd ṭabīʿī;
+        // ه is light → madd ṭabīʿī alone, which is off by default.
         const intervals: PhonemeInterval[] = [
-            { phone: 'd', start: 0, end: 0.1 },     // qalqala consonant (kāf/sād family stand-in)
-            { phone: 'a:', start: 0.1, end: 0.5 },  // ṭabīʿī long vowel (default-off rule)
-            { phone: 'n', start: 0.5, end: 0.8 },   // ikhfaa nasal
+            { phone: 'tˤ', start: 0, end: 0.2 }, { phone: 'aˤ:', start: 0.2, end: 0.7 },
+            { phone: 'h', start: 0.7, end: 0.8 }, { phone: 'a:', start: 0.8, end: 1.2 },
         ];
         const word = w(
-            [{ char: 'د', start: 0, end: 0.8, silent: false }],
+            [{ char: 'ط', start: 0, end: 0.7, silent: false }, { char: 'ه', start: 0.7, end: 1.2, silent: false }],
             [
-                base(0, [], { chars: 'د', status: 'dropped' }), // anchor base; the carrier sounds
-                {
-                    chars: 'دٓ', role: 'madd', status: 'present', phonemeIndices: [0, 1, 2],
-                    sourceLetterIndex: 0, tag: 'madd_tabii', shareGroup: null,
-                    phonemeRuleTags: ['qalqala_sughra', 'madd_tabii', 'ikhfaa_noon'],
-                },
+                { chars: 'ط', role: 'base', status: 'present', phonemeIndices: [0, 1], sourceLetterIndex: 0, rules: ['madd_tabii', 'tafkheem'], shareGroup: null },
+                { chars: 'ه', role: 'base', status: 'present', phonemeIndices: [2, 3], sourceLetterIndex: 1, rules: ['madd_tabii'], shareGroup: null },
             ],
-            [0, 1, 2],
+            [0, 1, 2, 3],
         );
-        const { container } = mount([word], intervals);
-        const ph = (i: number) => container.querySelector<HTMLElement>(`.mega-phoneme[data-index="${i}"]`)!;
-        expect(ph(0).style.boxShadow).toContain('qalqala'); // qalqala ṣughrā coloured
-        expect(ph(1).style.boxShadow).toBe('');             // madd ṭabīʿī off by default
-        expect(ph(2).style.boxShadow).toContain('ikhfaa');  // ikhfaa coloured
+        const letter = (c: HTMLElement, ch: string) =>
+            Array.from(c.querySelectorAll<HTMLElement>('.mega-letter')).find((e) => e.textContent === ch)!;
+        // madd ṭabīʿī off: ط keeps only its tafkheem bar, ه draws nothing.
+        const off = mount([word], intervals).container;
+        expect(letter(off, 'ط').style.boxShadow).toContain('tafkheem');
+        expect(letter(off, 'ط').style.boxShadow).not.toContain('madd');
+        expect(letter(off, 'ه').style.boxShadow).toBe('');
+        cleanup();
+        // madd ṭabīʿī on: the 2-count bar appears under the tafkheem bar on ط, and
+        // alone on ه.
+        setRuleEnabled('madd_tabii', true);
+        const on = mount([word], intervals).container;
+        expect(letter(on, 'ط').style.boxShadow).toContain('madd-tabii');
+        expect(letter(on, 'ط').style.boxShadow).toContain('tafkheem');
+        expect(letter(on, 'ه').style.boxShadow).toContain('madd-tabii');
+        expect(letter(on, 'ه').style.boxShadow).not.toContain('tafkheem');
     });
 
     it('muqattaat qalqala on a consonant rides its render-only Q echo, not the consonant', () => {
@@ -1640,11 +1627,9 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         const word = w(
             [{ char: 'دٓ', start: 0, end: 0.15, silent: false }],
             [
-                base(0, [], { chars: 'د', status: 'dropped' }),
                 {
-                    chars: 'دٓ', role: 'madd', status: 'present', phonemeIndices: [0],
-                    sourceLetterIndex: 0, tag: 'madd_lazim', shareGroup: null,
-                    phonemeRuleTags: ['qalqala_kubra'],
+                    chars: 'دٓ', role: 'base', status: 'present', phonemeIndices: [0],
+                    sourceLetterIndex: 0, rules: ['qalqala_kubra'], shareGroup: null,
                 },
             ],
             [0, 1], // the consonant + its render-only Q echo
@@ -1658,162 +1643,130 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(ph(1)!.style.getPropertyValue('--tj-kubra')).toContain('qalqala');
     });
 
-    it('muqattaat with NO base cell (كٓهيعٓصٓ-style) renders carrier underlines + per-cell phonemes', () => {
-        // Muqattaat not led by alif (كٓهيعٓصٓ, عٓسٓقٓ, صٓ, قٓ …) have ZERO base cells —
-        // every letter is a `madd` carrier. They must still render through the main
-        // per-cell path (carrier glyph + madd underline + phonemes under their own
-        // cell), NOT the synthetic fallback that drops real carriers. Regression for
-        // the all-`madd` anchor case (alif-led الٓمٓ has a base, so it never hit this).
-        const intervals: PhonemeInterval[] = [
-            { phone: 'k', start: 0, end: 0.1 },
-            { phone: 'a:', start: 0.1, end: 0.6 },   // kāf long vowel → madd_lazim
-            { phone: 'f', start: 0.6, end: 0.7 },
-            { phone: 'ʕ', start: 0.7, end: 0.8 },
-            { phone: 'a', start: 0.8, end: 0.85 },
-            { phone: 'j', start: 0.85, end: 1.2 },    // ʿayn leen-glide → madd_lazim
-            { phone: 'ŋ', start: 1.2, end: 1.5 },     // ʿayn ikhfaa nasal → ikhfaa_noon
-        ];
-        const word = w(
-            [{ char: 'ك', start: 0, end: 0.7, silent: false }, { char: 'ع', start: 0.7, end: 1.5, silent: false }],
-            [
-                {
-                    chars: 'كٓ', role: 'madd', status: 'present', phonemeIndices: [0, 1, 2],
-                    sourceLetterIndex: 0, tag: 'madd_lazim', shareGroup: null,
-                    phonemeRuleTags: [null, 'madd_lazim', null],
-                },
-                {
-                    chars: 'عٓ', role: 'madd', status: 'present', phonemeIndices: [3, 4, 5, 6],
-                    sourceLetterIndex: 1, tag: 'madd_lazim', shareGroup: null,
-                    phonemeRuleTags: [null, null, 'madd_lazim', 'ikhfaa_noon'],
-                },
-            ],
-            [0, 1, 2, 3, 4, 5, 6],
-        );
-        const { container } = mount([word], intervals);
-        const letter = (ch: string) =>
-            Array.from(container.querySelectorAll<HTMLElement>('.mega-letter')).find((e) => e.textContent === ch)!;
-        // Both carriers render with their madd-lazim underline (NOT dropped to a tag-less fallback).
-        expect(letter('كٓ').style.boxShadow).not.toBe('');
-        expect(letter('كٓ').style.boxShadow).toContain('madd-lazim');
-        expect(letter('عٓ').style.boxShadow).not.toBe('');
-        expect(letter('عٓ').style.boxShadow).toContain('madd-lazim');
-        // Per-phoneme: kāf aː + ʿayn leen-glide j = madd-lazim; ŋ = ikhfaa; consonants uncoloured.
-        const ph = (i: number) => container.querySelector<HTMLElement>(`.mega-phoneme[data-index="${i}"]`)!;
-        expect(ph(0).style.boxShadow).toBe(''); // k
-        expect(ph(1).style.boxShadow).toContain('madd-lazim'); // aː
-        expect(ph(2).style.boxShadow).toBe(''); // f
-        expect(ph(3).style.boxShadow).toBe(''); // ʕ
-        expect(ph(5).style.boxShadow).toContain('madd-lazim'); // j leen-glide
-        expect(ph(6).style.boxShadow).toContain('ikhfaa'); // ŋ
-    });
-
-    it('muqattaat 2-count letter (طه): heavy ط glyph BASE+tafkheem, light ه glyph bare, vowels differ', () => {
-        // طه = ṭā · hā. ط is istiʿlāʾ → its glyph is a BASE cell carrying secondaryTags
-        // tafkheem (mufakhkham) but NO madd bar; its heavy vowel aˤ: stacks tafkheem
-        // above madd. ه is light → no glyph bar, and its plain a: is madd_tabii only.
-        setRuleEnabled('madd_tabii', true); // surface the 2-count vowel madd
-        const intervals: PhonemeInterval[] = [
-            { phone: 'tˤ', start: 0, end: 0.2 }, { phone: 'aˤ:', start: 0.2, end: 0.7 },
-            { phone: 'h', start: 0.7, end: 0.8 }, { phone: 'a:', start: 0.8, end: 1.2 },
-        ];
-        const word = w(
-            [{ char: 'ط', start: 0, end: 0.7, silent: false }, { char: 'ه', start: 0.7, end: 1.2, silent: false }],
-            [
-                { chars: 'ط', role: 'base', status: 'present', phonemeIndices: [0, 1], sourceLetterIndex: 0, tag: null, shareGroup: null, phonemeRuleTags: ['tafkheem', 'madd_tabii'], secondaryTags: ['tafkheem'] },
-                { chars: 'ه', role: 'base', status: 'present', phonemeIndices: [2, 3], sourceLetterIndex: 1, tag: null, shareGroup: null, phonemeRuleTags: [null, 'madd_tabii'], secondaryTags: [] },
-            ],
-            [0, 1, 2, 3],
-        );
-        const { container } = mount([word], intervals);
-        const letter = (ch: string) =>
-            Array.from(container.querySelectorAll<HTMLElement>('.mega-letter')).find((e) => e.textContent === ch)!;
-        const ph = (i: number) => container.querySelector<HTMLElement>(`.mega-phoneme[data-index="${i}"]`)!;
-        // ط glyph: heavy → tafkheem, but never a madd bar (2-count lives on the phoneme).
-        expect(letter('ط').style.boxShadow).toContain('tafkheem');
-        expect(letter('ط').style.boxShadow).not.toContain('madd');
-        // ه glyph: light 2-count → no underline at all.
-        expect(letter('ه').style.boxShadow).toBe('');
-        // tˤ = tafkheem; aˤ: = madd-tabii + tafkheem stacked.
-        expect(ph(0).style.boxShadow).toContain('tafkheem');
-        expect(ph(1).style.boxShadow).toContain('madd-tabii');
-        expect(ph(1).style.boxShadow).toContain('tafkheem');
-        // ه's light a: = madd-tabii only, no tafkheem.
-        expect(ph(3).style.boxShadow).toContain('madd-tabii');
-        expect(ph(3).style.boxShadow).not.toContain('tafkheem');
-    });
-
-    it('muqattaat heavy rāʾ (الٓر): rˤ tafkheem + heavy vowel madd-tabii stacked tafkheem', () => {
-        setRuleEnabled('madd_tabii', true);
-        const intervals: PhonemeInterval[] = [
-            { phone: 'rˤ', start: 0, end: 0.2 }, { phone: 'aˤ:', start: 0.2, end: 0.7 },
-        ];
-        const word = w(
-            [{ char: 'ر', start: 0, end: 0.7, silent: false }],
-            [{ chars: 'ر', role: 'base', status: 'present', phonemeIndices: [0, 1], sourceLetterIndex: 0, tag: null, shareGroup: null, phonemeRuleTags: ['tafkheem', 'madd_tabii'], secondaryTags: ['tafkheem'] }],
-            [0, 1],
-        );
-        const { container } = mount([word], intervals);
-        const ph = (i: number) => container.querySelector<HTMLElement>(`.mega-phoneme[data-index="${i}"]`)!;
-        expect(ph(0).style.boxShadow).toContain('tafkheem');
-        expect(ph(1).style.boxShadow).toContain('madd-tabii');
-        expect(ph(1).style.boxShadow).toContain('tafkheem');
-    });
-
-    it('muqattaat ikhfaa nasal before a heavy istiʿlāʾ letter stacks tafkheem (عٓسٓقٓ سٓ ŋ before قٓ q)', () => {
-        // سٓ ends in an ikhfaa ŋ; the next letter is قٓ (q, heavy) → the nasal is heavy
-        // ikhfaa: ikhfaa underline + a stacked tafkheem bar, display ŋˤ.
-        const intervals: PhonemeInterval[] = [
-            { phone: 's', start: 0, end: 0.1 }, { phone: 'i:', start: 0.1, end: 0.5 },
-            { phone: 'ŋ', start: 0.5, end: 0.8 }, { phone: 'q', start: 0.8, end: 0.9 },
-            { phone: 'aˤ:', start: 0.9, end: 1.3 }, { phone: 'f', start: 1.3, end: 1.4 },
-        ];
-        const word = w(
-            [{ char: 'س', start: 0, end: 0.8, silent: false }, { char: 'ق', start: 0.8, end: 1.4, silent: false }],
-            [
-                { chars: 'سٓ', role: 'madd', status: 'present', phonemeIndices: [0, 1, 2], sourceLetterIndex: 0, tag: 'madd_lazim', shareGroup: null, phonemeRuleTags: [null, 'madd_lazim', 'ikhfaa_noon'] },
-                { chars: 'قٓ', role: 'madd', status: 'present', phonemeIndices: [3, 4, 5], sourceLetterIndex: 1, tag: 'madd_lazim', shareGroup: null, phonemeRuleTags: ['tafkheem', 'madd_lazim', null], secondaryTags: ['tafkheem'] },
-            ],
-            [0, 1, 2, 3, 4, 5],
-        );
-        const { container } = mount([word], intervals);
-        const ph = (i: number) => container.querySelector<HTMLElement>(`.mega-phoneme[data-index="${i}"]`)!;
-        // ŋ before q → heavy ikhfaa: ikhfaa underline + stacked tafkheem.
-        expect(ph(2).style.boxShadow).toContain('ikhfaa');
-        expect(ph(2).style.boxShadow).toContain('tafkheem');
-        // qāf consonant: tafkheem; its heavy vowel: madd-lazim + tafkheem stacked.
-        expect(ph(3).style.boxShadow).toContain('tafkheem');
-        expect(ph(4).style.boxShadow).toContain('madd-lazim');
-        expect(ph(4).style.boxShadow).toContain('tafkheem');
-    });
-
-    it('muqattaat: a buried heavy-ikhfaa nasal does NOT tafkheem-bar the bare letter glyph', () => {
-        // عٓ (in كٓهيعٓصٓ) ends in ŋ before ṣād (sˤ, heavy) → the ŋˤ heaviness shows on the
-        // phoneme row only; the bare ع glyph keeps just its madd-lazim, no tafkheem bar.
+    it('muqattaat with no haraka cells (عٓسٓقٓ-style) renders every letter + its underline', () => {
+        // عٓسٓقٓ carries no ḥaraka at all — every letter is a `base` cell followed by
+        // its maddah. They must render through the main per-cell path (letter glyph +
+        // its underline + phonemes under their own cell), NOT the synthetic fallback.
         const intervals: PhonemeInterval[] = [
             { phone: 'ʕ', start: 0, end: 0.1 }, { phone: 'a', start: 0.1, end: 0.15 },
             { phone: 'j', start: 0.15, end: 0.5 }, { phone: 'ŋ', start: 0.5, end: 0.8 },
-            { phone: 'sˤ', start: 0.8, end: 1.0 }, { phone: 'aˤ:', start: 1.0, end: 1.4 },
+            { phone: 's', start: 0.8, end: 0.9 }, { phone: 'i:', start: 0.9, end: 1.3 },
+            { phone: 'ŋˤ', start: 1.3, end: 1.6 }, { phone: 'q', start: 1.6, end: 1.7 },
         ];
         const word = w(
-            [{ char: 'ع', start: 0, end: 0.8, silent: false }, { char: 'ص', start: 0.8, end: 1.4, silent: false }],
             [
-                { chars: 'عٓ', role: 'madd', status: 'present', phonemeIndices: [0, 1, 2, 3], sourceLetterIndex: 0, tag: 'madd_lazim', shareGroup: null, phonemeRuleTags: [null, null, 'madd_lazim', 'ikhfaa_noon'] },
-                { chars: 'صٓ', role: 'madd', status: 'present', phonemeIndices: [4, 5], sourceLetterIndex: 1, tag: 'madd_lazim', shareGroup: null, phonemeRuleTags: ['tafkheem', 'madd_lazim'], secondaryTags: ['tafkheem'] },
+                { char: 'عٓ', start: 0, end: 0.8, silent: false },
+                { char: 'سٓ', start: 0.8, end: 1.6, silent: false },
+                { char: 'قٓ', start: 1.6, end: 1.7, silent: false },
             ],
-            [0, 1, 2, 3, 4, 5],
+            [
+                { chars: 'ع', role: 'base', status: 'present', phonemeIndices: [0, 1, 2, 3], sourceLetterIndex: 0, rules: ['ikhfaa'], shareGroup: null },
+                { chars: 'ٓ', role: 'madd', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 0, rules: ['orthographic_silence'], shareGroup: null },
+                { chars: 'س', role: 'base', status: 'present', phonemeIndices: [4, 5, 6], sourceLetterIndex: 1, rules: ['ikhfaa', 'madd_lazim'], shareGroup: null },
+                { chars: 'ٓ', role: 'madd', status: 'present', phonemeIndices: [5], sourceLetterIndex: 1, rules: ['madd_lazim'], shareGroup: null },
+                { chars: 'ق', role: 'base', status: 'present', phonemeIndices: [7], sourceLetterIndex: 2, rules: ['madd_lazim', 'tafkheem'], shareGroup: null },
+                { chars: 'ٓ', role: 'madd', status: 'present', phonemeIndices: [7], sourceLetterIndex: 2, rules: ['madd_lazim', 'tafkheem'], shareGroup: null },
+            ],
+            [0, 1, 2, 3, 4, 5, 6, 7],
         );
         const { container } = mount([word], intervals);
-        const letter = (ch: string) =>
-            Array.from(container.querySelectorAll<HTMLElement>('.mega-letter')).find((e) => e.textContent === ch)!;
-        // ع glyph: madd-lazim only — the buried heavy ŋˤ does NOT add a letter tafkheem bar.
-        expect(letter('عٓ').style.boxShadow).toContain('madd-lazim');
-        expect(letter('عٓ').style.boxShadow).not.toContain('tafkheem');
-        // ص glyph: heavy istiʿlāʾ → madd-lazim + its own secondaryTags tafkheem.
-        expect(letter('صٓ').style.boxShadow).toContain('tafkheem');
-        // The heavy ikhfaa ŋ still stacks tafkheem on the PHONEME row.
+        const letters = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter'));
+        // Three letters, each with its maddah folded on — no bare ٓ cell.
+        expect(letters.map((e) => e.textContent)).toEqual(['عٓ', 'سٓ', 'قٓ']);
+        const letter = (ch: string) => letters.find((e) => e.textContent === ch)!;
+        expect(letter('عٓ').style.boxShadow).toContain('ikhfaa');
+        expect(letter('سٓ').style.boxShadow).toContain('ikhfaa');
+        expect(letter('قٓ').style.boxShadow).toContain('madd-lazim');
+        // Per-phoneme: سٓ's long vowel takes the maddah cell's madd, its nasal the
+        // letter's ikhfaa.
         const ph = (i: number) => container.querySelector<HTMLElement>(`.mega-phoneme[data-index="${i}"]`)!;
-        expect(ph(3).style.boxShadow).toContain('ikhfaa');
-        expect(ph(3).style.boxShadow).toContain('tafkheem');
+        expect(ph(5).style.boxShadow).toContain('madd-lazim');
+        expect(ph(6).style.boxShadow).toContain('ikhfaa');
+    });
+
+    it('a heavy ikhfaa nasal stacks tafkheem, whichever nasal token the shard stores', () => {
+        // An ikhfaa ŋ before a heavy istiʿlāʾ letter is articulated heavy: ikhfaa
+        // underline + a stacked tafkheem bar. A shard may store the nasal already
+        // heavy (ŋˤ) or plain (ŋ, heavied display-side) — both must draw the bar.
+        const build = (nasal: string) => {
+            const intervals: PhonemeInterval[] = [
+                { phone: 's', start: 0, end: 0.1 }, { phone: 'i:', start: 0.1, end: 0.5 },
+                { phone: nasal, start: 0.5, end: 0.8 }, { phone: 'q', start: 0.8, end: 0.9 },
+            ];
+            const word = w(
+                [{ char: 'سٓ', start: 0, end: 0.8, silent: false }, { char: 'قٓ', start: 0.8, end: 0.9, silent: false }],
+                [
+                    { chars: 'س', role: 'base', status: 'present', phonemeIndices: [0, 1, 2], sourceLetterIndex: 0, rules: ['ikhfaa', 'madd_lazim'], shareGroup: null },
+                    { chars: 'ٓ', role: 'madd', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: ['madd_lazim'], shareGroup: null },
+                    { chars: 'ق', role: 'base', status: 'present', phonemeIndices: [3], sourceLetterIndex: 1, rules: ['tafkheem'], shareGroup: null },
+                ],
+                [0, 1, 2, 3],
+            );
+            return mount([word], intervals).container;
+        };
+        for (const nasal of ['ŋ', 'ŋˤ']) {
+            const c = build(nasal);
+            const nasalBox = c.querySelector<HTMLElement>('.mega-phoneme[data-index="2"]')!;
+            expect(nasalBox.style.boxShadow).toContain('ikhfaa');
+            expect(nasalBox.style.boxShadow).toContain('tafkheem');
+            cleanup();
+        }
+    });
+
+    // --- Special rules (the full-cell border channel) -----------------------
+
+    it('imala rings the whole cell instead of underlining it (مَجْر۪ىهَا)', () => {
+        // ر۪ + ى sound one imāla vowel eː. Both cells carry [madd_tabii, imala]; madd
+        // ṭabīʿī is off by default, so the ring is all that shows — and it draws as a
+        // full inset border, not a bottom bar.
+        const intervals: PhonemeInterval[] = [
+            { phone: 'r', start: 0, end: 0.1 }, { phone: 'e:', start: 0.1, end: 0.6 },
+        ];
+        const word = w(
+            [{ char: 'ر۪', start: 0, end: 0.1, silent: false }, { char: 'ى', start: 0.1, end: 0.6, silent: false }],
+            [
+                { chars: 'ر۪', role: 'base', status: 'present', phonemeIndices: [0], sourceLetterIndex: 0, rules: ['madd_tabii', 'imala'], shareGroup: null },
+                { chars: 'ى', role: 'madd', status: 'present', phonemeIndices: [1], sourceLetterIndex: 1, rules: ['madd_tabii', 'imala'], shareGroup: null },
+            ],
+            [0, 1],
+        );
+        const { container } = mount([word], intervals);
+        const raa = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter'))
+            .find((e) => e.textContent === 'ر۪')!;
+        expect(raa.style.boxShadow).toBe('inset 0 0 0 2px var(--tj-special)');
+        // the eː phoneme rings too
+        const vowel = container.querySelector<HTMLElement>('.mega-phoneme[data-index="1"]')!;
+        expect(vowel.style.boxShadow).toBe('inset 0 0 0 2px var(--tj-special)');
+        // ...and the ring survives beside a bar once the madd is switched on
+        cleanup();
+        setRuleEnabled('madd_tabii', true);
+        const on = mount([word], intervals).container;
+        const raaOn = Array.from(on.querySelectorAll<HTMLElement>('.mega-letter'))
+            .find((e) => e.textContent === 'ر۪')!;
+        expect(raaOn.style.boxShadow).toBe(
+            'inset 0 -2px 0 var(--tj-madd-tabii), inset 0 0 0 2px var(--tj-special)',
+        );
+    });
+
+    it('tashil / ishmam / ibdal al-hamzah all ring their cell under one toggle', () => {
+        const ring = (rules: string[], chars: string) => {
+            const intervals: PhonemeInterval[] = [{ phone: 'x', start: 0, end: 0.2 }];
+            const word = w(
+                [{ char: chars, start: 0, end: 0.2, silent: false }],
+                [{ chars, role: 'base', status: 'present', phonemeIndices: [0], sourceLetterIndex: 0, rules, shareGroup: null }],
+                [0],
+            );
+            const c = mount([word], intervals).container;
+            const box = Array.from(c.querySelectorAll<HTMLElement>('.mega-letter'))
+                .find((e) => e.textContent === chars)!.style.boxShadow;
+            cleanup();
+            return box;
+        };
+        expect(ring(['tashil'], 'ا۬')).toBe('inset 0 0 0 2px var(--tj-special)');
+        expect(ring(['ishmam'], 'م')).toBe('inset 0 0 0 2px var(--tj-special)');
+        expect(ring(['ibdal_hamza'], 'ئ')).toBe('inset 0 0 0 2px var(--tj-special)');
+        setRuleEnabled('special', false);
+        expect(ring(['tashil'], 'ا۬')).toBe('');
     });
 
     // --- Cross-word merger carrier timing (idgham / shafawi) ----------------
@@ -1832,13 +1785,13 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [{ char: 'د', start: 0, end: 0.22, silent: false }],
             [
                 base(0, [0], { chars: 'د' }),
-                { chars: 'ً', role: 'tanween', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: 'idgham_ghunnah_tanween', shareGroup: 4 },
+                { chars: 'ً', role: 'tanween', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: ['idgham_bi_ghunnah'], shareGroup: 4 },
             ],
             [0, 1],
         );
         const carrier = { ...w(
             [{ char: 'م', start: 0.22, end: 0.88, silent: false }],
-            [{ chars: 'مّ', role: 'base', status: 'present', phonemeIndices: [2], sourceLetterIndex: 0, tag: null, shareGroup: 4 }],
+            [{ chars: 'مّ', role: 'base', status: 'present', phonemeIndices: [2], sourceLetterIndex: 0, rules: [], shareGroup: 4 }],
             [2],
         ), location: '1:2:2' };
         const { container } = mount([src, carrier], intervals);
@@ -1866,12 +1819,12 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         ];
         const src = w(
             [{ char: 'م', start: 0, end: 0.59, silent: false }],
-            [{ chars: 'م', role: 'base', status: 'present', phonemeIndices: [0], sourceLetterIndex: 0, tag: 'idgham_shafawi', shareGroup: 3 }],
+            [{ chars: 'م', role: 'base', status: 'present', phonemeIndices: [0], sourceLetterIndex: 0, rules: ['idgham_shafawi'], shareGroup: 3 }],
             [0],
         );
         const recv = { ...w(
             [{ char: 'م', start: 0.59, end: 0.66, silent: false }],
-            [{ chars: 'م', role: 'base', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: 3 }],
+            [{ chars: 'م', role: 'base', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: [], shareGroup: 3 }],
             [1],
         ), location: '1:2:2' };
         const { container } = mount([src, recv], intervals);
@@ -1944,9 +1897,9 @@ describe('UnifiedDisplay — per-grapheme phoneme alignment', () => {
             [{ char: 'ه', start: 0, end: 0.3, silent: false }, { char: 'و', start: 0.3, end: 1.0, silent: false }],
             [
                 base(0, [0], { chars: 'ه' }),
-                { chars: 'ُ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: 0 },
-                { chars: 'و', role: 'madd', status: 'present', phonemeIndices: [1], sourceLetterIndex: 1, tag: 'madd_arid_lissukun', shareGroup: 0 },
-                { chars: 'َ', role: 'haraka', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 1, tag: null, shareGroup: null },
+                { chars: 'ُ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: [], shareGroup: 0 },
+                { chars: 'و', role: 'madd', status: 'present', phonemeIndices: [1], sourceLetterIndex: 1, rules: ['madd_arid_lil_sukun'], shareGroup: 0 },
+                { chars: 'َ', role: 'haraka', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 1, rules: [], shareGroup: null },
             ],
             [0, 1],
         );
@@ -1984,9 +1937,9 @@ describe('UnifiedDisplay — per-grapheme phoneme alignment', () => {
             [{ char: 'ق', start: 0, end: 0.2, silent: false }, { char: 'ل', start: 0.2, end: 0.3, silent: false }],
             [
                 base(0, [0]),
-                { chars: 'ُ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
+                { chars: 'ُ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: [], shareGroup: null },
                 base(1, [2]),
-                { chars: 'ْ', role: 'haraka', status: 'present', phonemeIndices: [], sourceLetterIndex: 1, tag: null, shareGroup: null }, // sukūn
+                { chars: 'ْ', role: 'haraka', status: 'present', phonemeIndices: [], sourceLetterIndex: 1, rules: [], shareGroup: null }, // sukūn
             ],
             [0, 1, 2],
         );
@@ -2029,7 +1982,7 @@ describe('UnifiedDisplay — per-grapheme phoneme alignment', () => {
             [{ char: 'م', start: 0, end: 0.2, silent: false }],
             [
                 base(0, [0]),
-                { chars: 'ٌ', role: 'tanween', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 0, tag: null, shareGroup: null },
+                { chars: 'ٌ', role: 'tanween', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 0, rules: [], shareGroup: null },
             ],
             [0],
         );
@@ -2053,8 +2006,8 @@ describe('UnifiedDisplay — per-grapheme phoneme alignment', () => {
             [{ char: 'م', start: 0, end: 0.1, silent: false }, { char: 'ي', start: 0.1, end: 0.4, silent: false }],
             [
                 base(0, [0]),
-                { chars: 'ِ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: 1 },
-                { chars: 'ي', role: 'madd', status: 'present', phonemeIndices: [1], sourceLetterIndex: 1, tag: null, shareGroup: 1 },
+                { chars: 'ِ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: [], shareGroup: 1 },
+                { chars: 'ي', role: 'madd', status: 'present', phonemeIndices: [1], sourceLetterIndex: 1, rules: [], shareGroup: 1 },
             ],
             [0, 1],
         );
@@ -2083,7 +2036,7 @@ describe('UnifiedDisplay — per-grapheme phoneme alignment', () => {
             [{ char: 'ق', start: 0, end: 0.2, silent: false }, { char: 'ل', start: 0.2, end: 0.3, silent: false }],
             [
                 base(0, [0]),
-                { chars: 'ُ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
+                { chars: 'ُ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: [], shareGroup: null },
                 base(1, [2]),
             ],
             [0, 1, 2],
@@ -2106,8 +2059,8 @@ describe('UnifiedDisplay — per-grapheme phoneme alignment', () => {
         const word = w(
             [{ char: 'ق', start: 0, end: 0.15, silent: false }, { char: 'د', start: 0.15, end: 0.3, silent: false }],
             [
-                base(0, [0], { tag: 'qalqala_sughra' }), // ق owns only q (idx 0), not the Q echo
-                { chars: 'ْ', role: 'haraka', status: 'present', phonemeIndices: [], sourceLetterIndex: 0, tag: null, shareGroup: null }, // sukūn
+                base(0, [0], { rules: ['qalqala_sughra'] }), // ق owns only q (idx 0), not the Q echo
+                { chars: 'ْ', role: 'haraka', status: 'present', phonemeIndices: [], sourceLetterIndex: 0, rules: [], shareGroup: null }, // sukūn
                 base(1, [2]), // د owns d (idx 2)
             ],
             [0, 1, 2], // Q (idx 1) is rendered but indexed by no cell
@@ -2129,8 +2082,8 @@ describe('UnifiedDisplay — per-grapheme phoneme alignment', () => {
         const word = w(
             [{ char: 'ن', start: 0, end: 0.15, silent: false }, { char: 'ص', start: 0.15, end: 0.4, silent: false }],
             [
-                base(0, [0], { chars: 'ن', tag: 'ikhfaa_noon' }),
-                base(1, [1], { chars: 'ص', tag: 'tafkheem' }),
+                base(0, [0], { chars: 'ن', rules: ['ikhfaa'] }),
+                base(1, [1], { chars: 'ص', rules: ['tafkheem'] }),
             ],
             [0, 1],
         );
@@ -2151,7 +2104,7 @@ describe('UnifiedDisplay — per-grapheme phoneme alignment', () => {
         ];
         const word = w(
             [{ char: 'ن', start: 0, end: 0.15, silent: false }, { char: 'ت', start: 0.15, end: 0.4, silent: false }],
-            [base(0, [0], { chars: 'ن', tag: 'ikhfaa_noon' }), base(1, [1], { chars: 'ت' })],
+            [base(0, [0], { chars: 'ن', rules: ['ikhfaa'] }), base(1, [1], { chars: 'ت' })],
             [0, 1],
         );
         const { container } = mount([word], iv);
@@ -2166,7 +2119,7 @@ describe('UnifiedDisplay — per-grapheme phoneme alignment', () => {
         const iv: PhonemeInterval[] = [{ phone: 'll', start: 0, end: 0.3 }];
         const src = w(
             [{ char: 'ل', start: 0, end: 0, silent: true }],
-            [base(0, [], { chars: 'ل', tag: 'idgham_mutamathilayn', shareGroup: 3 })],
+            [base(0, [], { chars: 'ل', rules: ['idgham_mutamathilayn'], shareGroup: 3 })],
             [],
         );
         const recv = w(
@@ -2186,7 +2139,7 @@ describe('UnifiedDisplay — per-grapheme phoneme alignment', () => {
         const iv: PhonemeInterval[] = [{ phone: 'm̃', start: 0, end: 0.3 }];
         const word = w(
             [{ char: 'م', start: 0, end: 0.3, silent: false }],
-            [base(0, [0], { chars: 'مّ', tag: 'meem_ghunnah', secondaryTags: ['idgham_mutajanisayn_kamil'] })],
+            [base(0, [0], { chars: 'مّ', rules: ['ghunnah', 'idgham_mutajanisayn_kamil'] })],
             [0],
         );
         const { container } = mount([word], iv);
@@ -2208,8 +2161,8 @@ describe('UnifiedDisplay — per-grapheme phoneme alignment', () => {
         const word = w(
             [{ char: 'ط', start: 0, end: 0.15, silent: false }, { char: 'ت', start: 0.15, end: 0.3, silent: false }],
             [
-                base(0, [0], { chars: 'ط', tag: 'idgham_mutajanisayn_naqis', secondaryTags: ['tafkheem'] }),
-                base(1, [1], { chars: 'ت', secondaryTags: ['idgham_mutajanisayn_naqis'] }),
+                base(0, [0], { chars: 'ط', rules: ['idgham_mutajanisayn_naqis', 'tafkheem'] }),
+                base(1, [1], { chars: 'ت' , rules: ['idgham_mutajanisayn_naqis'] }),
             ],
             [0, 1],
         );
@@ -2230,7 +2183,7 @@ describe('UnifiedDisplay — per-grapheme phoneme alignment', () => {
         expect(ph[1]!.style.boxShadow).not.toContain('var(--tj-tafkheem)');
     });
 
-    it('mutamathilayn TARGET underlines via its secondary tag, source co-lights, bridge carries it (بَّيْنَكُمْ)', () => {
+    it('mutamathilayn TARGET underlines via its secondary rules: [tag], source co-lights, bridge carries it (بَّيْنَكُمْ)', () => {
         // 2:282 وَلْيَكْتُب بَّيْنَكُمْ: source ب is co-lit (share group) + tagged; the receiver
         // بّ carries the rule as a SECONDARY tag (uniform with the other idghams), so the
         // target letter underlines without depending on the share-group path alone. The
@@ -2238,12 +2191,12 @@ describe('UnifiedDisplay — per-grapheme phoneme alignment', () => {
         const iv: PhonemeInterval[] = [{ phone: 'bb', start: 0, end: 0.3, bridge: 'idgham_mutamathilayn' }];
         const src = w(
             [{ char: 'ب', start: 0, end: 0, silent: true }],
-            [base(0, [], { chars: 'ب', tag: 'idgham_mutamathilayn', shareGroup: 0 })],
+            [base(0, [], { chars: 'ب', rules: ['idgham_mutamathilayn'], shareGroup: 0 })],
             [],
         );
         const recv = w(
             [{ char: 'ب', start: 0, end: 0.3, silent: false }],
-            [base(0, [0], { chars: 'بّ', shareGroup: 0, secondaryTags: ['idgham_mutamathilayn'] })],
+            [base(0, [0], { chars: 'بّ', shareGroup: 0 , rules: ['idgham_mutamathilayn'] })],
             [0],
         );
         const { container } = mount([src, recv], iv);
@@ -2266,8 +2219,8 @@ describe('UnifiedDisplay — per-grapheme phoneme alignment', () => {
         const word = w(
             [{ char: 'ق', start: 0, end: 0, silent: true }, { char: 'ك', start: 0, end: 0.3, silent: false }],
             [
-                base(0, [], { chars: 'ق', tag: 'idgham_mutaqaribayn', secondaryTags: ['tafkheem'] }),
-                base(1, [0], { chars: 'كّ', secondaryTags: ['idgham_mutaqaribayn'] }),
+                base(0, [], { chars: 'ق', rules: ['idgham_mutaqaribayn', 'tafkheem'] }),
+                base(1, [0], { chars: 'كّ' , rules: ['idgham_mutaqaribayn'] }),
             ],
             [0],
         );
@@ -2289,7 +2242,7 @@ describe('UnifiedDisplay — per-grapheme phoneme alignment', () => {
         const iv: PhonemeInterval[] = [{ phone: 'rˤrˤ', start: 0, end: 0.3 }];
         const src = w(
             [{ char: 'ل', start: 0, end: 0, silent: true }],
-            [base(0, [], { chars: 'ل', tag: 'idgham_mutaqaribayn', shareGroup: null })],
+            [base(0, [], { chars: 'ل', rules: ['idgham_mutaqaribayn'], shareGroup: null })],
             [],
         );
         const recv = w(

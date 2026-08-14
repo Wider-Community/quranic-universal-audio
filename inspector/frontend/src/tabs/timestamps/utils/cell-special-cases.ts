@@ -10,60 +10,115 @@
  * Add a NEW special case here rather than threading another branch through
  * `cellGroupsFor`.
  *
- *  - Iqlab noon: the phonemizer stamps a mini-meem cell only for tanwīn iqlab, so
- *    the FE synthesizes one for noon — the ن falls silent and a mini-meem stacked
- *    above it owns the nasal phone + the lone iqlab underline.
- *  - Silah madd: the phonemizer merges the silah maddah onto the bearing letter
- *    (هٓ); it visually belongs on the mini-waw/yaa carrier (هۥٓ), so the base sheds
- *    the maddah glyph and the dropped carrier gains it.
+ *  - Riding marks: the producer gives the maddah a cell of its own while the
+ *    letter row writes it on the letter it stretches, so the FE folds it back.
+ *  - Iqlab: the shard carries one cell for the converted noon / tanwīn; the FE
+ *    splits it into the muted source grapheme and the mini-meem that sounds.
  */
 import type { TsCell } from '../../../lib/types/ts-client';
-import { MADDAH, MEEM_HI } from './tajweed-script';
+import {
+    DAMMA,
+    DAMMATAN,
+    FATHA,
+    FATHATAN,
+    KASRA,
+    KASRATAN,
+    MADDAH,
+    MEEM_HI,
+    MEEM_LO,
+    firstMark,
+} from './tajweed-script';
 
-// ── Iqlab noon (نْ before ب) ──────────────────────────────────────────────────
+// ── Riding marks (the maddah) ─────────────────────────────────────────────────
+
+/** Marks that open a cell of their own but are written on the letter before them
+ *  — the maddah of آ, of a muqaṭṭaʿah letter name, of a ṣilah carrier (هۦٓ). */
+const RIDING_MARKS = new Set([MADDAH]);
+
+/** One folded cell plus the raw `word.cells[]` index it came from (a riding mark
+ *  takes its host's, so a report target still resolves). */
+export interface FoldedCell {
+    cell: TsCell;
+    rawIndex: number;
+}
+
+/** Fold every riding mark onto the cell before it — its chars, phonemes and rules
+ *  all join the host, mirroring the letter row that writes the mark on that same
+ *  letter. A leading riding mark (no host yet) stays a cell of its own. */
+export function foldRidingMarks(cells: TsCell[]): FoldedCell[] {
+    const out: FoldedCell[] = [];
+    cells.forEach((c, i) => {
+        const host = out[out.length - 1];
+        if (host && c.chars !== '' && [...c.chars].every((ch) => RIDING_MARKS.has(ch))) {
+            out[out.length - 1] = {
+                rawIndex: host.rawIndex,
+                cell: {
+                    ...host.cell,
+                    chars: host.cell.chars + c.chars,
+                    phonemeIndices: [...new Set([...host.cell.phonemeIndices, ...c.phonemeIndices])],
+                    rules: [...new Set([...host.cell.rules, ...c.rules])],
+                },
+            };
+            return;
+        }
+        out.push({ cell: c, rawIndex: i });
+    });
+    return out;
+}
+
+// ── Iqlab (نْ / tanwīn before ب) ──────────────────────────────────────────────
+
+/** Single haraka per tanwīn mark, and the mini-meem slot its vowel quality takes:
+ *  fatḥa/ḍamma stack the meem ABOVE, kasra BELOW. */
+const TANWEEN_IQLAB: Record<string, { haraka: string; meem: string }> = {
+    [FATHATAN]: { haraka: FATHA, meem: MEEM_HI },
+    [DAMMATAN]: { haraka: DAMMA, meem: MEEM_HI },
+    [KASRATAN]: { haraka: KASRA, meem: MEEM_LO },
+};
+
+/** True for a cell the FE renders as an iqlab pair — a sākin noon or a tanwīn the
+ *  producer converted. Both arrive as one cell; neither ships a mini-meem. */
+export function isIqlabCell(c: TsCell): boolean {
+    if (!c.rules.includes('iqlab')) return false;
+    if (c.role === 'base') return true;
+    return c.role === 'tanween' && !!TANWEEN_IQLAB[firstMark(c.chars)] && c.phonemeIndices.length >= 2;
+}
 
 /** The ن of an iqlab-noon cell rendered silent — it surrenders its nasal phone
  *  and the lone underline to the synthesized mini-meem below, but keeps a
- *  silent-only `iqlab_silent_noon` tag so it still names "Iqlab" on hover
+ *  silent-only `iqlab_silent_noon` rule so it still names "Iqlab" on hover
  *  (registered in `tajweed-rules.ts` SILENT_TOOLTIPS; draws no badge). */
 export function iqlabNoonSilentBase(c: TsCell): TsCell {
-    return { ...c, phonemeIndices: [], tag: 'iqlab_silent_noon', shareGroup: null };
+    return { ...c, phonemeIndices: [], rules: ['iqlab_silent_noon'], shareGroup: null };
 }
 
-/** The mini-meem stacked above an iqlab-noon ن: owns the nasal phone (the
- *  click/loop + tooltip target) and the lone iqlab underline. Mirrors the meem
- *  cell the phonemizer stamps for tanwīn iqlab, which it does NOT emit for noon. */
-export function iqlabNoonMiniMeem(c: TsCell): TsCell {
+/** The tanwīn of an iqlab cell reduced to the single haraka the mushaf writes —
+ *  it keeps only the vowel phone; the mini-meem takes the nasal and the underline. */
+export function iqlabTanweenVowel(c: TsCell): TsCell {
+    const pair = TANWEEN_IQLAB[firstMark(c.chars)];
     return {
-        chars: MEEM_HI,
-        role: 'tanween',
-        status: 'inserted',
-        phonemeIndices: c.phonemeIndices,
-        sourceLetterIndex: c.sourceLetterIndex,
-        tag: 'iqlab_noon',
+        ...c,
+        chars: pair ? pair.haraka : c.chars,
+        role: 'haraka',
+        phonemeIndices: c.phonemeIndices.slice(0, -1),
+        rules: [],
         shareGroup: null,
     };
 }
 
-// ── Silah madd (هُۥٓ / هِۦٓ) ────────────────────────────────────────────────────
-
-/** Source-letter indices whose dropped silah carrier (mini-waw/yaa) bears a madd
- *  the phonemizer merged onto the BEARING letter's grapheme (هٓ); these letters
- *  shed the maddah so it can ride the carrier instead. `droppedSilahSrc` (the set
- *  of source letters with a dropped silah carrier) is passed in — the caller
- *  already computes it for the carrier grouping. */
-export function silahMaddahSources(cells: TsCell[], droppedSilahSrc: Set<number>): Set<number> {
-    const out = new Set<number>();
-    for (const c of cells) {
-        if (c.role === 'base' && c.chars.includes(MADDAH) && droppedSilahSrc.has(c.sourceLetterIndex)) {
-            out.add(c.sourceLetterIndex);
-        }
-    }
-    return out;
+/** The mini-meem stacked on an iqlab source: it owns the nasal phone (the
+ *  click/loop + tooltip target) and the lone iqlab underline. A noon has no vowel
+ *  of its own, so the meem takes all its phones and the high glyph; a tanwīn hands
+ *  over its last phone and picks the glyph from its vowel quality. */
+export function iqlabMiniMeem(c: TsCell): TsCell {
+    const pair = c.role === 'tanween' ? TANWEEN_IQLAB[firstMark(c.chars)] : undefined;
+    return {
+        chars: pair ? pair.meem : MEEM_HI,
+        role: 'tanween',
+        status: 'inserted',
+        phonemeIndices: pair ? c.phonemeIndices.slice(-1) : c.phonemeIndices,
+        sourceLetterIndex: c.sourceLetterIndex,
+        rules: ['iqlab'],
+        shareGroup: null,
+    };
 }
-
-/** The bearing letter's glyph with the silah maddah removed (هٓ → ه). */
-export const shedSilahMaddah = (chars: string): string => chars.replace(MADDAH, '');
-
-/** The silah carrier's glyph with the relocated maddah (ۥ → ۥٓ). */
-export const wearSilahMaddah = (chars: string): string => chars + MADDAH;

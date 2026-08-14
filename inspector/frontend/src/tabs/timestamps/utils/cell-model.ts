@@ -8,12 +8,12 @@
  * template; the unit tests exercise this module's output through that component.
  */
 
-import { ALEF_MAKSURA, DAGGER, FATHA, MEEM, MEEM_HI, MEEM_LO, NOON, OPEN_TANWEEN, OPEN_TANWEEN_TAGS, SHADDA, SUKUN, cellGlyph, cellSlot, firstMark, implicitMaddGlyph } from './tajweed-script';
+import { ALEF_MAKSURA, DAGGER, FATHA, MEEM_HI, MEEM_LO, OPEN_TANWEEN, OPEN_TANWEEN_TAGS, SUKUN, cellGlyph, cellSlot, firstMark, implicitMaddGlyph } from './tajweed-script';
 import { badgesForTags, silentTooltip, tagsForLegend } from './tajweed-rules';
 import type { TjBadge } from './tajweed-rules';
-import { iqlabNoonMiniMeem, iqlabNoonSilentBase, shedSilahMaddah, silahMaddahSources, wearSilahMaddah } from './cell-special-cases';
+import { foldRidingMarks, iqlabMiniMeem, iqlabNoonSilentBase, iqlabTanweenVowel, isIqlabCell } from './cell-special-cases';
 import { harakaRenderStyle } from './haraka-render';
-import { _heavyIkhfaaDisplay } from './phoneme-columns';
+import { _isHeavyIkhfaa } from './phoneme-columns';
 import type { PhonemeInterval, TsCell, TsWord } from '../../../lib/types/ts-client';
 
 
@@ -21,7 +21,8 @@ export interface RenderedFull {
     glyph: string;
     silent: boolean;
     status: string;
-    tag: string | null;
+    /** The cell's own producer rules, in producer order. */
+    rules: string[];
     /** Implicit madd (chars==='') — rendered with the inserted/replaced glow. */
     implicit: boolean;
     /** A written-but-"added" full cell (the madd-ʿiwaḍ alef substituted for the
@@ -43,8 +44,8 @@ export interface RenderedFull {
     /** Index into the raw `word.cells[]` (the report target's `cell_index`);
      *  -1 for synthesized cells with no raw source. */
     cellIndex: number;
-    /** Internal tajweed tag id(s) on the cell (primary + secondary) — the
-     *  report rule-picker's options, keyed by the data-model tag not a label. */
+    /** Internal tajweed tag id(s) on the cell — the report rule-picker's options,
+     *  keyed by the data-model tag not a label. */
     ruleTags: string[];
     shareGroup: number | null;
     /** Flat interval indices this cell sounds — placed under its own column. */
@@ -64,7 +65,8 @@ export interface RenderedSmall {
     glyph: string;
     slot: 'top' | 'bottom';
     status: string;
-    tag: string | null;
+    /** The cell's own producer rules, in producer order. */
+    rules: string[];
     cellStart: number | null;
     cellEnd: number | null;
     shareGroup: number | null;
@@ -157,40 +159,6 @@ export interface RenderedPhoneme {
 /** A sukūn cell — never rendered (cell exists with empty phonemeIndices). */
 export function _isSukunCell(c: TsCell): boolean {
     return c.role === 'haraka' && firstMark(c.chars) === SUKUN;
-}
-
-/** Iẓhar — the phonemizer emits NO izhar tag, so it's synthesized here as the
- *  DEFAULT rule for a sounding, untagged, SAKIN noon/meem/tanwīn (the fallback
- *  when no assimilation/conversion rule fired). Two colours: ḥalqī (noon/tanwīn
- *  before a throat letter) vs shafawī (sakin meem). `voweledSrc` is the set of
- *  source-letter indices in the cell's word that carry a real (non-sukūn) vowel,
- *  used to decide a noon/meem is sakin. Returns the synthetic tag or null. */
-export function _izharTag(c: TsCell, voweledSrc: Set<number>): 'izhar_halqi' | 'izhar_shafawi' | null {
-    if (!c.phonemeIndices.length || c.tag != null || c.shareGroup != null) return null;
-    // A tanwīn IS an inherent word-final nūn sound → ḥalqī when untagged.
-    if (c.role === 'tanween') return 'izhar_halqi';
-    if (c.role !== 'base') return null;
-    const head = [...c.chars][0];
-    if (c.chars.includes(SHADDA)) return null; // mushaddad → ghunnah, not izhar
-    if (voweledSrc.has(c.sourceLetterIndex)) return null; // voweled → not sakin
-    if (head === NOON) return 'izhar_halqi';
-    if (head === MEEM) return 'izhar_shafawi';
-    return null;
-}
-
-/** Source-letter indices in a word that carry a real (sounding, non-sukūn)
- *  haraka — a noon/meem on one of these is voweled, not sakin (so not iẓhar). A
- *  tanwīn also vowels its base letter (a meem with ḍammatan is مُ, never sākin), so
- *  count it too — else a tanwīn'd meem/noon falsely reads as a sākin iẓhar source. */
-export function _voweledSrcSet(cells: TsCell[]): Set<number> {
-    const s = new Set<number>();
-    for (const c of cells) {
-        if (c.phonemeIndices.length
-            && ((c.role === 'haraka' && !_isSukunCell(c)) || c.role === 'tanween')) {
-            s.add(c.sourceLetterIndex);
-        }
-    }
-    return s;
 }
 
 export function _cellTiming(
@@ -347,19 +315,22 @@ export function cellGroupsFor(
     nasalUnions: Map<number, [number, number]>,
     idghamGroupTags: Map<number, string>,
     shareGroupRuleTags: Map<number, string[]>,
-    izharCellTag: Map<TsCell, string>,
     liftIltiqaa = false,
 ): RenderedGroup[] {
     const { folded, srcToFold } = foldedLettersFor(word);
+    // Raw `word.cells[]` index per cell (the report target's `cell_index`),
+    // carried through the riding-mark fold so a host keeps its own index.
+    // Synthesized special-case cells (iqlab mini-meem, …) miss → -1.
+    const foldedCells = foldRidingMarks(word.cells ?? []);
+    const rawIndexOf = new Map<TsCell, number>(
+        foldedCells.map(({ cell, rawIndex }) => [cell, rawIndex]),
+    );
+    const cellIndexOf = (c: TsCell): number => rawIndexOf.get(c) ?? -1;
     // The iltiqaa-kasra cell is lifted into a cross-word bridge — drop it from
     // the word's own letter row so it renders only between the two words.
-    // Raw `word.cells[]` index per cell (the report target's `cell_index`),
-    // captured BEFORE any transform reorders/replaces objects.
-    // Synthesized special-case cells (iqlab mini-meem, …) miss → -1.
-    const rawIndexOf = new Map<TsCell, number>();
-    (word.cells ?? []).forEach((c, i) => rawIndexOf.set(c, i));
-    const cellIndexOf = (c: TsCell): number => rawIndexOf.get(c) ?? -1;
-    const cells = (word.cells ?? []).filter((c) => !(liftIltiqaa && c.tag === 'iltiqaa_kasra'));
+    const cells = foldedCells
+        .map(({ cell }) => cell)
+        .filter((c) => !(liftIltiqaa && c.rules.includes('iltiqaa_kasra')));
     // A renderable anchor is a base cell OR a real madd carrier (chars != '').
     // Muqattaat whose letters are all spelled-out names (كٓهيعٓصٓ, عٓسٓقٓ, صٓ, قٓ …)
     // carry no base cell but ARE full graphemes — they render through the main
@@ -371,73 +342,31 @@ export function cellGroupsFor(
     );
     const groups: RenderedGroup[] = [];
 
-    // A cell's underline stack: its own tag + secondary tafkheem + synthesized
-    // iẓhar + the cross-word idgham tag propagated to a merger receiver (its
-    // share group's source tag) + a heavy-ikhfaa tafkheem (the nasal before an
-    // istiʿlāʾ letter, detected display-side). Resolved to ≤2 bars (base + tafkheem).
+    // A cell's underline stack: its own rules + the cross-word idgham tag
+    // propagated to a merger receiver (its share group's source tag) + a
+    // heavy-ikhfaa tafkheem (the nasal before an istiʿlāʾ letter, detected
+    // display-side). Resolved to ≤3 bars plus an optional full-cell border.
     const cellBadges = (c: TsCell): TjBadge[] => {
         const groupTag = c.shareGroup != null ? idghamGroupTags.get(c.shareGroup) : undefined;
-        // A muqattaat letter's heaviness rides its own `secondaryTags` tafkhīm (set
-        // on a heavy istiʿlāʾ / rāʾ name), NOT a buried ikhfaa nasal — so عَيْن's
-        // heavy ŋˤ tafkhīm stays on the phoneme row, off the bare ع glyph.
-        const isMuq = !!c.phonemeRuleTags?.length;
-        const heavyIkhfaa = !isMuq && c.phonemeIndices.some(
-            (fi) => _heavyIkhfaaDisplay(intervals[fi]?.phone, intervals[fi + 1]?.phone),
+        const heavyIkhfaa = c.phonemeIndices.some(
+            (fi) => _isHeavyIkhfaa(intervals[fi]?.phone, intervals[fi + 1]?.phone),
         );
         return badgesForTags([
-            c.tag, ...(c.secondaryTags ?? []), izharCellTag.get(c), groupTag,
-            heavyIkhfaa ? 'tafkheem' : undefined,
+            ...c.rules, groupTag, heavyIkhfaa ? 'tafkheem' : undefined,
         ]);
     };
     // Internal tajweed tag id(s) on the cell — the report rule-picker's options
-    // (primary + secondary + the synthesized iẓhar default + every rule shared
-    // across the cell's co-highlight group, so a tag-less co-lit partner is still
-    // reportable as the shared rule), keyed by the data-model id, never a label.
+    // (its own rules + every rule shared across the cell's co-highlight group, so
+    // a rule-less co-lit partner is still reportable as the shared rule), keyed by
+    // the data-model id, never a label.
     const cellRuleTags = (c: TsCell): string[] => {
         const grp = c.shareGroup != null ? shareGroupRuleTags.get(c.shareGroup) : undefined;
-        return [
-            ...new Set(
-                [c.tag, ...(c.secondaryTags ?? []), izharCellTag.get(c), ...(grp ?? [])].filter(
-                    (t): t is string => !!t,
-                ),
-            ),
-        ];
+        return [...new Set([...c.rules, ...(grp ?? [])])];
     };
-    // Context-derived silent-rule names (need the cell's neighbours): a trailing
-    // dropped ḥaraka/tanwīn with nothing sounding after it is the word-final
-    // vowel silenced at the stop → "Waqf"; the dropped fatḥatan whose
-    // compensating madd moved onto the next ʾalif at waqf → "Madd 'Iwad" (the
-    // ʾalif carries the bar); a silent alef/maqṣūra right after a tanwīn is the
-    // otiose ʿiwaḍ alef at waṣl → "Madd 'Iwad Wasl".
-    const extraSilent = new Map<TsCell, string>();
-    {
-        let lastSounding = -1;
-        cells.forEach((c, i) => { if (c.phonemeIndices.length) lastSounding = i; });
-        cells.forEach((c, i) => {
-            if ((c.role === 'haraka' || c.role === 'tanween') && c.status === 'dropped'
-                && c.phonemeIndices.length === 0 && cells[i + 1]?.tag === 'madd_iwad') {
-                extraSilent.set(c, "Madd 'Iwad");
-            } else if (c.role === 'madd' && c.tag === 'madd_iwad') {
-                // The sounding iwaḍ ʾalif names the rule on hover even when its madd
-                // underline (gated by the madd-ṭabīʿī toggle) is off — matching the fatḥa.
-                extraSilent.set(c, "Madd 'Iwad");
-            } else if ((c.role === 'haraka' || c.role === 'tanween') && c.status === 'dropped'
-                && c.phonemeIndices.length === 0 && i > lastSounding) {
-                extraSilent.set(c, 'Waqf');
-            } else if (c.role === 'base' && c.phonemeIndices.length === 0
-                && (c.chars === 'ا' || c.chars === 'ى') && cells[i - 1]?.role === 'tanween') {
-                extraSilent.set(c, "Madd 'Iwad Wasl");
-            }
-        });
-    }
     // A cell's silent-rule hover names (lām shamsiyyah, hamzat-waṣl, iltiqaa, the
-    // context cases above) — these draw no underline, only a tooltip line.
-    const cellSilent = (c: TsCell): string[] => {
-        const extra = extraSilent.get(c);
-        if (extra) return [extra];
-        const n = silentTooltip(c.tag);
-        return n ? [n] : [];
-    };
+    // waqf sukūn, the ʿiwaḍ madd) — these draw no underline, only a tooltip line.
+    const cellSilent = (c: TsCell): string[] =>
+        [...new Set(c.rules.map(silentTooltip).filter((n): n is string => !!n))];
 
     // Share-groups that contain a madd carrier = long-vowel units (the haraka
     // pairs with the carrier after it; its base renders separately).
@@ -454,9 +383,6 @@ export function cellGroupsFor(
             droppedSilahSrc.add(c.sourceLetterIndex);
         }
     }
-    // Silah-madd carriers (see cell-special-cases): the maddah the phonemizer
-    // merged onto the bearing letter is shed there + re-worn by its carrier.
-    const silahMaddahSrc = silahMaddahSources(cells, droppedSilahSrc);
     // Folded letters already emitted as a full cell (the ىٰ maksura+dagger fold).
     const consumedFold = new Set<number>();
 
@@ -465,19 +391,19 @@ export function cellGroupsFor(
     //     ADJACENT carrier must co-light + group with that carrier, not grey
     //     out. Three carriers: the madd-ʿiwaḍ alef, the Allah dagger-alef, and
     //     (idgham shafawi / noon) the merged base that absorbed the vowel. ---
-    const iwadAlef = cells.find((c) => c.role === 'madd' && c.tag === 'madd_iwad');
+    const iwadAlef = cells.find((c) => c.role === 'madd' && c.rules.includes('madd_iwad'));
     const _iwadIv = iwadAlef
         ? _cellTiming(iwadAlef.phonemeIndices, intervals, null)
         : { start: null, end: null };
     const iwadIv: [number, number] | null = _iwadIv.start != null ? [_iwadIv.start, _iwadIv.end!] : null;
     // The dropped fatḥatan whose compensating madd moved onto the next ʾalif at waqf
-    // — detected STRUCTURALLY (its own tag is cleared so it draws no underline; the
-    // ʾalif carries the bar). The renderer transforms it into a dashed fatḥa co-lit
-    // with the ʾalif (see the iwaḍ branch in the cell loop).
+    // — detected STRUCTURALLY (it sounds nothing of its own; the ʾalif carries the
+    // bar). The renderer transforms it into a dashed fatḥa co-lit with the ʾalif
+    // (see the iwaḍ branch in the cell loop).
     const iwadFathatan = new Set<TsCell>();
     cells.forEach((c, i) => {
         if ((c.role === 'tanween' || c.role === 'haraka') && c.status === 'dropped'
-            && c.phonemeIndices.length === 0 && cells[i + 1]?.tag === 'madd_iwad') {
+            && c.phonemeIndices.length === 0 && cells[i + 1]?.rules.includes('madd_iwad')) {
             iwadFathatan.add(c);
         }
     });
@@ -515,18 +441,19 @@ export function cellGroupsFor(
             glyph = opts.glyphOverride;
             slot = cellSlot(glyph);
             sizeGlyph = glyph;
-        } else if (c.role === 'tanween' && OPEN_TANWEEN[mark] && OPEN_TANWEEN_TAGS.has(c.tag ?? '')) {
+        } else if (c.role === 'tanween' && OPEN_TANWEEN[mark]
+            && c.rules.some((t) => OPEN_TANWEEN_TAGS.has(t))) {
             // Assimilated tanwīn (idgham / ikhfaa) renders OPEN (DK encodes it
-            // as a distinct codepoint); iẓhar (tagless) keeps the stacked form.
+            // as a distinct codepoint); iẓhar keeps the stacked form.
             // Slot follows the canonical mark (kasratan below, others above).
             glyph = OPEN_TANWEEN[mark]!;
             slot = cellSlot(mark);
             sizeGlyph = glyph;
         } else {
-            glyph = cellGlyph(c.chars, c.tag, phone);
+            glyph = cellGlyph(c.chars, c.rules, phone);
             // Iqlab mini-meem: the displayed GLYPH is always the low-meem
             // (cellGlyph normalises it), but its SLOT + calibration follow the
-            // SOURCE haraka the phonemizer stamped — MEEM_HI (ḍamma/fatḥa) sits
+            // SOURCE mark the synthesizer picked — MEEM_HI (ḍamma/fatḥa) sits
             // ABOVE, MEEM_LO (kasra) below — so a non-kasra iqlab meem is on top.
             const meemSrc = mark === MEEM_HI || mark === MEEM_LO;
             slot = meemSrc ? cellSlot(mark) : cellSlot(glyph);
@@ -537,7 +464,7 @@ export function cellGroupsFor(
             slot,
             // a carried-vowel cell sounds (co-lit) — render timed, not greyed.
             status: opts.coLightIv ? 'present' : c.status,
-            tag: c.tag,
+            rules: c.rules,
             cellStart: start,
             cellEnd: end,
             shareGroup: c.shareGroup,
@@ -546,9 +473,8 @@ export function cellGroupsFor(
             renderStyle: harakaRenderStyle(sizeGlyph, 0),
             inserted: opts.inserted ?? c.status === 'inserted',
             phoneIdx: c.phonemeIndices,
-            // Diacritic cells underline from their OWN tag (tanwīn idgham/ikhfaa/
-            // iqlab) or the synthesized iẓhar rule (an untagged sounding tanwīn);
-            // a madd's haraka has no tag → no underline.
+            // Diacritic cells underline from their OWN rules (tanwīn idgham /
+            // ikhfaa / iqlab / iẓhar); a madd's haraka has none → no underline.
             tjBadges: cellBadges(c),
             silentRules: cellSilent(c),
         });
@@ -578,7 +504,7 @@ export function cellGroupsFor(
         let start = ownStart;
         let end = ownEnd;
         const qalqalaEcho =
-            QALQALA_TAGS.has(c.tag ?? '') && ownEnd != null
+            c.rules.some((t) => QALQALA_TAGS.has(t)) && ownEnd != null
                 ? _qalqalaEchoIv(c.phonemeIndices, intervals)
                 : null;
         if (qalqalaEcho) {
@@ -592,8 +518,7 @@ export function cellGroupsFor(
         let isNull: boolean;
         let letterIndex: number;
         if (c.chars) {
-            // canonical text (shaddah already composed by the phonemizer);
-            // glyphOverride relocates a silah maddah off the bearing letter.
+            // canonical text (shaddah already composed by the producer).
             glyph = opts.glyphOverride ?? c.chars;
             // Silent = sounds nothing (no own phoneme indices) AND isn't co-lit through
             // a merger (no share group). Keyed on the indices, NOT a specific status, so
@@ -633,25 +558,24 @@ export function cellGroupsFor(
             lStart = lStart != null ? Math.min(lStart, qalqalaEcho[0]) : qalqalaEcho[0];
             lEnd = Math.max(lEnd, qalqalaEcho[1]);
         }
-        // Own tag + secondary tafkheem + synthesized iẓhar + the propagated
-        // cross-word idgham (the receiving merged letter). Un-greying is driven
-        // by co-light (a share group, folded into `silent` above), NOT by merely
-        // carrying a badge: a co-lit merge source (mutamāthilayn, noon idgham)
-        // reads visible + underlined, while a silent-but-tagged source
-        // (mutaqāribayn / mutajānisayn) stays greyed yet still draws its
-        // underline + tooltip.
+        // Own rules + the propagated cross-word idgham (the receiving merged
+        // letter). Un-greying is driven by co-light (a share group, folded into
+        // `silent` above), NOT by merely carrying a badge: a co-lit merge source
+        // (mutamāthilayn, noon idgham) reads visible + underlined, while a
+        // silent-but-tagged source (mutaqāribayn / mutajānisayn) stays greyed yet
+        // still draws its underline + tooltip.
         const badges = cellBadges(c);
         g.full.push({
             glyph,
             silent,
             status: c.status,
-            tag: c.tag,
+            rules: c.rules,
             implicit: false,
             // A written cell carrying the muted dashed "transform" border: the
             // madd-ʿiwaḍ alef (substitutes the fatḥatan at waqf), or a contextual
-            // transform seat the phonemizer flags `inserted` (started-on ٱئْتُونِى's
+            // transform seat the producer flags `inserted` (started-on ٱئْتُونِى's
             // ئ→ي madd carrier) — both are "altered, not the plain rasm".
-            inserted: c.tag === 'madd_iwad' || c.status === 'inserted',
+            inserted: c.rules.includes('madd_iwad') || c.status === 'inserted',
             isBase,
             cellStart: start,
             cellEnd: end,
@@ -673,10 +597,10 @@ export function cellGroupsFor(
         const shareIv = c.shareGroup != null ? shareUnions.get(c.shareGroup) ?? null : null;
         const { start, end } = _cellTiming(c.phonemeIndices, intervals, shareIv);
         g.full.push({
-            glyph: implicitMaddGlyph(c.tag),
+            glyph: implicitMaddGlyph(c.rules),
             silent: c.status === 'dropped',
             status: c.status,
-            tag: c.tag,
+            rules: c.rules,
             implicit: true,
             inserted: false,
             isBase: false,
@@ -719,19 +643,17 @@ export function cellGroupsFor(
             if (c.role === 'base') {
                 if (foldIdx != null && consumedFold.has(foldIdx)) continue; // maksura+dagger half
                 curBase = newGroup('base');
-                if (c.tag === 'iqlab_noon') {
+                if (isIqlabCell(c)) {
                     // Iqlab noon → silent ن + a synthesized stacked mini-meem (see
                     // cell-special-cases): the meem owns the nasal + the iqlab underline.
                     pushFullGrapheme(curBase, iqlabNoonSilentBase(c), false);
-                    pushSmall(curBase, iqlabNoonMiniMeem(c));
-                } else if (silahMaddahSrc.has(c.sourceLetterIndex)) {
-                    pushFullGrapheme(curBase, c, true, { glyphOverride: shedSilahMaddah(c.chars) });
+                    pushSmall(curBase, iqlabMiniMeem(c));
                 } else {
                     pushFullGrapheme(curBase, c, true);
                 }
             } else if (c.role === 'madd') {
                 if (c.chars !== '' && foldIdx != null && consumedFold.has(foldIdx)) continue; // fold half
-                if (c.tag === 'madd_iwad') {
+                if (c.rules.includes('madd_iwad')) {
                     // the substituted (written) or inserted (implicit — word ends in
                     // hamza, مَآءً) iwaḍ alef joins the [fatḥa, alef] vowel group
                     iwadGroup = iwadGroup ?? newGroup('vowel');
@@ -742,8 +664,8 @@ export function cellGroupsFor(
                         ? vowelGroupFor(c.shareGroup) : newGroup('vowel');
                     pushFullImplicit(g, c);
                     // An implicit (chars='') non-iwaḍ madd is the Allah dagger-alef —
-                    // tagged allah_dagger_alef (ṭabīʿī) or madd_arid_lissukun (ʿāriḍ at
-                    // waqf). Co-light its dropped fatḥa with the dagger either way.
+                    // ṭabīʿī, or madd ʿāriḍ at waqf. Co-light its dropped fatḥa with
+                    // the dagger either way.
                     const iv = ownIv(c);
                     if (iv) daggerBySrc.set(c.sourceLetterIndex, { group: g, iv });
                 } else {
@@ -752,26 +674,24 @@ export function cellGroupsFor(
                     // already opened (the ḥaraka is emitted first); else a fresh one.
                     const cg = carrierGroupBySrc.get(c.sourceLetterIndex)
                         ?? (lv ? vowelGroupFor(c.shareGroup!) : newGroup('vowel'));
-                    // A silah carrier bearing a madd wears the maddah shed by its
-                    // bearing letter (هٓ → ه + ۥٓ) — see cell-special-cases.
-                    pushFullGrapheme(
-                        cg,
-                        c,
-                        false,
-                        silahMaddahSrc.has(c.sourceLetterIndex) ? { glyphOverride: wearSilahMaddah(c.chars) } : {},
-                    );
+                    pushFullGrapheme(cg, c, false);
                     carrierGroupBySrc.set(c.sourceLetterIndex, cg);
                 }
             } else {
                 // haraka / tanwīn
                 const dropped = c.phonemeIndices.length === 0;
-                if (c.shareGroup != null && longVowelSG.has(c.shareGroup)) {
+                if (isIqlabCell(c)) {
+                    // Iqlab tanwīn → the single haraka the mushaf writes + the
+                    // synthesized mini-meem that owns the nasal and the underline.
+                    const g = curBase ?? (curBase = newGroup('base'));
+                    pushSmall(g, iqlabTanweenVowel(c));
+                    pushSmall(g, iqlabMiniMeem(c));
+                } else if (c.shareGroup != null && longVowelSG.has(c.shareGroup)) {
                     pushSmall(vowelGroupFor(c.shareGroup), c); // long vowel — leaves its base
                 } else if (dropped && iwadFathatan.has(c) && iwadIv) {
                     // dropped tanwīn at waqf → a fatḥa grouped + co-lit with the iwaḍ
                     // alef. The fatḥatan→fatḥa transform is "not in the rasm" — flag it
                     // inserted so the small fatḥa cell carries the muted dashed border.
-                    // (Detected structurally — its tag is cleared so it draws no bar.)
                     iwadGroup = iwadGroup ?? newGroup('vowel');
                     pushSmall(iwadGroup, c, { coLightIv: iwadIv, glyphOverride: FATHA, inserted: true });
                 } else if (dropped && daggerBySrc.has(c.sourceLetterIndex)) {
@@ -791,7 +711,7 @@ export function cellGroupsFor(
                     pushSmall(cg, c);
                 } else {
                     // short vowel / true waqf drop — and the idgham-shafawi
-                    // receiving meem's vowel, which the phonemizer now keeps on the
+                    // receiving meem's vowel, which the producer keeps on the
                     // haraka alone (own interval, no merger group), so it lights here
                     // on its own vowel without smearing across the merger.
                     pushSmall(curBase ?? (curBase = newGroup('base')), c);
@@ -810,7 +730,7 @@ export function cellGroupsFor(
             glyph: fl.glyph,
             silent: fl.silent,
             status: 'present',
-            tag: null,
+            rules: [],
             implicit: false,
             inserted: false,
             isBase: true,

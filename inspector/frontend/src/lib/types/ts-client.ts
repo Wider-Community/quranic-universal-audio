@@ -43,13 +43,12 @@ export interface Letter {
     silent?: boolean;
 }
 
-/** One per-character cell — the ordered source for the analysis letter row
- *  (schema v5). Cells include `base` consonant/carrier cells (which anchor a
- *  group + carry its full-letter glyph via `sourceLetterIndex`) alongside the
- *  haraka / tanween / long-vowel-carrier / implicit cells from the phonemizer's
- *  `character_phoneme_mappings()`. All script/visual specifics (mini-meem glyph,
- *  open/closed/iqlab form, above/below placement) are derived in the FE from
- *  `tag` + `chars`. */
+/** One per-character cell — the ordered source for the analysis letter row.
+ *  Cells include `base` consonant/carrier cells (which anchor a group + carry
+ *  its full-letter glyph via `sourceLetterIndex`) alongside the haraka / tanween
+ *  / long-vowel-carrier / implicit cells the producer projects. All script/visual
+ *  specifics (mini-meem glyph, open/closed/iqlab form, above/below placement) are
+ *  derived in the FE from `rules` + `chars`. */
 export interface TsCell {
     /** canonical source char(s); '' for a fully implicit cell */
     chars: string;
@@ -59,57 +58,43 @@ export interface TsCell {
     phonemeIndices: number[];
     /** the letter (index into this word's `letters`) the cell sits on/after; -1 if implicit */
     sourceLetterIndex: number;
-    /** canonical rule/case key the renderer switches on (e.g. 'iqlab_tanween', 'madd_iwad') */
-    tag: string | null;
+    /** every rule the producer fired on this grapheme, in its order and possibly
+     *  empty — there is no primary. The renderer resolves the list into at most
+     *  three ordered badges (`badgesForTags`) plus the silent-rule hover names. */
+    rules: string[];
     /** cells sharing one id highlight together (long vowel; cross-word idgham) */
     shareGroup: number | null;
-    /** per-phoneme rule tags parallel to `phonemeIndices` (same length), each a
-     *  rule key or null — set only on muqattaat cells whose phonemes carry
-     *  distinct tajweed (schema v8, 8th shard slot). Absent → null, and the FE
-     *  falls back to the single-`tag` colouring. */
-    phonemeRuleTags?: (string | null)[] | null;
-    /** extra rules co-occurring on this grapheme that lost the single-`tag` pick
-     *  (in practice `['tafkheem']` on a heavy madd/qalqala cell) — the renderer
-     *  stacks them as additional badges on `tag` (schema v9, 9th shard slot).
-     *  Absent → null. */
-    secondaryTags?: string[] | null;
 }
 
-/** A raw positional shard cell row (the 6th word slot) —
- *  `[chars, role, status, phoneme_indices, source_letter_index, tag?, share_group?,
- *   phoneme_rule_tags?, secondary_tags?]`. `phoneme_indices` are word-local
- *  indexable-phone indices; the optional 8th slot `phoneme_rule_tags` (schema v8)
- *  is parallel to them; the optional 9th slot `secondary_tags` (schema v9) is the
- *  heaviness-stack list (slot 8 padded null when only it is present). */
+/** A raw positional shard cell row (the 6th word slot), schema v11 —
+ *  `[chars, role, status, phoneme_indices, source_letter_index, rules, share_group]`.
+ *  `phoneme_indices` are word-local indexable-phone indices. */
 export type TsShardCellRow = [
     string,
     string,
     string,
     number[],
     number,
-    (string | null)?,
-    (number | null)?,
-    ((string | null)[] | null)?,
     (string[] | null)?,
+    (number | null)?,
 ];
 
 /** Read a positional shard cell row by name — the FE mirror of
- *  `qua_shared/ts_shard_cells.parse_cell`, so no consumer unpacks `row[0..7]`
+ *  `qua_shared/ts_shard_cells.parse_cell`, so no consumer unpacks `row[0..6]`
  *  inline. `phonemeIndices` stay WORD-LOCAL here; the caller maps them to the
- *  verse-flat `intervals[]`. The optional 8th slot `phoneme_rule_tags` (v8) is
- *  read here too — v5-v7 rows lack it and parse to null. The 9th slot
- *  `secondary_tags` (v9) is read likewise; older rows parse to null. */
+ *  verse-flat `intervals[]`. A pre-v11 row carried a bare tag string in slot 5;
+ *  reading it as characters would be silent nonsense, so it reads as a one-rule
+ *  list instead. */
 export function parseShardCell(row: TsShardCellRow): TsCell {
+    const raw = row[5];
     return {
         chars: row[0],
         role: row[1] as CellRole,
         status: row[2] as CellStatus,
         phonemeIndices: row[3] ?? [],
         sourceLetterIndex: row[4],
-        tag: (row[5] ?? null) as string | null,
+        rules: !raw ? [] : typeof raw === 'string' ? [raw] : [...raw],
         shareGroup: (row[6] ?? null) as number | null,
-        phonemeRuleTags: (row[7] ?? null) as (string | null)[] | null,
-        secondaryTags: (row[8] ?? null) as string[] | null,
     };
 }
 
@@ -210,9 +195,7 @@ export type TsShardWord = [
     /** phones: [phone, start_ms, end_ms, ...optional flags][] */ Array<(string | number | boolean)[]>,
     /** cells (schema v5, optional): the positional `TsShardCellRow` rows.
      *  phoneme_indices are word-local indices over the word's INDEXABLE phones
-     *  (qalqala `Q` excluded); the optional 8th slot phoneme_rule_tags (v8) is
-     *  parallel to them, the optional 9th slot secondary_tags (v9) is the
-     *  heaviness stack. */
+     *  (qalqala `Q` excluded). */
     TsShardCellRow[]?,
 ];
 
