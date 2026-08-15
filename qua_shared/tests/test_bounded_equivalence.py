@@ -200,10 +200,7 @@ def test_every_listed_reason_has_a_declared_count():
     would otherwise fail on, and `COUNT_FIXED` bounds those instead.
     """
     listed = {
-        reason
-        for tags in vocab.FIX_REFS.values()
-        for key, reason in tags.items()
-        if key != "count"
+        reason for tags in vocab.FIX_REFS.values() for key, reason in tags.items() if key != "count"
     }
     listed |= set(vocab.RESIDUE_REFS.values())
     assert listed <= set(vocab.MEMBERS), f"undeclared: {sorted(listed - set(vocab.MEMBERS))}"
@@ -295,6 +292,7 @@ def test_a_join_that_moves_the_pair_s_span_is_still_a_failure():
     assert rep.timing_moved
 
 
+@needs_producer
 def test_wasl_refs_link_a_segment_to_the_word_across_the_join():
     segments = [
         _joined("2:1", True, [(1, 0, 100), (2, 100, 200)]),
@@ -303,6 +301,7 @@ def test_wasl_refs_link_a_segment_to_the_word_across_the_join():
     assert gate.wasl_refs(segments) == [(None, "2:2:1"), ("2:1:2", None)]
 
 
+@needs_producer
 def test_a_segment_that_does_not_continue_links_nothing():
     segments = [
         _joined("2:1", False, [(1, 0, 100)]),

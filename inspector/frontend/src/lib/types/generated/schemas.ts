@@ -2213,7 +2213,8 @@ export interface TsShardDoc {
  *
  * Aligner provenance (``padding``, ``beam``, ``method``, ``aligner_model``,
  * ``shared_cmvn``, ``audio_source``, ``created_at``) passes through when the
- * source ``_meta`` carried it. Audio routing (reciter / url_template /
+ * source ``_meta`` carried it, and ``phonemizer_version`` names the producer
+ * that read the cells. Audio routing (reciter / url_template /
  * audio_urls) is deliberately NOT here — the audio-manifest sidecar is the
  * source of truth. ``extra="allow"`` so the optional provenance fields the
  * writer copies through stay typed-open for the FE.
