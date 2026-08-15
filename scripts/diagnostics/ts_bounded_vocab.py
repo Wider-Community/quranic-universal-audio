@@ -82,6 +82,11 @@ CARRIER_WAW = "و"
 #: A stop on a qalqala letter legacy left unnamed.
 FIX_QALQALA_AT_STOP = "qalqala_kubra"
 
+#: A hidden noon leaves a hum, and before a letter of istilaa that hum is
+#: heavy. Legacy coloured it and named the hiding twice instead of naming the
+#: weight, so a word carrying both is the correction and not a new rule.
+FIX_HEAVY_HUM = ("tafkheem", "ikhfaa")
+
 #: Corrections named one at a time: the ref, what moved there, and why the new
 #: reading is the right one.
 FIX_REFS = {
@@ -89,6 +94,11 @@ FIX_REFS = {
         "token": "yasri's raa is light, not heavy",
         "tafkheem": "yasri's raa is light, not heavy",
     },
+    # The riwayah disagrees with itself here and Hafs reads the seen; the
+    # shards were written under the saad. `docs/hafs/variants.md` names the
+    # variant `seen_sad_yabsut` / `seen_sad_bastah`, both defaulting to seen.
+    "2:245:14": {"token": "yabsut and bastah are read with the seen"},
+    "7:69:22": {"token": "yabsut and bastah are read with the seen"},
 }
 
 #: Differences accepted as they are, each with the reason it is not a bug.
@@ -101,15 +111,17 @@ RESIDUE_REFS = {
 CORPUS = {"shards": 114, "words": 80200}
 
 #: Words the stamper writes no cells for, because the projection and the
-#: aligner cut them into a different number of letters. Sixty-six are the
-#: length mark of `أَنَا۠`, which the projection writes as a letter of its own
-#: and the aligner folds onto the alif; one is `مَجْرىٰهَا`, whose dagger alif
-#: the projection drops. Ten more words differ only in that the projection
-#: shows a saktah or an ishmam mark on the letter it decorates and the aligner
-#: does not write it at all; they cut the same letters, so every index still
-#: addresses the letter it means and they keep their cells. May only fall: one
-#: letter partition is the answer, not two.
-CELLS_DROPPED = ("at_most", 67)
+#: aligner cut them into a different number of letters. Every one is the length
+#: mark of `أَنَا۠`, which the projection writes as a letter of its own and the
+#: aligner folded onto the alif. Ten more words differ only in that the
+#: projection shows a saktah or an ishmam mark on the letter it decorates and
+#: the aligner does not write it at all; they cut the same letters, so every
+#: index still addresses the letter it means and they keep their cells.
+#:
+#: The aligner cuts letters the projection's way now, so a shard written from
+#: here on has none of these. These are what the frozen ones already hold, and
+#: the count may only fall -- to zero as each is re-aligned.
+CELLS_DROPPED = ("at_most", 66)
 
 #: Family -> (direction the count may move, differences measured over CORPUS).
 #: `exact` is a mechanical map over a frozen corpus: it has one right answer,
@@ -119,10 +131,10 @@ CELLS_DROPPED = ("at_most", 67)
 EXPECTED = {
     "rename": ("exact", 33498),
     "collapse": ("exact", 15567),
-    "new_rule": ("exact", 17055),
-    "dropped": ("exact", 8571),
+    "new_rule": ("exact", 17056),
+    "dropped": ("exact", 8572),
     "merger_attribution": ("exact", 8289),
-    "fix": ("at_most", 6),
+    "fix": ("at_most", 557),
     "residue": ("at_most", 236),
 }
 
@@ -138,6 +150,8 @@ MEMBERS = {
     "a stop on a qalqala letter legacy left unnamed": ("at_most", 3),
     "a stop keeps the vowel's own length": ("at_most", 1),
     "yasri's raa is light, not heavy": ("at_most", 1),
+    "the hum a hidden noon leaves before istilaa is heavy": ("at_most", 527),
+    "yabsut and bastah are read with the seen": ("at_most", 2),
 }
 
 

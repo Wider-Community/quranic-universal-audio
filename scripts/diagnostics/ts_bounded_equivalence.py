@@ -69,6 +69,7 @@ from scripts.diagnostics.ts_bounded_report import (  # noqa: E402
 from scripts.diagnostics.ts_bounded_vocab import (  # noqa: E402
     CARRIER_WAW,
     DROPPED_RULES,
+    FIX_HEAVY_HUM,
     FIX_QALQALA_AT_STOP,
     FIX_REFS,
     LABIAL_MERGER,
@@ -334,6 +335,11 @@ def _unpaired_new(view: WordView, tag: str) -> tuple[str | None, str]:
     """A new tag no legacy tag maps onto."""
     if tag in NEW_RULE_TAGS:
         return "new_rule", ""
+    weight, hiding = FIX_HEAVY_HUM
+    if tag == weight and hiding in view.current:
+        # Asked before the merger question: a hum's weight has nothing to do
+        # with a merger, and a partner carrying tafkheem would claim it.
+        return "fix", "the hum a hidden noon leaves before istilaa is heavy"
     if tag in view.partner_tags:
         return "merger_attribution", ""
     if tag in FIX_REFS.get(view.ref, ()):
