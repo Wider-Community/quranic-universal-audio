@@ -185,6 +185,34 @@ def test_stamped_cell_rules_are_known_tags(chapter):
 
 
 @needs_producer
+def test_unwritten_madd_gets_a_graphemeless_cell():
+    """`ٱللَّهِ` says a long alif the rasm does not write.
+
+    The reading has to draw it, so the producer gives it a cell with no
+    grapheme, sharing the sound with the fatha that writes its quality. A
+    written dagger alif gets the same pair, one cell of it carrying a glyph.
+    """
+    from qua_sdk.integrations.cellrows import cell_rows
+    from qua_sdk.integrations.phonemizer import result_for_ref
+
+    unwritten = cell_rows(result_for_ref("1:1"))[1]
+    fatha = next(c for c in unwritten if c.chars == "َ")
+    alif = next(c for c in unwritten if c.chars == "" and c.role == "madd")
+    assert alif.status == "inserted"
+    assert unwritten.index(alif) == unwritten.index(fatha) + 1
+    assert alif.phoneme_indices == fatha.phoneme_indices
+    assert alif.source_letter_index == fatha.source_letter_index
+    assert alif.share_group is not None and alif.share_group == fatha.share_group
+    assert alif.rules == fatha.rules == ["madd_tabii"]
+
+    # ذَٰلِكَ writes its dagger, so no cell is invented for it.
+    written = cell_rows(result_for_ref("2:2"))[0]
+    assert not [c for c in written if c.chars == "" and c.role == "madd"]
+    dagger = next(c for c in written if c.chars == "ٰ")
+    assert dagger.share_group == next(c for c in written if c.chars == "َ").share_group
+
+
+@needs_producer
 @pytest.mark.parametrize("chapter", [101, 102])
 def test_cells_only_restamp_preserves_slot3_letters(chapter):
     """A cells-only re-stamp must NOT empty the legacy slot-3 ``letters``.

@@ -998,7 +998,37 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(qaf.dataset.cellEnd).toBe('0.1'); // own interval, echo NOT unioned
     });
 
-    it('Allah: the dropped fatḥa groups + co-lights with the implicit dagger-alef', () => {
+    it('Allah: the fatḥa and the implicit dagger-alef share one vowel group', () => {
+        // …للَّه as the producer writes it: the fatḥa keeps the sound it opens and
+        // the alif nobody wrote shares it, the same pair a written dagger gives.
+        const intervals: PhonemeInterval[] = [
+            { phone: 'll', start: 0, end: 0.15 }, { phone: 'a:', start: 0.15, end: 0.5 },
+        ];
+        const word = w(
+            [{ char: 'ل', start: 0, end: 0.5, silent: false }, { char: 'ه', start: 0.5, end: 0.6, silent: false }],
+            [
+                base(0, [0], { chars: 'ل' }),
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: ['madd_tabii'], shareGroup: 1 },
+                { chars: '', role: 'madd', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 0, rules: ['madd_tabii'], shareGroup: 1 },
+            ],
+            [0, 1],
+        );
+        const { container } = mount([word], intervals);
+        const vowel = Array.from(container.querySelectorAll<HTMLElement>('.cell-group')).find(
+            (g) => g.querySelector('.mega-letter.implicit'),
+        )!;
+        expect(vowel).toBeTruthy();
+        expect(vowel.querySelector<HTMLElement>('.mega-letter.implicit')!.textContent).toBe('ٰ');
+        const fatha = vowel.querySelector<HTMLElement>('.haraka-cell')!;
+        expect(fatha).toBeTruthy();
+        expect(fatha.dataset.cellStart).toBe('0.15');
+        // one sound across the whole [fatḥa, alif] group, as a written dagger gives.
+        expect(vowel.querySelectorAll('.phoneme-cluster').length).toBe(1);
+        expect(vowel.querySelector<HTMLElement>('.phoneme-cluster')!.style.gridColumn
+            .replace(/\s+/g, ' ').trim()).toBe('1 / span 2');
+    });
+
+    it('Allah: a v10 shard’s dropped fatḥa co-lights with the implicit dagger-alef', () => {
         // …للَّه: lam (geminate), implicit dagger-alef (a:), dropped fatḥa.
         const intervals: PhonemeInterval[] = [
             { phone: 'll', start: 0, end: 0.15 }, { phone: 'a:', start: 0.15, end: 0.5 },
