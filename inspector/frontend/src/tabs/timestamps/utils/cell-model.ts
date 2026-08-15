@@ -389,8 +389,8 @@ export function cellGroupsFor(
     // --- Carried-vowel resolution: a haraka/tanwīn the phonemizer marks
     //     `dropped` (empty indices) because its vowel is realized on an
     //     ADJACENT carrier must co-light + group with that carrier, not grey
-    //     out. Three carriers: the madd-ʿiwaḍ alef, the Allah dagger-alef, and
-    //     (idgham shafawi / noon) the merged base that absorbed the vowel. ---
+    //     out. Two carriers: the madd-ʿiwaḍ alef, and (idgham shafawi / noon)
+    //     the merged base that absorbed the vowel. ---
     const iwadAlef = cells.find((c) => c.role === 'madd' && c.rules.includes('madd_iwad'));
     const _iwadIv = iwadAlef
         ? _cellTiming(iwadAlef.phonemeIndices, intervals, null)
@@ -407,7 +407,6 @@ export function cellGroupsFor(
             iwadFathatan.add(c);
         }
     });
-    const daggerBySrc = new Map<number, { group: RenderedGroup; iv: [number, number] }>();
     // و/ى waqf carrier → its vowel group, so the carrier's own dropped fatḥa
     // rejoins it silently (a double-sided [haraka, carrier, dropped-fatḥa] unit)
     // instead of landing on the preceding base.
@@ -614,8 +613,6 @@ export function cellGroupsFor(
             ruleTags: cellRuleTags(c),
             shareGroup: c.shareGroup,
             phoneIdx: c.phonemeIndices,
-            // Implicit madd (dagger-alef of Allah / ʿiwaḍ alef) — both underline
-            // with the madd-ṭabīʿī rule.
             tjBadges: cellBadges(c),
             silentRules: cellSilent(c),
         });
@@ -632,10 +629,6 @@ export function cellGroupsFor(
                 vowelGroups.set(sg, g);
             }
             return g;
-        };
-        const ownIv = (c: TsCell): [number, number] | null => {
-            const t = _cellTiming(c.phonemeIndices, intervals, null);
-            return t.start != null ? [t.start, t.end!] : null;
         };
         for (const c of cells) {
             if (_isSukunCell(c)) continue; // sukūn never rendered
@@ -660,14 +653,14 @@ export function cellGroupsFor(
                     if (c.chars === '') pushFullImplicit(iwadGroup, c);
                     else pushFullGrapheme(iwadGroup, c, false);
                 } else if (c.chars === '') {
-                    const g = c.shareGroup != null && longVowelSG.has(c.shareGroup)
-                        ? vowelGroupFor(c.shareGroup) : newGroup('vowel');
-                    pushFullImplicit(g, c);
-                    // An implicit (chars='') non-iwaḍ madd is the Allah dagger-alef —
-                    // ṭabīʿī, or madd ʿāriḍ at waqf. Co-light its dropped fatḥa with
-                    // the dagger either way.
-                    const iv = ownIv(c);
-                    if (iv) daggerBySrc.set(c.sourceLetterIndex, { group: g, iv });
+                    // An implicit (chars='') non-iwaḍ madd is a long vowel no letter
+                    // stretches — the alef of ٱللَّه. It shares its sound with the
+                    // ḥaraka beside it, so it joins that ḥaraka's vowel group.
+                    pushFullImplicit(
+                        c.shareGroup != null && longVowelSG.has(c.shareGroup)
+                            ? vowelGroupFor(c.shareGroup) : newGroup('vowel'),
+                        c,
+                    );
                 } else {
                     const lv = c.shareGroup != null && longVowelSG.has(c.shareGroup);
                     // A dropped ṣilah carrier reuses the vowel group its own ḥaraka
@@ -694,9 +687,6 @@ export function cellGroupsFor(
                     // inserted so the small fatḥa cell carries the muted dashed border.
                     iwadGroup = iwadGroup ?? newGroup('vowel');
                     pushSmall(iwadGroup, c, { coLightIv: iwadIv, glyphOverride: FATHA, inserted: true });
-                } else if (dropped && daggerBySrc.has(c.sourceLetterIndex)) {
-                    const d = daggerBySrc.get(c.sourceLetterIndex)!;
-                    pushSmall(d.group, c, { coLightIv: d.iv }); // Allah: fatḥa joins the dagger ā
                 } else if (dropped && carrierGroupBySrc.has(c.sourceLetterIndex)) {
                     // و/ى waqf: the carrier stole the haraka before it into a madd;
                     // its own fatḥa drops at the stop. Render it silent in the

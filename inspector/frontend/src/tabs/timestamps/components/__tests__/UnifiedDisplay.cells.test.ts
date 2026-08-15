@@ -1028,37 +1028,6 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             .replace(/\s+/g, ' ').trim()).toBe('1 / span 2');
     });
 
-    it('Allah: a v10 shard’s dropped fatḥa co-lights with the implicit dagger-alef', () => {
-        // …للَّه: lam (geminate), implicit dagger-alef (a:), dropped fatḥa.
-        const intervals: PhonemeInterval[] = [
-            { phone: 'll', start: 0, end: 0.15 }, { phone: 'a:', start: 0.15, end: 0.5 },
-        ];
-        const word = w(
-            [{ char: 'ل', start: 0, end: 0.5, silent: false }, { char: 'ه', start: 0.5, end: 0.6, silent: false }],
-            [
-                base(0, [0], { chars: 'ل' }),
-                { chars: '', role: 'madd', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 0, rules: ['allah_dagger_alef'], shareGroup: null },
-                { chars: 'َ', role: 'haraka', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 0, rules: [], shareGroup: null },
-            ],
-            [0, 1],
-        );
-        const { container } = mount([word], intervals);
-        // the dagger group holds both the implicit dagger (full) and the fatḥa (small, co-lit).
-        const vowel = Array.from(container.querySelectorAll<HTMLElement>('.cell-group')).find(
-            (g) => g.querySelector('.mega-letter.implicit'),
-        )!;
-        expect(vowel).toBeTruthy();
-        const fatha = vowel.querySelector<HTMLElement>('.haraka-cell')!;
-        expect(fatha).toBeTruthy();
-        expect(fatha.classList.contains('dia-dropped')).toBe(false);
-        expect(fatha.dataset.cellTimed).toBe('1');
-        expect(fatha.dataset.cellStart).toBe('0.15'); // co-lit on the dagger ā
-        // the dagger-alef sound spans the WHOLE [fatḥa, dagger] group (same width).
-        expect(vowel.querySelectorAll('.phoneme-cluster').length).toBe(1);
-        expect(vowel.querySelector<HTMLElement>('.phoneme-cluster')!.style.gridColumn
-            .replace(/\s+/g, ' ').trim()).toBe('1 / span 2');
-    });
-
     it('renders one cell-group per letter-group, each holding its base + pinned diacritic', () => {
         const intervals: PhonemeInterval[] = [
             { phone: 'b', start: 0, end: 0.1 }, { phone: 'a', start: 0.1, end: 0.2 },
@@ -1247,40 +1216,38 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(bridge.style.boxShadow).toContain('idgham-shafawi');
     });
 
-    it('Allah dagger: arid-badged at waqf (carrier only, not the fatḥa); uncoloured continuing', () => {
+    it('Allah dagger: takes the rule its haraka takes — ṭabīʿī continuing, arid at waqf', () => {
         const intervals: PhonemeInterval[] = [
             { phone: 'll', start: 0, end: 0.15 }, { phone: 'a:', start: 0.15, end: 0.5 },
         ];
+        // The pair share one sound, so they carry one rule between them and both
+        // draw it — the same as a WRITTEN dagger (ذَٰلِكَ), which is the point.
         const mk = (tag: string) => w(
             [{ char: 'ل', start: 0, end: 0.5, silent: false }, { char: 'ه', start: 0.5, end: 0.6, silent: false }],
             [
                 base(0, [0], { chars: 'ل' }),
-                { chars: '', role: 'madd', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 0, rules: [tag], shareGroup: null },
-                { chars: 'َ', role: 'haraka', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 0, rules: [], shareGroup: null },
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: [tag], shareGroup: 1 },
+                { chars: '', role: 'madd', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 0, rules: [tag], shareGroup: 1 },
             ],
             [0, 1],
         );
-        // continuing → allah_dagger_alef → no badge
-        let c = mount([mk('allah_dagger_alef')], intervals).container;
-        expect(c.querySelector<HTMLElement>('.mega-letter.implicit')!.style.boxShadow).toBe('');
+        setRuleEnabled('madd_tabii', true); // off by default — it is on nearly every word
+        let c = mount([mk('madd_tabii')], intervals).container;
+        expect(c.querySelector<HTMLElement>('.mega-letter.implicit')!.style.boxShadow)
+            .toContain('madd-tabii');
         cleanup();
-        // stopping → madd_arid_lil_sukun → dagger badged, fatḥa not
+        resetAllTajweed();
         c = mount([mk('madd_arid_lil_sukun')], intervals).container;
-        const dagger = c.querySelector<HTMLElement>('.mega-letter.implicit')!;
-        expect(dagger.style.boxShadow).not.toBe('');
-        expect(dagger.style.boxShadow).toContain('madd-arid');
-        // the dropped fatḥa STILL groups + co-lights with the arid dagger (it must NOT
-        // fall back to the lām's base group greyed — daggerBySrc keys off the implicit
-        // madd, not the allah_dagger_alef rules: [tag], so the arid waqf case still co-lights).
         const vowel = Array.from(c.querySelectorAll<HTMLElement>('.cell-group')).find(
             (g) => g.querySelector('.mega-letter.implicit'),
         )!;
+        expect(vowel.querySelector<HTMLElement>('.mega-letter.implicit')!.style.boxShadow)
+            .toContain('madd-arid');
         const fatha = vowel.querySelector<HTMLElement>('.haraka-cell')!;
-        expect(fatha).toBeTruthy();
-        expect(fatha.classList.contains('dia-dropped')).toBe(false); // co-lit, not greyed
+        expect(fatha.classList.contains('dia-dropped')).toBe(false);
         expect(fatha.dataset.cellTimed).toBe('1');
-        expect(fatha.dataset.cellStart).toBe('0.15'); // the dagger's ā interval
-        expect(fatha.style.boxShadow).toBe(''); // colour is carrier-only
+        expect(fatha.dataset.cellStart).toBe('0.15'); // the ā it opens
+        expect(fatha.style.boxShadow).toContain('madd-arid');
     });
 
     it('no underline for an untagged madd carrier (no rule on the cell)', () => {

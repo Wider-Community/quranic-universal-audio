@@ -30,10 +30,9 @@ export type StackLayer = 'base' | 'merge' | 'top' | 'border';
 export type RuleCategory = 'noon_meem' | 'madd' | 'other';
 
 /** Tags the FE synthesizes itself — NOT producer `TajweedRule` members, so the
- *  registry allows them alongside the producer vocabulary. Each is documented at
- *  its synthesis site: `iqlab_silent_noon` (`cell-special-cases.ts`),
- *  `allah_dagger_alef` (an annotated shard's implicit Allah madd). */
-export type FeSynthesizedTag = 'iqlab_silent_noon' | 'allah_dagger_alef';
+ *  registry allows them alongside the producer vocabulary. Documented at its
+ *  synthesis site: `iqlab_silent_noon` (`cell-special-cases.ts`). */
+export type FeSynthesizedTag = 'iqlab_silent_noon';
 
 /** Any tag a cell can carry: the phonemizer producer vocabulary (`TajweedRule`,
  *  codegen'd from `qua_shared`) plus the FE-owned synthesized tags. */
@@ -73,9 +72,8 @@ const COLOR_RULES = {
     madd_jaiz_munfasil: { legendKey: 'madd_jaiz', colorVar: '--tj-madd-jaiz', tooltip: m.ts_tajweed_rule_madd_jaiz, stack: 'base' },
     madd_arid_lil_sukun: { legendKey: 'madd_arid', colorVar: '--tj-madd-arid', tooltip: m.ts_tajweed_rule_madd_arid, stack: 'base' },
     madd_leen: { legendKey: 'madd_leen', colorVar: '--tj-madd-leen', tooltip: m.ts_tajweed_rule_madd_leen, stack: 'base' },
-    // ṭabīʿī + its structural aliases (the dagger-alef of Allah, the ʿiwaḍ alef)
+    // ṭabīʿī + the ʿiwaḍ alef, which shares its colour
     madd_tabii: { legendKey: 'madd_tabii', colorVar: '--tj-madd-tabii', tooltip: m.ts_tajweed_rule_madd_tabii, stack: 'base' },
-    allah_dagger_alef: { legendKey: 'madd_tabii', colorVar: '--tj-madd-tabii', tooltip: m.ts_tajweed_rule_madd_tabii, stack: 'base' },
     madd_iwad: { legendKey: 'madd_tabii', colorVar: '--tj-madd-tabii', tooltip: m.ts_tajweed_rule_madd_iwad, stack: 'base' },
     // ── Heaviness ─────────────────────────────────────────────────────────────
     tafkheem: { legendKey: 'tafkheem', colorVar: '--tj-tafkheem', tooltip: m.ts_tajweed_rule_tafkheem, stack: 'top' },

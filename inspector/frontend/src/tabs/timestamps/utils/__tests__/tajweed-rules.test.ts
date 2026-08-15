@@ -37,8 +37,7 @@ describe('tajweed-rules — colour map', () => {
         expect(tajweedColorVar('idgham_mutajanisayn_kamil')).toBe('var(--tj-mutajanisayn)');
     });
 
-    it('aliases allah-dagger-alef + madd-iwad to the madd-ṭabīʿī colour', () => {
-        expect(tajweedColorVar('allah_dagger_alef')).toBe('var(--tj-madd-tabii)');
+    it('aliases madd-iwad to the madd-ṭabīʿī colour', () => {
         expect(tajweedColorVar('madd_iwad')).toBe('var(--tj-madd-tabii)');
     });
 

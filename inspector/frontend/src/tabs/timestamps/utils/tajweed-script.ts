@@ -77,7 +77,6 @@ export function cellGlyph(chars: string, rules: readonly string[], phone: string
         const mark = firstMark(chars);
         return mark === MEEM_HI ? MEEM_LO : mark;
     }
-    if (rules.includes('allah_dagger_alef')) return DAGGER;
     if (rules.includes('madd_iwad')) return ALEF; // the added alef (full cell)
     if (rules.includes('iltiqaa_kasra') || rules.includes('iltiqaa')) return KASRA;
     // hamza-waṣl connecting vowel: pick the haraka by the sounded vowel. Match the
