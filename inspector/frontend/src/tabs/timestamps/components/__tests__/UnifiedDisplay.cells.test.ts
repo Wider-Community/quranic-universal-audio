@@ -333,7 +333,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(implicit.dataset.cellStart).toBe('0.1');
     });
 
-    it('renders an implicit hamza-waṣl vowel as an inserted small cell with derived glyph', () => {
+    it('renders the hamza-waṣl vowel a reader starting on the word says', () => {
         const intervals: PhonemeInterval[] = [
             { phone: 'ʔ', start: 0, end: 0.1 }, { phone: 'a', start: 0.1, end: 0.2 },
         ];
@@ -341,14 +341,14 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [{ char: 'ٱ', start: 0, end: 0.1, silent: false }],
             [
                 base(0, [0]),
-                { chars: '', role: 'haraka', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 0, rules: ['hamza_wasl_kasra'], shareGroup: null },
+                { chars: 'َ', role: 'haraka', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 0, rules: ['hamza_wasl_kasra'], shareGroup: null },
             ],
             [0, 1],
         );
         const { container } = mount([word], intervals);
         const cell = container.querySelector<HTMLElement>('.haraka-cell.dia-inserted')!;
         expect(cell).toBeTruthy();
-        expect(cell.querySelector('.g')!.textContent).toBe('َ'); // fatḥa derived from 'a'
+        expect(cell.querySelector('.g')!.textContent).toBe('َ'); // the producer's own fatḥa
         expect(cell.dataset.cellTimed).toBe('1');
         expect(cell.dataset.cellStart).toBe('0.1');
     });

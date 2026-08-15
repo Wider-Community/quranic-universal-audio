@@ -197,7 +197,7 @@ describe('UnifiedDisplay — iltiqaa connecting-kasra borderless bridge', () => 
         const wN = cellWord('2:1:1', [{ char: 'د', start: 0, end: 0.3 }], [
             { chars: 'د', role: 'base', status: 'present', phonemeIndices: [0], sourceLetterIndex: 0, rules: [], shareGroup: null },
             { chars: 'ٌ', role: 'tanween', status: 'present', phonemeIndices: [1, 2], sourceLetterIndex: 0, rules: [], shareGroup: null },
-            { chars: '', role: 'haraka', status: 'inserted', phonemeIndices: [3], sourceLetterIndex: 0, rules: ['iltiqaa_kasra'], shareGroup: null },
+            { chars: 'ِ', role: 'haraka', status: 'inserted', phonemeIndices: [3], sourceLetterIndex: 0, rules: ['iltiqaa_kasra'], shareGroup: null },
         ], [0, 1, 2, 3]);
         const wNext = cellWord('2:1:2', [
             { char: 'ٱ', start: 0.4, end: 0.4 }, { char: 'ل', start: 0.4, end: 0.6 },
@@ -246,7 +246,7 @@ describe('UnifiedDisplay — iltiqaa connecting-kasra borderless bridge', () => 
             { chars: 'ي', role: 'base', status: 'present', phonemeIndices: [2], sourceLetterIndex: 1, rules: [], shareGroup: null },
             { chars: 'ر', role: 'base', status: 'present', phonemeIndices: [3], sourceLetterIndex: 2, rules: [], shareGroup: null },
             { chars: 'ً', role: 'tanween', status: 'present', phonemeIndices: [4, 5], sourceLetterIndex: 2, rules: [], shareGroup: null },
-            { chars: '', role: 'haraka', status: 'inserted', phonemeIndices: [6], sourceLetterIndex: 2, rules: ['iltiqaa_kasra'], shareGroup: null },
+            { chars: 'ِ', role: 'haraka', status: 'inserted', phonemeIndices: [6], sourceLetterIndex: 2, rules: ['iltiqaa_kasra'], shareGroup: null },
             { chars: 'ا', role: 'base', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 3, rules: [], shareGroup: null },
         ], [0, 1, 2, 3, 4, 5, 6]);
         const wNext = cellWord('2:1:2', [
@@ -303,7 +303,7 @@ describe('UnifiedDisplay — word-unit grouping (justification atoms)', () => {
         const wN = cellWord('2:1:1', [{ char: 'د', start: 0, end: 0.3 }], [
             { chars: 'د', role: 'base', status: 'present', phonemeIndices: [0], sourceLetterIndex: 0, rules: [], shareGroup: null },
             { chars: 'ٌ', role: 'tanween', status: 'present', phonemeIndices: [1, 2], sourceLetterIndex: 0, rules: [], shareGroup: null },
-            { chars: '', role: 'haraka', status: 'inserted', phonemeIndices: [3], sourceLetterIndex: 0, rules: ['iltiqaa_kasra'], shareGroup: null },
+            { chars: 'ِ', role: 'haraka', status: 'inserted', phonemeIndices: [3], sourceLetterIndex: 0, rules: ['iltiqaa_kasra'], shareGroup: null },
         ], [0, 1, 2, 3]);
         const wNext = cellWord('2:1:2', [
             { char: 'ٱ', start: 0.4, end: 0.4 }, { char: 'ل', start: 0.4, end: 0.6 },

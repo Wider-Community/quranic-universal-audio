@@ -67,22 +67,15 @@ export function cellSlot(glyph: string): 'top' | 'bottom' {
     return BELOW_MARKS.has(glyph) ? 'bottom' : 'top';
 }
 
-/** The DK glyph for a SMALL cell — its own mark, or derived for an implicit
- *  graphemeless cell (the producer keeps `chars` empty + carries the rules). */
-export function cellGlyph(chars: string, rules: readonly string[], phone: string | undefined): string {
-    if (chars) {
-        // The iqlab mini-meem always DISPLAYS the low-meem glyph (cleaner than the
-        // isolated high-meem); pushSmall slots it by the source mark (MEEM_HI →
-        // above, MEEM_LO → below).
-        const mark = firstMark(chars);
-        return mark === MEEM_HI ? MEEM_LO : mark;
-    }
-    if (rules.includes('madd_iwad')) return ALEF; // the added alef (full cell)
-    if (rules.includes('iltiqaa_kasra') || rules.includes('iltiqaa')) return KASRA;
-    // hamza-waṣl connecting vowel: pick the haraka by the sounded vowel. Match the
-    // BASE vowel (first char) so the long ibtidaa form (i:/u:, ٱئْتُونِى) maps too.
-    const v = phone?.[0];
-    return v === 'i' ? KASRA : v === 'u' ? DAMMA : FATHA;
+/** The DK glyph for a SMALL cell — its own mark. A cell the rasm wrote nothing
+ *  for still carries one: the producer takes it from the reading (the kasra a
+ *  reader starting on `ٱئْتِ` says), so nothing here is inferred from a sound. */
+export function cellGlyph(chars: string): string {
+    // The iqlab mini-meem always DISPLAYS the low-meem glyph (cleaner than the
+    // isolated high-meem); pushSmall slots it by the source mark (MEEM_HI →
+    // above, MEEM_LO → below).
+    const mark = firstMark(chars);
+    return mark === MEEM_HI ? MEEM_LO : mark;
 }
 
 /** The FULL-cell glyph for an implicit madd (chars==='') — dagger / alef. */

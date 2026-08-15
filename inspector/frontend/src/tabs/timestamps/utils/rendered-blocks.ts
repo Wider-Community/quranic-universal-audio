@@ -289,7 +289,7 @@ export function buildRendered(
         if (kasra && kpi != null && intervals[kpi] && wi + 1 < words.length
             && !bridgeBeforeBlock.has(wi + 1)) {
             const iv = intervals[kpi];
-            const glyph = cellGlyph(kasra.chars, kasra.rules, iv.phone);
+            const glyph = cellGlyph(kasra.chars);
             bridgeBeforeBlock.set(wi + 1, {
                 phonemes: [{ interval: iv, index: kpi, wordLocalIndex: -1, tjBadges: [] }],
                 letter: {

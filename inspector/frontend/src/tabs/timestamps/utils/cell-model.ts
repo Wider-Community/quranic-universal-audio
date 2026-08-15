@@ -421,7 +421,7 @@ export function cellGroupsFor(
             slot = cellSlot(mark);
             sizeGlyph = glyph;
         } else {
-            glyph = cellGlyph(c.chars, c.rules, phone);
+            glyph = cellGlyph(c.chars);
             // Iqlab mini-meem: the displayed GLYPH is always the low-meem
             // (cellGlyph normalises it), but its SLOT + calibration follow the
             // SOURCE mark the synthesizer picked — MEEM_HI (ḍamma/fatḥa) sits
