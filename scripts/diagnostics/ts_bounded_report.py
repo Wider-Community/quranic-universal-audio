@@ -10,7 +10,13 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
-from scripts.diagnostics.ts_bounded_vocab import CELLS_DROPPED, CORPUS, EXPECTED, MEMBERS
+from scripts.diagnostics.ts_bounded_vocab import (
+    CELLS_DROPPED,
+    CORPUS,
+    COUNT_FIXED,
+    EXPECTED,
+    MEMBERS,
+)
 
 
 @dataclass(frozen=True)
@@ -36,6 +42,8 @@ class Report:
     count_moved: list[str] = field(default_factory=list)
     runs_dropped: list[str] = field(default_factory=list)
     cells_dropped: list[str] = field(default_factory=list)
+    boundary_retimed: list[str] = field(default_factory=list)
+    count_fixed: list[str] = field(default_factory=list)
 
     @property
     def unclassified(self) -> list[Diff]:
@@ -97,6 +105,7 @@ def count_violations(rep: Report) -> list[str]:
     checks = [(family, rep.families[family], *rule) for family, rule in EXPECTED.items()]
     checks += [(reason, seen[reason], *rule) for reason, rule in MEMBERS.items()]
     checks.append(("words without cells", len(rep.cells_dropped), *CELLS_DROPPED))
+    checks.append(("counts a fix moved", len(rep.count_fixed), *COUNT_FIXED))
     return [row for row in (_moved(*check) for check in checks) if row]
 
 
@@ -108,6 +117,15 @@ def _hard_assertions(rep: Report, max_examples: int) -> list[str]:
         f"  runs the stamper kept     {rep.words - len(rep.runs_dropped)}/{rep.words}",
         f"  words that got cells      {rep.words - len(rep.cells_dropped)}/{rep.words}",
     ]
+    if rep.count_fixed:
+        out.append(
+            f"  counts a fix moved        {len(rep.count_fixed)} (listed by ref, with the reading)"
+        )
+    if rep.boundary_retimed:
+        out.append(
+            f"  waṣl boundaries retimed   {len(rep.boundary_retimed)} "
+            "(outer span held, the words still meet)"
+        )
     for label, rows in (
         ("timing moved", rep.timing_moved),
         ("count moved", rep.count_moved),
@@ -170,6 +188,8 @@ def to_json(rep: Report) -> dict:
         "count_moved": rep.count_moved,
         "runs_dropped": rep.runs_dropped,
         "cells_dropped": rep.cells_dropped,
+        "boundary_retimed": rep.boundary_retimed,
+        "count_fixed": rep.count_fixed,
         "count_violations": count_violations(rep),
         "unclassified": [
             {"kind": d.kind, "ref": d.ref, "text": d.text, "detail": d.detail}

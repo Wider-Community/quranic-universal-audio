@@ -82,6 +82,20 @@ CARRIER_WAW = "و"
 #: A stop on a qalqala letter legacy left unnamed.
 FIX_QALQALA_AT_STOP = "qalqala_kubra"
 
+#: The cell tags a cross-word merger leaves on the word it merged into. Across
+#: a waṣl join its partner is in the next segment, where this scan cannot look,
+#: so the join itself is what says the re-attribution is the reason.
+MERGER_CELL_TAGS = frozenset(
+    {
+        "idgham_bi_ghunnah",
+        "idgham_bila_ghunnah",
+        "idgham_shafawi",
+        "idgham_mutamathilayn",
+        "idgham_mutaqaribayn",
+        "idgham_mutajanisayn_kamil",
+    }
+)
+
 #: A hidden noon leaves a hum, and before a letter of istilaa that hum is
 #: heavy. Legacy coloured it and named the hiding twice instead of naming the
 #: weight, so a word carrying both is the correction and not a new rule.
@@ -99,6 +113,10 @@ FIX_REFS = {
     # variant `seen_sad_yabsut` / `seen_sad_bastah`, both defaulting to seen.
     "2:245:14": {"token": "yabsut and bastah are read with the seen"},
     "7:69:22": {"token": "yabsut and bastah are read with the seen"},
+    # Started on, `ٱئْتِ` is read `إِىٓتِ`: the prosthetic hamza takes a kasra and
+    # the quiescent hamza after it becomes the madd that kasra opens. One sound
+    # where legacy read two, so the word's phone count is one lower.
+    "10:15:11": {"count": "starting on `ٱئْتِ` reads its second hamza as a madd"},
 }
 
 #: Differences accepted as they are, each with the reason it is not a bug.
@@ -122,6 +140,12 @@ CORPUS = {"shards": 114, "words": 80200}
 #: here on has none of these. These are what the frozen ones already hold, and
 #: the count may only fall -- to zero as each is re-aligned.
 CELLS_DROPPED = ("at_most", 66)
+
+#: Words whose stored phone count a listed correction moved. Each is named by
+#: ref in `FIX_REFS` under `count`, which is what permits it; this only bounds
+#: how many there may be. None over this corpus -- the one that exists is a
+#: word another reciter starts a segment on and this one does not.
+COUNT_FIXED = ("at_most", 0)
 
 #: Family -> (direction the count may move, differences measured over CORPUS).
 #: `exact` is a mechanical map over a frozen corpus: it has one right answer,

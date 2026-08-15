@@ -74,6 +74,7 @@ from scripts.diagnostics.ts_bounded_vocab import (  # noqa: E402
     FIX_REFS,
     LABIAL_MERGER,
     LEGACY_SILENCE_TAGS,
+    MERGER_CELL_TAGS,
     NEW_RULE_TAGS,
     RESIDUE_REFS,
     family_of_legacy,
@@ -138,6 +139,8 @@ class ProducerWord:
     tokens: list[str]
     rules: list[str]
     partners: frozenset[int]
+    #: A merger crosses a waṣl join into this word, from the segment before.
+    joined: bool = False
 
 
 def _mfa_tokens(phonemes) -> list[str]:
@@ -188,31 +191,55 @@ def _partners_by_word(res, n_words: int) -> list[frozenset[int]]:
     return [frozenset(partners) for partners in out]
 
 
-def producer_view(verse_key: str, words: list) -> list[ProducerWord | None]:
+def producer_view(
+    verse_key: str,
+    words: list,
+    wasl_prev_ref: str | None = None,
+    wasl_cont_ref: str | None = None,
+) -> list[ProducerWord | None]:
     """One ``ProducerWord`` per shard word, phonemized as the cell stamper does.
 
-    Gap-bounded runs, each on its own ref, so a run's last word stops. A run
-    whose word count disagrees with the shard leaves ``None`` in its slots --
-    the stamper drops that run's cells, which the caller reports as a hard
-    failure rather than as a family.
+    Gap-bounded runs, each on its own ref, so a run's last word stops -- except
+    at a waṣl join, where the stamper reads across it and so must this. A
+    reciter who never joins a verse to the next hides the difference; one who
+    does reads a tanween into the next word's letter and the run's last word
+    keeps no iwad.
+
+    A run whose word count disagrees with the shard leaves ``None`` in its
+    slots -- the stamper drops that run's cells, which the caller reports as a
+    hard failure rather than as a family.
     """
-    from qua_sdk.components.timing.lib.cells import _gap_runs
+    from qua_sdk.components.timing.lib.cells import _extend_ref, _gap_runs
     from qua_sdk.integrations.phonemizer import result_for_ref
     from qua_sdk.integrations.projection import words as phon_words
 
     out: list[ProducerWord | None] = [None] * len(words)
     pos = 0
-    for run in _gap_runs(words):
+    runs = _gap_runs(words)
+    for index, run in enumerate(runs):
         lo, hi = run[0][0], run[-1][0]
-        ref = f"{verse_key}:{lo}" if lo == hi else f"{verse_key}:{lo}-{verse_key}:{hi}"
+        base = f"{verse_key}:{lo}" if lo == hi else f"{verse_key}:{lo}-{verse_key}:{hi}"
+        ref, skip = _extend_ref(
+            base,
+            wasl_prev_ref if index == 0 else None,
+            wasl_cont_ref if index == len(runs) - 1 else None,
+        )
         res = result_for_ref(ref, display=True)
-        phoned = phon_words(res)
+        whole = phon_words(res)
+        phoned = whole[skip : skip + len(run)]
         if len(phoned) == len(run):
-            rules = _rules_by_word(res, len(phoned))
-            partners = _partners_by_word(res, len(phoned))
+            rules = _rules_by_word(res, len(whole))[skip : skip + len(run)]
+            partners = _partners_by_word(res, len(whole))[skip : skip + len(run)]
             for i, word in enumerate(phoned):
-                shifted = frozenset(p + pos for p in partners[i])
-                out[pos + i] = ProducerWord(_mfa_tokens(word.phonemes), rules[i], shifted)
+                # A merger realized on the word appended across the join belongs
+                # to the next segment; only this run's partners are ours.
+                shifted = frozenset(
+                    p - skip + pos for p in partners[i] if skip <= p < skip + len(run)
+                )
+                joined = any(not skip <= p < skip + len(run) for p in partners[i])
+                out[pos + i] = ProducerWord(
+                    _mfa_tokens(word.phonemes), rules[i], shifted, joined
+                )
         pos += len(run)
     return out
 
@@ -248,6 +275,7 @@ class WordView:
     bucket_moved: bool
     bucket_is_merger: bool
     partner_tags: set[str]
+    joined: bool
 
 
 def classify_word(view: WordView) -> list[Diff]:
@@ -342,6 +370,8 @@ def _unpaired_new(view: WordView, tag: str) -> tuple[str | None, str]:
         return "fix", "the hum a hidden noon leaves before istilaa is heavy"
     if tag in view.partner_tags:
         return "merger_attribution", ""
+    if view.joined and tag in MERGER_CELL_TAGS:
+        return "merger_attribution", ""
     if tag in FIX_REFS.get(view.ref, ()):
         return "fix", FIX_REFS[view.ref][tag]
     if tag == FIX_QALQALA_AT_STOP and tag not in view.legacy:
@@ -352,26 +382,39 @@ def _unpaired_new(view: WordView, tag: str) -> tuple[str | None, str]:
 # --- the scan ---------------------------------------------------------------
 
 
-def scan_segment(old_seg: dict, new_seg: dict, rep: Report) -> None:
+def scan_segment(
+    old_seg: dict,
+    new_seg: dict,
+    rep: Report,
+    wasl_prev_ref: str | None = None,
+    wasl_cont_ref: str | None = None,
+    retimed: frozenset[str] = frozenset(),
+) -> None:
     """Every difference between one segment before and after the replay."""
     from qua_sdk.integrations.tokens import is_indexable
 
     verse_key = old_seg["ref"]
-    view = producer_view(verse_key, new_seg["words"])
+    view = producer_view(verse_key, new_seg["words"], wasl_prev_ref, wasl_cont_ref)
     legacy_phones = legacy_buckets(new_seg["words"])
     pairs = zip(old_seg["words"], new_seg["words"], strict=True)
     for pos, (old, new) in enumerate(pairs):
         rep.words += 1
         ref = f"{verse_key}:{old[0]}"
         if (old[1], old[2]) != (new[1], new[2]):
-            rep.timing_moved.append(f"{ref} {(old[1], old[2])} -> {(new[1], new[2])}")
+            moved = rep.boundary_retimed if ref in retimed else rep.timing_moved
+            moved.append(f"{ref} {(old[1], old[2])} -> {(new[1], new[2])}")
         produced = view[pos]
         if produced is None:
             rep.runs_dropped.append(ref)
             continue
         stored = [phone[0] for phone in new[4] if is_indexable(phone[0])]
         if len(stored) != len(produced.tokens):
-            rep.count_moved.append(f"{ref} stored {len(stored)} != producer {len(produced.tokens)}")
+            listed = FIX_REFS.get(ref, {}).get("count")
+            where = rep.count_fixed if listed else rep.count_moved
+            note = f" -- {listed}" if listed else ""
+            where.append(
+                f"{ref} stored {len(stored)} != producer {len(produced.tokens)}{note}"
+            )
             continue
         if not has_cells(new):
             # The stamper refused this word -- its letters do not match the
@@ -398,6 +441,7 @@ def scan_segment(old_seg: dict, new_seg: dict, rep: Report) -> None:
                 partner_tags={
                     tag for p in produced.partners for tag in new_tags(new_seg["words"][p])
                 },
+                joined=produced.joined,
             )
         )
 
@@ -409,16 +453,72 @@ def _token_family(ref: str) -> tuple[str | None, str]:
     return None, ""
 
 
+def wasl_refs(segments: list[dict]) -> list[tuple[str | None, str | None]]:
+    """The waṣl-adjacent word refs per segment, as ``annotate_ordered_segments``
+    derives them -- the replay reads across a join, so the re-derive must too."""
+    from qua_sdk.components.timing.lib.cells import _next_verse_key
+
+    out: list[tuple[str | None, str | None]] = []
+    for i, seg in enumerate(segments):
+        key = seg["ref"]
+        prev_ref = cont_ref = None
+        if i > 0 and segments[i - 1].get("wasl"):
+            pkey, pwords = segments[i - 1]["ref"], segments[i - 1]["words"]
+            if pwords and (pkey == key or _next_verse_key(pkey) == key):
+                prev_ref = f"{pkey}:{pwords[-1][0]}"
+        if seg.get("wasl") and i + 1 < len(segments):
+            nkey, nwords = segments[i + 1]["ref"], segments[i + 1]["words"]
+            if nwords and (nkey == key or _next_verse_key(key) == nkey):
+                cont_ref = f"{nkey}:{nwords[0][0]}"
+        out.append((prev_ref, cont_ref))
+    return out
+
+
+def retimed_joins(before: list[dict], after: list[dict], rep: Report) -> frozenset[str]:
+    """The two word refs at each waṣl join whose shared boundary legitimately
+    moved, so the first word holds through the ghunnah of a merger that starts
+    the second.
+
+    The move is a boundary and not a drift: the pair's outer span is what it
+    was and the two words still meet. Where that does not hold the refs are
+    left out, and the caller reports the move as a timing failure.
+    """
+    out: set[str] = set()
+    for i, seg in enumerate(after):
+        if not seg.get("wasl") or i + 1 >= len(after):
+            continue
+        prev_old, prev_new = before[i]["words"][-1], seg["words"][-1]
+        next_old, next_new = before[i + 1]["words"][0], after[i + 1]["words"][0]
+        if (prev_old[1], prev_old[2]) == (prev_new[1], prev_new[2]) and (
+            next_old[1],
+            next_old[2],
+        ) == (next_new[1], next_new[2]):
+            continue  # nothing moved here
+        held = (prev_old[1], next_old[2]) == (prev_new[1], next_new[2])
+        if not held or prev_new[2] != next_new[1]:
+            rep.timing_moved.append(
+                f"{seg['ref']}:{prev_new[0]} waṣl boundary moved the pair's span"
+            )
+            continue
+        out.add(f"{seg['ref']}:{prev_new[0]}")
+        out.add(f"{after[i + 1]['ref']}:{next_new[0]}")
+    return frozenset(out)
+
+
 def scan_doc(doc: dict, rep: Report) -> None:
     from qua_sdk.components.timing.lib.cells import annotate_ordered_segments
 
     before = copy.deepcopy(doc["segments"])
+    joins = wasl_refs(doc["segments"])
     annotate_ordered_segments(
         [(seg["ref"], seg["words"], bool(seg.get("wasl"))) for seg in doc["segments"]]
     )
     rep.shards += 1
-    for old_seg, new_seg in zip(before, doc["segments"], strict=True):
-        scan_segment(old_seg, new_seg, rep)
+    retimed = retimed_joins(before, doc["segments"], rep)
+    for (old_seg, new_seg), (prev_ref, cont_ref) in zip(
+        zip(before, doc["segments"], strict=True), joins, strict=True
+    ):
+        scan_segment(old_seg, new_seg, rep, prev_ref, cont_ref, retimed)
 
 
 def _load(path: Path) -> dict:

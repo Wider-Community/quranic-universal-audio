@@ -56,6 +56,7 @@ def _view(**over) -> gate.WordView:
         bucket_moved=False,
         bucket_is_merger=False,
         partner_tags=set(),
+        joined=False,
     )
     return gate.WordView(**{**base, **over})
 
@@ -193,9 +194,24 @@ def test_every_family_the_classifier_emits_has_a_declared_count():
 
 
 def test_every_listed_reason_has_a_declared_count():
-    listed = {reason for tags in vocab.FIX_REFS.values() for reason in tags.values()}
+    """Every reason a difference can be filed under is one `MEMBERS` bounds.
+
+    A `count` reason is not one of them: it explains a word the hard assertion
+    would otherwise fail on, and `COUNT_FIXED` bounds those instead.
+    """
+    listed = {
+        reason
+        for tags in vocab.FIX_REFS.values()
+        for key, reason in tags.items()
+        if key != "count"
+    }
     listed |= set(vocab.RESIDUE_REFS.values())
     assert listed <= set(vocab.MEMBERS), f"undeclared: {sorted(listed - set(vocab.MEMBERS))}"
+
+
+def test_a_count_a_fix_moved_is_listed_by_ref_and_bounded():
+    assert "count" in vocab.FIX_REFS["10:15:11"]
+    assert vocab.COUNT_FIXED[0] == "at_most"
 
 
 # --- the declared tables mirror the producer's ------------------------------
@@ -237,6 +253,62 @@ def test_no_legacy_name_is_also_a_current_one():
     legacy = set(vocab.RENAMED_TAGS) | set(vocab.COLLAPSED_TAGS) | {vocab.LEGACY_WASL_VOWEL}
     live = _live_shard_tags()
     assert not legacy & live, f"still current: {sorted(legacy & live)}"
+
+
+# --- the waṣl join ----------------------------------------------------------
+
+
+def _joined(ref: str, wasl: bool, words: list[tuple[int, int, int]]) -> dict:
+    """A segment shaped as a shard writes it: ``[widx, start, end, letters, phones]``."""
+    return {
+        "ref": ref,
+        "wasl": wasl,
+        "words": [[widx, start, end, [], []] for widx, start, end in words],
+    }
+
+
+def test_a_bridge_tag_arriving_across_a_join_is_re_attribution():
+    """The merger's other side is the previous segment's last word, which this
+    scan cannot reach, so the join itself is what names the reason."""
+    view = _view(current={"idgham_bi_ghunnah"}, joined=True)
+    assert _families(view) == ["merger_attribution"]
+    # ...and without the join there is nothing to explain it.
+    assert _families(_view(current={"idgham_bi_ghunnah"})) == [None]
+
+
+def test_the_wasl_boundary_may_move_when_the_pair_still_spans_the_same_time():
+    """A head merger at a join holds its ghunnah on the word before, which moves
+    the boundary between the two and nothing else."""
+    before = [_joined("2:1", True, [(1, 0, 100)]), _joined("2:2", False, [(1, 100, 300)])]
+    after = [_joined("2:1", True, [(1, 0, 180)]), _joined("2:2", False, [(1, 180, 300)])]
+    rep = gate.Report()
+    retimed = gate.retimed_joins(before, after, rep)
+    assert retimed == {"2:1:1", "2:2:1"}
+    assert rep.timing_moved == []
+
+
+def test_a_join_that_moves_the_pair_s_span_is_still_a_failure():
+    before = [_joined("2:1", True, [(1, 0, 100)]), _joined("2:2", False, [(1, 100, 300)])]
+    after = [_joined("2:1", True, [(1, 0, 180)]), _joined("2:2", False, [(1, 180, 400)])]
+    rep = gate.Report()
+    assert gate.retimed_joins(before, after, rep) == frozenset()
+    assert rep.timing_moved
+
+
+def test_wasl_refs_link_a_segment_to_the_word_across_the_join():
+    segments = [
+        _joined("2:1", True, [(1, 0, 100), (2, 100, 200)]),
+        _joined("2:2", False, [(1, 200, 300)]),
+    ]
+    assert gate.wasl_refs(segments) == [(None, "2:2:1"), ("2:1:2", None)]
+
+
+def test_a_segment_that_does_not_continue_links_nothing():
+    segments = [
+        _joined("2:1", False, [(1, 0, 100)]),
+        _joined("2:2", False, [(1, 200, 300)]),
+    ]
+    assert gate.wasl_refs(segments) == [(None, None), (None, None)]
 
 
 # --- the corpus run ---------------------------------------------------------
