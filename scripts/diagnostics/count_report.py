@@ -3,8 +3,16 @@
 Prints the 13 ``category_counts`` and the ``stats`` block that
 ``services.validation.validate_reciter_segments`` returns for a reciter. Two
 runs of this script (a baseline arm and a candidate arm) are what a segmenter
-A/B is scored on. Every number is the engine's own — nothing here recomputes a
-count, so the two arms cannot drift apart through a second implementation.
+A/B is scored on. Every number is the engine's own, so the two arms cannot
+drift apart through a second implementation.
+
+The one exception is ``low_confidence``. ``category_counts`` reports it as the
+length of the detail list, built against ``LOW_CONFIDENCE_DETAIL_THRESHOLD =
+1.0`` — every segment that is not a perfect match, typically 40% of a reciter.
+The accordion badge and the mark-ready gate both count the strict
+``LOW_CONFIDENCE_THRESHOLD = 0.80`` band instead, so this report does too: an
+A/B has to move the number a reviewer acts on. The ``<1.0`` tier stays visible
+on its own line rather than disappearing.
 
 **One slug, one bucket, one process.** ``get_backend()`` is a process-wide
 singleton whose bucket id is fixed at construction, so a prod baseline against
@@ -71,11 +79,29 @@ def _fmt(value: object) -> str:
     return f"{value:.3f}" if isinstance(value, float) else str(value)
 
 
+def _strict_counts(result: dict) -> tuple[dict, int]:
+    """``category_counts`` with ``low_confidence`` at 0.80, plus the ``<1.0`` total.
+
+    Mirrors what ``state.mark_ready`` does to the same field, for the same reason.
+    """
+    from config import LOW_CONFIDENCE_THRESHOLD
+
+    counts = dict(result["category_counts"])
+    detail_total = counts.get("low_confidence", 0)
+    items = result.get("low_confidence") or []
+    counts["low_confidence"] = sum(
+        1 for it in items if (it.get("confidence") or 0.0) < LOW_CONFIDENCE_THRESHOLD
+    )
+    return counts, detail_total
+
+
 def _render(slug: str, bucket: str, result: dict) -> None:
     print(f"[{slug}]  bucket={bucket}")
+    counts, detail_total = _strict_counts(result)
     print("\ncategory_counts")
-    for name, count in result["category_counts"].items():
+    for name, count in counts.items():
         print(f"  {name:<{_LABEL_WIDTH}} {count:>10}")
+    print(f"  {'(conf < 1.0)':<{_LABEL_WIDTH}} {detail_total:>10}")
     print("\nstats")
     stats = result.get("stats")
     if not stats:
