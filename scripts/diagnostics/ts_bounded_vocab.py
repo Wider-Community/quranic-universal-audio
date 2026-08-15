@@ -100,17 +100,28 @@ RESIDUE_REFS = {
 #: reports its counts and asserts nothing about them.
 CORPUS = {"shards": 114, "words": 80200}
 
+#: Words the stamper writes no cells for, because the projection and the
+#: aligner cut them into a different number of letters. Sixty-six are the
+#: length mark of `أَنَا۠`, which the projection writes as a letter of its own
+#: and the aligner folds onto the alif; one is `مَجْرىٰهَا`, whose dagger alif
+#: the projection drops. Ten more words differ only in that the projection
+#: shows a saktah or an ishmam mark on the letter it decorates and the aligner
+#: does not write it at all; they cut the same letters, so every index still
+#: addresses the letter it means and they keep their cells. May only fall: one
+#: letter partition is the answer, not two.
+CELLS_DROPPED = ("at_most", 67)
+
 #: Family -> (direction the count may move, differences measured over CORPUS).
 #: `exact` is a mechanical map over a frozen corpus: it has one right answer,
 #: and a producer change that moves it says so in the same commit. `at_most`
 #: may only fall, as a correction lands upstream or a residue is resolved and
 #: the difference stops existing.
 EXPECTED = {
-    "rename": ("exact", 33566),
-    "collapse": ("exact", 15568),
-    "new_rule": ("exact", 17122),
-    "dropped": ("exact", 8573),
-    "merger_attribution": ("exact", 8294),
+    "rename": ("exact", 33498),
+    "collapse": ("exact", 15567),
+    "new_rule": ("exact", 17055),
+    "dropped": ("exact", 8571),
+    "merger_attribution": ("exact", 8289),
     "fix": ("at_most", 6),
     "residue": ("at_most", 236),
 }

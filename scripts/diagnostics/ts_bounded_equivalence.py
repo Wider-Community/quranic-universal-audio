@@ -96,11 +96,20 @@ def legacy_tags(word: list) -> set[str]:
 
 
 def new_tags(word: list) -> set[str]:
-    """Every rule the replayed cell rows carry."""
+    """Every rule the replayed cell rows carry. A v11 cell names them in a
+    list; anything else is a row the replay did not write."""
     out: set[str] = set()
     for cell in word[5] if len(word) > 5 and word[5] else []:
-        out |= set(cell[5] or [])
+        if len(cell) > 5 and isinstance(cell[5], list):
+            out |= {tag for tag in cell[5] if tag}
     return out
+
+
+def has_cells(word: list) -> bool:
+    """Did the replay write this word's cells? A word the stamper declined
+    keeps whatever it held, which is not an answer to compare against."""
+    cells = word[5] if len(word) > 5 else None
+    return bool(cells) and all(isinstance(c[5], list) for c in cells if len(c) > 5)
 
 
 def word_text(word: list) -> str:
@@ -357,6 +366,11 @@ def scan_segment(old_seg: dict, new_seg: dict, rep: Report) -> None:
         stored = [phone[0] for phone in new[4] if is_indexable(phone[0])]
         if len(stored) != len(produced.tokens):
             rep.count_moved.append(f"{ref} stored {len(stored)} != producer {len(produced.tokens)}")
+            continue
+        if not has_cells(new):
+            # The stamper refused this word -- its letters do not match the
+            # ones the projection writes -- so it carries no reading to sort.
+            rep.cells_dropped.append(ref)
             continue
         text = word_text(old)
         if stored != produced.tokens:

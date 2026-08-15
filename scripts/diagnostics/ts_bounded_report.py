@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
-from scripts.diagnostics.ts_bounded_vocab import CORPUS, EXPECTED, MEMBERS
+from scripts.diagnostics.ts_bounded_vocab import CELLS_DROPPED, CORPUS, EXPECTED, MEMBERS
 
 
 @dataclass(frozen=True)
@@ -27,7 +27,7 @@ class Diff:
 
 @dataclass
 class Report:
-    """Every difference a run turned up, plus the three hard-assertion tallies."""
+    """Every difference a run turned up, plus the tallies that ride on top."""
 
     shards: int = 0
     words: int = 0
@@ -35,6 +35,7 @@ class Report:
     timing_moved: list[str] = field(default_factory=list)
     count_moved: list[str] = field(default_factory=list)
     runs_dropped: list[str] = field(default_factory=list)
+    cells_dropped: list[str] = field(default_factory=list)
 
     @property
     def unclassified(self) -> list[Diff]:
@@ -95,6 +96,7 @@ def count_violations(rep: Report) -> list[str]:
     seen = rep.ledger("residue") + rep.ledger("fix")
     checks = [(family, rep.families[family], *rule) for family, rule in EXPECTED.items()]
     checks += [(reason, seen[reason], *rule) for reason, rule in MEMBERS.items()]
+    checks.append(("words without cells", len(rep.cells_dropped), *CELLS_DROPPED))
     return [row for row in (_moved(*check) for check in checks) if row]
 
 
@@ -104,11 +106,13 @@ def _hard_assertions(rep: Report, max_examples: int) -> list[str]:
         f"  word timings unmoved      {rep.words - len(rep.timing_moved)}/{rep.words}",
         f"  indexable counts agree    {rep.words - len(rep.count_moved)}/{rep.words}",
         f"  runs the stamper kept     {rep.words - len(rep.runs_dropped)}/{rep.words}",
+        f"  words that got cells      {rep.words - len(rep.cells_dropped)}/{rep.words}",
     ]
     for label, rows in (
         ("timing moved", rep.timing_moved),
         ("count moved", rep.count_moved),
         ("run dropped", rep.runs_dropped),
+        ("no cells", rep.cells_dropped),
     ):
         out += [f"    x {label}: {row}" for row in rows[:max_examples]]
     return out
@@ -165,6 +169,7 @@ def to_json(rep: Report) -> dict:
         "timing_moved": rep.timing_moved,
         "count_moved": rep.count_moved,
         "runs_dropped": rep.runs_dropped,
+        "cells_dropped": rep.cells_dropped,
         "count_violations": count_violations(rep),
         "unclassified": [
             {"kind": d.kind, "ref": d.ref, "text": d.text, "detail": d.detail}
