@@ -14,7 +14,7 @@ import { splitWaqf } from '../../../lib/utils/waqf';
 import type { PhonemeInterval, TsCell, TsWord } from '../../../lib/types/ts-client';
 import { QALQALA_TAGS, _nasalUnions, _shareUnions, cellGroupsFor } from './cell-model';
 import type { RenderedGroup, RenderedPhoneme } from './cell-model';
-import { _buildColumns, _heavyIkhfaaDisplay, _isHeavyIkhfaa } from './phoneme-columns';
+import { _buildColumns } from './phoneme-columns';
 
 /** Rub-el-hizb (U+06DE) and place-of-sajdah (U+06E9) — section markers, not
  *  recited; stripped from the analysis word box so the cell shows only the
@@ -245,12 +245,7 @@ export function buildRendered(
         const idxs = c.role === 'tanween' && c.phonemeIndices.length > 1
             ? c.phonemeIndices.slice(-1)
             : c.phonemeIndices;
-        // A heavy ikhfaa nasal (ŋ before an istiʿlāʾ letter, shown ŋˤ) stacks a
-        // tafkheem bar above its ikhfaa underline.
-        for (const fi of idxs) {
-            const heavy = _isHeavyIkhfaa(intervals[fi]?.phone, intervals[fi + 1]?.phone);
-            phonemeBadges.set(fi, heavy ? badgesForTags([...baseTags, 'tafkheem']) : badges);
-        }
+        for (const fi of idxs) phonemeBadges.set(fi, badges);
     }
 
     // Cross-word bridges baked into the shard: a phoneme carrying a `bridge` rule
@@ -350,7 +345,6 @@ export function buildRendered(
                     index: pi,
                     wordLocalIndex: indexable ? wli : -1,
                     tjBadges: phonemeBadges.get(pi) ?? [],
-                    displayPhone: _heavyIkhfaaDisplay(iv.phone, intervals[pi + 1]?.phone),
                 });
             }
             if (indexable) wli++;

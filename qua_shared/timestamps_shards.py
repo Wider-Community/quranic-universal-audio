@@ -52,6 +52,10 @@ _SEGMENT_META_PROVENANCE = (
     "shared_cmvn",
     "audio_source",
     "created_at",
+    # Which phonemizer read the cells and the silent flags. A shard written by
+    # one version and read after an upgrade is otherwise indistinguishable
+    # from one that still agrees with the producer.
+    "phonemizer_version",
 )
 
 # v5 added the 6th word slot ``cells[]`` — per-character phoneme cells from the

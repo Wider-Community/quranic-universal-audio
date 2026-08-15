@@ -70,6 +70,21 @@ def _rl(fn, *args, **kwargs):
     raise RuntimeError("rate-limit retries exhausted")
 
 
+def _stamp_producer(data: dict) -> None:
+    """Record which phonemizer read these cells, and say when it changed.
+
+    Stamped beside the cells rather than at the write, so no caller can update
+    one without the other.
+    """
+    from qua_sdk.integrations.phonemizer import producer_version
+
+    meta = data.setdefault("_meta", {})
+    was, now = meta.get("phonemizer_version"), producer_version()
+    if was and was != now:
+        print(f"  phonemizer {was} -> {now}: cells re-read by a different producer", flush=True)
+    meta["phonemizer_version"] = now
+
+
 def _stamp_doc(data: dict, *, restamp: bool) -> tuple[int, Counter, Counter, list]:
     """Stamp cells across every segment of a shard doc, in place.
 
@@ -88,6 +103,7 @@ def _stamp_doc(data: dict, *, restamp: bool) -> tuple[int, Counter, Counter, lis
     # the same linking generation does via annotate_v2_doc.
     seq = [(seg["ref"], seg["words"], bool(seg.get("wasl"))) for seg in data.get("segments", [])]
     annotate_ordered_segments(seq)
+    _stamp_producer(data)
 
     n_cells = 0
     status_dist: Counter = Counter()

@@ -26,30 +26,6 @@ export function splitPhone(phone: string | undefined): { base: string; mod: stri
     return m ? { base: phone.slice(0, -m[0].length), mod: m[0] } : { base: phone, mod: '' };
 }
 
-/** The istiʿlāʾ (heavy) consonants among the 15 ikhfaa letters — ص ض ط ظ ق,
- *  whose base phones are `sˤ dˤ tˤ ðˤ q`. The ikhfaa nasal `ŋ` before one of
- *  these is articulated heavy (tafkhīm). */
-export const HEAVY_IKHFAA_PHONES = new Set(['sˤ', 'dˤ', 'tˤ', 'ðˤ', 'q']);
-/** The emphatic long vowel `aˤ:` — a muqattaat heavy letter's vowel (ṣād's aˤ:,
- *  qāf's aˤ:, the heavy rāʾ's aˤ:). It stacks tafkhīm above its madd bar. */
-export const HEAVY_VOWEL_PHONES = new Set(['aˤ:']);
-/** DISPLAY-only ikhfaa-heavy override: a plain ikhfaa nasal `ŋ` immediately
- *  before a heavy istiʿlāʾ consonant renders as `ŋˤ`. Returns the override
- *  phone, or undefined when no transform applies (the raw phone is used). The
- *  GATE skips a phone that is ALREADY `ŋˤ` so a producer-side heavy nasal wins
- *  unchanged. */
-export function _heavyIkhfaaDisplay(phone: string | undefined, nextPhone: string | undefined): string | undefined {
-    if (phone !== 'ŋ' || !nextPhone) return undefined;
-    return HEAVY_IKHFAA_PHONES.has(nextPhone) ? 'ŋˤ' : undefined;
-}
-
-/** Is this ikhfaa nasal articulated heavy (→ a stacked tafkhīm bar)? True for a
- *  producer-side `ŋˤ` and for the plain `ŋ` the display override heavies, so the
- *  bar survives whichever of the two a shard stores. */
-export function _isHeavyIkhfaa(phone: string | undefined, nextPhone: string | undefined): boolean {
-    return phone === 'ŋˤ' || !!_heavyIkhfaaDisplay(phone, nextPhone);
-}
-
 /** Assign each rendered phoneme to the grapheme COLUMN(s) that sound it, then
  *  pack the phonemes into row-2 clusters that SPAN those columns. So a phoneme
  *  sits beneath the grapheme(s) it belongs to:

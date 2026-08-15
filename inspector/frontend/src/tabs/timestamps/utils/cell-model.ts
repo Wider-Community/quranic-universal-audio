@@ -13,7 +13,6 @@ import { badgesForTags, silentTooltip, tagsForLegend } from './tajweed-rules';
 import type { TjBadge } from './tajweed-rules';
 import { foldRidingMarks, iqlabMiniMeem, iqlabNoonSilentBase, iqlabTanweenVowel, isIqlabCell } from './cell-special-cases';
 import { harakaRenderStyle } from './haraka-render';
-import { _isHeavyIkhfaa } from './phoneme-columns';
 import type { PhonemeInterval, TsCell, TsWord } from '../../../lib/types/ts-client';
 
 
@@ -143,10 +142,6 @@ export interface RenderedPhoneme {
     wordLocalIndex: number;
     /** Ordered tajweed underline badges (bottom→top, tafkheem on top). */
     tjBadges: TjBadge[];
-    /** DISPLAY-only phone override (the shard keeps `interval.phone`): a heavy
-     *  ikhfaa nasal `ŋ` shown as `ŋˤ` before an istiʿlāʾ letter. Render sites
-     *  prefer this over `interval.phone`; null/undefined → use the raw phone. */
-    displayPhone?: string;
 }
 
 
@@ -342,18 +337,12 @@ export function cellGroupsFor(
     );
     const groups: RenderedGroup[] = [];
 
-    // A cell's underline stack: its own rules + the cross-word idgham tag
-    // propagated to a merger receiver (its share group's source tag) + a
-    // heavy-ikhfaa tafkheem (the nasal before an istiʿlāʾ letter, detected
-    // display-side). Resolved to ≤3 bars plus an optional full-cell border.
+    // A cell's underline stack: its own rules plus the cross-word idgham tag
+    // propagated to a merger receiver (its share group's source tag). Resolved
+    // to ≤3 bars plus an optional full-cell border.
     const cellBadges = (c: TsCell): TjBadge[] => {
         const groupTag = c.shareGroup != null ? idghamGroupTags.get(c.shareGroup) : undefined;
-        const heavyIkhfaa = c.phonemeIndices.some(
-            (fi) => _isHeavyIkhfaa(intervals[fi]?.phone, intervals[fi + 1]?.phone),
-        );
-        return badgesForTags([
-            ...c.rules, groupTag, heavyIkhfaa ? 'tafkheem' : undefined,
-        ]);
+        return badgesForTags([...c.rules, groupTag]);
     };
     // Internal tajweed tag id(s) on the cell — the report rule-picker's options
     // (its own rules + every rule shared across the cell's co-highlight group, so
@@ -389,29 +378,12 @@ export function cellGroupsFor(
     // --- Carried-vowel resolution: a haraka/tanwīn the phonemizer marks
     //     `dropped` (empty indices) because its vowel is realized on an
     //     ADJACENT carrier must co-light + group with that carrier, not grey
-    //     out. Two carriers: the madd-ʿiwaḍ alef, and (idgham shafawi / noon)
-    //     the merged base that absorbed the vowel. ---
-    const iwadAlef = cells.find((c) => c.role === 'madd' && c.rules.includes('madd_iwad'));
-    const _iwadIv = iwadAlef
-        ? _cellTiming(iwadAlef.phonemeIndices, intervals, null)
-        : { start: null, end: null };
-    const iwadIv: [number, number] | null = _iwadIv.start != null ? [_iwadIv.start, _iwadIv.end!] : null;
-    // The dropped fatḥatan whose compensating madd moved onto the next ʾalif at waqf
-    // — detected STRUCTURALLY (it sounds nothing of its own; the ʾalif carries the
-    // bar). The renderer transforms it into a dashed fatḥa co-lit with the ʾalif
-    // (see the iwaḍ branch in the cell loop).
-    const iwadFathatan = new Set<TsCell>();
-    cells.forEach((c, i) => {
-        if ((c.role === 'tanween' || c.role === 'haraka') && c.status === 'dropped'
-            && c.phonemeIndices.length === 0 && cells[i + 1]?.rules.includes('madd_iwad')) {
-            iwadFathatan.add(c);
-        }
-    });
+    //     out. One carrier: (idgham shafawi / noon) the merged base that
+    //     absorbed the vowel. ---
     // و/ى waqf carrier → its vowel group, so the carrier's own dropped fatḥa
     // rejoins it silently (a double-sided [haraka, carrier, dropped-fatḥa] unit)
     // instead of landing on the preceding base.
     const carrierGroupBySrc = new Map<number, RenderedGroup>();
-    let iwadGroup: RenderedGroup | null = null;
 
     const newGroup = (kind: 'base' | 'vowel'): RenderedGroup => {
         const g: RenderedGroup = { kind, full: [], small: [], shareGroup: null, cols: [], phonemeSpans: [] };
@@ -570,11 +542,11 @@ export function cellGroupsFor(
             status: c.status,
             rules: c.rules,
             implicit: false,
-            // A written cell carrying the muted dashed "transform" border: the
-            // madd-ʿiwaḍ alef (substitutes the fatḥatan at waqf), or a contextual
-            // transform seat the producer flags `inserted` (started-on ٱئْتُونِى's
-            // ئ→ي madd carrier) — both are "altered, not the plain rasm".
-            inserted: c.rules.includes('madd_iwad') || c.status === 'inserted',
+            // The muted dashed "transform" border, for a contextual transform
+            // seat the producer flags `inserted` (started-on ٱئْتُونِى's ئ→ي madd
+            // carrier): altered, not the plain rasm. A written ʿiwaḍ alef is the
+            // plain rasm — its fatḥatan is the cell that was transformed.
+            inserted: c.status === 'inserted',
             isBase,
             cellStart: start,
             cellEnd: end,
@@ -592,7 +564,7 @@ export function cellGroupsFor(
         noteShare(g, c);
     };
 
-    const pushFullImplicit = (g: RenderedGroup, c: TsCell): void => {
+    const pushFullImplicit = (g: RenderedGroup, c: TsCell, dashed = false): void => {
         const shareIv = c.shareGroup != null ? shareUnions.get(c.shareGroup) ?? null : null;
         const { start, end } = _cellTiming(c.phonemeIndices, intervals, shareIv);
         g.full.push({
@@ -601,7 +573,7 @@ export function cellGroupsFor(
             status: c.status,
             rules: c.rules,
             implicit: true,
-            inserted: false,
+            inserted: dashed,
             isBase: false,
             cellStart: start,
             cellEnd: end,
@@ -646,20 +618,16 @@ export function cellGroupsFor(
                 }
             } else if (c.role === 'madd') {
                 if (c.chars !== '' && foldIdx != null && consumedFold.has(foldIdx)) continue; // fold half
-                if (c.rules.includes('madd_iwad')) {
-                    // the substituted (written) or inserted (implicit — word ends in
-                    // hamza, مَآءً) iwaḍ alef joins the [fatḥa, alef] vowel group
-                    iwadGroup = iwadGroup ?? newGroup('vowel');
-                    if (c.chars === '') pushFullImplicit(iwadGroup, c);
-                    else pushFullGrapheme(iwadGroup, c, false);
-                } else if (c.chars === '') {
-                    // An implicit (chars='') non-iwaḍ madd is a long vowel no letter
-                    // stretches — the alef of ٱللَّه. It shares its sound with the
-                    // ḥaraka beside it, so it joins that ḥaraka's vowel group.
+                if (c.chars === '') {
+                    // A graphemeless madd is a long vowel no letter stretches: the
+                    // alef of ٱللَّه, or the one a stop supplies for a tanwīn fatḥ
+                    // whose word ends in hamza (مَآءً). Only the ʿiwaḍ one is a
+                    // transform of what is written, so only it is dashed.
                     pushFullImplicit(
                         c.shareGroup != null && longVowelSG.has(c.shareGroup)
                             ? vowelGroupFor(c.shareGroup) : newGroup('vowel'),
                         c,
+                        c.rules.includes('madd_iwad'),
                     );
                 } else {
                     const lv = c.shareGroup != null && longVowelSG.has(c.shareGroup);
@@ -679,14 +647,15 @@ export function cellGroupsFor(
                     const g = curBase ?? (curBase = newGroup('base'));
                     pushSmall(g, iqlabTanweenVowel(c));
                     pushSmall(g, iqlabMiniMeem(c));
+                } else if (c.rules.includes('madd_iwad') && c.shareGroup != null) {
+                    // The stop reads a fatḥatan as a fatḥa and hands its length to
+                    // an alef. The mushaf writes the fatḥatan, so the fatḥa is a
+                    // transform: dashed, and grouped with the alef it fed.
+                    pushSmall(vowelGroupFor(c.shareGroup), c, {
+                        glyphOverride: FATHA, inserted: true,
+                    });
                 } else if (c.shareGroup != null && longVowelSG.has(c.shareGroup)) {
                     pushSmall(vowelGroupFor(c.shareGroup), c); // long vowel — leaves its base
-                } else if (dropped && iwadFathatan.has(c) && iwadIv) {
-                    // dropped tanwīn at waqf → a fatḥa grouped + co-lit with the iwaḍ
-                    // alef. The fatḥatan→fatḥa transform is "not in the rasm" — flag it
-                    // inserted so the small fatḥa cell carries the muted dashed border.
-                    iwadGroup = iwadGroup ?? newGroup('vowel');
-                    pushSmall(iwadGroup, c, { coLightIv: iwadIv, glyphOverride: FATHA, inserted: true });
                 } else if (dropped && carrierGroupBySrc.has(c.sourceLetterIndex)) {
                     // و/ى waqf: the carrier stole the haraka before it into a madd;
                     // its own fatḥa drops at the stop. Render it silent in the

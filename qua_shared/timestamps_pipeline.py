@@ -1122,6 +1122,7 @@ def _finalize_shards(
     from qua_sdk.components.timing.lib.cells import (
         annotate_v2_doc,  # lazy: keep phonemizer off the inspector import path
     )
+    from qua_sdk.integrations.phonemizer import producer_version
 
     from qua_shared.timestamps_dedup import build_raw_v2  # lazy: avoid import cycle
 
@@ -1136,6 +1137,7 @@ def _finalize_shards(
         "beam": canonical_beam,
         "shared_cmvn": shared_cmvn,
         "padding": padding,
+        "phonemizer_version": producer_version(),
     }
 
     def _emit_segment_shards(results_by_ch, suffix=""):

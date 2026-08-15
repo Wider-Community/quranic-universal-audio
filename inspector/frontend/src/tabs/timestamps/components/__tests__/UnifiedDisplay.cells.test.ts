@@ -659,8 +659,8 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(container.querySelector('.dia-track')!.classList.contains('wide')).toBe(false);
     });
 
-    it('madd-ʿiwaḍ: dropped tanwīn → a fatḥa grouped + co-lit with the added alef', () => {
-        // ضًا at waqf: ض base, dropped fatḥatan (tag madd_iwad), added alef (replaced a:).
+    it('madd-ʿiwaḍ: the fatḥatan reads as a dashed fatḥa beside the written alef', () => {
+        // ضًا at waqf: ض base, the fatḥatan and the alef sharing the ʿiwaḍ ā.
         const intervals: PhonemeInterval[] = [
             { phone: 'dˤ', start: 0, end: 0.2 }, { phone: 'aˤ:', start: 0.2, end: 0.6 },
         ];
@@ -668,8 +668,8 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [{ char: 'ض', start: 0, end: 0.2, silent: false }, { char: 'ا', start: 0.2, end: 0.6, silent: false }],
             [
                 base(0, [0], { chars: 'ض' }),
-                { chars: 'ً', role: 'tanween', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 0, rules: ['madd_iwad'], shareGroup: null },
-                { chars: 'ا', role: 'madd', status: 'present', phonemeIndices: [1], sourceLetterIndex: 1, rules: ['madd_iwad'], shareGroup: null },
+                { chars: 'ً', role: 'tanween', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: ['madd_iwad'], shareGroup: 0 },
+                { chars: 'ا', role: 'madd', status: 'present', phonemeIndices: [1], sourceLetterIndex: 1, rules: ['madd_iwad'], shareGroup: 0 },
             ],
             [0, 1],
         );
@@ -680,9 +680,12 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(vowel).toBeTruthy();
         const small = vowel.querySelector<HTMLElement>('.haraka-cell .g')!;
         expect(small.textContent).toBe('َ'); // a SINGLE fatḥa, not the fatḥatan
-        expect(vowel.querySelector('.mega-letter')!.textContent).toBe('ا');
-        // the fatḥa co-lights on the alef's long ā (timed, not greyed).
+        const alef = vowel.querySelector<HTMLElement>('.mega-letter')!;
+        expect(alef.textContent).toBe('ا');
+        // the alef IS in the rasm, so it is not dashed; the fatḥa is not, so it is.
+        expect(alef.classList.contains('dia-inserted')).toBe(false);
         const fatha = vowel.querySelector<HTMLElement>('.haraka-cell')!;
+        expect(fatha.classList.contains('dia-inserted')).toBe(true);
         expect(fatha.dataset.cellTimed).toBe('1');
         expect(fatha.dataset.cellStart).toBe('0.2');
         // the ʿiwaḍ sound spans the WHOLE [fatḥa, alef] group (same width as the unit).
@@ -691,10 +694,10 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             .replace(/\s+/g, ' ').trim()).toBe('1 / span 2');
     });
 
-    it('madd-ʿiwaḍ at hamza waqf: dropped fatḥatan groups + co-lights with the IMPLICIT alef', () => {
-        // مَآءً at waqf ends in hamza with NO written alef carrier: ء base, dropped
-        // fatḥatan (tag madd_iwad), and an INSERTED graphemeless alef (chars='', a:).
-        // The fatḥa must join the implicit alef as [fatḥa, alef] and co-light, not grey.
+    it('madd-ʿiwaḍ at hamza waqf: BOTH the fatḥa and the inserted alef are dashed', () => {
+        // مَآءً at waqf ends in hamza with NO written alef: ء base, the fatḥatan,
+        // and a graphemeless alef the stop supplies. Neither the fatḥa nor the
+        // alef is what the mushaf writes, so both carry the dashed border.
         const intervals: PhonemeInterval[] = [
             { phone: 'ʔ', start: 0, end: 0.2 }, { phone: 'a:', start: 0.2, end: 0.6 },
         ];
@@ -702,8 +705,8 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [{ char: 'ء', start: 0, end: 0.2, silent: false }],
             [
                 base(0, [0], { chars: 'ء' }),
-                { chars: 'ً', role: 'tanween', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 0, rules: ['madd_iwad'], shareGroup: null },
-                { chars: '', role: 'madd', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 0, rules: ['madd_iwad'], shareGroup: null },
+                { chars: 'ً', role: 'tanween', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: ['madd_iwad'], shareGroup: 0 },
+                { chars: '', role: 'madd', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 0, rules: ['madd_iwad'], shareGroup: 0 },
             ],
             [0, 1],
         );
@@ -719,10 +722,12 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(implicit).toBeTruthy();
         expect(implicit.textContent).toBe('ا');
         expect(implicit.classList.contains('dia-inserted')).toBe(true);
-        // the fatḥa co-lights on the alef's long ā (timed, not greyed).
+        // the fatḥa co-lights on the alef's long ā (timed, not greyed) AND is
+        // itself dashed: the mushaf writes a fatḥatan, not a fatḥa.
         const fatha = vowel.querySelector<HTMLElement>('.haraka-cell')!;
         expect(fatha.dataset.cellTimed).toBe('1');
         expect(fatha.dataset.cellStart).toBe('0.2');
+        expect(fatha.classList.contains('dia-inserted')).toBe(true);
         // the ʿiwaḍ sound spans the WHOLE [fatḥa, implicit-alef] group.
         expect(vowel.querySelectorAll('.phoneme-cluster').length).toBe(1);
         expect(vowel.querySelector<HTMLElement>('.phoneme-cluster')!.style.gridColumn
@@ -760,8 +765,8 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
                 { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [3], sourceLetterIndex: 0, rules: [], shareGroup: 9 },
                 { chars: 'آ', role: 'madd', status: 'present', phonemeIndices: [3], sourceLetterIndex: 1, rules: [], shareGroup: 9 },
                 base(2, [4], { chars: 'ء' }),
-                { chars: 'ً', role: 'tanween', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 2, rules: ['madd_iwad'], shareGroup: null },
-                { chars: '', role: 'madd', status: 'inserted', phonemeIndices: [5], sourceLetterIndex: 2, rules: ['madd_iwad'], shareGroup: null },
+                { chars: 'ً', role: 'tanween', status: 'present', phonemeIndices: [5], sourceLetterIndex: 2, rules: ['madd_iwad'], shareGroup: 0 },
+                { chars: '', role: 'madd', status: 'inserted', phonemeIndices: [5], sourceLetterIndex: 2, rules: ['madd_iwad'], shareGroup: 0 },
             ],
             [2, 3, 4, 5],
         );
@@ -1681,10 +1686,10 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(ph(6).style.boxShadow).toContain('ikhfaa');
     });
 
-    it('a heavy ikhfaa nasal stacks tafkheem, whichever nasal token the shard stores', () => {
-        // An ikhfaa ŋ before a heavy istiʿlāʾ letter is articulated heavy: ikhfaa
-        // underline + a stacked tafkheem bar. A shard may store the nasal already
-        // heavy (ŋˤ) or plain (ŋ, heavied display-side) — both must draw the bar.
+    it('a heavy ikhfaa nasal stacks tafkheem on the letter that fired both rules', () => {
+        // An ikhfaa hum before a heavy istiʿlāʾ letter is heavy, and the producer
+        // names both rules on the letter. The bar comes from the rules, so it
+        // draws whichever nasal token the shard happens to store.
         const build = (nasal: string) => {
             const intervals: PhonemeInterval[] = [
                 { phone: 's', start: 0, end: 0.1 }, { phone: 'i:', start: 0.1, end: 0.5 },
@@ -1693,7 +1698,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             const word = w(
                 [{ char: 'سٓ', start: 0, end: 0.8, silent: false }, { char: 'قٓ', start: 0.8, end: 0.9, silent: false }],
                 [
-                    { chars: 'س', role: 'base', status: 'present', phonemeIndices: [0, 1, 2], sourceLetterIndex: 0, rules: ['ikhfaa', 'madd_lazim'], shareGroup: null },
+                    { chars: 'س', role: 'base', status: 'present', phonemeIndices: [0, 1, 2], sourceLetterIndex: 0, rules: ['ikhfaa', 'tafkheem', 'madd_lazim'], shareGroup: null },
                     { chars: 'ٓ', role: 'madd', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: ['madd_lazim'], shareGroup: null },
                     { chars: 'ق', role: 'base', status: 'present', phonemeIndices: [3], sourceLetterIndex: 1, rules: ['tafkheem'], shareGroup: null },
                 ],
@@ -2070,16 +2075,16 @@ describe('UnifiedDisplay — per-grapheme phoneme alignment', () => {
     });
 
     it('heavy ikhfaa: the nasal before an istiʿlāʾ letter stacks tafkheem above the ikhfaa bar', () => {
-        // نْ before ص: the ikhfaa nasal ŋ is articulated heavy (shown ŋˤ) → a tafkheem
-        // bar rides above the ikhfaa underline on both the noon cell and its nasal phone.
+        // نْ before ص: the producer names the hum heavy and spends a character on
+        // it (ŋˤ), so the noon cell carries both rules and stacks both bars.
         const iv: PhonemeInterval[] = [
-            { phone: 'ŋ', start: 0, end: 0.15 },
+            { phone: 'ŋˤ', start: 0, end: 0.15 },
             { phone: 'sˤ', start: 0.15, end: 0.4 },
         ];
         const word = w(
             [{ char: 'ن', start: 0, end: 0.15, silent: false }, { char: 'ص', start: 0.15, end: 0.4, silent: false }],
             [
-                base(0, [0], { chars: 'ن', rules: ['ikhfaa'] }),
+                base(0, [0], { chars: 'ن', rules: ['ikhfaa', 'tafkheem'] }),
                 base(1, [1], { chars: 'ص', rules: ['tafkheem'] }),
             ],
             [0, 1],
