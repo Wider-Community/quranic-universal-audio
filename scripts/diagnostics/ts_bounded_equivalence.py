@@ -54,6 +54,7 @@ import gzip
 import json
 import logging
 import sys
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -117,6 +118,51 @@ def has_cells(word: list) -> bool:
 
 def word_text(word: list) -> str:
     return "".join(letter[0] for letter in word[3])
+
+
+def _cells(word: list) -> list:
+    return word[5] if len(word) > 5 and word[5] else []
+
+
+def phone_owners(word: list) -> dict[int, frozenset[int]]:
+    """Phone index -> the letters whose cells claim it.
+
+    Which letter a sound is drawn under. A tag set says a word names a rule;
+    this says where the reading put the sound the rule is about.
+    """
+    out: dict[int, set[int]] = defaultdict(set)
+    for cell in _cells(word):
+        for phone in cell[3] or []:
+            out[phone].add(cell[4])
+    return {phone: frozenset(letters) for phone, letters in out.items()}
+
+
+def greyed_letters(word: list) -> frozenset[int]:
+    """Letters the Inspector greys: every cell on them sounds nothing and
+    shares nothing, so no highlight ever reaches them."""
+    sounding: set[int] = set()
+    seen: set[int] = set()
+    for cell in _cells(word):
+        seen.add(cell[4])
+        if (cell[3] or []) or (len(cell) > 6 and cell[6] is not None):
+            sounding.add(cell[4])
+    return frozenset(seen - sounding)
+
+
+def share_shape(word: list) -> frozenset[frozenset[int]]:
+    """The letters each share group covers. A group with one letter in this
+    word reaches out of it -- a merger co-lighting across the boundary."""
+    out: dict[int, set[int]] = defaultdict(set)
+    for cell in _cells(word):
+        if len(cell) > 6 and cell[6] is not None:
+            out[cell[6]].add(cell[4])
+    return frozenset(frozenset(letters) for letters in out.values())
+
+
+def cell_writing(word: list) -> tuple[str, ...]:
+    """What each cell shows, in order -- the partition of the word into cells
+    as a reader sees it."""
+    return tuple(cell[0] for cell in _cells(word))
 
 
 def silence_flips(old_word: list, new_word: list) -> list[str]:
@@ -449,6 +495,37 @@ def scan_segment(
                 joined=produced.joined,
             )
         )
+        rep.diffs += cell_diffs(old, new, ref, text)
+
+
+def cell_diffs(old: list, new: list, ref: str, text: str) -> list[Diff]:
+    """Where the two readings put a word's sounds, greys and groups.
+
+    The tag comparison asks only which rules a word names, as a set, so a rule
+    moving from one cell to another inside it says nothing. These ask which
+    letter each sound is drawn under, which letters grey, how the share groups
+    partition the word, and how it is cut into cells at all.
+    """
+    out: list[Diff] = []
+    was, now = phone_owners(old), phone_owners(new)
+    for phone in sorted(set(was) | set(now)):
+        if was.get(phone) != now.get(phone):
+            detail = f"{sorted(was.get(phone, ()))} -> {sorted(now.get(phone, ()))}"
+            out.append(Diff("owner", ref, text, detail, None))
+    if greyed_letters(old) != greyed_letters(new):
+        detail = f"{sorted(greyed_letters(old))} -> {sorted(greyed_letters(new))}"
+        out.append(Diff("greyed", ref, text, detail, None))
+    if share_shape(old) != share_shape(new):
+        detail = f"{_shape(share_shape(old))} -> {_shape(share_shape(new))}"
+        out.append(Diff("share", ref, text, detail, None))
+    if cell_writing(old) != cell_writing(new):
+        detail = f"{'|'.join(cell_writing(old))} -> {'|'.join(cell_writing(new))}"
+        out.append(Diff("cut", ref, text, detail, None))
+    return out
+
+
+def _shape(groups: frozenset[frozenset[int]]) -> str:
+    return "{" + ",".join(str(sorted(g)) for g in sorted(groups, key=sorted)) + "}"
 
 
 def _token_family(ref: str) -> tuple[str | None, str]:
