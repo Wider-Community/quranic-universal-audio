@@ -115,7 +115,10 @@ export function iqlabMiniMeem(c: TsCell): TsCell {
     return {
         chars: pair ? pair.meem : MEEM_HI,
         role: 'tanween',
-        status: 'inserted',
+        // `present`, not `inserted`: the mini-meem is a mark the mushaf writes
+        // and a sound the reader makes, so it draws as an ordinary cell. The
+        // dashed border says "not what the rasm wrote", which this is not.
+        status: 'present',
         phonemeIndices: pair ? c.phonemeIndices.slice(-1) : c.phonemeIndices,
         sourceLetterIndex: c.sourceLetterIndex,
         rules: ['iqlab'],

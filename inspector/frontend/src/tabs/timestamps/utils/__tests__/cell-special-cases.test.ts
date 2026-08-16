@@ -36,7 +36,7 @@ describe('cell-special-cases — iqlab noon', () => {
         const meem = iqlabMiniMeem(noon);
         expect(meem.chars).toBe(MEEM_HI); // above-slot source glyph
         expect(meem.role).toBe('tanween');
-        expect(meem.status).toBe('inserted');
+        expect(meem.status).toBe('present'); // a written mark and a sounded nasal — never dashed
         expect(meem.phonemeIndices).toEqual([2]); // the click/loop target span
         expect(meem.sourceLetterIndex).toBe(1);
         expect(meem.rules).toEqual(['iqlab']); // the iqlab underline rides here
