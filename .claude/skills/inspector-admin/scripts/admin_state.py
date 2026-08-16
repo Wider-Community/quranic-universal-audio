@@ -8,6 +8,12 @@ For the valid event names per state + the payload shape per event, open
 docs/reference/state-machine.md. This script does NOT validate either —
 it forwards straight to services/state/state.transition, which raises on
 an unknown event or bad payload.
+
+A slug with no state row is not an error for every event: ``reciter.requested``
+takes a delivery from no row at all to ``awaiting_alignment``, and that seed has
+to exist before the pipeline uploads ``reciters/<slug>/`` or ``auto_detect``
+ignores the folder forever. So a missing row is reported and passed through
+rather than refused; the service rejects it for any event that needs one.
 """
 
 from __future__ import annotations
@@ -37,9 +43,9 @@ def main() -> int:
 
         row = state_service.get_row(a.slug)
         if row is None:
-            print(f"unknown slug {a.slug}", file=sys.stderr)
-            return 4
-        print(f"BEFORE: state={row.state.value}  marked_ready={row.marked_ready}")
+            print(f"BEFORE: no state row for {a.slug}")
+        else:
+            print(f"BEFORE: state={row.state.value}  marked_ready={row.marked_ready}")
 
         payload = json.loads(a.payload) if a.payload else None
         if a.dry_run:
