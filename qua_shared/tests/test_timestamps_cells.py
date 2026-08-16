@@ -185,20 +185,20 @@ def test_stamped_cell_rules_are_known_tags(chapter):
 
 
 @needs_producer
-def test_unwritten_madd_gets_a_graphemeless_cell():
+def test_unwritten_madd_gets_a_cell_of_its_own():
     """`ٱللَّهِ` says a long alif the rasm does not write.
 
-    The reading has to draw it, so the producer gives it a cell with no
-    grapheme, sharing the sound with the fatha that writes its quality. A
-    written dagger alif gets the same pair, one cell of it carrying a glyph.
+    The reading writes it, so the producer gives it a cell of its own carrying
+    the letter the renderer spelt, sharing the sound with the fatha that writes
+    its quality. A written dagger alif gets the same pair off the rasm alone.
     """
     from qua_sdk.integrations.cellrows import cell_rows
     from qua_sdk.integrations.phonemizer import result_for_ref
 
     unwritten = cell_rows(result_for_ref("1:1"))[1]
     fatha = next(c for c in unwritten if c.chars == "َ")
-    alif = next(c for c in unwritten if c.chars == "" and c.role == "madd")
-    assert alif.status == "inserted"
+    alif = next(c for c in unwritten if c.status == "inserted" and c.role == "madd")
+    assert alif.chars == "ا"
     assert unwritten.index(alif) == unwritten.index(fatha) + 1
     assert alif.phoneme_indices == fatha.phoneme_indices
     assert alif.source_letter_index == fatha.source_letter_index
@@ -207,7 +207,7 @@ def test_unwritten_madd_gets_a_graphemeless_cell():
 
     # ذَٰلِكَ writes its dagger, so no cell is invented for it.
     written = cell_rows(result_for_ref("2:2"))[0]
-    assert not [c for c in written if c.chars == "" and c.role == "madd"]
+    assert not [c for c in written if c.status == "inserted" and c.role == "madd"]
     dagger = next(c for c in written if c.chars == "ٰ")
     assert dagger.share_group == next(c for c in written if c.chars == "َ").share_group
 

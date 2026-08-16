@@ -74,6 +74,7 @@ from scripts.diagnostics.ts_bounded_vocab import (  # noqa: E402
     FIX_REFS,
     LABIAL_MERGER,
     LEGACY_SILENCE_TAGS,
+    IMPLIED_TAGS,
     MERGER_CELL_TAGS,
     NEW_RULE_TAGS,
     RESIDUE_REFS,
@@ -362,6 +363,10 @@ def _unpaired_legacy(view: WordView, tag: str) -> tuple[str | None, str, set[str
 def _unpaired_new(view: WordView, tag: str) -> tuple[str | None, str]:
     """A new tag no legacy tag maps onto."""
     if tag in NEW_RULE_TAGS:
+        return "new_rule", ""
+    if IMPLIED_TAGS.get(tag) in view.current:
+        # Asked before the merger question: the tag that carries this one is on
+        # the word, so a partner naming it too has no claim on it.
         return "new_rule", ""
     weight, hiding = FIX_HEAVY_HUM
     if tag == weight and hiding in view.current:

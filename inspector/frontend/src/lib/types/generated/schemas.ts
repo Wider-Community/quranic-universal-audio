@@ -54,7 +54,7 @@ export type SegValAnyItem =
   | SegValBasmalaAminItem;
 export type AudioCategory = "by_surah" | "by_ayah";
 export type CellRole = "base" | "haraka" | "tanween" | "madd";
-export type CellStatus = "present" | "inserted" | "dropped";
+export type CellStatus = "present" | "replaced" | "inserted" | "dropped";
 export type TajweedRule =
   | "ghunnah"
   | "ikhfaa"

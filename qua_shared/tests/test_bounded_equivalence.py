@@ -238,6 +238,15 @@ def test_dropped_rules_mirror_the_sdk_vocabulary():
 
 
 @needs_producer
+def test_implied_tags_mirror_the_sdk_vocabulary():
+    """Inverted: the gate asks which tag carries a new one, the producer which
+    tag a cell's own name brings with it."""
+    from qua_sdk.integrations.vocabulary import IMPLIED
+
+    assert vocab.IMPLIED_TAGS == {added: by for by, added in IMPLIED.items()}
+
+
+@needs_producer
 def test_every_declared_target_is_a_tag_the_producer_writes():
     live = _live_shard_tags()
     assert _declared_targets() <= live, f"not shard tags: {sorted(_declared_targets() - live)}"

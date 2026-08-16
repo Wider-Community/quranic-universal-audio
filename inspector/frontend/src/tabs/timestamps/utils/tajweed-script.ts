@@ -62,6 +62,15 @@ export function firstMark(chars: string): string {
     return arr[0]!;
 }
 
+/** The glyph for a length the rasm writes no letter for. The producer gives the
+ *  letter the reading writes; a mushaf draws that alef DAGGER-sized where it only
+ *  lengthens the ḥaraka it sits on (ٱللَّه, مِهَـٰد) and full where it stands in for
+ *  a tanwīn a stop replaced (بِنَآءَا) — the seat's own status says which, and
+ *  that is the only change made here. */
+export function insertedLengthGlyph(chars: string, seatReplaced: boolean): string {
+    return chars === ALEF && !seatReplaced ? DAGGER : chars;
+}
+
 /** Pin slot for a small cell's mark — top unless it's a below-mark. */
 export function cellSlot(glyph: string): 'top' | 'bottom' {
     return BELOW_MARKS.has(glyph) ? 'bottom' : 'top';
@@ -76,9 +85,4 @@ export function cellGlyph(chars: string): string {
     // above, MEEM_LO → below).
     const mark = firstMark(chars);
     return mark === MEEM_HI ? MEEM_LO : mark;
-}
-
-/** The FULL-cell glyph for an implicit madd (chars==='') — dagger / alef. */
-export function implicitMaddGlyph(rules: readonly string[]): string {
-    return rules.includes('madd_iwad') ? ALEF : DAGGER;
 }

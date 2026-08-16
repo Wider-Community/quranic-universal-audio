@@ -8,7 +8,7 @@
  * template; the unit tests exercise this module's output through that component.
  */
 
-import { ALEF_MAKSURA, DAGGER, FATHA, MEEM_HI, MEEM_LO, OPEN_TANWEEN, OPEN_TANWEEN_TAGS, SUKUN, cellGlyph, cellSlot, firstMark, implicitMaddGlyph } from './tajweed-script';
+import { ALEF_MAKSURA, DAGGER, FATHA, MEEM_HI, MEEM_LO, OPEN_TANWEEN, OPEN_TANWEEN_TAGS, SUKUN, cellGlyph, cellSlot, firstMark, insertedLengthGlyph } from './tajweed-script';
 import { badgesForTags, silentTooltip, tagsForLegend } from './tajweed-rules';
 import type { TjBadge } from './tajweed-rules';
 import { foldRidingMarks, iqlabMiniMeem, iqlabNoonSilentBase, iqlabTanweenVowel, isIqlabCell } from './cell-special-cases';
@@ -22,11 +22,10 @@ export interface RenderedFull {
     status: string;
     /** The cell's own producer rules, in producer order. */
     rules: string[];
-    /** Implicit madd (chars==='') — rendered with the inserted/replaced glow. */
+    /** An `inserted` madd — a full cell the letter row has no slot for. */
     implicit: boolean;
-    /** A written-but-"added" full cell (the madd-ʿiwaḍ alef substituted for the
-     *  fatḥatan at waqf) — carries the muted dashed inserted border, like the
-     *  implicit madd, without being implicit. */
+    /** `status==='inserted'`: not in the rasm at all. Draws the muted dashed
+     *  border; a `replaced` cell draws the same one off its own status class. */
     inserted: boolean;
     /** True for a `base` cell (the interactive letter target). */
     isBase: boolean;
@@ -493,8 +492,8 @@ export function cellGroupsFor(
             glyph = opts.glyphOverride ?? c.chars;
             // Silent = sounds nothing (no own phoneme indices) AND isn't co-lit through
             // a merger (no share group). Keyed on the indices, NOT a specific status, so
-            // every soundless carrier greys uniformly — a `dropped` otiose alef, a
-            // `shortened` iltiqāʾ carrier, etc. (A merger-receiving idgham-noon source
+            // every soundless carrier greys uniformly — the otiose alef, the
+            // carrier a shortening silenced. (A merger-receiving idgham-noon source
             // noon has no own phones but a share group, so it stays a normal co-lit cell.)
             silent = c.phonemeIndices.length === 0 && c.shareGroup == null;
             lStart = ownStart;
@@ -542,10 +541,9 @@ export function cellGroupsFor(
             status: c.status,
             rules: c.rules,
             implicit: false,
-            // The muted dashed "transform" border, for a contextual transform
-            // seat the producer flags `inserted` (started-on ٱئْتُونِى's ئ→ي madd
-            // carrier): altered, not the plain rasm. A written ʿiwaḍ alef is the
-            // plain rasm — its fatḥatan is the cell that was transformed.
+            // A full cell the rasm wrote is never `inserted`; where the reading
+            // shows it as another letter the producer says `replaced`, and the
+            // status class draws the same dashed border.
             inserted: c.status === 'inserted',
             isBase,
             cellStart: start,
@@ -564,16 +562,19 @@ export function cellGroupsFor(
         noteShare(g, c);
     };
 
-    const pushFullImplicit = (g: RenderedGroup, c: TsCell, dashed = false): void => {
+    const pushFullImplicit = (g: RenderedGroup, c: TsCell, cells: TsCell[]): void => {
         const shareIv = c.shareGroup != null ? shareUnions.get(c.shareGroup) ?? null : null;
         const { start, end } = _cellTiming(c.phonemeIndices, intervals, shareIv);
         g.full.push({
-            glyph: implicitMaddGlyph(c.rules),
+            // The seat is the cell the producer inserted this one after.
+            glyph: insertedLengthGlyph(
+                c.chars, cells[cells.indexOf(c) - 1]?.status === 'replaced',
+            ),
             silent: c.status === 'dropped',
             status: c.status,
             rules: c.rules,
             implicit: true,
-            inserted: dashed,
+            inserted: true,
             isBase: false,
             cellStart: start,
             cellEnd: end,
@@ -617,17 +618,17 @@ export function cellGroupsFor(
                     pushFullGrapheme(curBase, c, true);
                 }
             } else if (c.role === 'madd') {
-                if (c.chars !== '' && foldIdx != null && consumedFold.has(foldIdx)) continue; // fold half
-                if (c.chars === '') {
-                    // A graphemeless madd is a long vowel no letter stretches: the
-                    // alef of ٱللَّه, or the one a stop supplies for a tanwīn fatḥ
-                    // whose word ends in hamza (مَآءً). Only the ʿiwaḍ one is a
-                    // transform of what is written, so only it is dashed.
+                if (c.status !== 'inserted' && foldIdx != null && consumedFold.has(foldIdx)) continue; // fold half
+                if (c.status === 'inserted') {
+                    // An inserted madd is a long vowel no letter of the rasm
+                    // stretches: the alef of ٱللَّه, or the one a stop supplies for
+                    // a tanwīn fatḥ (مَآءً). It occupies no slot in the letter row,
+                    // so it renders from its own glyph with no letter timing.
                     pushFullImplicit(
                         c.shareGroup != null && longVowelSG.has(c.shareGroup)
                             ? vowelGroupFor(c.shareGroup) : newGroup('vowel'),
                         c,
-                        c.rules.includes('madd_iwad'),
+                        cells,
                     );
                 } else {
                     const lv = c.shareGroup != null && longVowelSG.has(c.shareGroup);
@@ -710,11 +711,11 @@ export function cellGroupsFor(
     });
     for (const c of cells) {
         if (_isSukunCell(c)) continue;
-        if (c.role === 'madd' && c.chars !== '') continue; // real carrier — already a folded letter
+        if (c.role === 'madd' && c.status !== 'inserted') continue; // real carrier — already a folded letter
         const foldIdx = srcToFold.get(c.sourceLetterIndex);
         const g = (foldIdx != null ? groupByFold[foldIdx] : undefined) ?? groupByFold[groupByFold.length - 1];
         if (!g) continue;
-        if (c.role === 'madd' && c.chars === '') pushFullImplicit(g, c);
+        if (c.role === 'madd') pushFullImplicit(g, c, cells);
         else pushSmall(g, c);
     }
     return groups;

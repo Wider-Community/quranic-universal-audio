@@ -311,8 +311,8 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(container.querySelector<HTMLElement>('.mega-phoneme[data-index="2"]')!.style.boxShadow).not.toBe('');
     });
 
-    it('renders an implicit madd as a FULL cell with an inserted affordance', () => {
-        // madd_iwad → an added alef, full cell, "replaced"/"inserted" glow.
+    it('renders an inserted madd as a FULL cell with an inserted affordance', () => {
+        // madd_iwad → the fatḥatan shown as a fatḥa, plus the alef a stop adds.
         const intervals: PhonemeInterval[] = [
             { phone: 'n', start: 0, end: 0.1 }, { phone: 'a:', start: 0.1, end: 0.4 },
         ];
@@ -320,7 +320,8 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [{ char: 'ن', start: 0, end: 0.1, silent: false }],
             [
                 base(0, [0]),
-                { chars: '', role: 'madd', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 0, rules: ['madd_iwad'], shareGroup: null },
+                { chars: 'َ', role: 'haraka', status: 'replaced', phonemeIndices: [1], sourceLetterIndex: 0, rules: ['madd_iwad', 'madd_tabii'], shareGroup: null },
+                { chars: 'ا', role: 'madd', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 0, rules: ['madd_iwad', 'madd_tabii'], shareGroup: null },
             ],
             [0, 1],
         );
@@ -456,10 +457,10 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(letters).toContain('ۥ' + MADDAH);
     });
 
-    it('hamza-waṣl ibtidaa madd (ٱئْتُونِى started-on): ئ transforms to a ي madd carrier sounding iː', () => {
-        // ٱ sounds only ʔ; the yaa-hamza ئ transforms to a ي madd carrier sounding the
-        // iː (madd ṭabīʿī), rendered as a dashed (inserted) transform cell — NOT greyed.
-        // Cells as the phonemizer now stamps them (the FE no longer re-pairs anything).
+    it('hamza-waṣl ibtidaa madd (ٱئْتِ started-on): ٱ reads إ and ئ reads as the ى it carries', () => {
+        // Cells as the producer stamps them: the ٱ shows the إ a reader says, the
+        // quiescent ئ shows the ى the reading writes the length on, and the kasra
+        // between them is not in the rasm at all. All three dashed, none greyed.
         const intervals: PhonemeInterval[] = [
             { phone: 'ʔ', start: 0, end: 0.1 },
             { phone: 'i:', start: 0.1, end: 0.4 },
@@ -467,30 +468,35 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         ];
         const word = w(
             [
+                // the letter row keeps the rasm — it is what a consumer matches
+                // its own letters against; only the cells show the reading.
                 { char: 'ٱ', start: 0, end: 0.1, silent: false },
                 { char: 'ئ', start: 0.1, end: 0.4, silent: false },
                 { char: 'ت', start: 0.4, end: 0.5, silent: false },
             ],
             [
-                base(0, [0], { chars: 'ٱ' }),
-                { chars: 'ِ', role: 'haraka', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 1, rules: ['hamza_wasl_kasra'], shareGroup: null },
-                { chars: 'ي', role: 'madd', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 1, rules: ['madd_tabii'], shareGroup: null },
-                { chars: 'ْ', role: 'haraka', status: 'present', phonemeIndices: [], sourceLetterIndex: 1, rules: [], shareGroup: null },
+                base(0, [0], { chars: 'إ', status: 'replaced', rules: ['hamza_wasl_kasra'] }),
+                { chars: 'ِ', role: 'haraka', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 0, rules: ['ibdal_hamza'], shareGroup: 0 },
+                { chars: 'ى', role: 'madd', status: 'replaced', phonemeIndices: [1], sourceLetterIndex: 1, rules: ['ibdal_hamza'], shareGroup: 0 },
+                { chars: 'ْ', role: 'haraka', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 1, rules: [], shareGroup: null },
                 base(2, [2], { chars: 'ت' }),
             ],
             [0, 1, 2],
         );
         setRuleEnabled('madd_tabii', true); // colour madd-ṭabīʿī so its underline renders
         const { container } = mount([word], intervals);
-        // ئ renders as the transformed ي glyph: a madd cell with the dashed (inserted)
-        // transform border, sounding (timed) — not greyed/silent.
-        const yaa = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter')).find((l) => l.textContent === 'ي')!;
+        // the ئ's cell renders the ى: dashed (replaced), sounding (timed) — not greyed.
+        const yaa = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter')).find((l) => l.textContent === 'ى')!;
         expect(yaa).toBeTruthy();
-        expect(yaa.classList.contains('dia-inserted')).toBe(true); // dashed transform border
+        expect(yaa.classList.contains('dia-replaced')).toBe(true);
         expect(yaa.classList.contains('silent')).toBe(false);
         expect(yaa.dataset.cellTimed).toBe('1');
-        // the hamza-waṣl helping kasra is a bordered (inserted) small cell forming the
-        // kasra+yaa vowel group — the FE dashes it from status alone (glyph notwithstanding).
+        // the ٱ's own cell renders the إ, dashed for the same reason.
+        const hamza = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter')).find((l) => l.textContent === 'إ')!;
+        expect(hamza).toBeTruthy();
+        expect(hamza.classList.contains('dia-replaced')).toBe(true);
+        // the helping kasra is a bordered (inserted) small cell forming the
+        // kasra+yaa vowel group — the FE dashes it from status alone.
         const kasra = Array.from(container.querySelectorAll<HTMLElement>('.haraka-cell')).find(
             (h) => h.textContent?.includes('ِ'),
         )!;
@@ -498,7 +504,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(kasra.classList.contains('dia-inserted')).toBe(true);
         // the sukūn rides inert and is filtered — no ئ glyph survives.
         expect(Array.from(container.querySelectorAll('.mega-letter')).some((l) => l.textContent === 'ئ')).toBe(false);
-        // ʔ (idx 0, under ٱ), iː (idx 1, under ي), t (idx 2, under ت) each in a DISTINCT
+        // ʔ (idx 0, under إ), iː (idx 1, under ى), t (idx 2, under ت) each in a DISTINCT
         // cluster — not snapped onto the first letter.
         const clusters = Array.from(container.querySelectorAll<HTMLElement>('.phoneme-cluster'));
         const cl = (i: string) => clusters.findIndex((c) => c.querySelector(`.mega-phoneme[data-index="${i}"]`));
@@ -508,9 +514,8 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         // underlines on the iː itself.
         const iLong = container.querySelector<HTMLElement>('.mega-phoneme[data-index="1"]')!;
         expect(iLong.style.boxShadow).not.toBe('');
-        // ٱ stays its own base sounding ʔ.
-        const alif = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter')).find((l) => l.textContent === 'ٱ')!;
-        expect(alif.dataset.cellTimed).toBe('1');
+        // the prosthetic hamza stays its own base sounding ʔ.
+        expect(hamza.dataset.cellTimed).toBe('1');
     });
 
     it('groups a long vowel as [diacritic, carrier] with its base SEPARATED', () => {
@@ -705,8 +710,8 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [{ char: 'ء', start: 0, end: 0.2, silent: false }],
             [
                 base(0, [0], { chars: 'ء' }),
-                { chars: 'ً', role: 'tanween', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: ['madd_iwad'], shareGroup: 0 },
-                { chars: '', role: 'madd', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 0, rules: ['madd_iwad'], shareGroup: 0 },
+                { chars: 'َ', role: 'haraka', status: 'replaced', phonemeIndices: [1], sourceLetterIndex: 0, rules: ['madd_iwad', 'madd_tabii'], shareGroup: 0 },
+                { chars: 'ا', role: 'madd', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 0, rules: ['madd_iwad', 'madd_tabii'], shareGroup: 0 },
             ],
             [0, 1],
         );
@@ -727,7 +732,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         const fatha = vowel.querySelector<HTMLElement>('.haraka-cell')!;
         expect(fatha.dataset.cellTimed).toBe('1');
         expect(fatha.dataset.cellStart).toBe('0.2');
-        expect(fatha.classList.contains('dia-inserted')).toBe(true);
+        expect(fatha.classList.contains('dia-replaced')).toBe(true);
         // the ʿiwaḍ sound spans the WHOLE [fatḥa, implicit-alef] group.
         expect(vowel.querySelectorAll('.phoneme-cluster').length).toBe(1);
         expect(vowel.querySelector<HTMLElement>('.phoneme-cluster')!.style.gridColumn
@@ -765,8 +770,8 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
                 { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [3], sourceLetterIndex: 0, rules: [], shareGroup: 9 },
                 { chars: 'آ', role: 'madd', status: 'present', phonemeIndices: [3], sourceLetterIndex: 1, rules: [], shareGroup: 9 },
                 base(2, [4], { chars: 'ء' }),
-                { chars: 'ً', role: 'tanween', status: 'present', phonemeIndices: [5], sourceLetterIndex: 2, rules: ['madd_iwad'], shareGroup: 0 },
-                { chars: '', role: 'madd', status: 'inserted', phonemeIndices: [5], sourceLetterIndex: 2, rules: ['madd_iwad'], shareGroup: 0 },
+                { chars: 'َ', role: 'haraka', status: 'replaced', phonemeIndices: [5], sourceLetterIndex: 2, rules: ['madd_iwad', 'madd_tabii'], shareGroup: 0 },
+                { chars: 'ا', role: 'madd', status: 'inserted', phonemeIndices: [5], sourceLetterIndex: 2, rules: ['madd_iwad', 'madd_tabii'], shareGroup: 0 },
             ],
             [2, 3, 4, 5],
         );
@@ -1014,7 +1019,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [
                 base(0, [0], { chars: 'ل' }),
                 { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: ['madd_tabii'], shareGroup: 1 },
-                { chars: '', role: 'madd', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 0, rules: ['madd_tabii'], shareGroup: 1 },
+                { chars: 'ا', role: 'madd', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 0, rules: ['madd_tabii'], shareGroup: 1 },
             ],
             [0, 1],
         );

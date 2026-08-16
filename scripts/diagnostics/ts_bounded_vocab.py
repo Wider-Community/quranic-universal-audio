@@ -62,6 +62,12 @@ NEW_RULE_TAGS = frozenset(
     }
 )
 
+#: A tag the shard now carries beside one it already names, and the tag that
+#: carries it, mirroring ``qua_sdk.integrations.vocabulary.IMPLIED``. The alif
+#: a stop gives a tanween fath is held for two counts, which is the natural
+#: madd; legacy named that nowhere on the cell.
+IMPLIED_TAGS = {"madd_tabii": "madd_iwad"}
+
 #: Producer rules a cell never carries, mirroring ``qua_sdk.integrations.
 #: vocabulary.DROPPED`` so the classifier stays importable without the SDK.
 #: ``test_bounded_equivalence`` asserts the mirror against the live one.
@@ -155,7 +161,7 @@ COUNT_FIXED = ("at_most", 0)
 EXPECTED = {
     "rename": ("exact", 33498),
     "collapse": ("exact", 15567),
-    "new_rule": ("exact", 17056),
+    "new_rule": ("exact", 17635),
     "dropped": ("exact", 8572),
     "merger_attribution": ("exact", 8289),
     "fix": ("at_most", 557),

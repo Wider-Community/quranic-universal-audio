@@ -28,11 +28,11 @@ from qua_shared.schemas.bucket.ts_shard import TsShardWord
 # producer is absent. Keep in lockstep with the producer (the skipif tests below
 # assert the live producer yields these exact sets).
 _ROLE_VALUES = {"base", "haraka", "tanween", "madd"}
-# Only three: ``cellrows._status`` answers "inserted" for a cell with no glyph,
-# else "present" or "dropped" by whether the glyph reached a sound. The former
-# ``replaced`` / ``shortened`` name distinctions the producer no longer draws, and
-# a v11 shard can never carry them, so the FE union does not offer them either.
-_STATUS_VALUES = {"present", "inserted", "dropped"}
+# Four: a cell with no glyph is "inserted"; one whose rules say the reading
+# shows a letter other than the written one is "replaced"; the rest are
+# "present" or "dropped" by whether the glyph reached a sound. The former
+# ``shortened`` named a carrier a shortening silenced, which "dropped" says.
+_STATUS_VALUES = {"present", "replaced", "inserted", "dropped"}
 _TAJWEED_VALUES = {
     "ghunnah",
     "ikhfaa",
@@ -120,12 +120,13 @@ def test_role_mirrors_producer():
 @needs_producer
 def test_status_mirrors_producer():
     """Exercise every branch of ``cellrows._status``: it reads only whether the
-    pairing wrote a glyph and whether that glyph reached a sound."""
+    pairing wrote a glyph and whether that glyph reached a sound. A written
+    cell under one of the replacement rules takes the fourth instead."""
     from types import SimpleNamespace
 
     producer = _producer()
     assert producer is not None
-    cellrows, _vocabulary, _rules = producer
+    cellrows, vocabulary, _rules = producer
     glyphless = SimpleNamespace(glyphs=())
     written = SimpleNamespace(glyphs=(0,))
     live = {
@@ -133,7 +134,21 @@ def test_status_mirrors_producer():
         cellrows._status(written, [0]),
         cellrows._status(written, []),
     }
-    assert live == {s.value for s in CellStatus} == _STATUS_VALUES
+    assert vocabulary.REPLACEMENTS, "no rule shows a cell the letter it is read as"
+    assert live | {"replaced"} == {s.value for s in CellStatus} == _STATUS_VALUES
+
+
+@needs_producer
+def test_every_replacement_rule_is_a_shard_tag():
+    """A cell shows the reading's letter under a rule name; a rule the shard
+    never tags could never reach one."""
+    producer = _producer()
+    assert producer is not None
+    _cellrows, vocabulary, _rules = producer
+    assert vocabulary.REPLACEMENTS <= {r.value for r in TajweedRule}
+    assert set(vocabulary.IMPLIED) | set(vocabulary.IMPLIED.values()) <= {
+        r.value for r in TajweedRule
+    }
 
 
 @needs_producer

@@ -1469,6 +1469,7 @@
                                             class="mega-letter"
                                             class:silent={f.silent}
                                             class:dia-inserted={f.inserted}
+                                            class:dia-replaced={f.status === 'replaced'}
                                             class:dia-timed={f.cellStart != null && (!f.silent || f.shareGroup != null)}
                                             style="grid-column:{ci + 1}; justify-self:stretch"
                                             data-cell-timed={f.cellStart != null && (!f.silent || f.shareGroup != null) ? '1' : undefined}
