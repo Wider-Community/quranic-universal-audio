@@ -10,13 +10,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
-from scripts.diagnostics.ts_bounded_vocab import (
-    CELLS_DROPPED,
-    CORPUS,
-    COUNT_FIXED,
-    EXPECTED,
-    MEMBERS,
-)
+from scripts.diagnostics.ts_bounded_vocab import declared_for
 
 
 @dataclass(frozen=True)
@@ -96,16 +90,17 @@ def _moved(label: str, got: int, direction: str, expected: int) -> str | None:
 def count_violations(rep: Report) -> list[str]:
     """Counts that moved in a direction nobody declared.
 
-    Only asked of a run over the whole declared corpus: a subset has no
+    Only asked of a run over a corpus somebody measured: a subset has no
     expected count, and a floor read off part of the shards means nothing.
     """
-    if (rep.shards, rep.words) != (CORPUS["shards"], CORPUS["words"]):
+    held = declared_for(rep.shards, rep.words)
+    if held is None:
         return []
     seen = rep.ledger("residue") + rep.ledger("fix")
-    checks = [(family, rep.families[family], *rule) for family, rule in EXPECTED.items()]
-    checks += [(reason, seen[reason], *rule) for reason, rule in MEMBERS.items()]
-    checks.append(("words without cells", len(rep.cells_dropped), *CELLS_DROPPED))
-    checks.append(("counts a fix moved", len(rep.count_fixed), *COUNT_FIXED))
+    checks = [(family, rep.families[family], *rule) for family, rule in held["families"].items()]
+    checks += [(reason, seen[reason], *rule) for reason, rule in held["members"].items()]
+    checks.append(("words without cells", len(rep.cells_dropped), *held["cells_dropped"]))
+    checks.append(("counts a fix moved", len(rep.count_fixed), *held["count_fixed"]))
     return [row for row in (_moved(*check) for check in checks) if row]
 
 
@@ -137,10 +132,11 @@ def _hard_assertions(rep: Report, max_examples: int) -> list[str]:
 
 
 def _tallies(rep: Report) -> list[str]:
+    held = declared_for(rep.shards, rep.words) or {"families": {}, "members": {}}
     out = ["", "FAMILIES                differences    words   declared"]
     words = rep.family_words
     for family, count in rep.families.most_common():
-        direction, expected = EXPECTED.get(family, ("", 0))
+        direction, expected = held["families"].get(family, ("", 0))
         out.append(f"  {family:20s} {count:11d} {words[family]:8d}   {direction} {expected}")
     kinds = rep.kind_words
     out += ["", "KINDS                   differences    words"]
@@ -149,7 +145,7 @@ def _tallies(rep: Report) -> list[str]:
     out += ["", "DECLARED ONE AT A TIME (words)"]
     for family in ("residue", "fix"):
         for reason, count in rep.ledger(family).most_common():
-            direction, expected = MEMBERS.get(reason, ("", 0))
+            direction, expected = held["members"].get(reason, ("", 0))
             out.append(f"  {count:8d}  {family}: {reason}  [{direction} {expected}]")
     return out
 

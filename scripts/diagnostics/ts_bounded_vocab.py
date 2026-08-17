@@ -130,23 +130,14 @@ RESIDUE_REFS = {
     "11:42:15": "legacy also named a ghunnah the doubled meem already carries",
 }
 
-#: The corpus the expected counts were measured over. A run over anything else
-#: reports its counts and asserts nothing about them.
-CORPUS = {"shards": 114, "words": 80200}
-
-#: Words the stamper writes no cells for. The stamper reconciles the two letter
-#: rows rather than demanding they match, so this is now a word the projection
-#: and the aligner spell differently -- which is a bug in one of them, not a
-#: cut to be reconciled. There are none.
-CELLS_DROPPED = ("exact", 0)
-
-#: Words whose stored phone count a listed correction moved. Each is named by
-#: ref in `FIX_REFS` under `count`, which is what permits it; this only bounds
-#: how many there may be. None over this corpus -- the one that exists is a
-#: word another reciter starts a segment on and this one does not.
-COUNT_FIXED = ("at_most", 0)
-
-#: Family -> (direction the count may move, differences measured over CORPUS).
+#: What each measured corpus declares, keyed by the shape that identifies it.
+#: A run over a shape not here reports its counts and asserts nothing about
+#: them. Two reciters are measured because one alone cannot tell a producer
+#: change from a segmentation one: the same rule fires in a different waqf
+#: context when the runs are cut elsewhere, so a count that moves in one corpus
+#: and not the other is the segmentation talking.
+#:
+#: `families` maps a family to (direction its count may move, differences here).
 #: `exact` is a mechanical map over a frozen corpus: it has one right answer,
 #: and a producer change that moves it says so in the same commit. `at_most`
 #: may only fall, as a correction lands upstream or a residue is resolved and
@@ -161,35 +152,89 @@ COUNT_FIXED = ("at_most", 0)
 #: hold that count still: the producer may not move a single cell without saying
 #: which family moved and why. A regression in greying moves `cell_greyed` alone
 #: and nothing else, which is what makes them worth counting apart.
-EXPECTED = {
-    "rename": ("exact", 33566),
-    "collapse": ("exact", 15568),
-    "new_rule": ("exact", 17701),
-    "dropped": ("exact", 8573),
-    "merger_attribution": ("exact", 8097),
-    "fix": ("at_most", 557),
-    "residue": ("at_most", 236),
-    "cell_owner": ("exact", 42898),
-    "cell_greyed": ("exact", 1017),
-    "cell_share": ("exact", 14294),
-    "cell_cut": ("exact", 24544),
+#:
+#: `members` is the two families declared one row at a time. Each row is a
+#: difference that was looked at and accepted; none may grow without being
+#: looked at again.
+#:
+#: `cells_dropped` is words the stamper writes no cells for. The stamper
+#: reconciles the two letter rows rather than demanding they match, so this is
+#: a word the projection and the aligner spell differently, or one in a run
+#: whose stored phone count a correction moved -- the run goes with the word.
+#:
+#: `count_fixed` is words whose stored phone count a listed correction moved.
+#: Each is named by ref in `FIX_REFS` under `count`, which is what permits it;
+#: this only bounds how many there may be.
+DECLARED = {
+    # mishary_rashid_al_afasy_mp3quran
+    (114, 80200): {
+        "families": {
+            "rename": ("exact", 33566),
+            "collapse": ("exact", 15568),
+            "new_rule": ("exact", 17701),
+            "dropped": ("exact", 8573),
+            "merger_attribution": ("exact", 8097),
+            "fix": ("at_most", 557),
+            "residue": ("at_most", 236),
+            "cell_owner": ("exact", 42898),
+            "cell_greyed": ("exact", 1017),
+            "cell_share": ("exact", 14294),
+            "cell_cut": ("exact", 24544),
+        },
+        "members": {
+            "the waw carrying a dagger alif is sounded": ("at_most", 184),
+            "a carrier letter legacy sounded is greyed": ("at_most", 42),
+            "a carrier letter legacy greyed is sounded": ("at_most", 2),
+            "a carrier letter's silence moved": ("at_most", 0),
+            "legacy also named a ghunnah the doubled meem already carries": ("at_most", 1),
+            "a stop on a qalqala letter legacy left unnamed": ("at_most", 3),
+            "a stop keeps the vowel's own length": ("at_most", 1),
+            "yasri's raa is light, not heavy": ("at_most", 1),
+            "the hum a hidden noon leaves before istilaa is heavy": ("at_most", 527),
+            "yabsut and bastah are read with the seen": ("at_most", 2),
+        },
+        "cells_dropped": ("exact", 0),
+        "count_fixed": ("at_most", 0),
+    },
+    # nasser_al_qatami_mp3quran
+    (114, 84998): {
+        "families": {
+            "rename": ("exact", 35363),
+            "collapse": ("exact", 16248),
+            "new_rule": ("exact", 19352),
+            "dropped": ("exact", 8968),
+            "merger_attribution": ("exact", 8304),
+            "fix": ("at_most", 568),
+            "residue": ("at_most", 255),
+            "cell_owner": ("exact", 45025),
+            "cell_greyed": ("exact", 1163),
+            "cell_share": ("exact", 15117),
+            "cell_cut": ("exact", 26207),
+        },
+        "members": {
+            "the waw carrying a dagger alif is sounded": ("at_most", 184),
+            "a carrier letter legacy sounded is greyed": ("at_most", 42),
+            "a carrier letter legacy greyed is sounded": ("at_most", 2),
+            "a carrier letter's silence moved": ("at_most", 0),
+            "legacy also named a ghunnah the doubled meem already carries": ("at_most", 1),
+            "a stop on a qalqala letter legacy left unnamed": ("at_most", 3),
+            "a stop keeps the vowel's own length": ("at_most", 1),
+            "yasri's raa is light, not heavy": ("at_most", 1),
+            "the hum a hidden noon leaves before istilaa is heavy": ("at_most", 527),
+            "yabsut and bastah are read with the seen": ("at_most", 2),
+        },
+        # `ٱئْتِ` started on reads one sound where the frozen shard stores two,
+        # and the run its word sits in goes without cells until that verse is
+        # aligned again. Mishary's runs are cut elsewhere and keep theirs.
+        "cells_dropped": ("exact", 5),
+        "count_fixed": ("at_most", 1),
+    },
 }
 
-#: Reason -> (direction, words carrying it over CORPUS), for the two families
-#: declared one member at a time. Each row is a difference that was looked at
-#: and accepted; none of them may grow without being looked at again.
-MEMBERS = {
-    "the waw carrying a dagger alif is sounded": ("at_most", 184),
-    "a carrier letter legacy sounded is greyed": ("at_most", 42),
-    "a carrier letter legacy greyed is sounded": ("at_most", 2),
-    "a carrier letter's silence moved": ("at_most", 0),
-    "legacy also named a ghunnah the doubled meem already carries": ("at_most", 1),
-    "a stop on a qalqala letter legacy left unnamed": ("at_most", 3),
-    "a stop keeps the vowel's own length": ("at_most", 1),
-    "yasri's raa is light, not heavy": ("at_most", 1),
-    "the hum a hidden noon leaves before istilaa is heavy": ("at_most", 527),
-    "yabsut and bastah are read with the seen": ("at_most", 2),
-}
+
+def declared_for(shards: int, words: int) -> dict | None:
+    """What a run of this shape is held to, or None if nothing measured it."""
+    return DECLARED.get((shards, words))
 
 
 def targets_of_legacy(tag: str) -> frozenset[str]:

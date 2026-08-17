@@ -104,17 +104,22 @@ def test_a_merger_moves_a_letters_silence_and_its_phone():
     assert _families(view) == ["merger_attribution", "merger_attribution"]
 
 
+def _members() -> set[str]:
+    """Every reason any measured corpus bounds."""
+    return {r for held in vocab.DECLARED.values() for r in held["members"]}
+
+
 def test_a_carrier_letter_moving_its_silence_is_a_declared_residue():
     diffs = gate.classify_word(_view(flips=["و:True->False"]))
     assert [d.family for d in diffs] == ["residue"]
-    assert diffs[0].reason in vocab.MEMBERS
+    assert diffs[0].reason in _members()
 
 
 def test_a_listed_correction_is_a_fix():
     view = _view(ref="89:4:3", legacy={"tafkheem"}, current=set())
     diffs = gate.classify_word(view)
     assert [d.family for d in diffs] == ["fix"]
-    assert diffs[0].reason in vocab.MEMBERS
+    assert diffs[0].reason in _members()
 
 
 def test_a_bucket_move_that_is_not_a_merger_is_unclassified():
@@ -180,7 +185,7 @@ def test_no_legacy_tag_is_named_twice_or_maps_to_itself():
 
 
 def test_every_family_the_classifier_emits_has_a_declared_count():
-    """A family with no row in ``EXPECTED`` would grow unwatched."""
+    """A family with no row in a corpus's `families` would grow unwatched."""
     emitted = {
         "rename",
         "collapse",
@@ -194,25 +199,49 @@ def test_every_family_the_classifier_emits_has_a_declared_count():
         "cell_share",
         "cell_cut",
     }
-    assert set(vocab.EXPECTED) == emitted
+    for shape, held in vocab.DECLARED.items():
+        assert set(held["families"]) == emitted, shape
 
 
 def test_every_listed_reason_has_a_declared_count():
-    """Every reason a difference can be filed under is one `MEMBERS` bounds.
+    """Every reason a difference can be filed under is one `members` bounds.
 
     A `count` reason is not one of them: it explains a word the hard assertion
-    would otherwise fail on, and `COUNT_FIXED` bounds those instead.
+    would otherwise fail on, and `count_fixed` bounds those instead.
     """
     listed = {
         reason for tags in vocab.FIX_REFS.values() for key, reason in tags.items() if key != "count"
     }
     listed |= set(vocab.RESIDUE_REFS.values())
-    assert listed <= set(vocab.MEMBERS), f"undeclared: {sorted(listed - set(vocab.MEMBERS))}"
+    for shape, held in vocab.DECLARED.items():
+        undeclared = listed - set(held["members"])
+        assert not undeclared, f"{shape} undeclared: {sorted(undeclared)}"
 
 
 def test_a_count_a_fix_moved_is_listed_by_ref_and_bounded():
     assert "count" in vocab.FIX_REFS["10:15:11"]
-    assert vocab.COUNT_FIXED[0] == "at_most"
+    for held in vocab.DECLARED.values():
+        assert held["count_fixed"][0] == "at_most"
+
+
+def test_every_corpus_declares_the_same_vocabulary():
+    """Only the counts are a corpus's own. A reason or a family one corpus
+    names and another does not is drift between two copies of one table."""
+    shapes = list(vocab.DECLARED)
+    first = vocab.DECLARED[shapes[0]]
+    for shape in shapes[1:]:
+        held = vocab.DECLARED[shape]
+        assert set(held["families"]) == set(first["families"]), shape
+        assert set(held["members"]) == set(first["members"]), shape
+
+
+def test_a_reason_is_bounded_alike_wherever_it_is_declared():
+    """A member's direction is the vocabulary's, not the corpus's."""
+    shapes = list(vocab.DECLARED)
+    first = vocab.DECLARED[shapes[0]]["members"]
+    for shape in shapes[1:]:
+        for reason, (direction, _count) in vocab.DECLARED[shape]["members"].items():
+            assert direction == first[reason][0], f"{shape}: {reason}"
 
 
 # --- the declared tables mirror the producer's ------------------------------
