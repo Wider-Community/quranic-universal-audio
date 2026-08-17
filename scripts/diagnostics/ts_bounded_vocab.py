@@ -134,18 +134,11 @@ RESIDUE_REFS = {
 #: reports its counts and asserts nothing about them.
 CORPUS = {"shards": 114, "words": 80200}
 
-#: Words the stamper writes no cells for, because the projection and the
-#: aligner cut them into a different number of letters. Every one is the length
-#: mark of `أَنَا۠`, which the projection writes as a letter of its own and the
-#: aligner folded onto the alif. Ten more words differ only in that the
-#: projection shows a saktah or an ishmam mark on the letter it decorates and
-#: the aligner does not write it at all; they cut the same letters, so every
-#: index still addresses the letter it means and they keep their cells.
-#:
-#: The aligner cuts letters the projection's way now, so a shard written from
-#: here on has none of these. These are what the frozen ones already hold, and
-#: the count may only fall -- to zero as each is re-aligned.
-CELLS_DROPPED = ("at_most", 66)
+#: Words the stamper writes no cells for. The stamper reconciles the two letter
+#: rows rather than demanding they match, so this is now a word the projection
+#: and the aligner spell differently -- which is a bug in one of them, not a
+#: cut to be reconciled. There are none.
+CELLS_DROPPED = ("exact", 0)
 
 #: Words whose stored phone count a listed correction moved. Each is named by
 #: ref in `FIX_REFS` under `count`, which is what permits it; this only bounds
@@ -158,21 +151,35 @@ COUNT_FIXED = ("at_most", 0)
 #: and a producer change that moves it says so in the same commit. `at_most`
 #: may only fall, as a correction lands upstream or a residue is resolved and
 #: the difference stops existing.
+#:
+#: The four `cell_` families are the cell row itself: which letter each sound is
+#: drawn under, which letters grey, how the share groups partition the word, and
+#: what each cell shows. A frozen shard's row was written to the older contract,
+#: under which the carrier came before the haraka it lengthens, a long vowel was
+#: claimed by one letter rather than both, and an added cell wrote no letter at
+#: all. So these count a whole contract, not one rule each, and they are here to
+#: hold that count still: the producer may not move a single cell without saying
+#: which family moved and why. A regression in greying moves `cell_greyed` alone
+#: and nothing else, which is what makes them worth counting apart.
 EXPECTED = {
-    "rename": ("exact", 33498),
-    "collapse": ("exact", 15567),
-    "new_rule": ("exact", 17635),
-    "dropped": ("exact", 8572),
-    "merger_attribution": ("exact", 8289),
+    "rename": ("exact", 33566),
+    "collapse": ("exact", 15568),
+    "new_rule": ("exact", 17701),
+    "dropped": ("exact", 8573),
+    "merger_attribution": ("exact", 8097),
     "fix": ("at_most", 557),
     "residue": ("at_most", 236),
+    "cell_owner": ("exact", 42898),
+    "cell_greyed": ("exact", 1017),
+    "cell_share": ("exact", 14294),
+    "cell_cut": ("exact", 24544),
 }
 
 #: Reason -> (direction, words carrying it over CORPUS), for the two families
 #: declared one member at a time. Each row is a difference that was looked at
 #: and accepted; none of them may grow without being looked at again.
 MEMBERS = {
-    "the waw carrying a dagger alif is sounded": ("at_most", 183),
+    "the waw carrying a dagger alif is sounded": ("at_most", 184),
     "a carrier letter legacy sounded is greyed": ("at_most", 42),
     "a carrier letter legacy greyed is sounded": ("at_most", 2),
     "a carrier letter's silence moved": ("at_most", 0),

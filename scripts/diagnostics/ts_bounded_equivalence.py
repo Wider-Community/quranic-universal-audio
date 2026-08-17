@@ -511,16 +511,16 @@ def cell_diffs(old: list, new: list, ref: str, text: str) -> list[Diff]:
     for phone in sorted(set(was) | set(now)):
         if was.get(phone) != now.get(phone):
             detail = f"{sorted(was.get(phone, ()))} -> {sorted(now.get(phone, ()))}"
-            out.append(Diff("owner", ref, text, detail, None))
+            out.append(Diff("owner", ref, text, detail, "cell_owner"))
     if greyed_letters(old) != greyed_letters(new):
         detail = f"{sorted(greyed_letters(old))} -> {sorted(greyed_letters(new))}"
-        out.append(Diff("greyed", ref, text, detail, None))
+        out.append(Diff("greyed", ref, text, detail, "cell_greyed"))
     if share_shape(old) != share_shape(new):
         detail = f"{_shape(share_shape(old))} -> {_shape(share_shape(new))}"
-        out.append(Diff("share", ref, text, detail, None))
+        out.append(Diff("share", ref, text, detail, "cell_share"))
     if cell_writing(old) != cell_writing(new):
         detail = f"{'|'.join(cell_writing(old))} -> {'|'.join(cell_writing(new))}"
-        out.append(Diff("cut", ref, text, detail, None))
+        out.append(Diff("cut", ref, text, detail, "cell_cut"))
     return out
 
 
