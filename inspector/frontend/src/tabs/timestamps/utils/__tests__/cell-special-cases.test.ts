@@ -7,7 +7,7 @@ import {
     iqlabTanweenVowel,
     isIqlabCell,
 } from '../cell-special-cases';
-import { DAMMA, DAMMATAN, FATHA, FATHATAN, KASRA, KASRATAN, MADDAH, MEEM_HI, MEEM_LO } from '../tajweed-script';
+import { DAGGER, DAMMA, DAMMATAN, FATHA, FATHATAN, KASRA, KASRATAN, MADDAH, MEEM_HI, MEEM_LO } from '../tajweed-script';
 
 const cell = (over: Partial<TsCell>): TsCell => ({
     chars: '',
@@ -88,6 +88,34 @@ describe('cell-special-cases — riding marks', () => {
         expect(folded[0]!.cell.chars).toBe('ا' + MADDAH);
         expect(folded[0]!.cell.rules).toEqual(['madd_tabii', 'madd_wajib_muttasil']);
         expect(folded[0]!.rawIndex).toBe(0); // the host keeps its own report index
+    });
+
+    it('folds a dagger onto the carrier it is written on (تُتْلَىٰ)', () => {
+        const cells: TsCell[] = [
+            cell({ chars: 'ى', role: 'madd', phonemeIndices: [4], rules: ['madd_tabii'], sourceLetterIndex: 3, shareGroup: 1 }),
+            cell({ chars: DAGGER, role: 'madd', phonemeIndices: [4], rules: ['madd_tabii'], sourceLetterIndex: 4, shareGroup: 1 }),
+        ];
+        const folded = foldRidingMarks(cells);
+        expect(folded).toHaveLength(1);
+        expect(folded[0]!.cell.chars).toBe('ى' + DAGGER);
+        expect(folded[0]!.cell.phonemeIndices).toEqual([4]);
+    });
+
+    it('leaves a dagger on a consonant its own cell — the ḥaraka is not its carrier (ذَٰلِكَ)', () => {
+        const cells: TsCell[] = [
+            cell({ chars: 'ذ', phonemeIndices: [0], sourceLetterIndex: 0 }),
+            cell({ chars: FATHA, role: 'haraka', phonemeIndices: [1], sourceLetterIndex: 0, shareGroup: 0 }),
+            cell({ chars: DAGGER, role: 'madd', phonemeIndices: [1], sourceLetterIndex: 1, shareGroup: 0 }),
+        ];
+        expect(foldRidingMarks(cells).map((f) => f.cell.chars)).toEqual(['ذ', FATHA, DAGGER]);
+    });
+
+    it('leaves an otiose alef alone — same phones, no share group, not one unit (لَقُوا۟)', () => {
+        const cells: TsCell[] = [
+            cell({ chars: 'و', role: 'madd', phonemeIndices: [3], sourceLetterIndex: 2 }),
+            cell({ chars: 'ا۟', role: 'madd', status: 'dropped', phonemeIndices: [3], sourceLetterIndex: 3 }),
+        ];
+        expect(foldRidingMarks(cells).map((f) => f.cell.chars)).toEqual(['و', 'ا۟']);
     });
 
     it('leaves every other cell (and its raw index) alone', () => {

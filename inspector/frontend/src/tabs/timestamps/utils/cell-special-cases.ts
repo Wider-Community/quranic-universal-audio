@@ -35,6 +35,25 @@ import {
  *  — the maddah of آ, of a muqaṭṭaʿah letter name, of a ṣilah carrier (هۦٓ). */
 const RIDING_MARKS = new Set([MADDAH]);
 
+/** Do two cells hold one written unit — a mark and the carrier it sits on?
+ *
+ *  A maddah always does; it is written on its letter whether or not the reading
+ *  sounds either. Anything else has to say so structurally: two carriers voicing
+ *  the same phone under the same share group are one long vowel written twice
+ *  (ىٰ, وٰ). A dagger on a consonant is not — its host is that letter's ḥaraka,
+ *  and the two render side by side as the vowel group they are. */
+function rides(host: TsCell, c: TsCell): boolean {
+    if (c.chars === '') return false;
+    if ([...c.chars].every((ch) => RIDING_MARKS.has(ch))) return true;
+    return (
+        host.role === 'madd'
+        && c.role === 'madd'
+        && c.shareGroup != null
+        && c.shareGroup === host.shareGroup
+        && String(c.phonemeIndices) === String(host.phonemeIndices)
+    );
+}
+
 /** One folded cell plus the raw `word.cells[]` index it came from (a riding mark
  *  takes its host's, so a report target still resolves). */
 export interface FoldedCell {
@@ -49,7 +68,7 @@ export function foldRidingMarks(cells: TsCell[]): FoldedCell[] {
     const out: FoldedCell[] = [];
     cells.forEach((c, i) => {
         const host = out[out.length - 1];
-        if (host && c.chars !== '' && [...c.chars].every((ch) => RIDING_MARKS.has(ch))) {
+        if (host && rides(host.cell, c)) {
             out[out.length - 1] = {
                 rawIndex: host.rawIndex,
                 cell: {
