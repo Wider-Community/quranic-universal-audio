@@ -14,14 +14,8 @@ import type { PhonemeSpan, RenderedGroup, RenderedPhoneme } from './cell-model';
 // Only length marks (ː / ASCII :) are detached modifiers; ˤ is integral to
 // the consonant symbol (rˤ, dˤ, sˤ, tˤ, ðˤ) and must stay in the base.
 export const PHONE_MOD_RE = /([ː:]+)$/u;
-// Only the SHORT emphatic open vowel `aˤ` (heavy `a` after an istiʿlāʾ
-// consonant) DISPLAYS as a plain `a` — the emphasis is a vowel quality, not a
-// separate symbol like a consonant emphatic. The LONG emphatic `aˤ:` keeps its
-// ˤ (the emphasis stays on a held vowel). Display-only: the shard keeps `aˤ`.
-export const EMPHATIC_A_RE = /^aˤ$/u;
 export function splitPhone(phone: string | undefined): { base: string; mod: string } {
     if (!phone || phone === 'sil' || phone === 'sp') return { base: phone ?? '', mod: '' };
-    if (EMPHATIC_A_RE.test(phone)) return { base: 'a', mod: '' };
     const m = PHONE_MOD_RE.exec(phone);
     return m ? { base: phone.slice(0, -m[0].length), mod: m[0] } : { base: phone, mod: '' };
 }
