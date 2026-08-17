@@ -189,6 +189,10 @@ def test_every_family_the_classifier_emits_has_a_declared_count():
         "merger_attribution",
         "fix",
         "residue",
+        "cell_owner",
+        "cell_greyed",
+        "cell_share",
+        "cell_cut",
     }
     assert set(vocab.EXPECTED) == emitted
 
