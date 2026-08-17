@@ -1,7 +1,8 @@
-"""Named accessor for Timestamps-shard cell rows — the 6th word slot, seven slots.
+"""Named accessor for Timestamps-shard cell rows — the 6th word slot, eight slots.
 
 A shard word's optional 6th slot ``cells`` is a list of POSITIONAL rows
-``[chars, role, status, phoneme_indices, source_letter_index, rules, share_group]``
+``[chars, role, status, phoneme_indices, source_letter_index, rules, share_group,
+phoneme_rules]``
 — see ``CellTiming`` in ``qua_shared/schemas/bucket/ts_shard.py``. They are the
 per-character highlight tier from the producer's projection, which includes
 ``role == 'base'`` (consonant) rows alongside ``haraka``/``tanween``/``madd`` —
@@ -29,12 +30,18 @@ class CellRow(NamedTuple):
     """One character-phoneme cell, by name.
 
     ``role`` in {``base``, ``haraka``, ``tanween``, ``madd``}; ``status`` in
-    {``present``, ``inserted``, ``dropped``}. ``chars`` is the canonical source
-    character(s), ``""`` for a fully implicit cell. ``phoneme_indices`` are
-    word-local indexable-phone indices (``[]`` = silent). ``source_letter_index``
-    is the anchoring letter (``-1`` if fully implicit). ``rules`` is every rule
-    the producer fired on the grapheme, in its order and possibly empty — there
-    is no primary; ``share_group`` ties co-timed cells.
+    {``present``, ``replaced``, ``inserted``, ``dropped``}. ``chars`` is the
+    canonical source character(s), ``""`` for a fully implicit cell.
+    ``phoneme_indices`` are word-local indexable-phone indices (``[]`` = silent).
+    ``source_letter_index`` is the anchoring letter (``-1`` if fully implicit).
+    ``rules`` is every rule the producer fired on the grapheme, in its order and
+    possibly empty — there is no primary; ``share_group`` ties co-timed cells.
+
+    ``phoneme_rules`` says which of ``phoneme_indices`` each rule is on, as one
+    list per phone in that order. It is ``None`` for the ordinary cell, whose
+    phones all name what ``rules`` names. A letter read as a whole word is the
+    reason it exists: ``عٓ`` says four sounds and the hidden noon is the only one
+    the ikhfaa is on, so drawing ``rules`` across the cell would light all four.
     """
 
     chars: str
@@ -44,12 +51,13 @@ class CellRow(NamedTuple):
     source_letter_index: int
     rules: list[str]
     share_group: int | None = None
+    phoneme_rules: list[list[str]] | None = None
 
 
 def parse_cell(row: object) -> CellRow:
     """Parse one positional cell row into a :class:`CellRow`.
 
-    Reads only the named positions and ignores any trailing slot beyond the 7th.
+    Reads only the named positions and ignores any trailing slot beyond the 8th.
     Raises ``ValueError`` on a row with fewer than the 5 required slots.
     """
     seq = tuple(row)  # type: ignore[call-overload]
@@ -61,6 +69,7 @@ def parse_cell(row: object) -> CellRow:
     chars, role, status, phoneme_indices, source_letter_index = seq[:5]
     raw_rules = seq[5] if len(seq) > 5 else None
     share_group = seq[6] if len(seq) > 6 else None
+    per_phone = seq[7] if len(seq) > 7 else None
     return CellRow(
         str(chars),
         str(role),
@@ -69,6 +78,7 @@ def parse_cell(row: object) -> CellRow:
         int(source_letter_index),
         _rules(raw_rules),
         share_group,
+        [list(tags) for tags in per_phone] if per_phone else None,
     )
 
 

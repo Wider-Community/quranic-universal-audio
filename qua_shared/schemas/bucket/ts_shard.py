@@ -72,7 +72,13 @@ PhoneTiming = list[str | int | bool]
 # ``role`` / ``status`` are the codegen-source enums (``bucket/cell_vocab``);
 # ``phoneme_indices`` are word-local indices over the word's indexable phones;
 # ``rules`` is the cell's ordered rule list (v11), possibly empty.
-CellTiming = tuple[str, CellRole, CellStatus, list[int], int, list[str], int | None]
+CellTiming = (
+    tuple[str, CellRole, CellStatus, list[int], int, list[str], int | None]
+    | tuple[
+        str, CellRole, CellStatus, list[int], int, list[str], int | None,
+        list[list[str]] | None,
+    ]
+)
 
 
 class TsShardWord(
@@ -111,6 +117,7 @@ class TsShardCell(BaseModel):
     source_letter_index: int
     rules: list[TajweedRule] = Field(default_factory=list)
     share_group: int | None = None
+    phoneme_rules: list[list[TajweedRule]] | None = None
 
 
 class TsShardSegment(BaseModel):

@@ -64,11 +64,19 @@ export interface TsCell {
     rules: string[];
     /** cells sharing one id highlight together (long vowel; cross-word idgham) */
     shareGroup: number | null;
+    /** which of `phonemeIndices` each rule is on, one list per phone in that
+     *  order — `null` for the ordinary cell, whose phones all name what `rules`
+     *  names. A letter read as a whole word is why it exists: `عٓ` says four
+     *  sounds and only the hidden noon carries the ikhfaa, so drawing `rules`
+     *  across the whole cell lights all four. */
+    phonemeRules?: string[][] | null;
 }
 
 /** A raw positional shard cell row (the 6th word slot), schema v11 —
- *  `[chars, role, status, phoneme_indices, source_letter_index, rules, share_group]`.
- *  `phoneme_indices` are word-local indexable-phone indices. */
+ *  `[chars, role, status, phoneme_indices, source_letter_index, rules, share_group,
+ *  phoneme_rules]`. `phoneme_indices` are word-local indexable-phone indices, and
+ *  the trailing `phoneme_rules` is present only on a cell whose phones do not all
+ *  name the same thing. */
 export type TsShardCellRow = [
     string,
     string,
@@ -77,6 +85,7 @@ export type TsShardCellRow = [
     number,
     (string[] | null)?,
     (number | null)?,
+    (string[][] | null)?,
 ];
 
 /** Read a positional shard cell row by name — the FE mirror of
@@ -95,6 +104,7 @@ export function parseShardCell(row: TsShardCellRow): TsCell {
         sourceLetterIndex: row[4],
         rules: !raw ? [] : typeof raw === 'string' ? [raw] : [...raw],
         shareGroup: (row[6] ?? null) as number | null,
+        phonemeRules: row[7] ? row[7].map((tags) => [...tags]) : null,
     };
 }
 
