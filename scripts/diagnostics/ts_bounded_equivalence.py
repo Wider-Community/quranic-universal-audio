@@ -333,11 +333,22 @@ def classify_word(view: WordView) -> list[Diff]:
         if rule in DROPPED_RULES
     ]
     if view.bucket_moved:
-        family = "merger_attribution" if view.bucket_is_merger else None
-        out.append(Diff("bucket", view.ref, view.text, "phone re-attributed", family))
+        family, reason = _bucket_family(view)
+        out.append(Diff("bucket", view.ref, view.text, "phone re-attributed", family, reason))
     out += _silence_diffs(view)
     out += _tag_diffs(view)
     return out
+
+
+def _bucket_family(view: WordView) -> tuple[str | None, str]:
+    """Why a word's stored phones are not the ones it stores now: a merger
+    re-hosted a sound onto its neighbour, or the reading folded two phones the
+    aligner cut apart into the one sound it says -- which is a listed fix,
+    because the shard was aligned before the reading said so."""
+    listed = FIX_REFS.get(view.ref, {}).get("bucket")
+    if listed:
+        return "fix", listed
+    return ("merger_attribution" if view.bucket_is_merger else None), ""
 
 
 def _silence_reason(flip: str | None) -> str:
@@ -538,19 +549,23 @@ def _token_family(ref: str) -> tuple[str | None, str]:
 def wasl_refs(segments: list[dict]) -> list[tuple[str | None, str | None]]:
     """The waṣl-adjacent word refs per segment, as ``annotate_ordered_segments``
     derives them -- the replay reads across a join, so the re-derive must too."""
-    from qua_sdk.components.timing.lib.cells import _next_verse_key
+    from qua_sdk.components.timing.lib.cells import _joined, _next_verse_key
 
     out: list[tuple[str | None, str | None]] = []
     for i, seg in enumerate(segments):
-        key = seg["ref"]
+        key, words = seg["ref"], seg["words"]
         prev_ref = cont_ref = None
         if i > 0 and segments[i - 1].get("wasl"):
             pkey, pwords = segments[i - 1]["ref"], segments[i - 1]["words"]
-            if pwords and (pkey == key or _next_verse_key(pkey) == key):
+            if pwords and words and _joined(pwords[-1], words[0]) and (
+                pkey == key or _next_verse_key(pkey) == key
+            ):
                 prev_ref = f"{pkey}:{pwords[-1][0]}"
         if seg.get("wasl") and i + 1 < len(segments):
             nkey, nwords = segments[i + 1]["ref"], segments[i + 1]["words"]
-            if nwords and (nkey == key or _next_verse_key(key) == nkey):
+            if nwords and words and _joined(words[-1], nwords[0]) and (
+                nkey == key or _next_verse_key(key) == nkey
+            ):
                 cont_ref = f"{nkey}:{nwords[0][0]}"
         out.append((prev_ref, cont_ref))
     return out

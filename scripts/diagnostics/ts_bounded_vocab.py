@@ -121,8 +121,9 @@ FIX_REFS = {
     "7:69:22": {"token": "yabsut and bastah are read with the seen"},
     # Started on, `ٱئْتِ` is read `إِىٓتِ`: the prosthetic hamza takes a kasra and
     # the quiescent hamza after it becomes the madd that kasra opens. One sound
-    # where legacy read two, so the word's phone count is one lower.
-    "10:15:11": {"count": "starting on `ٱئْتِ` reads its second hamza as a madd"},
+    # where legacy read two, so the stamper folds the two stored phones into one
+    # over their union and the word's stored array is one shorter.
+    "10:15:11": {"bucket": "starting on `ٱئْتِ` reads its second hamza as a madd"},
 }
 
 #: Differences accepted as they are, each with the reason it is not a bug.
@@ -192,6 +193,7 @@ DECLARED = {
             "yasri's raa is light, not heavy": ("at_most", 1),
             "the hum a hidden noon leaves before istilaa is heavy": ("at_most", 527),
             "yabsut and bastah are read with the seen": ("at_most", 2),
+            "starting on `ٱئْتِ` reads its second hamza as a madd": ("at_most", 0),
         },
         "cells_dropped": ("exact", 0),
         "count_fixed": ("at_most", 0),
@@ -222,12 +224,12 @@ DECLARED = {
             "yasri's raa is light, not heavy": ("at_most", 1),
             "the hum a hidden noon leaves before istilaa is heavy": ("at_most", 527),
             "yabsut and bastah are read with the seen": ("at_most", 2),
+            "starting on `ٱئْتِ` reads its second hamza as a madd": ("at_most", 1),
         },
-        # `ٱئْتِ` started on reads one sound where the frozen shard stores two,
-        # and the run its word sits in goes without cells until that verse is
-        # aligned again. Mishary's runs are cut elsewhere and keep theirs.
-        "cells_dropped": ("exact", 5),
-        "count_fixed": ("at_most", 1),
+        # The stamper folds the one word whose stored phones the reading says
+        # are one sound, so no word goes without cells in either corpus.
+        "cells_dropped": ("exact", 0),
+        "count_fixed": ("at_most", 0),
     },
 }
 

@@ -218,8 +218,11 @@ def test_every_listed_reason_has_a_declared_count():
         assert not undeclared, f"{shape} undeclared: {sorted(undeclared)}"
 
 
-def test_a_count_a_fix_moved_is_listed_by_ref_and_bounded():
-    assert "count" in vocab.FIX_REFS["10:15:11"]
+def test_a_phone_array_a_fix_moved_is_listed_by_ref_and_bounded():
+    """The stamper folds `ٱئْتِ`'s two stored phones into the one sound the
+    reading says, so the word's stored array moves rather than its count
+    disagreeing. A moved array is a `bucket` difference and is listed by ref."""
+    assert "bucket" in vocab.FIX_REFS["10:15:11"]
     for held in vocab.DECLARED.values():
         assert held["count_fixed"][0] == "at_most"
 
