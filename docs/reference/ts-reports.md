@@ -12,7 +12,9 @@ and everyone sees persisted flags in the analysis grid. Two surfaces:
   strip and turns the analysis grid into the click surface, so a contributor
   annotates specific cells without a modal blocking them.
 
-Backed by one SQLite table; the per-reciter shard content is never touched.
+Backed by one SQLite table; the per-reciter shard content is never touched. A report target
+addresses shard coordinates (`word_index` / `source_letter_index` / `cell_index` /
+`phoneme_flat_index` / `share_group`) — what each one means is [shards.md](shards.md).
 
 ## Data model — table `ts_reports`
 

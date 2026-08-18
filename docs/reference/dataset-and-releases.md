@@ -25,7 +25,8 @@ running + historical, in one place: the **Jobs** tab — [admin-dashboard.md](ad
 | **HF dataset** | `hetchyy/quranic-universal-ayahs` | ML researchers, training, analysis | Parquet-native, queryable, embedded audio |
 
 Every adapter starts from the same bucket inputs. The bucket per-chapter shard stores every
-recited segment **raw** (temporal segment-array shape — see [timestamps-job.md](timestamps-job.md));
+recited segment **raw** (temporal segment-array shape — see [shards.md](shards.md) for the schema,
+[timestamps-job.md](timestamps-job.md) for the write/read path);
 the single canonical take per verse is a pure projection
 ([`project_segment_shard`](../../qua_shared/timestamps_dedup.py), completion-based occasion dedup).
 Both release adapters call that one projection, so the TS-tab read path and the release/dataset
@@ -173,9 +174,9 @@ Each tier self-contains the level below; all times are relative to the matching 
 startup speed, and network transfer cheap: download verse, word, or letter detail independently.
 Use `shard.py` when an app prefers local per-surah files. There is no per-reciter `README.md`.
 
-**Letter-tier `char` alphabet.** Internal shards (`reciters/<slug>/timestamps/<ch>.json.gz`)
-carry a 57-token grapheme alphabet (haraka stripped upstream, but the maddah mark and madd
-composites retained). At publish time **both** `cut_release` and `publish_hf` map each `char`
+**Letter-tier `char` alphabet.** Internal shards (`reciters/<slug>/timestamps/<ch>.json.gz`,
+[shards.md](shards.md)) carry a 57-token grapheme alphabet (haraka stripped upstream, but the maddah
+mark and madd composites retained). At publish time **both** `cut_release` and `publish_hf` map each `char`
 through `qua_shared/letter_vocab.to_external_char`, which drops the maddah mark (`U+0653`) to
 yield a stable **42-token** external alphabet — a non-lossy, prolongation-only collapse (no two
 distinct letters merge). The mapping is **fail-loud**: an unknown token aborts the cut so a new

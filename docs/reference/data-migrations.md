@@ -87,7 +87,8 @@ Reshape each bucket per-chapter timestamps shard from the historical **v2 occurr
 (`{_meta, segments: [{ref, t, words}, ...]}`, recitation order, single-verse refs). This is a
 **reshape, not a regeneration** — no MFA re-run; occurrences are flattened by `time_start`. It lets
 the read path serve the bucket gz as a byte pass-through and gives external consumers a clean
-artifact. Full contract: [timestamps-job.md §1, §6](timestamps-job.md);
+artifact. Shard schema: [shards.md](shards.md); write/read path + the reshape's place in the job:
+[timestamps-job.md §1, §6](timestamps-job.md);
 [`docs/planning/ts-segment-array-migration.md`](../planning/ts-segment-array-migration.md).
 
 **Safe-because.** A prod-bucket audit (`.local/ts_migration_audit/`) verified all 10 released
