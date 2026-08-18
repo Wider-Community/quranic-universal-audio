@@ -17,6 +17,7 @@
  */
 import type { TsCell } from '../../../lib/types/ts-client';
 import {
+    DAGGER,
     DAMMA,
     DAMMATAN,
     FATHA,
@@ -37,6 +38,9 @@ import {
  *  the pausal zero of أَنَا۠. */
 const RIDING_MARKS = new Set([MADDAH, PAUSAL_ZERO]);
 
+/** Marks written on the letter before them that may say nothing at all. */
+const SILENT_MARKS = new Set([MADDAH, PAUSAL_ZERO, DAGGER]);
+
 /** Do two cells hold one written unit — a mark and the carrier it sits on?
  *
  *  A maddah always does; so does the pausal zero, which is written on its alif
@@ -50,6 +54,12 @@ const RIDING_MARKS = new Set([MADDAH, PAUSAL_ZERO]);
 function rides(host: TsCell, c: TsCell): boolean {
     if (c.chars === '') return false;
     if ([...c.chars].every((ch) => RIDING_MARKS.has(ch))) return true;
+    // A mark that says nothing of its own is written on the letter before it:
+    // the dagger of مَجْر۪ىٰهَا, whose length the imala mark already gave. An
+    // otiose alif is silent too but is a letter, not a mark, and keeps its cell.
+    if (c.phonemeIndices.length === 0 && [...c.chars].every((ch) => SILENT_MARKS.has(ch))) {
+        return host.role === 'madd';
+    }
     return (
         host.role === 'madd'
         && c.role === 'madd'

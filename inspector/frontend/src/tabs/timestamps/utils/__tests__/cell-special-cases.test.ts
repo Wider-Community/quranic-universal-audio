@@ -155,3 +155,24 @@ describe('cell-special-cases — folding per-phone rules', () => {
         expect(foldRidingMarks(cells)[0]!.cell.phonemeRules).toBeNull();
     });
 });
+
+describe('cell-special-cases — a mark that says nothing', () => {
+    it('folds a soundless dagger onto the carrier it is written on (مَجْر۪ىٰهَا)', () => {
+        const cells: TsCell[] = [
+            cell({ chars: 'ى', role: 'madd', phonemeIndices: [5], rules: ['madd_tabii', 'imala'], sourceLetterIndex: 4 }),
+            cell({ chars: DAGGER, role: 'madd', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 5 }),
+        ];
+        const folded = foldRidingMarks(cells);
+        expect(folded).toHaveLength(1);
+        expect(folded[0]!.cell.chars).toBe('ى' + DAGGER);
+        expect(folded[0]!.cell.phonemeIndices).toEqual([5]);
+    });
+
+    it('still leaves the otiose alef alone — a silent letter is not a mark', () => {
+        const cells: TsCell[] = [
+            cell({ chars: 'و', role: 'madd', phonemeIndices: [3], sourceLetterIndex: 2 }),
+            cell({ chars: 'ا۟', role: 'madd', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 3 }),
+        ];
+        expect(foldRidingMarks(cells).map((f) => f.cell.chars)).toEqual(['و', 'ا۟']);
+    });
+});
