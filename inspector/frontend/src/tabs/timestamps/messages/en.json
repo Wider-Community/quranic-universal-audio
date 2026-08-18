@@ -268,7 +268,7 @@
   "ts_tajweed_rule_silent_iltiqaa": "Iltiqa' 'as-sakinayn",
   "ts_tajweed_rule_silent_waqf": "Waqf",
   "ts_tajweed_rule_silent_orthographic": "Silent Letter",
-  "ts_tajweed_rule_pausal_alif": "Alif (waqf)",
+  "ts_tajweed_rule_pausal_alif": "Alif (silent, read only at waqf)",
   "ts_tajweed_rule_taa_marbuta_pausal": "Ta' Marbutah (waqf)",
   "ts_footer_wipe_title": "Continuous highlight (karaoke wipe)",
   "ts_footer_tajweed_settings_title": "Tajweed rules & colours",

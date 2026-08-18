@@ -1755,7 +1755,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         );
     });
 
-    it('the pausal alef of أَنَا۠ folds into one cell in continuation, named "Alif (waqf)" once', () => {
+    it('the pausal alef of أَنَا۠ folds into one cell in continuation, named for its silence once', () => {
         // Continuation: neither the alif nor the mark is said, so the producer
         // gives them no phones and no share group. They are still ONE written
         // unit, and the catch-all silence yields to the rule that says why.
@@ -1785,7 +1785,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(alef).toBeTruthy();
         // one folded cell, not two: the bare mark never renders on its own
         expect(letters.some((e) => e.textContent === '۠')).toBe(false);
-        expect(alef.dataset.tjRules).toBe('Alif (waqf)');
+        expect(alef.dataset.tjRules).toBe('Alif (silent, read only at waqf)');
     });
 
     it('the same alef at waqf keeps its existing shareGroup fold and still sounds', () => {
