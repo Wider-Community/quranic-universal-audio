@@ -190,13 +190,16 @@ class ProducerWord:
     joined: bool = False
 
 
-def _mfa_tokens(phonemes) -> list[str]:
-    """A display surface's tokens on the aligner's inventory, render-only
-    markers dropped -- the space a shard's stored phones live in."""
-    from qua_sdk.integrations.phonemizer import DISPLAY_ONLY_TOKENS
+def _shown_tokens(phonemes) -> list[str]:
+    """The tokens a shard's stored phones live in, render-only markers dropped.
+
+    A stamped shard spells a phone the way it shows it -- the imala vowel, the
+    eased hamza, the hum a heavy letter leaves -- so comparing against the
+    aligner's own spelling would report every one of them as a difference.
+    """
     from qua_sdk.integrations.tokens import is_indexable
 
-    return [DISPLAY_ONLY_TOKENS.get(p, p) for p in phonemes if is_indexable(p)]
+    return [p for p in phonemes if is_indexable(p)]
 
 
 def _pairing_word(res, pairing, hosts) -> int | None:
@@ -285,7 +288,7 @@ def producer_view(
                 )
                 joined = any(not skip <= p < skip + len(run) for p in partners[i])
                 out[pos + i] = ProducerWord(
-                    _mfa_tokens(word.phonemes), rules[i], shifted, joined
+                    _shown_tokens(word.phonemes), rules[i], shifted, joined
                 )
         pos += len(run)
     return out
