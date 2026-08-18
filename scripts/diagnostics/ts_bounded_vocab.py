@@ -152,7 +152,10 @@ RESIDUE_REFS = {
 #: all. So these count a whole contract, not one rule each, and they are here to
 #: hold that count still: the producer may not move a single cell without saying
 #: which family moved and why. A regression in greying moves `cell_greyed` alone
-#: and nothing else, which is what makes them worth counting apart.
+#: and nothing else, which is what makes them worth counting apart. All four
+#: fell where the rasm writes a madd carrier a stop silences: the written letter
+#: draws the length legacy also drew it under, so the word agrees with the
+#: frozen row on all four counts at once.
 #:
 #: `members` is the two families declared one row at a time. Each row is a
 #: difference that was looked at and accepted; none may grow without being
@@ -177,10 +180,10 @@ DECLARED = {
             "merger_attribution": ("exact", 8093),
             "fix": ("at_most", 557),
             "residue": ("at_most", 236),
-            "cell_owner": ("exact", 44228),
-            "cell_greyed": ("exact", 939),
-            "cell_share": ("exact", 15637),
-            "cell_cut": ("exact", 24534),
+            "cell_owner": ("exact", 44198),
+            "cell_greyed": ("exact", 909),
+            "cell_share": ("exact", 15607),
+            "cell_cut": ("exact", 24504),
         },
         "members": {
             "the waw carrying a dagger alif is sounded": ("at_most", 184),
@@ -208,10 +211,10 @@ DECLARED = {
             "merger_attribution": ("exact", 8301),
             "fix": ("at_most", 569),
             "residue": ("at_most", 257),
-            "cell_owner": ("exact", 46555),
-            "cell_greyed": ("exact", 1079),
-            "cell_share": ("exact", 16661),
-            "cell_cut": ("exact", 26199),
+            "cell_owner": ("exact", 46522),
+            "cell_greyed": ("exact", 1045),
+            "cell_share": ("exact", 16628),
+            "cell_cut": ("exact", 26166),
         },
         "members": {
             "the waw carrying a dagger alif is sounded": ("at_most", 184),
