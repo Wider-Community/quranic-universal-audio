@@ -30,8 +30,10 @@ may carry a cross-word tajweed bridge rule — see
 The optional 6th slot ``cells`` (schema v5) is the per-character phoneme cells
 the producer's projection writes — the full per-character breakdown, ``role ==
 'base'`` (consonant) rows alongside ``haraka``/``tanween``/``madd``. Each cell is
-the seven-slot positional row ``[chars, role, status, phoneme_indices,
-source_letter_index, rules, share_group]``; see ``qua_shared/ts_shard_cells.py``.
+the positional row ``[chars, role, status, phoneme_indices, source_letter_index,
+rules, share_group]`` plus an optional 8th ``phoneme_rules`` (one rule list per
+entry of ``phoneme_indices``, written only where the cell's phones do not all
+name the same thing); see ``qua_shared/ts_shard_cells.py``.
 ``phoneme_indices`` are **word-local indices over the word's indexable phones**
 (the qalqala ``Q`` excluded, same coordinate space as the bridge index).
 ``rules`` (schema v11) is the cell's ordered rule list — every rule the producer
@@ -39,8 +41,9 @@ fired on the grapheme, no primary pick — and may be empty. Read via
 ``ts_shard_cells.parse_cell`` — never unpack positionally, and tolerate a missing
 6th slot on v3/v4 shards.
 
-Extras handling: ``extra="forbid"`` + ``strip_and_warn`` on the document and
-``_meta``. The word/letter/phone tuples are positional and are validated by
+Extras handling: ``extra="forbid"`` + ``strip_and_warn`` on the document;
+``_meta`` is ``extra="allow"`` so aligner provenance the writer adds later rides
+through. The word/letter/phone tuples are positional and are validated by
 arity, not by a key set, so they carry no extras surface.
 """
 
@@ -67,11 +70,13 @@ LetterTiming = tuple[str, int | None, int | None] | tuple[str, int | None, int |
 # loose ``list`` of the union of cell types rather than a fixed tuple.
 PhoneTiming = list[str | int | bool]
 
-# Cell row (the 6th word slot): a per-character cell, exactly seven slots.
-# ``[chars, role, status, phoneme_indices, source_letter_index, rules, share_group]``.
+# Cell row (the 6th word slot): a per-character cell, seven slots plus an optional
+# 8th. ``[chars, role, status, phoneme_indices, source_letter_index, rules,
+# share_group(, phoneme_rules)]``.
 # ``role`` / ``status`` are the codegen-source enums (``bucket/cell_vocab``);
 # ``phoneme_indices`` are word-local indices over the word's indexable phones;
-# ``rules`` is the cell's ordered rule list (v11), possibly empty.
+# ``rules`` is the cell's ordered rule list (v11), possibly empty;
+# ``phoneme_rules`` is one such list per phone, present only where they differ.
 CellTiming = (
     tuple[str, CellRole, CellStatus, list[int], int, list[str], int | None]
     | tuple[

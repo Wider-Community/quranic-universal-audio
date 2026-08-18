@@ -1,7 +1,7 @@
 /**
  * Pure phoneme-row layout for the Timestamps analysis view — splits phones into
- * base + IPA-modifier, detects the heavy (istiʿlāʾ) ikhfāʾ/vowel display, and
- * assigns each phoneme span to its source grapheme columns (`_buildColumns`).
+ * base + IPA-modifier and assigns each phoneme span to its source grapheme
+ * columns (`_buildColumns`).
  * Consumed by `rendered-blocks.ts`; see `cell-model.ts` for the group model.
  */
 

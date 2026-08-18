@@ -41,7 +41,9 @@ a fact the producer read off the projection and stamped onto those timings.
 
 Audio routing (`reciter`, `url_template`, `audio_urls`) is deliberately absent: the slug is the path
 and the catalog + audio-manifest sidecar are ground truth. `_meta` is the one forward-compat surface
-in the document — unknown keys ride through (`strip_and_warn`), everything else is `extra="forbid"`.
+in the document: it is `extra="allow"`, so an unknown key rides through. Everything else is
+`extra="forbid"`, and an unknown key at the top level is stripped with a WARNING before validation
+(`strip_and_warn`, `TsShardDoc._surface_extras`).
 
 ### Segment entry (`TsShardSegment`)
 
@@ -137,7 +139,7 @@ Real v11 rows (`10:1` word 1, `الٓر`, letters `ا` / `لٓ` / `ر`, phones
 ["ا",  "base", "present", [0,1,2,3,4], 0, [],                             null]
 ["ل",  "base", "present", [5,6,7],     1, ["madd_lazim","izhar_shafawi"], 0,    [[], ["madd_lazim"], ["izhar_shafawi"]]]
 ["ٓ",  "madd", "present", [6],         1, ["madd_lazim"],                 0]
-["ر",  "base", "present", [8,9],       2, ["madd_tabii","tafkheem"],      null, [["tafkheem"], ["madd_tabii","tafkheem"]]]
+["ر",  "base", "present", [8,9],       2, ["tafkheem"],                   null]
 ```
 
 ### `CellRole` (`qua_shared/schemas/bucket/cell_vocab.py`)
@@ -193,9 +195,11 @@ shard is re-stamped rather than migrated in place.
 | 7 | `phoneme_rule_tags` | `list[str \| null] \| None` — one tag (or `None`) per phone, parallel to `phoneme_indices` | `phoneme_rules: str[][] \| None` |
 | 8 | `secondary_tags` | `list[str]` — the colourable rules that co-occurred on the grapheme but **lost the single-tag pick** (in practice `["tafkheem"]` on a heavy madd/qalqala cell). Slot 7 is padded `None` when only slot 8 is present. | gone — every rule is in `rules` |
 
-Slots 7 and 8 are the two slots v11 exists to remove: both carried what one tag could not.
-`ts_shard_cells._rules` still reads a bare string at slot 5 as a one-element list, and `parseShardCell`
-does the same — reading it as characters would be silent nonsense.
+Slots 7 and 8 are what one tag could not carry. v11 deletes slot 8 outright — every rule is in
+`rules` now — and keeps slot 7, retyped: one *list* per phone instead of one tag or `None`, and still
+written only where the cell's phones do not all name the same thing. `ts_shard_cells._rules` still
+reads a bare string at slot 5 as a one-element list, and `parseShardCell` does the same — reading it
+as characters would be silent nonsense.
 
 v10 `CellStatus` carried a fifth member, `shortened`, which is not a v11 value: such a cell now falls
 to `present` or `dropped` by whether it sounds (`_status` in `cellrows.py`). The word tuple, letter
@@ -229,7 +233,7 @@ producer holds a `PhonemizeResult` and reads these surfaces off it:
 | `res.spellings` | edge array | `Supplies` / `Witnesses` / `Decorates` / `Structural` — which unit(s) a glyph spells, which glyph writes a vowel's *length* rather than its quality, which mark decorates which unit |
 | `res.attributions` | edge array | `Hosts` (the unit responsible for a sound — the whole word-local index space), `MergedInto` (where a merger sits), `Silent` |
 | `res.modifiers` | edge array | `Recolours` / `SetsLength` / `Classifies` — which **sound** a rule names, which is what `phoneme_rules` is built from |
-| `res.alignment(text="source", grouping="glyph")` | projection | The producer's main loop. Each pairing gives `glyphs`, `sounds` it owns, `shares`, `rules`, and `silent`. One pairing per source character. |
+| `res.alignment(text="source", grouping="glyph")` | projection | The producer's main loop. Each pairing gives `glyphs`, `sounds` it owns, `shares`, `rules`, and `silent`. One pairing per source glyph, plus one glyphless pairing per sound no glyph writes — which is what a cell's `inserted` status is read off (`_status`). |
 | `res.phonemes()` | projection | The flat token sequence, used to respell and to count stored phones |
 
 The shard is a projection of that graph onto timings: `letters[]` is the source glyph sequence with
@@ -274,8 +278,8 @@ Five effects, in order:
 |---|---|
 | Silent flags | Letter slot 3 only — the char is never rewritten (`_stamp_silent_flags`) |
 | Phone spellings | Phone slot 0, respelt display-side (§6) (`_stamp_phone_tokens`) |
-| Re-attribution | Re-slices the segment's flat phones into words by the projection's per-word indexable counts, then recomputes word `start`/`end` (`_apply_to_words`) |
-| Bridge tags | Phone slot 5 on each merger phone |
+| Bridge tags | Phone slot 5 on each merger phone (`_apply_to_words`, before it re-slices) |
+| Re-attribution | Same call: re-slices the segment's flat phones into words by the projection's per-word indexable counts, then recomputes word `start`/`end` |
 | Cells | Word slot 5 (`_stamp_cells`) |
 
 **What the stamper will not overwrite.** It never touches a timing the aligner measured. A folded
@@ -367,8 +371,9 @@ written mark**, with the shadda composed into the letter it doubles. The tables 
 
 A riding mark goes to the cell **presenting the sound it evidences** (`_ridden`), not blindly to the
 last cell: `وَٱلطُّورِ` writes the damma before the shadda, and the shadda is the taa's. A mark that
-evidences no sound at all rides the last cell. A folded mark hands its host only the rules naming a
-sound that host actually makes (`_borne`).
+evidences no sound at all rides the last cell. A folded mark hands its host the rules naming a sound
+that host actually makes, plus any rule naming no sound at all — that one is about the writing, which
+is what the mark is (`_borne`).
 
 Two cells exist that no glyph opened:
 
@@ -392,6 +397,10 @@ stay the same length. The FE mirrors the set as `RENDER_ONLY_PHONES` in
 
 The same coordinate space carries the bridge index and the phone counts the re-slice guard uses. A
 phone two cells present keeps one index in each (that is what `share_group` is for).
+
+**Resolving a cell's timing.** Walk the word's `phones`, skip every render-only marker, and take the
+`phoneme_indices`-th entries of what is left; the interval is `[min(start), max(end)]` over them. A
+cell with `[]` sounds nothing and has no timing of its own.
 
 ### `source_letter_index`
 
@@ -539,8 +548,9 @@ Keyed on the indices, not on a status, so every soundless carrier greys uniforml
 the carrier a shortening silenced, an elided hamzat wasl, an assimilated sun lam. A merger source with
 no phones of its own but a share group is co-lit and stays a normal cell; a silent-but-tagged source
 (mutaqaribayn, mutajanisayn) stays grey and still draws its underline and tooltip. The bounded gate
-counts the same predicate (`greyed_letters` in `ts_bounded_equivalence.py`), which is what lets a
-greying regression be caught as its own family.
+counts the same predicate aggregated per letter — `greyed_letters` (`ts_bounded_equivalence.py`)
+greys `source_letter_index` N when *every* cell on it sounds nothing and shares nothing — which is
+what lets a greying regression be caught as its own family.
 
 ### Everything else the FE owns
 
@@ -584,12 +594,20 @@ each sound is drawn under), `greyed`, `share` (how the share groups partition th
 | `residue` | A listed exception with its reason (`RESIDUE_REFS`) |
 | `cell_owner` / `cell_greyed` / `cell_share` / `cell_cut` | The four cell-row counts |
 
-Two assertions ride on top and belong to no family; either failing fails the run outright:
+Two assertions ride on top and belong to no family (`Report.hard_failures` — `timing_moved`,
+`count_moved`, `runs_dropped`); any of them non-empty fails the run outright:
 
-1. **Word timings are byte-identical** — `words[i][1]` / `words[i][2]` may not move for any word,
-   including across a merger. This is the whole safety claim of the uniform merger attribution.
+1. **Word timings do not move** — `words[i][1]` / `words[i][2]` stay put for every word, including
+   across a merger. This is the whole safety claim of the uniform merger attribution. The one
+   exemption is a wasl junction, where the first word legitimately holds through the ghunnah of a
+   merger starting the second: `retimed_joins` allows that pair's shared boundary to move only while
+   the pair's **outer** span is unchanged and the two words still meet, and books it as
+   `boundary_retimed`. Anything else at that join is a timing failure like any other.
 2. **Every word's stored indexable-phone count equals the producer's**, so the stamper writes cells
-   for each word instead of dropping a run.
+   for each word instead of dropping a run (`count_moved` when it differs; `runs_dropped` when the
+   producer returns no word at all). A ref listed in `FIX_REFS` under `count` moves instead to
+   `count_fixed` — a correction that legitimately changes a word's phone count — which `DECLARED`
+   bounds rather than forbids, alongside `cells_dropped` (words the stamper wrote no cells for).
 
 `DECLARED` in `ts_bounded_vocab.py` keys each measured corpus by its `(shards, words)` shape and holds
 each family to `exact` (a mechanical map over a frozen corpus has one right answer) or `at_most` (may

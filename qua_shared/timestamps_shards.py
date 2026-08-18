@@ -80,10 +80,11 @@ _SEGMENT_META_PROVENANCE = (
 # reconstruct a waṣl group (per-occurrence, so retakes regroup correctly).
 # v11 replaces the cell row's single ``tag`` at slot 5 with ``rules`` — the ordered
 # list of every rule the producer fired on the grapheme — and drops the optional
-# 8th/9th slots (``phoneme_rule_tags``, ``secondary_tags``) that existed to carry
-# what a single tag could not. The row is now exactly seven slots, no trailing
-# options. A v10 row is NOT readable as v11 (slot 5 changed type), so a shard is
-# re-stamped rather than migrated in place.
+# 9th slot ``secondary_tags``, which existed only because one tag had to be picked.
+# The optional 8th slot survives, retyped: ``phoneme_rules`` is one rule LIST per
+# entry of ``phoneme_indices``, still written only where the cell's phones do not
+# all name the same thing. A v10 row is NOT readable as v11 (slot 5 changed type),
+# so a shard is re-stamped rather than migrated in place.
 SEGMENT_SCHEMA_VERSION = 11
 
 
