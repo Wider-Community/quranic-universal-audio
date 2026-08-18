@@ -285,6 +285,17 @@ export function foldedLettersFor(word: TsWord): {
     return { folded, srcToFold };
 }
 
+/** The rules a cell draws across itself: the ones every phone under it names.
+ *  A cell saying several sounds does not colour whole because one of them fires
+ *  a rule -- the tanwin of فِسْقًا is heavy on its fatha and clear on its noon, and
+ *  a bar over the glyph would claim both of each. Where a cell does not
+ *  distinguish its phones, `rules` already is what they all name. */
+export function cellWideRules(c: TsCell): string[] {
+    const per = c.phonemeRules;
+    if (!per || per.length === 0) return c.rules;
+    return c.rules.filter((tag) => per.every((tags) => tags.includes(tag)));
+}
+
 /**
  * Build the ordered cell-group model — the single source for the letter row.
  *
@@ -341,7 +352,7 @@ export function cellGroupsFor(
     // to ≤3 bars plus an optional full-cell border.
     const cellBadges = (c: TsCell): TjBadge[] => {
         const groupTag = c.shareGroup != null ? idghamGroupTags.get(c.shareGroup) : undefined;
-        return badgesForTags([...c.rules, groupTag]);
+        return badgesForTags([...cellWideRules(c), groupTag]);
     };
     // Internal tajweed tag id(s) on the cell — the report rule-picker's options
     // (its own rules + every rule shared across the cell's co-highlight group, so
