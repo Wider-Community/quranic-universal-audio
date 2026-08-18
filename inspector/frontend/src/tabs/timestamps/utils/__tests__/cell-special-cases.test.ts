@@ -129,3 +129,29 @@ describe('cell-special-cases — riding marks', () => {
         expect(folded.map((f) => f.rawIndex)).toEqual([0, 1]);
     });
 });
+
+describe('cell-special-cases — folding per-phone rules', () => {
+    it('the maddah gives its madd to the sound it stretches (كٓهيعٓصٓ)', () => {
+        const cells: TsCell[] = [
+            cell({
+                chars: 'ع', phonemeIndices: [7, 8, 9, 10], sourceLetterIndex: 3,
+                rules: ['ikhfaa', 'tafkheem'],
+                phonemeRules: [[], [], [], ['ikhfaa', 'tafkheem']],
+            }),
+            cell({ chars: MADDAH, role: 'madd', phonemeIndices: [9], sourceLetterIndex: 3, rules: ['madd_lazim'] }),
+        ];
+        const folded = foldRidingMarks(cells);
+        expect(folded).toHaveLength(1);
+        // the leen the maddah lengthens, and the hidden noon the ikhfaa is on
+        expect(folded[0]!.cell.phonemeRules).toEqual([[], [], ['madd_lazim'], ['ikhfaa', 'tafkheem']]);
+        expect(folded[0]!.cell.rules).toEqual(['ikhfaa', 'tafkheem', 'madd_lazim']);
+    });
+
+    it('leaves an ordinary letter and its mark undistinguished', () => {
+        const cells: TsCell[] = [
+            cell({ chars: 'ا', role: 'madd', phonemeIndices: [1], rules: ['madd_tabii'] }),
+            cell({ chars: MADDAH, role: 'madd', phonemeIndices: [1], rules: ['madd_tabii'] }),
+        ];
+        expect(foldRidingMarks(cells)[0]!.cell.phonemeRules).toBeNull();
+    });
+});

@@ -61,6 +61,28 @@ export interface FoldedCell {
     rawIndex: number;
 }
 
+/** The folded cell's per-phone rules: each phone keeps what the host said about
+ *  it, plus what the mark says about the phones the mark itself draws. A maddah
+ *  is the madd of the sound it stretches, and the letter it rides may say
+ *  nothing about that sound on its own — the ain of كٓهيعٓصٓ carries the ikhfaa of
+ *  the noon hidden in its name, while the length on its leen is the maddah's.
+ *  `null` when neither cell distinguishes its phones, which is the ordinary
+ *  letter and its ordinary mark. */
+function mergedPhonemeRules(
+    host: TsCell,
+    mark: TsCell,
+    phonemeIndices: number[],
+): string[][] | null {
+    if (!host.phonemeRules && !mark.phonemeRules && mark.rules.length === 0) return null;
+    const of = (c: TsCell, phone: number): string[] => {
+        const at = c.phonemeIndices.indexOf(phone);
+        if (at < 0) return [];
+        return c.phonemeRules ? (c.phonemeRules[at] ?? []) : [...c.rules];
+    };
+    const per = phonemeIndices.map((phone) => [...new Set([...of(host, phone), ...of(mark, phone)])]);
+    return per.some((tags) => String(tags) !== String(per[0])) ? per : null;
+}
+
 /** Fold every riding mark onto the cell before it — its chars, phonemes and rules
  *  all join the host, mirroring the letter row that writes the mark on that same
  *  letter. A leading riding mark (no host yet) stays a cell of its own. */
@@ -69,13 +91,15 @@ export function foldRidingMarks(cells: TsCell[]): FoldedCell[] {
     cells.forEach((c, i) => {
         const host = out[out.length - 1];
         if (host && rides(host.cell, c)) {
+            const phonemeIndices = [...new Set([...host.cell.phonemeIndices, ...c.phonemeIndices])];
             out[out.length - 1] = {
                 rawIndex: host.rawIndex,
                 cell: {
                     ...host.cell,
                     chars: host.cell.chars + c.chars,
-                    phonemeIndices: [...new Set([...host.cell.phonemeIndices, ...c.phonemeIndices])],
+                    phonemeIndices,
                     rules: [...new Set([...host.cell.rules, ...c.rules])],
+                    phonemeRules: mergedPhonemeRules(host.cell, c, phonemeIndices),
                 },
             };
             return;
