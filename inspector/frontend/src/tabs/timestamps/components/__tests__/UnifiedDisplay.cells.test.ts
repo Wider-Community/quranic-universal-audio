@@ -1755,6 +1755,68 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         );
     });
 
+    it('the pausal alef of أَنَا۠ folds into one cell in continuation, named "Alif (waqf)" once', () => {
+        // Continuation: neither the alif nor the mark is said, so the producer
+        // gives them no phones and no share group. They are still ONE written
+        // unit, and the catch-all silence yields to the rule that says why.
+        const iv: PhonemeInterval[] = [
+            { phone: 'ʔ', start: 0, end: 0.1 }, { phone: 'a', start: 0.1, end: 0.15 },
+            { phone: 'n', start: 0.15, end: 0.2 }, { phone: 'a', start: 0.2, end: 0.3 },
+        ];
+        const word = w(
+            [
+                { char: 'أ', start: 0, end: 0.15, silent: false },
+                { char: 'ن', start: 0.15, end: 0.3, silent: false },
+                { char: 'ا۠', start: null, end: null, silent: true },
+            ],
+            [
+                base(0, [0], { chars: 'أ' }),
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: [], shareGroup: null },
+                base(1, [2], { chars: 'ن' }),
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [3], sourceLetterIndex: 1, rules: ['pausal_alif'], shareGroup: null },
+                { chars: 'ا', role: 'madd', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 2, rules: ['orthographic_silence'], shareGroup: null },
+                { chars: '۠', role: 'madd', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 2, rules: ['pausal_alif'], shareGroup: null },
+            ],
+            [0, 1, 2, 3],
+        );
+        const { container } = mount([word], iv);
+        const letters = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter'));
+        const alef = letters.find((e) => e.textContent === 'ا۠')!;
+        expect(alef).toBeTruthy();
+        // one folded cell, not two: the bare mark never renders on its own
+        expect(letters.some((e) => e.textContent === '۠')).toBe(false);
+        expect(alef.dataset.tjRules).toBe('Alif (waqf)');
+    });
+
+    it('the same alef at waqf keeps its existing shareGroup fold and still sounds', () => {
+        // At waqf the alif IS read: both cells present the long vowel under one
+        // share group, which the structural clause already folds. Nothing moves.
+        const iv: PhonemeInterval[] = [
+            { phone: 'ʔ', start: 0, end: 0.1 }, { phone: 'a', start: 0.1, end: 0.15 },
+            { phone: 'n', start: 0.15, end: 0.2 }, { phone: 'a:', start: 0.2, end: 0.5 },
+        ];
+        const word = w(
+            [
+                { char: 'أ', start: 0, end: 0.15, silent: false },
+                { char: 'ن', start: 0.15, end: 0.2, silent: false },
+                { char: 'ا۠', start: 0.2, end: 0.5, silent: false },
+            ],
+            [
+                base(0, [0], { chars: 'أ' }),
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: [], shareGroup: null },
+                base(1, [2], { chars: 'ن' }),
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [3], sourceLetterIndex: 1, rules: ['pausal_sukun', 'madd_tabii'], shareGroup: 10 },
+                { chars: 'ا', role: 'madd', status: 'present', phonemeIndices: [3], sourceLetterIndex: 2, rules: ['pausal_sukun', 'madd_tabii'], shareGroup: 10 },
+                { chars: '۠', role: 'madd', status: 'present', phonemeIndices: [3], sourceLetterIndex: 2, rules: ['pausal_sukun', 'madd_tabii'], shareGroup: 10 },
+            ],
+            [0, 1, 2, 3],
+        );
+        const { container } = mount([word], iv);
+        const letters = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter'));
+        expect(letters.find((e) => e.textContent === 'ا۠')).toBeTruthy();
+        expect(letters.some((e) => e.textContent === '۠')).toBe(false);
+    });
+
     it('tashil / ishmam / ibdal al-hamzah all ring their cell under one toggle', () => {
         const ring = (rules: string[], chars: string) => {
             const intervals: PhonemeInterval[] = [{ phone: 'x', start: 0, end: 0.2 }];

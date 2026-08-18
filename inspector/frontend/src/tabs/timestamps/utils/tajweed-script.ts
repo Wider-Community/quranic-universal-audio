@@ -21,6 +21,9 @@ export const DAGGER = 'ٰ'; // U+0670 dagger-alef
 export const ALEF = 'ا'; // U+0627
 export const ALEF_MAKSURA = 'ى'; // U+0649
 export const MADDAH = 'ٓ'; // U+0653 maddah-above — the silah-madd mark
+/** U+06E0 small high upright rectangular zero — the seven alifs (أَنَا۠). It is
+ *  written on the alif before it and never opens a written unit of its own. */
+export const PAUSAL_ZERO = '۠';
 export const NOON = 'ن'; // U+0646
 export const MEEM = 'م'; // U+0645
 /** Mini-meem glyphs the phonemizer stamps onto an iqlab tanwīn's own meem cell —

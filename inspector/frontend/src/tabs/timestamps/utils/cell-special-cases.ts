@@ -26,22 +26,27 @@ import {
     MADDAH,
     MEEM_HI,
     MEEM_LO,
+    PAUSAL_ZERO,
     firstMark,
 } from './tajweed-script';
 
-// ── Riding marks (the maddah) ─────────────────────────────────────────────────
+// ── Riding marks (the maddah, the pausal zero) ────────────────────────────────
 
 /** Marks that open a cell of their own but are written on the letter before them
- *  — the maddah of آ, of a muqaṭṭaʿah letter name, of a ṣilah carrier (هۦٓ). */
-const RIDING_MARKS = new Set([MADDAH]);
+ *  — the maddah of آ, of a muqaṭṭaʿah letter name, of a ṣilah carrier (هۦٓ), and
+ *  the pausal zero of أَنَا۠. */
+const RIDING_MARKS = new Set([MADDAH, PAUSAL_ZERO]);
 
 /** Do two cells hold one written unit — a mark and the carrier it sits on?
  *
- *  A maddah always does; it is written on its letter whether or not the reading
- *  sounds either. Anything else has to say so structurally: two carriers voicing
- *  the same phone under the same share group are one long vowel written twice
- *  (ىٰ, وٰ). A dagger on a consonant is not — its host is that letter's ḥaraka,
- *  and the two render side by side as the vowel group they are. */
+ *  A maddah always does; so does the pausal zero, which is written on its alif
+ *  whether or not the reading sounds either — in continuation neither the alif
+ *  nor the mark is said, and two silent cells would otherwise stay apart.
+ *  Anything else has to say so structurally: two carriers voicing the same phone
+ *  under the same share group are one long vowel written twice (ىٰ, وٰ). A dagger
+ *  on a consonant is not — it is written on a bare consonant as often as on a
+ *  carrier, so its host is that letter's ḥaraka, and the two render side by side
+ *  as the vowel group they are. */
 function rides(host: TsCell, c: TsCell): boolean {
     if (c.chars === '') return false;
     if ([...c.chars].every((ch) => RIDING_MARKS.has(ch))) return true;
@@ -83,6 +88,18 @@ function mergedPhonemeRules(
     return per.some((tags) => String(tags) !== String(per[0])) ? per : null;
 }
 
+/** One silence, named once. `orthographic_silence` is the producer's catch-all
+ *  for a grapheme that sounds nothing; where the folded cell also carries a rule
+ *  that says WHY it is silent — `pausal_alif`, the alif read only at waqf — the
+ *  catch-all is the weaker of two answers to the same question, and the cell
+ *  would otherwise hover as "Silent Letter, Alif (waqf)". A cell that still
+ *  sounds keeps everything: the tag is then about one of its graphemes, not
+ *  about the cell. */
+function namedOnce(rules: string[], phonemeIndices: number[]): string[] {
+    if (phonemeIndices.length > 0 || rules.length < 2) return rules;
+    return rules.filter((tag) => tag !== 'orthographic_silence');
+}
+
 /** Fold every riding mark onto the cell before it — its chars, phonemes and rules
  *  all join the host, mirroring the letter row that writes the mark on that same
  *  letter. A leading riding mark (no host yet) stays a cell of its own. */
@@ -98,7 +115,7 @@ export function foldRidingMarks(cells: TsCell[]): FoldedCell[] {
                     ...host.cell,
                     chars: host.cell.chars + c.chars,
                     phonemeIndices,
-                    rules: [...new Set([...host.cell.rules, ...c.rules])],
+                    rules: namedOnce([...new Set([...host.cell.rules, ...c.rules])], phonemeIndices),
                     phonemeRules: mergedPhonemeRules(host.cell, c, phonemeIndices),
                 },
             };
