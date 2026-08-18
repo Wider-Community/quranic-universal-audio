@@ -300,6 +300,10 @@ def legacy_buckets(new_words: list) -> list[list[str]]:
     Legacy hosted the labial idgham on the word before; every other merged
     sound already sat on the word whose letter carries it. Walking forward
     handles a chain of them, where one word both gives and takes.
+
+    Only how many phones each word holds is compared against this, never which
+    strings: a stamped shard respells a phone in the spelling it shows, and a
+    respelling is not a phone changing words.
     """
     out = [[phone[0] for phone in word[4]] for word in new_words]
     for i in range(1, len(new_words)):
@@ -501,8 +505,8 @@ def scan_segment(
                 current=new_tags(new),
                 rules=produced.rules,
                 flips=silence_flips(old, new),
-                bucket_moved=was != [phone[0] for phone in new[4]],
-                bucket_is_merger=was == legacy_phones[pos],
+                bucket_moved=len(was) != len(new[4]),
+                bucket_is_merger=len(was) == len(legacy_phones[pos]),
                 partner_tags={
                     tag for p in produced.partners for tag in new_tags(new_seg["words"][p])
                 },
