@@ -76,10 +76,13 @@ def stale_targets(keep: set[str]) -> list[str]:
     """
     from huggingface_hub import list_bucket_tree
 
+    # The tree prefix matches as a string, not as a directory, so the sibling
+    # marker at ``code/qua_sdk_stage.json`` comes back under ``code/qua_sdk``.
+    # Deleting it would erase the very record the launch gate reads.
     staged = {
         entry.path
         for entry in list_bucket_tree(ALIGNER_BUCKET, _SDK_PREFIX.rstrip("/"), recursive=True)
-        if getattr(entry, "size", None) is not None
+        if getattr(entry, "size", None) is not None and entry.path.startswith(_SDK_PREFIX)
     }
     return sorted(staged - keep)
 
@@ -95,8 +98,13 @@ def read_marker() -> dict | None:
     """The staged tree's marker, or None when it has never been written."""
     from huggingface_hub import hffs
 
+    path = f"buckets/{ALIGNER_BUCKET}/{MARKER_PATH}"
+    # The launcher is one long-lived worker and fsspec caches the miss. Without
+    # this, a process that read the marker before a re-stage keeps reading the
+    # absence it saw first, and the gate stays shut on a tree that is now fine.
+    hffs.invalidate_cache(path)
     try:
-        raw = hffs.cat_file(f"buckets/{ALIGNER_BUCKET}/{MARKER_PATH}")
+        raw = hffs.cat_file(path)
     except Exception:  # noqa: BLE001 — absent marker reads as "unknown", not an error
         return None
     try:

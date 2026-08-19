@@ -70,7 +70,13 @@ def test_a_bucket_the_source_dropped_a_path_from_loses_it(monkeypatch):
     monkeypatch.setattr(
         huggingface_hub,
         "list_bucket_tree",
-        lambda *a, **k: [Entry("code/qua_sdk/kept.py"), Entry("code/qua_sdk/renamed_away.py")],
+        lambda *a, **k: [
+            Entry("code/qua_sdk/kept.py"),
+            Entry("code/qua_sdk/renamed_away.py"),
+            # The prefix matches as a string, so the sibling marker comes back
+            # under it. Sweeping it up would erase what the gate reads.
+            Entry(stage_sdk.MARKER_PATH),
+        ],
         raising=False,
     )
     assert stage_sdk.stale_targets({"code/qua_sdk/kept.py"}) == ["code/qua_sdk/renamed_away.py"]
