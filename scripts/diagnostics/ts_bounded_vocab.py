@@ -174,7 +174,7 @@ DECLARED = {
         "families": {
             "rename": ("exact", 33566),
             "collapse": ("exact", 15568),
-            "new_rule": ("exact", 17619),
+            "new_rule": ("exact", 17602),
             "dropped": ("exact", 8635),
             "merger_attribution": ("exact", 8093),
             "fix": ("at_most", 557),
@@ -205,7 +205,7 @@ DECLARED = {
         "families": {
             "rename": ("exact", 35364),
             "collapse": ("exact", 16248),
-            "new_rule": ("exact", 19268),
+            "new_rule": ("exact", 19246),
             "dropped": ("exact", 9037),
             "merger_attribution": ("exact", 8300),
             "fix": ("at_most", 569),
