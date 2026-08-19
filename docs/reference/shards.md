@@ -79,7 +79,7 @@ A flat positional tuple, 5 or 6 slots:
 | 0 | `char` | The aligner's own grapheme token, verbatim — the stamper writes only slot 3 |
 | 1 | `start_ms` | `null` when the aligner could not place the letter |
 | 2 | `end_ms` | `null` likewise |
-| 3 | `silent` | `bool`, from schema v4. True when the grapheme produces no audible phoneme at its own position (elided hamzat wasl, the assimilated lam of a sun letter, the otiose tanween alef). Absent on v3 rows → `False`. |
+| 3 | `silent` | `bool`, from schema v4. True when the grapheme produces no audible phoneme at its own position (elided hamzat wasl, the assimilated lam of a sun letter, the otiose tanween alef). A letter that merged into a **vowel** is not one of them — a vowel is nobody's letter, so the letter running into one is the writing of its length and keeps its sound (`_merged_away` in `cellrows.py`); only a letter merging into a consonant yields, that consonant being another letter's, doubled. Absent on v3 rows → `False`. |
 
 Read via `qua_shared/ts_shard_letters.py::parse_letter` / `iter_letters`. Never unpack positionally:
 a bare `for char, s, e in letters` broke every publish and cut the day the 4th slot landed.
@@ -132,6 +132,14 @@ the hidden noon carries the ikhfaa; drawing `rules` across the cell would light 
 in a per-phone list is **also** in `rules`, so a consumer that reads only slot 5 is never told less
 than one that reads both (`cellrows.py`, after `_rules_per_phone`).
 
+That union is what makes slot 5 safe to read alone, and what makes it wrong to **paint** alone: a
+cell may colour whole only for the rules every one of its phones names, and anything narrower
+belongs under the phone that names it. The tanween of `فِسْقًا` is heavy on its fatha and clear on its
+noon, so a bar drawn over the glyph would claim both of each; the letters of a spelled-out opening
+do the same with the rules of one sound inside their name. The frontend's `cellWideRules`
+(`cell-model.ts`) is that intersection, and a cell with no per-phone list is unchanged by it — its
+`rules` already are what all its phones name.
+
 Real v11 rows (`10:1` word 1, `الٓر`, letters `ا` / `لٓ` / `ر`, phones
 `ʔ a l i f l a: m rˤ aˤ:`):
 
@@ -139,7 +147,7 @@ Real v11 rows (`10:1` word 1, `الٓر`, letters `ا` / `لٓ` / `ر`, phones
 ["ا",  "base", "present", [0,1,2,3,4], 0, [],                             null]
 ["ل",  "base", "present", [5,6,7],     1, ["madd_lazim","izhar_shafawi"], 0,    [[], ["madd_lazim"], ["izhar_shafawi"]]]
 ["ٓ",  "madd", "present", [6],         1, ["madd_lazim"],                 0]
-["ر",  "base", "present", [8,9],       2, ["tafkheem"],                   null]
+["ر",  "base", "present", [8,9],       2, ["madd_tabii","tafkheem"],      null, [["tafkheem"], ["madd_tabii","tafkheem"]]]
 ```
 
 ### `CellRole` (`qua_shared/schemas/bucket/cell_vocab.py`)
