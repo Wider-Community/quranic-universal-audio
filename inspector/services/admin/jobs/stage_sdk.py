@@ -100,9 +100,12 @@ def read_marker() -> dict | None:
     except Exception:  # noqa: BLE001 — absent marker reads as "unknown", not an error
         return None
     try:
-        return json.loads(bytes(raw))
+        # cat_file is typed str | bytes; json.loads takes either, but only one
+        # of them survives being handed to a reader expecting the other.
+        marker = json.loads(raw)
     except ValueError:
         return None
+    return marker if isinstance(marker, dict) else None
 
 
 def assert_staged_sdk(expected: int) -> None:
