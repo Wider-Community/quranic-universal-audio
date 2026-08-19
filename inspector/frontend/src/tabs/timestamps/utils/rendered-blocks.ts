@@ -226,26 +226,32 @@ export function buildRendered(
         const bridge = bridgeRuleOf(c);
         if (bridge && (!c.phonemeIndices.length || bridgeRules.has(bridge))) continue;
         const groupTag = c.shareGroup != null ? idghamGroupTags.get(c.shareGroup) : undefined;
-        // Qalqala underlines the render-only echo `Q` (the bounce), NOT the
-        // consonant phoneme — its consonant keeps only its other rules (tafkheem).
-        const qalqala = c.rules.find((t) => QALQALA_TAGS.has(t));
-        if (qalqala && c.phonemeIndices.length) {
-            const echo = Math.max(...c.phonemeIndices) + 1;
-            if (intervals[echo]?.phone === 'Q') {
-                const qb = badgesForTags([qalqala]);
-                if (qb.length) phonemeBadges.set(echo, qb);
+        // What each phone names. A letter read as its own name says several
+        // sounds and each answers for itself — the noon hidden at the end of عٓ
+        // takes the ikhfaa, its leen takes the madd. Where the cell draws no
+        // distinction its rules are every phone's.
+        const per = c.phonemeRules;
+        // A tanwīn mark holds the ḥaraka it doubles as well as its nasal, and
+        // the rule is the nasal's; without per-phone lists the position is all
+        // there is to say so with.
+        const nasalOnly = !per && c.role === 'tanween' && c.phonemeIndices.length > 1;
+        const last = c.phonemeIndices.length - 1;
+        c.phonemeIndices.forEach((fi, i) => {
+            if (nasalOnly && i !== last) return;
+            const tags = per?.[i] ?? c.rules;
+            // Qalqala underlines the render-only echo `Q` (the bounce), NOT the
+            // consonant phoneme — its consonant keeps only its other rules.
+            const qalqala = tags.find((t) => QALQALA_TAGS.has(t));
+            if (qalqala) {
+                const echo = Math.max(...c.phonemeIndices) + 1;
+                if (intervals[echo]?.phone === 'Q') {
+                    const qb = badgesForTags([qalqala]);
+                    if (qb.length) phonemeBadges.set(echo, qb);
+                }
             }
-            const rest = badgesForTags([...c.rules.filter((t) => t !== qalqala), groupTag]);
-            if (rest.length) for (const fi of c.phonemeIndices) phonemeBadges.set(fi, rest);
-            continue;
-        }
-        const baseTags = [...c.rules, groupTag];
-        const badges = badgesForTags(baseTags);
-        if (!badges.length) continue;
-        const idxs = c.role === 'tanween' && c.phonemeIndices.length > 1
-            ? c.phonemeIndices.slice(-1)
-            : c.phonemeIndices;
-        for (const fi of idxs) phonemeBadges.set(fi, badges);
+            const badges = badgesForTags([...tags.filter((t) => t !== qalqala), groupTag]);
+            if (badges.length) phonemeBadges.set(fi, badges);
+        });
     }
 
     // Cross-word bridges baked into the shard: a phoneme carrying a `bridge` rule
