@@ -118,7 +118,7 @@ The 6th word slot. One row per written mark, in written order. Read via
 | 2 | `status` | `CellStatus` | `present` / `replaced` / `inserted` / `dropped` |
 | 3 | `phoneme_indices` | `int[]` | Word-local indices over the word's **indexable** phones (§7). `[]` = this cell sounds nothing. |
 | 4 | `source_letter_index` | `int` | Index into **this word's `letters` row**; `-1` for a fully implicit cell |
-| 5 | `rules` | `str[]` | Every rule the producer fired on this grapheme, in the producer's order. Possibly empty. **There is no primary.** |
+| 5 | `rules` | `str[]` | What the cell names as a whole — the rules every sound it says names, in the producer's order. Possibly empty. **There is no primary.** |
 | 6 | `share_group` | `int \| null` | Cells presenting one sound carry one id, so they highlight together |
 | 7 | `phoneme_rules` | `str[][] \| null` | Optional. One rule list per entry of `phoneme_indices`, in that order. Present **only** when the cell's phones do not all name the same thing. |
 
@@ -128,26 +128,28 @@ both read only the positions they name, which is what keeps a future trailing sl
 consumer.
 
 `phoneme_rules` exists because a letter can be read as a whole word. `عٓ` says four sounds and only
-the hidden noon carries the ikhfaa; drawing `rules` across the cell would light all four. Every rule
-in a per-phone list is **also** in `rules`, so a consumer that reads only slot 5 is never told less
-than one that reads both (`cellrows.py`, after `_rules_per_phone`).
+the hidden noon carries the ikhfaa; naming that on the cell would light all four. So the two slots
+answer different questions and **slot 5 is not the union of slot 7**: the cell names what holds
+across the whole of it, and each phone names the rest for itself (`_cell_wide` in `cellrows.py`).
+A rule that appears in one per-phone list and not in every one of them is in slot 7 only, and a
+consumer that wants everything the word fires must read both.
 
-That union is what makes slot 5 safe to read alone, and what makes it wrong to **paint** alone: a
-cell may colour whole only for the rules every one of its phones names, and anything narrower
-belongs under the phone that names it. The tanween of `فِسْقًا` is heavy on its fatha and clear on its
-noon, so a bar drawn over the glyph would claim both of each; the letters of a spelled-out opening
-do the same with the rules of one sound inside their name. The frontend's `cellWideRules`
-(`cell-model.ts`) is that intersection, and a cell with no per-phone list is unchanged by it — its
-`rules` already are what all its phones name.
+The split is what makes slot 5 safe to **paint**. A bar over the glyph claims every sound under it,
+so it may carry only what all of them name. The tanween of `فِسْقًا` is heavy on its fatha and clear
+on its noon, and neither is the mark's; `صٓ` is the length its maddah marks and the weight of its own
+saad, not the bounce of the dal that closes its name. Two cells answer specially: a tanween mark
+holds the haraka it doubles as well as its own nasal, so it answers for the nasal alone, and the
+bounce a qalqala letter releases is that letter finishing rather than a sound of its own, so a cell
+saying one letter names it (an ordinary `ق` keeps `qalqala_sughra`; `صٓ` does not).
 
 Real v11 rows (`10:1` word 1, `الٓر`, letters `ا` / `لٓ` / `ر`, phones
 `ʔ a l i f l a: m rˤ aˤ:`):
 
 ```jsonc
-["ا",  "base", "present", [0,1,2,3,4], 0, [],                             null]
-["ل",  "base", "present", [5,6,7],     1, ["madd_lazim","izhar_shafawi"], 0,    [[], ["madd_lazim"], ["izhar_shafawi"]]]
-["ٓ",  "madd", "present", [6],         1, ["madd_lazim"],                 0]
-["ر",  "base", "present", [8,9],       2, ["madd_tabii","tafkheem"],      null, [["tafkheem"], ["madd_tabii","tafkheem"]]]
+["ا",  "base", "present", [0,1,2,3,4], 0, [],            null]
+["ل",  "base", "present", [5,6,7],     1, [],            0,    [[], ["madd_lazim"], ["izhar_shafawi"]]]
+["ٓ",  "madd", "present", [6],         1, ["madd_lazim"], 0]
+["ر",  "base", "present", [8,9],       2, ["tafkheem"],  null, [["tafkheem"], ["madd_tabii","tafkheem"]]]
 ```
 
 ### `CellRole` (`qua_shared/schemas/bucket/cell_vocab.py`)
@@ -183,7 +185,7 @@ the `silent` flag on that row is the reading's to say.
 ### The tajweed vocabulary
 
 `rules` and `phoneme_rules` carry the cell tag vocabulary — `TajweedRule` in
-`qua_shared/schemas/bucket/tajweed_vocab.py`, 38 values across noon/meem/tanween, madd, heaviness and
+`qua_shared/schemas/bucket/tajweed_vocab.py`, 37 values across noon/meem/tanween, madd, heaviness and
 qalqala, hamza, other articulations, and what a stop does to the written word. On the wire the
 positional row keeps them as open-form `str` so an unknown tag rides through the byte pass-through;
 the `TsShardCell` codegen vehicle types them as the enum so the FE registry compiles against it.
@@ -201,11 +203,14 @@ shard is re-stamped rather than migrated in place.
 | 5 | `tag` | `str \| null` — the **one primary** rule the producer had to pick | `rules: str[]` |
 | 6 | `share_group` | `int \| null` | same |
 | 7 | `phoneme_rule_tags` | `list[str \| null] \| None` — one tag (or `None`) per phone, parallel to `phoneme_indices` | `phoneme_rules: str[][] \| None` |
-| 8 | `secondary_tags` | `list[str]` — the colourable rules that co-occurred on the grapheme but **lost the single-tag pick** (in practice `["tafkheem"]` on a heavy madd/qalqala cell). Slot 7 is padded `None` when only slot 8 is present. | gone — every rule is in `rules` |
+| 8 | `secondary_tags` | `list[str]` — the colourable rules that co-occurred on the grapheme but **lost the single-tag pick** (in practice `["tafkheem"]` on a heavy madd/qalqala cell). Slot 7 is padded `None` when only slot 8 is present. | gone — `rules` is a list, so nothing loses a pick |
 
-Slots 7 and 8 are what one tag could not carry. v11 deletes slot 8 outright — every rule is in
-`rules` now — and keeps slot 7, retyped: one *list* per phone instead of one tag or `None`, and still
-written only where the cell's phones do not all name the same thing. `ts_shard_cells._rules` still
+Slots 7 and 8 are what one tag could not carry. v11 deletes slot 8 outright — slot 5 is a list, so a
+colouring no longer has to lose a pick to the rule beside it — and keeps slot 7, retyped: one *list*
+per phone instead of one tag or `None`, and still written only where the cell's phones do not all
+name the same thing. What v10 chose for slot 5 by priority, v11 derives: the primary it picked and
+its slot-8 secondaries together are the rules the cell names across all of its sounds, so a folded
+v11 row carries the same letter tags v10 wrote. `ts_shard_cells._rules` still
 reads a bare string at slot 5 as a one-element list, and `parseShardCell` does the same — reading it
 as characters would be silent nonsense.
 
@@ -245,8 +250,9 @@ producer holds a `PhonemizeResult` and reads these surfaces off it:
 | `res.phonemes()` | projection | The flat token sequence, used to respell and to count stored phones |
 
 The shard is a projection of that graph onto timings: `letters[]` is the source glyph sequence with
-timings, `phones[]` is `sounds` with timings, `cells[]` is the alignment between them, and `rules` on
-a cell is `res.rules` filtered to the ones this letter's own unit is the source of.
+timings, `phones[]` is `sounds` with timings, `cells[]` is the alignment between them, and the rules
+on a cell are `res.rules` resolved per sound through `res.modifiers` — kept on the cell where every
+sound it says names them, and pushed into `phoneme_rules` where they do not.
 
 What the shard does **not** carry: the units, the edges, the recited-text alignment, the respelling
 blocks, or teaching labels. A consumer needing those phonemizes the ref itself.
@@ -431,7 +437,10 @@ The producer gives a maddah a cell of its own; the letter row writes it on the l
 the FE folds it back. A folded mark's chars, phoneme indices and rules all join the host, and
 `mergedPhonemeRules` recomputes the host's per-phone lists as the union per phone. `namedOnce` then
 drops `orthographic_silence` from a fully silent folded cell that also carries a rule saying *why* it
-is silent (`pausal_alif`), so it does not hover as two answers to one question.
+is silent (`hamza_wasl_elision`), so it does not hover as two answers to one question. The fold is
+also what puts a spelled-out opening back on legacy's row: `م` names nothing across `m̃ i: m` and its
+maddah names the length, and folded the two carry `madd_lazim` on the letter with the merger and the
+izhar still under their own phones.
 
 | Case | Rule |
 |---|---|
@@ -480,22 +489,17 @@ positive gap between consecutive words becomes a pause tile carrying the earlier
 
 ### Which rules colour a cell as a whole
 
-`cellWideRules` — `cell-model.ts`.
+`cellBadges` — `cell-model.ts` — draws slot 5 as it stands. The producer already narrowed it to what
+all the cell's sounds name (§3), so the frontend does **not** narrow again: after `foldRidingMarks`
+the maddah's `madd_lazim` has deliberately joined the letter it stretches, and re-intersecting
+against the host's per-phone lists would take the length off the very letter the mark is written on.
 
-```ts
-const per = c.phonemeRules;
-if (!per || per.length === 0) return c.rules;
-return c.rules.filter((tag) => per.every((tags) => tags.includes(tag)));
-```
-
-A cell saying several sounds does not colour whole because one of them fires a rule — the tanween of
-`فِسْقًا` is heavy on its fatha and clear on its noon, and a bar over the glyph would claim both of
-each. Where a cell does not distinguish its phones, `rules` already is what they all name.
-
-Per-phoneme badges are the other half, in `rendered-blocks.ts`: a tanween rule underlines only its
-**last** phone (the nasal); a qalqala rule underlines the render-only `Q` echo, not the consonant,
-which keeps only its other rules; a cross-word idgham source draws no inline badge because its merger
-shows in the bridge tile. `badgesForTags` (`tajweed-rules.ts`) then resolves any tag list into at most
+Per-phoneme badges are the other half, in `rendered-blocks.ts`: each phone draws
+`phonemeRules[i]`, falling back to `rules` where the cell draws no distinction. A qalqala rule
+underlines the render-only `Q` echo rather than the consonant, which keeps its other rules; a
+cross-word idgham source draws no inline badge because its merger shows in the bridge tile. A
+tanween whose cell carries **no** per-phone list still underlines its last phone alone — position is
+all there is to go on there. `badgesForTags` (`tajweed-rules.ts`) then resolves any tag list into at most
 one `base` bar, one `merge` bar, `tafkheem` on top, and a full-cell `border` ring.
 
 ### Grouping cells, and what a share group does
@@ -590,6 +594,12 @@ the re-attribution moved between words), `token` (a stored phone the producer no
 `silence` (a letter whose `silent` flag moved), plus four cell-row comparisons — `owner` (which letter
 each sound is drawn under), `greyed`, `share` (how the share groups partition the word) and `cut`
 (what each cell shows).
+
+`tag` compares **sets per word**, so it sees which rules a word names and not where in the word they
+sit: a rule moving from a cell to one of its phones is not a `tag` difference. Both readers must
+therefore look in the same places — `legacy_tags` reads v10 slots 5, 7 and 8, and `new_tags` reads
+v11 slots 5 and 7. Placement itself is not gated; `scripts/diagnostics` has no per-phone scan, and a
+change that moves a rule between the two slots has to be checked against the frozen rows directly.
 
 | Family | Names |
 |---|---|
