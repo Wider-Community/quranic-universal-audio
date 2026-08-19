@@ -155,24 +155,53 @@ export function isIqlabCell(c: TsCell): boolean {
     return c.role === 'tanween' && !!TANWEEN_IQLAB[firstMark(c.chars)] && c.phonemeIndices.length >= 2;
 }
 
+/** What one half of a split cell names on its own: the rules every phone it
+ *  keeps names. A cell drawing no distinction between its phones already names
+ *  what all of them do. */
+function rulesOver(c: TsCell, kept: number[]): string[] {
+    const per = c.phonemeRules;
+    if (!per || kept.length === 0) return [...c.rules];
+    const lists = kept.map((fi) => per[c.phonemeIndices.indexOf(fi)] ?? []);
+    return (lists[0] ?? []).filter((tag) => lists.every((tags) => tags.includes(tag)));
+}
+
+/** The per-phone lists covering only the phones this half keeps. */
+function rulesPerKept(c: TsCell, kept: number[]): string[][] | null {
+    const per = c.phonemeRules;
+    if (!per) return null;
+    const lists = kept.map((fi) => per[c.phonemeIndices.indexOf(fi)] ?? []);
+    return lists.some((tags) => String(tags) !== String(lists[0])) ? lists : null;
+}
+
 /** The ن of an iqlab-noon cell rendered silent — it surrenders its nasal phone
  *  and the lone underline to the synthesized mini-meem below, but keeps a
  *  silent-only `iqlab_silent_noon` rule so it still names "Iqlab" on hover
  *  (registered in `tajweed-rules.ts` SILENT_TOOLTIPS; draws no badge). */
 export function iqlabNoonSilentBase(c: TsCell): TsCell {
-    return { ...c, phonemeIndices: [], rules: ['iqlab_silent_noon'], shareGroup: null };
+    return {
+        ...c,
+        phonemeIndices: [],
+        rules: ['iqlab_silent_noon'],
+        phonemeRules: null,
+        shareGroup: null,
+    };
 }
 
 /** The tanwīn of an iqlab cell reduced to the single haraka the mushaf writes —
  *  it keeps only the vowel phone; the mini-meem takes the nasal and the underline. */
 export function iqlabTanweenVowel(c: TsCell): TsCell {
     const pair = TANWEEN_IQLAB[firstMark(c.chars)];
+    const kept = c.phonemeIndices.slice(0, -1);
     return {
         ...c,
         chars: pair ? pair.haraka : c.chars,
         role: 'haraka',
-        phonemeIndices: c.phonemeIndices.slice(0, -1),
-        rules: [],
+        phonemeIndices: kept,
+        // The haraka keeps what its own vowel names and nothing of the nasal's:
+        // the fatḥa of بَصِيرًۢا is heavy after its rāʾ, and that is the ḥaraka's
+        // news, not the iqlāb's.
+        rules: rulesOver(c, kept).filter((tag) => tag !== 'iqlab'),
+        phonemeRules: rulesPerKept(c, kept),
         shareGroup: null,
     };
 }
@@ -183,6 +212,7 @@ export function iqlabTanweenVowel(c: TsCell): TsCell {
  *  over its last phone and picks the glyph from its vowel quality. */
 export function iqlabMiniMeem(c: TsCell): TsCell {
     const pair = c.role === 'tanween' ? TANWEEN_IQLAB[firstMark(c.chars)] : undefined;
+    const taken = pair ? c.phonemeIndices.slice(-1) : c.phonemeIndices;
     return {
         chars: pair ? pair.meem : MEEM_HI,
         role: 'tanween',
@@ -190,9 +220,10 @@ export function iqlabMiniMeem(c: TsCell): TsCell {
         // and a sound the reader makes, so it draws as an ordinary cell. The
         // dashed border says "not what the rasm wrote", which this is not.
         status: 'present',
-        phonemeIndices: pair ? c.phonemeIndices.slice(-1) : c.phonemeIndices,
+        phonemeIndices: taken,
         sourceLetterIndex: c.sourceLetterIndex,
-        rules: ['iqlab'],
+        rules: [...new Set(['iqlab', ...rulesOver(c, taken)])],
+        phonemeRules: rulesPerKept(c, taken),
         shareGroup: null,
     };
 }

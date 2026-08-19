@@ -222,3 +222,35 @@ describe('foldRidingMarks — a letter read as its own name', () => {
         expect(folded[0]!.cell.phonemeRules?.[2]).toEqual(['qalqala_kubra']);
     });
 });
+
+describe('iqlab — each half of the split cell names its own phone', () => {
+    // 17:17 خَبِيرًۢا: the raa makes the fatha heavy and the noon is converted.
+    // One mark writes both, and the split must not hand either sound's news to
+    // the other.
+    const tanween = (): TsCell => cell({
+        chars: FATHATAN,
+        role: 'tanween',
+        phonemeIndices: [4, 5],
+        rules: ['iqlab'],
+        phonemeRules: [['tafkheem'], ['iqlab']],
+    });
+
+    it('leaves the heavy fatha on the haraka and the iqlab off it', () => {
+        const vowel = iqlabTanweenVowel(tanween());
+        expect(vowel.chars).toBe(FATHA);
+        expect(vowel.phonemeIndices).toEqual([4]);
+        expect(vowel.rules).toEqual(['tafkheem']);
+    });
+
+    it('gives the mini-meem the iqlab and nothing of the vowel', () => {
+        const meem = iqlabMiniMeem(tanween());
+        expect(meem.chars).toBe(MEEM_HI);
+        expect(meem.phonemeIndices).toEqual([5]);
+        expect(meem.rules).toEqual(['iqlab']);
+    });
+
+    it('drops per-phone lists covering phones the half no longer holds', () => {
+        expect(iqlabTanweenVowel(tanween()).phonemeRules).toBeNull();
+        expect(iqlabMiniMeem(tanween()).phonemeRules).toBeNull();
+    });
+});
