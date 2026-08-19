@@ -69,6 +69,7 @@ class TajweedRule(str, Enum):
     LAM_SHAMSIYYAH = "lam_shamsiyyah"
     ILTIQAA = "iltiqaa"
     ILTIQAA_KASRA = "iltiqaa_kasra"
+    ILTIQAA_FATHA = "iltiqaa_fatha"
 
     # What a stop does to the written word
     PAUSAL_SUKUN = "pausal_sukun"

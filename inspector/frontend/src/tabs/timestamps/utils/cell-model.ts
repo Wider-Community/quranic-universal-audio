@@ -9,7 +9,7 @@
  */
 
 import { ALEF_MAKSURA, DAGGER, FATHA, MEEM_HI, MEEM_LO, OPEN_TANWEEN, OPEN_TANWEEN_TAGS, SUKUN, cellGlyph, cellSlot, firstMark, insertedLengthGlyph } from './tajweed-script';
-import { badgesForTags, silentTooltip, tagsForLegend } from './tajweed-rules';
+import { badgesForTags, isIltiqaaBridge, silentTooltip, tagsForLegend } from './tajweed-rules';
 import type { TjBadge } from './tajweed-rules';
 import { foldRidingMarks, iqlabMiniMeem, iqlabNoonSilentBase, iqlabTanweenVowel, isIqlabCell } from './cell-special-cases';
 import { harakaRenderStyle } from './haraka-render';
@@ -320,11 +320,12 @@ export function cellGroupsFor(
         foldedCells.map(({ cell, rawIndex }) => [cell, rawIndex]),
     );
     const cellIndexOf = (c: TsCell): number => rawIndexOf.get(c) ?? -1;
-    // The iltiqaa-kasra cell is lifted into a cross-word bridge — drop it from
-    // the word's own letter row so it renders only between the two words.
+    // The vowel repairing a meeting of two quiescent letters is lifted into a
+    // cross-word bridge — drop it from the word's own letter row so it renders
+    // only between the two words.
     const cells = foldedCells
         .map(({ cell }) => cell)
-        .filter((c) => !(liftIltiqaa && c.rules.includes('iltiqaa_kasra')));
+        .filter((c) => !(liftIltiqaa && isIltiqaaBridge(c)));
     // A renderable anchor is a base cell OR a real madd carrier (chars != '').
     // Muqattaat whose letters are all spelled-out names (كٓهيعٓصٓ, عٓسٓقٓ, صٓ, قٓ …)
     // carry no base cell but ARE full graphemes — they render through the main

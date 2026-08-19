@@ -107,6 +107,7 @@ const SILENT_TOOLTIPS = {
     hamza_wasl_elision: m.ts_tajweed_rule_silent_hamza_wasl,
     lam_shamsiyyah: m.ts_tajweed_rule_silent_lam_shamsiyah,
     iltiqaa_kasra: m.ts_tajweed_rule_silent_iltiqaa,
+    iltiqaa_fatha: m.ts_tajweed_rule_iltiqaa_fatha,
     iltiqaa: m.ts_tajweed_rule_silent_iltiqaa,
     pausal_sukun: m.ts_tajweed_rule_silent_waqf,
     taa_marbuta_pausal: m.ts_tajweed_rule_taa_marbuta_pausal,
@@ -400,4 +401,13 @@ const BRIDGE_CELL_TAG: Record<string, TajweedTag> = {
 export function bridgeCellTag(bridge: string | null | undefined): string | null {
     if (!bridge) return null;
     return BRIDGE_CELL_TAG[bridge] ?? bridge;
+}
+
+/** The vowel a meeting of two quiescent letters adds across a waṣl: a kasra
+ *  after a tanwīn, a fatḥa after a spelled-out opening. Neither word writes it,
+ *  so its cell is lifted into the bridge between them. */
+const ILTIQAA_BRIDGE_TAGS = new Set(['iltiqaa_kasra', 'iltiqaa_fatha']);
+
+export function isIltiqaaBridge(cell: { rules: string[] }): boolean {
+    return cell.rules.some((tag) => ILTIQAA_BRIDGE_TAGS.has(tag));
 }

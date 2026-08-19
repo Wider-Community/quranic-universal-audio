@@ -286,6 +286,7 @@
   "ts_tajweed_rule_silent_hamza_wasl": "همزة وصل (غير منطوقة)",
   "ts_tajweed_rule_silent_lam_shamsiyah": "لام شمسية",
   "ts_tajweed_rule_silent_iltiqaa": "التقاء الساكنين",
+  "ts_tajweed_rule_iltiqaa_fatha": "التقاء الساكنين (فتح)",
   "ts_tajweed_rule_silent_waqf": "وقف",
   "ts_tajweed_rule_silent_orthographic": "حرف لا ينطق به",
   "ts_tajweed_rule_taa_marbuta_pausal": "تاء مربوطة (وقفًا)",

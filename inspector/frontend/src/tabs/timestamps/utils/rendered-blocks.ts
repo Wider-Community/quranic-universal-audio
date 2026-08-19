@@ -7,7 +7,7 @@
  */
 
 import { cellGlyph } from './tajweed-script';
-import { badgesForTags, bridgeCellTag, isBridgeTag, silentTooltip } from './tajweed-rules';
+import { badgesForTags, bridgeCellTag, isBridgeTag, isIltiqaaBridge, silentTooltip } from './tajweed-rules';
 import type { TjBadge } from './tajweed-rules';
 import { harakaRenderStyle } from './haraka-render';
 import { splitWaqf } from '../../../lib/utils/waqf';
@@ -284,13 +284,15 @@ export function buildRendered(
                 excluded.add(pi);
             }
         }
-        // iltiqaa kasra: tanwīn meeting the next word's hamza-waṣl inserts a
-        // connecting kasra (i). Lift its cell out of word N into a borderless
-        // bridge before word N+1 — the kasra char on the letter row + the i
-        // phoneme on the phoneme row, between the two words. The silent alef of
-        // a fatḥatan+alef word (خَيْرًا) stays in word N, so the bridge naturally
-        // sits after it; the lifted i is the word's last phoneme.
-        const kasra = (word?.cells ?? []).find((c) => c.rules.includes('iltiqaa_kasra'));
+        // Two quiescent letters meeting across a waṣl take a vowel neither word
+        // writes — a kasra after a tanwīn, a fatḥa after a spelled-out opening
+        // (الٓمٓ ٱللَّهُ). Lift its cell out of word N into a borderless bridge
+        // before word N+1: the mark on the letter row and its phoneme on the
+        // phoneme row, between the two words. The mark keeps its own glyph, so
+        // a fatḥa pins above where a kasra pins below. The silent alef of a
+        // fatḥatan+alef word (خَيْرًا) stays in word N, so the bridge naturally
+        // sits after it; the lifted vowel is the word's last phoneme.
+        const kasra = (word?.cells ?? []).find((c) => isIltiqaaBridge(c));
         const kpi = kasra?.phonemeIndices[0];
         if (kasra && kpi != null && intervals[kpi] && wi + 1 < words.length
             && !bridgeBeforeBlock.has(wi + 1)) {

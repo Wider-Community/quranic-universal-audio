@@ -68,6 +68,7 @@ _TAJWEED_VALUES = {
     "lam_shamsiyyah",
     "iltiqaa",
     "iltiqaa_kasra",
+    "iltiqaa_fatha",
     "pausal_sukun",
     "taa_marbuta_pausal",
     "orthographic_silence",
