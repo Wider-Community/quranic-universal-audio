@@ -315,6 +315,22 @@ never silently:
 | Letter rows unreconcilable at silence-stamp time | The run keeps whatever silent flags it had | `silence drift: … kept its stored silent flags` |
 | Bridges detected but none applied | The segment's attribution is left alone | `bridge drift: … applied 0` |
 
+**Restamping a whole corpus.** `result_for_ref(ref, display)` is the only expensive call in the
+stamper, and its key is the run's ref — `verse:lo-verse:hi`, which already carries the boundary
+context, because a run's last word is stopping by construction. Two things follow, and both matter
+once the job is more than one reciter:
+
+- **Widen the cache.** The stock `lru_cache(maxsize=512)` is smaller than one chapter's working set,
+  and every miss is a full phonemization. `cells.py` imports the symbol directly, so rebinding it on
+  `integrations.phonemizer` alone leaves the narrow cache in use — rebind both.
+- **Sort the work by chapter, not by reciter.** Reciters pause in the same places, so their runs
+  produce the same refs. One worker owning chapter N for every reciter answers nearly all of them
+  from cache; one worker per reciter starts a cold cache per reciter and re-phonemizes the same runs
+  once each. Measured over 36 reciters, a chapter's ~1,000 requests resolve to ~15 phonemizations.
+
+The stored phones are what the cache cannot help with: they are read per shard and drive the count
+checks above, so a corpus pass is phonemizer-bound only until the cache warms and I/O-bound after.
+
 **Letter-row reconciliation — `components/timing/lib/letter_cut.py`.** The two rows spell the same
 word and do not always cut it the same way: the aligner writes a pausal alef and its mark as one
 grapheme (`ا۠`) where the projection writes the mark on its own, and the aligner's letter tokens leave
