@@ -631,6 +631,175 @@ SDK's rename map, so the codegen mirrors can never drift.
 
 ---
 
+## 10. Bumping the schema
+
+`SEGMENT_SCHEMA_VERSION` (`qua_shared/timestamps_shards.py`) names the cell row's shape. A bump is a
+coordinated edit across the schema, the accessor, the producer, the stamper and the frontend mirror,
+followed by a re-stamp of every shard that is to carry the new shape. It is finished when the
+bounded-equivalence gate (§9) reports `UNCLASSIFIED 0` and no count violation on **both** measured
+corpora, and the rendering has been looked at.
+
+**The row is additive.** `parse_cell` reads only the positions it names and ignores anything past the
+8th; `parseShardCell` does the same. A new trailing slot therefore cannot break an old reader, which
+is what makes an in-place bump possible at all.
+
+| Change | Old readers | Re-stamp |
+|---|---|---|
+| A new trailing slot | Unaffected — both readers ignore it | Needed, to fill it |
+| Retyping an existing slot | Broken unless taught the new type. v10→v11 retyped slot 5, and both readers keep a bare-string fallback for it (`_rules`, `typeof raw === 'string'`) | Needed — a shard is re-stamped, never migrated in place |
+| Dropping a trailing slot | Unaffected | Needed |
+| A new `CellRole` / `CellStatus` / `TajweedRule` value | Rides through — the positional row keeps rules as open-form `str` | Needed, to emit it |
+
+The word tuple, letter row, phone row and segment entry do not move for a cell-row bump; §3 lists the
+absences a reader tolerates independently of it.
+
+### What changes together
+
+| Place | File | What |
+|---|---|---|
+| Row type | `qua_shared/schemas/bucket/ts_shard.py` | `CellTiming` (a union over the row's arities — a new arity needs a new member) and `TsShardCell` (the codegen vehicle) |
+| Vocabulary | `qua_shared/schemas/bucket/cell_vocab.py`, `tajweed_vocab.py` | `CellRole` / `CellStatus` / `TajweedRule` |
+| Accessor | `qua_shared/ts_shard_cells.py` | `CellRow` + `parse_cell` (and `_rules`, where an old slot's fallback lives) |
+| Version | `qua_shared/timestamps_shards.py` | `SEGMENT_SCHEMA_VERSION` |
+| Producer | `qua_sdk/integrations/cellrows.py` | the `CellRow` dataclass the projection emits |
+| Stamper | `qua_sdk/components/timing/lib/cells.py` | `_stamp_cells`, which builds the positional row |
+| FE read | `inspector/frontend/src/lib/types/ts-client.ts` | `TsShardCellRow` (a fixed-arity tuple), `TsCell`, `parseShardCell` |
+| FE types | `scripts/codegen/regen_fe_types.py` | regenerates `lib/types/generated/schemas.ts`; CI fails the build on the diff |
+| Parity | `qua_shared/tests/test_cell_vocab_parity.py` | the literal value sets, plus the live-producer check that composes the SDK rename map |
+| Declared counts | `scripts/diagnostics/ts_bounded_vocab.py` | `DECLARED`, in the same commit (§9) |
+| Job image | `inspector/services/admin/timestamps_jobs.py` | `_INSTALL` pins `quranic-phonemizer>=2.8,<3`, and the prebuilt job image bakes the same set — a **fresh generation** sees a new phonemizer release only after that image is rebuilt |
+
+### The pipeline
+
+Ordered. Each step is cheap next to the one after it, and each answers a question the next one assumes.
+
+**1. Freeze the oracle.** Before touching anything, take a local read-only copy of the pre-change
+shards for **both** measured reciters (the two shapes keyed in `DECLARED` —
+`mishary_rashid_al_afasy_mp3quran` and `nasser_al_qatami_mp3quran`):
+
+```
+python scripts/fetch_prod_shards.py     # repo root; read-only, prod -> inspector/dev_fixtures/
+```
+
+They are the only record of the old reading, and every question of the form *is this right?* is
+answered by diffing new output against them rather than by reasoning about tajweed. Two corpora, not
+one: their segmentations differ, so a count that moves in one and not the other is the segmentation
+talking, not a producer change.
+
+**2. Change the producer.** A reading change belongs in the phonemizer; row shape and tag mapping
+belong in `qua_sdk/integrations/`.
+
+**3. Point every process at one phonemizer.** The SDK imports the `quranic-phonemizer`
+**distribution**, never a repo checkout, and `producer_version()` reads the installed dist metadata.
+While iterating, install the repo editable into the venv the gates and stamper use, then confirm what
+resolved:
+
+```
+uv pip install -e <phonemizer-repo> --no-deps -p <venv>/Scripts/python.exe
+python -c "import quranic_phonemizer as q; print(q.__file__)"     # run from the audio repo
+```
+
+Before shipping, release rather than editable-install. `.github/workflows/publish.yml` in the
+phonemizer repo fires on a `v*` tag and uploads to PyPI; the version is setuptools-scm-derived from
+that tag. PyPI versions are immutable, so a re-release needs a new number. Run `python tools/gates.py`
+in the phonemizer repo before tagging.
+
+**4. Wide before/after cell diff.** Dump every cell of a broad chapter sample, change the producer,
+dump again, diff. The dump must go through the **stamper** — that is what the Inspector reads, and it
+differs from a bare producer dump:
+
+```python
+from copy import deepcopy
+from qua_sdk.components.timing.lib.cells import annotate_ordered_segments
+
+before = deepcopy(doc["segments"])
+annotate_ordered_segments([(s["ref"], s["words"], bool(s.get("wasl"))) for s in doc["segments"]])
+```
+
+Align words by letter text: `w[0]` is `word_idx`, 1-based within the verse, not a 0-based index into
+the producer's word list. The useful output is a count plus one example per distinct shape, and every
+changed cell must be justifiable in one sentence. Measure counts; never estimate them.
+`scripts/diagnostics/ts_cell_drift.py --bucket dev --reciters <a>,<b> --json` is the standing A/B for
+the other half of the question — which runs lose their cells entirely.
+
+**5. Unit tests.** `python -m pytest qua_shared/tests -v`; `cd inspector && python -m pytest tests/ -v`;
+`cd inspector/frontend && npm run test && npm run check`.
+
+**6. Regenerate the FE types.** `python scripts/codegen/regen_fe_types.py`, and commit the regenerated
+`inspector/frontend/src/lib/types/generated/schemas.ts`.
+
+**7. Both gates, both corpora.**
+
+```
+python scripts/diagnostics/ts_bounded_equivalence.py <frozen-dir>
+QUA_FROZEN_SHARDS=<frozen-dir> python -m pytest qua_shared/tests/test_bounded_equivalence.py
+```
+
+`QUA_FROZEN_SHARDS` names one directory, so this is one run per corpus. Done means `UNCLASSIFIED 0`
+and an empty `count_violations` on both. Re-measure after the change and write the measured numbers
+into `DECLARED`, in the same commit, saying which count moved and why. Never widen a tolerance to pass.
+
+**8. Dev re-stamp of the two test reciters.**
+
+```
+HF_HUB_DISABLE_XET=1 python scripts/backfills/backfill_cells.py \
+    --slug <slug> --bucket dev --restamp --write
+```
+
+Dry-run is the default; `--write` uploads. `--restamp` is what re-derives cells on a shard whose
+`_meta.schema_version` already equals `SEGMENT_SCHEMA_VERSION` — without it such a shard is skipped. A
+shard with an index violation (a cell index past the word's indexable phones) is never written, and
+the run exits 1.
+
+**9. Deploy, then look at the rendering.**
+
+```
+bash .claude/skills/deploy/scripts/deploy.sh dev
+python .claude/skills/deploy/scripts/wait_space.py dev      # background: RUNNING + /healthz 200
+```
+
+The deploy rebuilds the Space image, so the new bundle is not live the moment the upload returns. Then
+screenshot the real analysis view — the `inspector-playwright` skill's
+`shoot.mjs --reciter <slug> --ref <surah:verse>`. Skipping this is how a correct shard still ships a
+wrong screen: a good deal of what a reader sees is derived in the frontend alone (§8), and only the
+render shows it.
+
+**10. Prod, last and scoped.**
+
+```
+HF_HUB_DISABLE_XET=1 python scripts/backfills/backfill_cells.py \
+    --slug <slug> --bucket prod --yes-prod --restamp --write \
+    --inspector-url https://<inspector-host>
+```
+
+`--bucket prod` refuses to mutate without `--yes-prod`. Before writing: back up the shards being
+replaced, and query `ts_reports` for targets in scope. Scope by `--slug` rather than sweeping the
+catalogue with `--all`. Re-stamping is not reversible by re-stamping again.
+
+### MFA
+
+The aligner owns every timing and the phone **count** (§6).
+
+| Change | Re-run alignment |
+|---|---|
+| A phone respelt | No — the display and trained surfaces are the same length, so an index means the same thing on both |
+| A rule moved between cells, or a slot added | No — nothing addressing a timing moves |
+| A word's phone count changed | Yes — the boundaries move, and anything addressing a phone by index is invalidated |
+| Two stored phones folded into one | No, within `_lengthened`'s limits: one contiguous run of stored phones, folded into the lengthened form of the first, spanning exactly the phones it replaces. Never applied to a run the segment continues out of — read in continuation it does not stop, and folding it would write over a sound the reciter made (`stops` in `_stamp_phone_tokens`). |
+
+### Traps
+
+| Trap | What happens | What to do |
+|---|---|---|
+| Running python from inside the phonemizer repo | `sys.path[0]` is the cwd, so the import resolves to the **repo** while the stamper and gates — which run from the audio repo — resolve to the **installed distribution**. The two silently disagree, `producer_version()` included. | Confirm with `python -c "import quranic_phonemizer as q; print(q.__file__)"` from the audio repo before trusting any measurement |
+| Xet uploader on a full-corpus write | OOMs | `HF_HUB_DISABLE_XET=1` in the environment |
+| Assuming per-shard write granularity | `backfill_cells.py` stamps every chapter of a reciter, then writes them in **one Xet batch per reciter** (`_bootstrap.batch_write`). An interrupted run leaves whole reciters; a reciter that never reached its batch wrote nothing. | Scope by `--slug` so the unit of loss is one reciter |
+| Trusting the gate for placement | Its tag comparison is a per-word **set** (`legacy_tags` / `new_tags`), so it structurally cannot see which cell — or which phone inside a multi-phone cell — a rule sits on. The `cell_*` families compare sound ownership, greying, share partition and cut, not rule placement. | Cover placement with the step-4 diff and unit tests |
+| Index-addressed report targets | `ts_reports.cell_index` / `phoneme_flat_index` / `source_letter_index` address by index and survive a re-stamp untouched. Nothing re-fingerprints them here: `recheck_reports_staleness` runs only from the HF-job completion path, and the `--inspector-url` callback (`POST /api/admin/internal/ts-refreshed`) only advances the release watermark and stamps HF/GH stale. | Query for affected targets **before** a prod re-stamp ([ts-reports.md](ts-reports.md)) |
+| Reading the deploy as finished | `upload_inspector.py` returns after the upload; the Space rebuilds afterwards | Poll the Space runtime stage (`wait_space.py`) |
+
+---
+
 ## Key files
 
 | Concern | Files |
