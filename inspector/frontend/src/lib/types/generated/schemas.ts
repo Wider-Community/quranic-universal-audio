@@ -2195,6 +2195,7 @@ export interface TsShardCell {
   source_letter_index: number;
   rules?: TajweedRule[];
   share_group?: number | null;
+  phoneme_rules?: TajweedRule[][] | null;
 }
 /**
  * The decompressed body of one chapter shard: ``_meta`` + ``segments[]``.
