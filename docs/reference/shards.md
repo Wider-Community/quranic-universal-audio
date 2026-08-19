@@ -636,18 +636,18 @@ SDK's rename map, so the codegen mirrors can never drift.
 `SEGMENT_SCHEMA_VERSION` (`qua_shared/timestamps_shards.py`) names the cell row's shape. A bump is a
 coordinated edit across the schema, the accessor, the producer, the stamper and the frontend mirror,
 followed by a re-stamp of every shard that is to carry the new shape. It is finished when the
-bounded-equivalence gate (§9) reports `UNCLASSIFIED 0` and no count violation on **both** measured
-corpora, and the rendering has been looked at.
+bounded-equivalence gate (§9) exits 0 on **both** measured corpora — no unclassified diff, no hard
+failure, no count violation — and the rendering has been looked at.
 
 **The row is additive.** `parse_cell` reads only the positions it names and ignores anything past the
-8th; `parseShardCell` does the same. A new trailing slot therefore cannot break an old reader, which
-is what makes an in-place bump possible at all.
+8th; `parseShardCell` reads `row[0..7]` and ignores the rest. A new trailing slot therefore cannot
+break an old reader at runtime, which is what makes an in-place bump possible at all.
 
 | Change | Old readers | Re-stamp |
 |---|---|---|
-| A new trailing slot | Unaffected — both readers ignore it | Needed, to fill it |
+| A new trailing slot | Unaffected at runtime — both readers ignore it. `TsShardCellRow` is a fixed-arity tuple, so the FE needs the slot typed before anything may read it | Needed, to fill it |
 | Retyping an existing slot | Broken unless taught the new type. v10→v11 retyped slot 5, and both readers keep a bare-string fallback for it (`_rules`, `typeof raw === 'string'`) | Needed — a shard is re-stamped, never migrated in place |
-| Dropping a trailing slot | Unaffected | Needed |
+| Dropping a trailing slot | Unaffected down to the 5 slots `parse_cell` requires; fewer raises `ValueError` | Needed |
 | A new `CellRole` / `CellStatus` / `TajweedRule` value | Rides through — the positional row keeps rules as open-form `str` | Needed, to emit it |
 
 The word tuple, letter row, phone row and segment entry do not move for a cell-row bump; §3 lists the
@@ -662,29 +662,37 @@ absences a reader tolerates independently of it.
 | Accessor | `qua_shared/ts_shard_cells.py` | `CellRow` + `parse_cell` (and `_rules`, where an old slot's fallback lives) |
 | Version | `qua_shared/timestamps_shards.py` | `SEGMENT_SCHEMA_VERSION` |
 | Producer | `qua_sdk/integrations/cellrows.py` | the `CellRow` dataclass the projection emits |
+| Tag map | `qua_sdk/integrations/vocabulary.py` | producer rule → shard tag. A new producer rule passes through unnamed (`RENAMED.get(name, name)`); a rename, a `DROPPED` rule or a `REPLACEMENTS` member is decided here |
 | Stamper | `qua_sdk/components/timing/lib/cells.py` | `_stamp_cells`, which builds the positional row |
 | FE read | `inspector/frontend/src/lib/types/ts-client.ts` | `TsShardCellRow` (a fixed-arity tuple), `TsCell`, `parseShardCell` |
 | FE types | `scripts/codegen/regen_fe_types.py` | regenerates `lib/types/generated/schemas.ts`; CI fails the build on the diff |
 | Parity | `qua_shared/tests/test_cell_vocab_parity.py` | the literal value sets, plus the live-producer check that composes the SDK rename map |
 | Declared counts | `scripts/diagnostics/ts_bounded_vocab.py` | `DECLARED`, in the same commit (§9) |
-| Job image | `inspector/services/admin/timestamps_jobs.py` | `_INSTALL` pins `quranic-phonemizer>=2.8,<3`, and the prebuilt job image bakes the same set — a **fresh generation** sees a new phonemizer release only after that image is rebuilt |
+| Job image | `inspector/services/admin/timestamps_jobs.py` | `JOB_IMAGE` defaults to the prebuilt Space image `hf.co/spaces/hetchyy/quran-ts-job`, which bakes the phonemizer into `/env` — a **fresh generation** sees a new release only once that image is rebuilt ([timestamps-job.md](timestamps-job.md)). `_INSTALL` is the bootstrap fallback only (stock mambaforge base) and floors at `quranic-phonemizer>=2.8,<3`, so it resolves the newest 2.x at launch |
 
 ### The pipeline
 
 Ordered. Each step is cheap next to the one after it, and each answers a question the next one assumes.
 
 **1. Freeze the oracle.** Before touching anything, take a local read-only copy of the pre-change
-shards for **both** measured reciters (the two shapes keyed in `DECLARED` —
-`mishary_rashid_al_afasy_mp3quran` and `nasser_al_qatami_mp3quran`):
+shards. The two measured corpora are the shapes keyed in `DECLARED` —
+`mishary_rashid_al_afasy_mp3quran` and `nasser_al_qatami_mp3quran`:
 
 ```
-python scripts/fetch_prod_shards.py     # repo root; read-only, prod -> inspector/dev_fixtures/
+python scripts/fetch_prod_shards.py                 # repo root; no flags, read-only
+cp -r inspector/dev_fixtures/reciters <frozen-root>  # keep the oracle out of the fixture tree
 ```
 
-They are the only record of the old reading, and every question of the form *is this right?* is
-answered by diffing new output against them rather than by reasoning about tajweed. Two corpora, not
-one: their segmentations differ, so a count that moves in one and not the other is the segmentation
-talking, not a producer change.
+`fetch_prod_shards.py` takes no arguments and pulls **every** prod reciter into
+`inspector/dev_fixtures/reciters/<slug>/timestamps/` (gitignored). Copy it aside: that same tree is
+what `backfill_cells.py --local-root inspector/dev_fixtures` re-stamps, so a later fixture regen
+overwrites the oracle in place. The dir each gate later reads is one reciter's `timestamps/`, not the
+tree root.
+
+The frozen shards are the only record of the old reading, and every question of the form *is this
+right?* is answered by diffing new output against them rather than by reasoning about tajweed. Two
+corpora, not one: their segmentations differ, so a count that moves in one and not the other is the
+segmentation talking, not a producer change.
 
 **2. Change the producer.** A reading change belongs in the phonemizer; row shape and tag mapping
 belong in `qua_sdk/integrations/`.
@@ -700,9 +708,10 @@ python -c "import quranic_phonemizer as q; print(q.__file__)"     # run from the
 ```
 
 Before shipping, release rather than editable-install. `.github/workflows/publish.yml` in the
-phonemizer repo fires on a `v*` tag and uploads to PyPI; the version is setuptools-scm-derived from
-that tag. PyPI versions are immutable, so a re-release needs a new number. Run `python tools/gates.py`
-in the phonemizer repo before tagging.
+phonemizer repo fires on a `v*` tag and runs `python -m build` + `twine upload` to PyPI; the version
+is setuptools-scm-derived from that tag. PyPI versions are immutable, so a re-release needs a new
+number. That workflow runs **no gate** — `gates.yml` fires on branch pushes and PRs, not on a tag —
+so run `python tools/gates.py` in the phonemizer repo before tagging.
 
 **4. Wide before/after cell diff.** Dump every cell of a broad chapter sample, change the producer,
 dump again, diff. The dump must go through the **stamper** — that is what the Inspector reads, and it
@@ -730,51 +739,71 @@ the other half of the question — which runs lose their cells entirely.
 
 **7. Both gates, both corpora.**
 
+Both run from the repo root, against one reciter's frozen `timestamps/` dir:
+
 ```
-python scripts/diagnostics/ts_bounded_equivalence.py <frozen-dir>
-QUA_FROZEN_SHARDS=<frozen-dir> python -m pytest qua_shared/tests/test_bounded_equivalence.py
+python scripts/diagnostics/ts_bounded_equivalence.py <frozen-root>/<slug>/timestamps
+QUA_FROZEN_SHARDS=<frozen-root>/<slug>/timestamps python -m pytest \
+    qua_shared/tests/test_bounded_equivalence.py
 ```
 
-`QUA_FROZEN_SHARDS` names one directory, so this is one run per corpus. Done means `UNCLASSIFIED 0`
-and an empty `count_violations` on both. Re-measure after the change and write the measured numbers
-into `DECLARED`, in the same commit, saying which count moved and why. Never widen a tolerance to pass.
+`QUA_FROZEN_SHARDS` names one directory, so this is one run per corpus. Done is **exit 0** on both:
+`UNCLASSIFIED 0`, no `hard_failures` (`timing_moved` / `count_moved` / `runs_dropped`), and no
+`x count:` line. Run the whole corpus — `--chapters` narrows the scan to a shape not in `DECLARED`,
+which reports its counts and asserts nothing. Re-measure after the change and write the measured
+numbers into `DECLARED`, in the same commit, saying which count moved and why. Never widen a
+tolerance to pass.
 
 **8. Dev re-stamp of the two test reciters.**
 
 ```
-HF_HUB_DISABLE_XET=1 python scripts/backfills/backfill_cells.py \
-    --slug <slug> --bucket dev --restamp --write
+python scripts/backfills/backfill_cells.py --slug <slug> --bucket dev --restamp --write
 ```
 
 Dry-run is the default; `--write` uploads. `--restamp` is what re-derives cells on a shard whose
-`_meta.schema_version` already equals `SEGMENT_SCHEMA_VERSION` — without it such a shard is skipped. A
-shard with an index violation (a cell index past the word's indexable phones) is never written, and
-the run exits 1.
+`_meta.schema_version` already reaches `SEGMENT_SCHEMA_VERSION` — without it such a shard is skipped.
+A shard with an index violation (a cell index past the word's indexable phones) is never written, and
+the run exits 1. Needs `HF_TOKEN` in the env or the worktree `.env`.
 
-**9. Deploy, then look at the rendering.**
+**9. Look at the rendering.** Screenshot the real analysis view — the `inspector-playwright` skill,
+run from `inspector/frontend`:
 
 ```
+node ../../.claude/skills/inspector-playwright/scripts/shoot.mjs \
+    --reciter <slug> --ref <surah>:<verse>
+```
+
+This needs step 8, **not** a deploy: the harness serves the production component out of the local
+checkout through Vite and proxies `/api` at the dev Space (its default), whose shard endpoint is
+`no-store` — so it renders your working-tree frontend against the shards you just re-stamped.
+Skipping it is how a correct shard still ships a wrong screen: a good deal of what a reader sees is
+derived in the frontend alone (§8), and only the render shows it.
+
+**10. Deploy dev.** For the live SPA, not for the screenshot.
+
+```
+git commit …                                                # deploy.sh stages the COMMITTED tree
 bash .claude/skills/deploy/scripts/deploy.sh dev
 python .claude/skills/deploy/scripts/wait_space.py dev      # background: RUNNING + /healthz 200
 ```
 
-The deploy rebuilds the Space image, so the new bundle is not live the moment the upload returns. Then
-screenshot the real analysis view — the `inspector-playwright` skill's
-`shoot.mjs --reciter <slug> --ref <surah:verse>`. Skipping this is how a correct shard still ships a
-wrong screen: a good deal of what a reader sees is derived in the frontend alone (§8), and only the
-render shows it.
+`upload_inspector.py` stages every git-tracked file, uploads, and factory-reboots the Space — an
+uncommitted edit does not ship, and the new bundle is not live the moment the upload returns.
 
-**10. Prod, last and scoped.**
+**11. Prod, last and scoped.**
 
 ```
-HF_HUB_DISABLE_XET=1 python scripts/backfills/backfill_cells.py \
+python scripts/backfills/backfill_cells.py \
     --slug <slug> --bucket prod --yes-prod --restamp --write \
     --inspector-url https://<inspector-host>
 ```
 
-`--bucket prod` refuses to mutate without `--yes-prod`. Before writing: back up the shards being
-replaced, and query `ts_reports` for targets in scope. Scope by `--slug` rather than sweeping the
-catalogue with `--all`. Re-stamping is not reversible by re-stamping again.
+`--bucket prod` refuses to mutate without `--yes-prod`. `--inspector-url` also needs
+`INSPECTOR_WEBHOOK_SECRET` in the env — without it the callback is skipped silently and the refresh
+never reaches the Inspector (the endpoint itself 503s when the Space has no secret configured).
+Before writing: back up the shards being replaced (`scripts/fetch_prod_shards.py`), and query
+`ts_reports` for targets in scope. Scope by `--slug` rather than sweeping the catalogue with `--all`.
+Re-stamping is not reversible by re-stamping again.
 
 ### MFA
 
@@ -792,11 +821,11 @@ The aligner owns every timing and the phone **count** (§6).
 | Trap | What happens | What to do |
 |---|---|---|
 | Running python from inside the phonemizer repo | `sys.path[0]` is the cwd, so the import resolves to the **repo** while the stamper and gates — which run from the audio repo — resolve to the **installed distribution**. The two silently disagree, `producer_version()` included. | Confirm with `python -c "import quranic_phonemizer as q; print(q.__file__)"` from the audio repo before trusting any measurement |
-| Xet uploader on a full-corpus write | OOMs | `HF_HUB_DISABLE_XET=1` in the environment |
-| Assuming per-shard write granularity | `backfill_cells.py` stamps every chapter of a reciter, then writes them in **one Xet batch per reciter** (`_bootstrap.batch_write`). An interrupted run leaves whole reciters; a reciter that never reached its batch wrote nothing. | Scope by `--slug` so the unit of loss is one reciter |
+| Assuming per-shard write granularity | `backfill_cells.py` holds every stamped chapter of a reciter in memory, then writes them in **one Xet batch per reciter** (`_bootstrap.batch_write`, non-transactional). An interrupted run leaves whole reciters; a reciter that never reached its batch wrote nothing. | Scope by `--slug` so the unit of loss is one reciter. If the batch write itself fails, `HF_HUB_DISABLE_XET=1` forces the non-Xet upload path |
+| Overwriting the oracle | `fetch_prod_shards.py` writes into `inspector/dev_fixtures/`, and `backfill_cells.py --local-root inspector/dev_fixtures` re-stamps that same tree in place | Copy the frozen shards out of `dev_fixtures/` before step 2 |
 | Trusting the gate for placement | Its tag comparison is a per-word **set** (`legacy_tags` / `new_tags`), so it structurally cannot see which cell — or which phone inside a multi-phone cell — a rule sits on. The `cell_*` families compare sound ownership, greying, share partition and cut, not rule placement. | Cover placement with the step-4 diff and unit tests |
-| Index-addressed report targets | `ts_reports.cell_index` / `phoneme_flat_index` / `source_letter_index` address by index and survive a re-stamp untouched. Nothing re-fingerprints them here: `recheck_reports_staleness` runs only from the HF-job completion path, and the `--inspector-url` callback (`POST /api/admin/internal/ts-refreshed`) only advances the release watermark and stamps HF/GH stale. | Query for affected targets **before** a prod re-stamp ([ts-reports.md](ts-reports.md)) |
-| Reading the deploy as finished | `upload_inspector.py` returns after the upload; the Space rebuilds afterwards | Poll the Space runtime stage (`wait_space.py`) |
+| Index-addressed report targets | `ts_reports.cell_index` / `phoneme_flat_index` / `source_letter_index` address by index and survive a re-stamp untouched. Nothing re-fingerprints them here: `recheck_reports_staleness` runs only from the HF-job completion path, and the `--inspector-url` callback (`POST /api/admin/internal/ts-refreshed`) only advances the release watermark, stamps HF/GH stale and audits `reciter.ts_refreshed`. | Query for affected targets **before** a prod re-stamp ([ts-reports.md](ts-reports.md)) |
+| Reading the deploy as finished | `upload_inspector.py` uploads, factory-reboots, and returns; the Space rebuilds afterwards | Poll the Space runtime stage (`wait_space.py`) |
 
 ---
 
