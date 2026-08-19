@@ -32,6 +32,13 @@ def _beams(raw: str) -> list[int]:
     return [int(t) for t in raw.replace(" ", "").split(",") if t]
 
 
+def _chapters(raw: str | None) -> list[int] | None:
+    """Parse --chapters into surah numbers; None = whole reciter."""
+    if not raw:
+        return None
+    return [int(t) for t in raw.replace(" ", "").split(",") if t]
+
+
 def _print(msg: str) -> None:
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
 
@@ -50,6 +57,7 @@ def _do_launch(a, ctx) -> int:
         beams=_beams(a.beams), workers=a.workers,
         download_workers=a.dl_workers, flavor=a.flavor, timeout=a.timeout,
         aligner_model=getattr(a, "model", None),
+        chapters=_chapters(getattr(a, "chapters", None)),
     )
     _print(f"settings: {settings.model_dump(exclude_none=False)}")
     if a.dry_run:
@@ -162,6 +170,9 @@ def main() -> int:
     pl.add_argument("--dl-workers", type=int, default=None)
     pl.add_argument("--flavor", default=None); pl.add_argument("--timeout", default=None)
     pl.add_argument("--model", default=None, help="aligner model catalog id (default: store default)")
+    pl.add_argument("--chapters", default=None,
+                    help="comma-separated surah numbers to re-align (default: whole reciter); "
+                         "untouched chapters keep their existing shards")
     pl.add_argument("--monitor", action="store_true")
     pl.add_argument("--poll-secs", type=int, default=15)
     _common_writer_args(pl)
