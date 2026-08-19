@@ -169,6 +169,16 @@ def test_new_tags_read_the_seven_slot_rule_list():
     assert gate.new_tags(word) == {"madd_lazim", "tafkheem"}
 
 
+def test_new_tags_read_what_a_cell_names_only_on_one_of_its_phones():
+    """A letter read as its own name draws several sounds and names nothing
+    across all of them, so everything it fires is in the per-phone lists."""
+    word = [
+        1, 0, 10, [], [],
+        [["م", "base", "present", [0, 1, 2], 0, [], 1, [["idgham_shafawi"], ["madd_lazim"], []]]],
+    ]
+    assert gate.new_tags(word) == {"idgham_shafawi", "madd_lazim"}
+
+
 # --- the declared tables hold together --------------------------------------
 
 

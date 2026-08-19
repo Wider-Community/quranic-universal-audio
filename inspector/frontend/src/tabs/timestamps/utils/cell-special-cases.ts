@@ -100,9 +100,9 @@ function mergedPhonemeRules(
 
 /** One silence, named once. `orthographic_silence` is the producer's catch-all
  *  for a grapheme that sounds nothing; where the folded cell also carries a rule
- *  that says WHY it is silent — `pausal_alif`, the alif read only at waqf — the
- *  catch-all is the weaker of two answers to the same question, and the cell
- *  would otherwise hover as "Silent Letter, Alif (silent, read only at waqf)".
+ *  that says WHY it is silent — `hamza_wasl_elision`, the prosthetic hamza a
+ *  continuation drops — the catch-all is the weaker of two answers to the same
+ *  question, and the cell would otherwise hover as two names for one silence.
  *  The surviving name says the silence itself, so nothing is lost. A cell that
  *  still sounds keeps everything: the tag is then about one of its graphemes,
  *  not about the cell. */

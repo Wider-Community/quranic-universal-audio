@@ -72,7 +72,6 @@ class TajweedRule(str, Enum):
 
     # What a stop does to the written word
     PAUSAL_SUKUN = "pausal_sukun"
-    PAUSAL_ALIF = "pausal_alif"
     TAA_MARBUTA_PAUSAL = "taa_marbuta_pausal"
     ORTHOGRAPHIC_SILENCE = "orthographic_silence"
 

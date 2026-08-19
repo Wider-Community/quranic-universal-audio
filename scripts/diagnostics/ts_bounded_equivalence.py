@@ -100,12 +100,16 @@ def legacy_tags(word: list) -> set[str]:
 
 
 def new_tags(word: list) -> set[str]:
-    """Every rule the replayed cell rows carry. A v11 cell names them in a
-    list; anything else is a row the replay did not write."""
+    """Every rule the replayed cell rows carry. A v11 cell names in a list what
+    holds across the whole cell and in slot 7 what each of its phones names
+    apart, so a letter read as its own name answers in both; anything else is a
+    row the replay did not write."""
     out: set[str] = set()
     for cell in word[5] if len(word) > 5 and word[5] else []:
         if len(cell) > 5 and isinstance(cell[5], list):
             out |= {tag for tag in cell[5] if tag}
+        if len(cell) > 7 and cell[7]:
+            out |= {tag for tags in cell[7] for tag in tags if tag}
     return out
 
 

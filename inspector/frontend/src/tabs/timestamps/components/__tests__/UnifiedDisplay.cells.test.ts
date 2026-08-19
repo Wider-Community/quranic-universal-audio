@@ -1773,9 +1773,9 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
                 base(0, [0], { chars: 'أ' }),
                 { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, rules: [], shareGroup: null },
                 base(1, [2], { chars: 'ن' }),
-                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [3], sourceLetterIndex: 1, rules: ['pausal_alif'], shareGroup: null },
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [3], sourceLetterIndex: 1, rules: [], shareGroup: null },
                 { chars: 'ا', role: 'madd', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 2, rules: ['orthographic_silence'], shareGroup: null },
-                { chars: '۠', role: 'madd', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 2, rules: ['pausal_alif'], shareGroup: null },
+                { chars: '۠', role: 'madd', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 2, rules: [], shareGroup: null },
             ],
             [0, 1, 2, 3],
         );
@@ -1785,7 +1785,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(alef).toBeTruthy();
         // one folded cell, not two: the bare mark never renders on its own
         expect(letters.some((e) => e.textContent === '۠')).toBe(false);
-        expect(alef.dataset.tjRules).toBe('Alif (silent, read only at waqf)');
+        expect(alef.dataset.tjRules).toBe('Silent Letter');
     });
 
     it('the same alef at waqf keeps its existing shareGroup fold and still sounds', () => {

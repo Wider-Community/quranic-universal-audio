@@ -109,7 +109,6 @@ const SILENT_TOOLTIPS = {
     iltiqaa_kasra: m.ts_tajweed_rule_silent_iltiqaa,
     iltiqaa: m.ts_tajweed_rule_silent_iltiqaa,
     pausal_sukun: m.ts_tajweed_rule_silent_waqf,
-    pausal_alif: m.ts_tajweed_rule_pausal_alif,
     taa_marbuta_pausal: m.ts_tajweed_rule_taa_marbuta_pausal,
     orthographic_silence: m.ts_tajweed_rule_silent_orthographic,
     madd_iwad: m.ts_tajweed_rule_madd_iwad,

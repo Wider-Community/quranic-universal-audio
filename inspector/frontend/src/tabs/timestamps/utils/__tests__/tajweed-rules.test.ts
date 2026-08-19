@@ -272,7 +272,6 @@ describe('tajweed-rules — the silent rules the producer now names', () => {
         expect(silentTooltip('pausal_sukun')).toBe('Waqf');
         expect(silentTooltip('orthographic_silence')).toBe("Silent Letter");
         expect(silentTooltip('madd_iwad')).toBe("Madd 'Iwad");
-        expect(silentTooltip('pausal_alif')).toBe('Alif (silent, read only at waqf)');
         expect(silentTooltip('taa_marbuta_pausal')).toBe("Ta' Marbutah (waqf)");
         expect(silentTooltip('hamza_wasl_elision')).toBe('Hamzat-al-wasl (silent)');
     });

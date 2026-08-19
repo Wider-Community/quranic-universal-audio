@@ -176,3 +176,49 @@ describe('cell-special-cases — a mark that says nothing', () => {
         expect(foldRidingMarks(cells).map((f) => f.cell.chars)).toEqual(['و', 'ا۟']);
     });
 });
+
+describe('foldRidingMarks — a letter read as its own name', () => {
+    it('7:1 مٓ — the fold gives the letter the length its maddah marks and leaves the rest per-phone', () => {
+        // The producer sends the letter naming nothing across `m̃ i: m` and the
+        // maddah naming the length; legacy wrote one row saying both.
+        const folded = foldRidingMarks([
+            cell({
+                chars: 'م',
+                phonemeIndices: [7, 8, 9],
+                rules: [],
+                shareGroup: 1,
+                phonemeRules: [['idgham_shafawi'], ['madd_lazim'], ['izhar_shafawi']],
+            }),
+            cell({ chars: MADDAH, role: 'madd', phonemeIndices: [8], rules: ['madd_lazim'], shareGroup: 2 }),
+        ]);
+        expect(folded).toHaveLength(1);
+        expect(folded[0]!.cell.chars).toBe('مٓ');
+        expect(folded[0]!.cell.rules).toEqual(['madd_lazim']);
+        expect(folded[0]!.cell.phonemeRules).toEqual([
+            ['idgham_shafawi'],
+            ['madd_lazim'],
+            ['izhar_shafawi'],
+        ]);
+    });
+
+    it('7:1 صٓ — the bounce closing the name stays off the letter', () => {
+        const folded = foldRidingMarks([
+            cell({
+                chars: 'ص',
+                phonemeIndices: [10, 11, 12],
+                rules: [],
+                shareGroup: 3,
+                phonemeRules: [['tafkheem'], ['madd_lazim', 'tafkheem'], ['qalqala_kubra']],
+            }),
+            cell({
+                chars: MADDAH,
+                role: 'madd',
+                phonemeIndices: [11],
+                rules: ['madd_lazim', 'tafkheem'],
+                shareGroup: 3,
+            }),
+        ]);
+        expect(folded[0]!.cell.rules).toEqual(['madd_lazim', 'tafkheem']);
+        expect(folded[0]!.cell.phonemeRules?.[2]).toEqual(['qalqala_kubra']);
+    });
+});

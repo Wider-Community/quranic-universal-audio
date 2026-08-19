@@ -55,7 +55,6 @@ NEW_RULE_TAGS = frozenset(
         "ishmam",
         "ibdal_hamza",
         "pausal_sukun",
-        "pausal_alif",
         "taa_marbuta_pausal",
         "orthographic_silence",
         "idgham_mutajanisayn_naqis",
@@ -71,7 +70,7 @@ IMPLIED_TAGS = {"madd_tabii": "madd_iwad"}
 #: Producer rules a cell never carries, mirroring ``qua_sdk.integrations.
 #: vocabulary.DROPPED`` so the classifier stays importable without the SDK.
 #: ``test_bounded_equivalence`` asserts the mirror against the live one.
-DROPPED_RULES = frozenset({"lam_qamariyyah", "tarqeeq", "fakk_idgham"})
+DROPPED_RULES = frozenset({"lam_qamariyyah", "tarqeeq", "fakk_idgham", "pausal_alif"})
 
 #: Legacy names for a letter that says nothing. A merger or a carrier letter
 #: moving its silence takes these with it.
@@ -175,8 +174,8 @@ DECLARED = {
         "families": {
             "rename": ("exact", 33566),
             "collapse": ("exact", 15568),
-            "new_rule": ("exact", 17681),
-            "dropped": ("exact", 8573),
+            "new_rule": ("exact", 17619),
+            "dropped": ("exact", 8635),
             "merger_attribution": ("exact", 8093),
             "fix": ("at_most", 557),
             "residue": ("at_most", 198),
@@ -206,8 +205,8 @@ DECLARED = {
         "families": {
             "rename": ("exact", 35364),
             "collapse": ("exact", 16248),
-            "new_rule": ("exact", 19336),
-            "dropped": ("exact", 8969),
+            "new_rule": ("exact", 19268),
+            "dropped": ("exact", 9037),
             "merger_attribution": ("exact", 8300),
             "fix": ("at_most", 569),
             "residue": ("at_most", 222),
