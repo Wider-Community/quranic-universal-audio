@@ -10,10 +10,10 @@ minimal, additive change to shards that were already bridge-tagged. No MFA / aud
 is a stop, so a silah drops at waqf), exactly like a regen but without re-aligning.
 
 Idempotent: re-running no-ops on an already-stamped shard (the char-match guard
-sees the folded mark and skips). After a silent-logic change (e.g. the carrier-waw
-silence in 2.6) pass ``--restamp`` to reset already-stamped letters to bare and
-re-derive — no re-alignment, since the flags are a pure function of the text.
-Requires ``quranic-phonemizer>=2.7``.
+sees the folded mark and skips). After a silent-logic change pass ``--restamp`` to
+reset already-stamped letters to bare and re-derive — no re-alignment, since the
+flags are a pure function of the text. A shard's ``schema_version`` is raised to
+the letter tier and no further: cells are ``backfill_cells``' business.
 
 Dry-run by default: reports per-reciter coverage (letters / stamped / silent /
 marked / NO-SLOT) WITHOUT writing. ``--write`` uploads the stamped shards via
@@ -45,12 +45,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "bucket"))
 import _bootstrap as bs  # noqa: E402
 from qua_sdk.components.timing.lib.cells import _stamp_silent_flags  # noqa: E402
 
-from qua_shared.timestamps_shards import (  # noqa: E402
-    SEGMENT_SCHEMA_VERSION,
-    gzip_shard,
-)
+from qua_shared.timestamps_shards import gzip_shard  # noqa: E402
 
 _SILENT_MARKS = {"۟", "۠"}  # ۟ SILENT_ALWAYS, ۠ SILENT_AT_CONTINUATION
+
+#: The version this backfill can honestly claim. It writes letters only, so it
+#: raises a shard to the letter tier and never past it — the cell row a later
+#: version defines is not something this pass produces.
+_LETTERS_SCHEMA_VERSION = 4
 
 
 def _rl(fn, *args, **kwargs):
@@ -146,7 +148,10 @@ def process_reciter(
         cov += _stamp_shard(data, restamp=restamp)
         cov["shards"] += 1
         if write:
-            data.setdefault("_meta", {})["schema_version"] = SEGMENT_SCHEMA_VERSION
+            meta = data.setdefault("_meta", {})
+            meta["schema_version"] = max(
+                int(meta.get("schema_version") or 0), _LETTERS_SCHEMA_VERSION
+            )
             local = os.path.join(tmpdir, f"{ch}.json.gz")
             Path(local).write_bytes(gzip_shard(data))
             adds.append((local, f"reciters/{slug}/timestamps/{ch}.json.gz"))
@@ -243,7 +248,7 @@ def main() -> int:
         f"\n=== TOTAL: {grand['shards']} shards, {grand['letters']} letters, "
         f"{grand['stamped']} stamped ({grand['silent']} silent, {grand['marked']} marked), "
         f"NO-SLOT={noslot} ({pct:.1f}%) in {dt:.0f}s "
-        f"({'DRY-RUN' if not args.write else 'WROTE v=' + str(SEGMENT_SCHEMA_VERSION)})"
+        f"({'DRY-RUN' if not args.write else 'WROTE v>=' + str(_LETTERS_SCHEMA_VERSION)})"
     )
     return 0
 

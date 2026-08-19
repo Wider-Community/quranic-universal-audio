@@ -1,12 +1,13 @@
-"""Backfill per-character (haraka/tanween) cells into existing timestamp shards.
+"""Backfill per-character cells into existing timestamp shards.
 
-Stamps the schema-v5 6th word slot ``cells[]`` onto every segment-array shard,
-using the same ``qua_sdk.components.timing.lib.cells.annotate_segment_words`` the
-live pipeline runs — so a backfilled shard is byte-identical to a fresh
-generation. Re-phonemizing each segment also re-applies silent flags + bridge tags
-(both idempotent), bringing v3/v4 shards fully up to v5 in one pass, then bumps
-``_meta.schema_version`` to 5. Cells include ``role == "base"`` (the SDK annotator
-emits the full per-character breakdown).
+Stamps the 6th word slot ``cells[]`` onto every segment-array shard, using the
+same ``qua_sdk.components.timing.lib.cells.annotate_segment_words`` the live
+pipeline runs — so a backfilled shard is byte-identical to a fresh generation.
+Re-phonemizing each segment also re-applies silent flags + bridge tags (both
+idempotent), bringing an older shard up to ``SEGMENT_SCHEMA_VERSION`` in one pass,
+then bumps ``_meta.schema_version`` to it. Cells include ``role == "base"`` (the
+producer emits the full per-character breakdown) and carry an ordered ``rules``
+list, so a shard written before the seven-slot row needs ``--restamp``.
 
 Cell ``phoneme_indices`` are word-local indices over the word's *indexable*
 phones (the render-only qalqala ``Q`` excluded — same coordinate space as the
@@ -16,7 +17,7 @@ render-only markers a model emits.
 Dry-run by default: reports per-reciter cell counts, the status/tag distribution,
 and any anti-drift violation (a cell index past the word's indexable phones)
 WITHOUT writing. ``--write`` uploads (``--bucket prod`` also
-needs ``--yes-prod``). ``--restamp`` re-derives cells on shards already at v5.
+needs ``--yes-prod``). ``--restamp`` re-derives cells on already-current shards.
 ``--local-dir DIR`` processes local ``*.shard.json`` / ``*.json.gz`` files
 instead of the bucket (no HF token needed) — used to regenerate inspector
 fixtures.
@@ -26,7 +27,7 @@ fixtures.
     # write one reciter
     python scripts/backfills/backfill_cells.py --slug nasser_al_qatami_mp3quran \\
         --bucket prod --yes-prod --write
-    # regenerate local fixtures to v5
+    # regenerate local fixtures
     python scripts/backfills/backfill_cells.py --local-dir some/dir --write
 """
 
@@ -69,12 +70,27 @@ def _rl(fn, *args, **kwargs):
     raise RuntimeError("rate-limit retries exhausted")
 
 
+def _stamp_producer(data: dict) -> None:
+    """Record which phonemizer read these cells, and say when it changed.
+
+    Stamped beside the cells rather than at the write, so no caller can update
+    one without the other.
+    """
+    from qua_sdk.integrations.phonemizer import producer_version
+
+    meta = data.setdefault("_meta", {})
+    was, now = meta.get("phonemizer_version"), producer_version()
+    if was and was != now:
+        print(f"  phonemizer {was} -> {now}: cells re-read by a different producer", flush=True)
+    meta["phonemizer_version"] = now
+
+
 def _stamp_doc(data: dict, *, restamp: bool) -> tuple[int, Counter, Counter, list]:
     """Stamp cells across every segment of a shard doc, in place.
 
-    Returns ``(n_cells, status_dist, tag_dist, violations)``. Cells now include
-    ``role == "base"`` (the SDK annotator emits the full per-character breakdown);
-    a violation is a cell index past the word's indexable phones, which means
+    Returns ``(n_cells, status_dist, tag_dist, violations)``, where ``tag_dist``
+    counts every rule on every cell (a cell carries an ordered list, not one tag).
+    A violation is a cell index past the word's indexable phones, which means
     phonemizer/shard drift and is never written silently."""
     if restamp:
         for seg in data.get("segments", []):
@@ -87,6 +103,7 @@ def _stamp_doc(data: dict, *, restamp: bool) -> tuple[int, Counter, Counter, lis
     # the same linking generation does via annotate_v2_doc.
     seq = [(seg["ref"], seg["words"], bool(seg.get("wasl"))) for seg in data.get("segments", [])]
     annotate_ordered_segments(seq)
+    _stamp_producer(data)
 
     n_cells = 0
     status_dist: Counter = Counter()
@@ -98,8 +115,7 @@ def _stamp_doc(data: dict, *, restamp: bool) -> tuple[int, Counter, Counter, lis
             for c in ts_shard_cells.word_cells(wd):
                 n_cells += 1
                 status_dist[c.status] += 1
-                if c.tag:
-                    tag_dist[c.tag] += 1
+                tag_dist.update(c.rules)
                 for i in c.phoneme_indices:
                     if not (0 <= i < n_idx):
                         violations.append((seg["ref"], wd[0], "idx-oob", i, n_idx))
@@ -250,7 +266,9 @@ def main() -> int:
     g.add_argument("--local-dir", help="process local shard files in DIR (no bucket)")
     g.add_argument("--local-root", help="process every reciters/*/timestamps under DIR (no bucket)")
     ap.add_argument("--write", action="store_true", help="write stamped shards (default: dry-run)")
-    ap.add_argument("--restamp", action="store_true", help="re-derive cells even on v5 shards")
+    ap.add_argument(
+        "--restamp", action="store_true", help="re-derive cells even on current-version shards"
+    )
     bs.add_bucket_args(ap)
     bs.add_notify_args(ap)
     args = ap.parse_args()

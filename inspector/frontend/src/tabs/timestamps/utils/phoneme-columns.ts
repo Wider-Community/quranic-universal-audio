@@ -1,7 +1,7 @@
 /**
  * Pure phoneme-row layout for the Timestamps analysis view — splits phones into
- * base + IPA-modifier, detects the heavy (istiʿlāʾ) ikhfāʾ/vowel display, and
- * assigns each phoneme span to its source grapheme columns (`_buildColumns`).
+ * base + IPA-modifier and assigns each phoneme span to its source grapheme
+ * columns (`_buildColumns`).
  * Consumed by `rendered-blocks.ts`; see `cell-model.ts` for the group model.
  */
 
@@ -14,33 +14,10 @@ import type { PhonemeSpan, RenderedGroup, RenderedPhoneme } from './cell-model';
 // Only length marks (ː / ASCII :) are detached modifiers; ˤ is integral to
 // the consonant symbol (rˤ, dˤ, sˤ, tˤ, ðˤ) and must stay in the base.
 export const PHONE_MOD_RE = /([ː:]+)$/u;
-// Only the SHORT emphatic open vowel `aˤ` (heavy `a` after an istiʿlāʾ
-// consonant) DISPLAYS as a plain `a` — the emphasis is a vowel quality, not a
-// separate symbol like a consonant emphatic. The LONG emphatic `aˤ:` keeps its
-// ˤ (the emphasis stays on a held vowel). Display-only: the shard keeps `aˤ`.
-export const EMPHATIC_A_RE = /^aˤ$/u;
 export function splitPhone(phone: string | undefined): { base: string; mod: string } {
     if (!phone || phone === 'sil' || phone === 'sp') return { base: phone ?? '', mod: '' };
-    if (EMPHATIC_A_RE.test(phone)) return { base: 'a', mod: '' };
     const m = PHONE_MOD_RE.exec(phone);
     return m ? { base: phone.slice(0, -m[0].length), mod: m[0] } : { base: phone, mod: '' };
-}
-
-/** The istiʿlāʾ (heavy) consonants among the 15 ikhfaa letters — ص ض ط ظ ق,
- *  whose base phones are `sˤ dˤ tˤ ðˤ q`. The ikhfaa nasal `ŋ` before one of
- *  these is articulated heavy (tafkhīm). */
-export const HEAVY_IKHFAA_PHONES = new Set(['sˤ', 'dˤ', 'tˤ', 'ðˤ', 'q']);
-/** The emphatic long vowel `aˤ:` — a muqattaat heavy letter's vowel (ṣād's aˤ:,
- *  qāf's aˤ:, the heavy rāʾ's aˤ:). It stacks tafkhīm above its madd bar. */
-export const HEAVY_VOWEL_PHONES = new Set(['aˤ:']);
-/** DISPLAY-only ikhfaa-heavy override: a plain ikhfaa nasal `ŋ` immediately
- *  before a heavy istiʿlāʾ consonant renders as `ŋˤ`. Returns the override
- *  phone, or undefined when no transform applies (the raw phone is used). The
- *  GATE skips a phone that is ALREADY `ŋˤ` so a future phonemizer-side heavy
- *  nasal wins unchanged. */
-export function _heavyIkhfaaDisplay(phone: string | undefined, nextPhone: string | undefined): string | undefined {
-    if (phone !== 'ŋ' || !nextPhone) return undefined;
-    return HEAVY_IKHFAA_PHONES.has(nextPhone) ? 'ŋˤ' : undefined;
 }
 
 /** Assign each rendered phoneme to the grapheme COLUMN(s) that sound it, then

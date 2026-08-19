@@ -52,12 +52,15 @@ _SEGMENT_META_PROVENANCE = (
     "shared_cmvn",
     "audio_source",
     "created_at",
+    # Which phonemizer read the cells and the silent flags. A shard written by
+    # one version and read after an upgrade is otherwise indistinguishable
+    # from one that still agrees with the producer.
+    "phonemizer_version",
 )
 
 # v5 added the 6th word slot ``cells[]`` — per-character phoneme cells from the
-# phonemizer's ``character_phoneme_mappings()`` (see
-# ``qua_sdk.components.timing.lib.cells._stamp_cells`` and
-# ``qua_shared/ts_shard_cells.py``). v6 carries two extra phonemizer-owned cell
+# producer's projection (see ``qua_sdk.components.timing.lib.cells._stamp_cells``
+# and ``qua_shared/ts_shard_cells.py``). v6 carries two extra phonemizer-owned cell
 # facts so the FE never infers phonology: the canonical shaddah composed into a
 # geminated base cell's ``chars``, and a ``share_group`` on the vowel-absorbed
 # haraka of a cross-word idgham. v7 expands the open-form cell ``tag`` vocabulary
@@ -75,7 +78,14 @@ _SEGMENT_META_PROVENANCE = (
 # without a stop, so its junction word carries waṣl (not waqf) phonemes. Emitted
 # only when True; absence = waqf. The FE walks consecutive flagged occurrences to
 # reconstruct a waṣl group (per-occurrence, so retakes regroup correctly).
-SEGMENT_SCHEMA_VERSION = 10
+# v11 replaces the cell row's single ``tag`` at slot 5 with ``rules`` — the ordered
+# list of every rule the producer fired on the grapheme — and drops the optional
+# 9th slot ``secondary_tags``, which existed only because one tag had to be picked.
+# The optional 8th slot survives, retyped: ``phoneme_rules`` is one rule LIST per
+# entry of ``phoneme_indices``, still written only where the cell's phones do not
+# all name the same thing. A v10 row is NOT readable as v11 (slot 5 changed type),
+# so a shard is re-stamped rather than migrated in place.
+SEGMENT_SCHEMA_VERSION = 11
 
 
 def _filter_mfa_failures(failures: list[dict] | None, chapter: int) -> list[dict]:

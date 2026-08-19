@@ -1329,7 +1329,7 @@
                     </span>
                 {/if}
                 {#each br.phonemes as ph (ph.index)}
-                    {@const parts = splitPhone(ph.displayPhone ?? ph.interval.phone)}
+                    {@const parts = splitPhone(ph.interval.phone)}
                     <span
                         class="mega-phoneme"
                         class:hidden={br.letter != null && !$showPhonemes}
@@ -1469,6 +1469,7 @@
                                             class="mega-letter"
                                             class:silent={f.silent}
                                             class:dia-inserted={f.inserted}
+                                            class:dia-replaced={f.status === 'replaced'}
                                             class:dia-timed={f.cellStart != null && (!f.silent || f.shareGroup != null)}
                                             style="grid-column:{ci + 1}; justify-self:stretch"
                                             data-cell-timed={f.cellStart != null && (!f.silent || f.shareGroup != null) ? '1' : undefined}
@@ -1540,7 +1541,7 @@
                                     style="grid-column:{ps.colStart + 1} / span {ps.span}"
                                 >
                                     {#each ps.phonemes as ph (ph.index)}
-                                        {@const parts = splitPhone(ph.displayPhone ?? ph.interval.phone)}
+                                        {@const parts = splitPhone(ph.interval.phone)}
                                         <span
                                             class="mega-phoneme"
                                             class:silence={!ph.interval.phone ||
@@ -1576,7 +1577,7 @@
             {:else}
                 <div class="mega-phonemes flat" class:hidden={!$showPhonemes} dir="rtl">
                     {#each block.phonemes as ph (ph.index)}
-                        {@const parts = splitPhone(ph.displayPhone ?? ph.interval.phone)}
+                        {@const parts = splitPhone(ph.interval.phone)}
                         <span
                             class="mega-phoneme"
                             class:silence={!ph.interval.phone ||

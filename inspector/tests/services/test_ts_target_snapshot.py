@@ -18,12 +18,12 @@ def _doc() -> dict:
         [["ب", 0, 10], ["َ", 10, 20]],
         [["b", 0, 10], ["a", 10, 20]],
         [
-            ["ب", "base", "present", [0], 0, "qalqala_sughra", None],
-            ["َ", "haraka", "present", [1], 1, None, None],
+            ["ب", "base", "present", [0], 0, ["qalqala_sughra"], None],
+            ["َ", "haraka", "present", [1], 1, [], None],
         ],
     ]
     return {
-        "_meta": {"schema_version": 9, "chapter": 2, "audio_category": "by_ayah_audio"},
+        "_meta": {"schema_version": 11, "chapter": 2, "audio_category": "by_ayah_audio"},
         "segments": [{"ref": "2:45", "t": [0, 20], "words": [word]}],
     }
 
@@ -73,7 +73,7 @@ def test_tajweed_stale_when_rule_changes():
     report = _report("tajweed", target, doc)
     assert snap.is_stale_after_restamp(report, doc) is False
     changed = copy.deepcopy(doc)
-    changed["segments"][0]["words"][0][5][0][5] = None  # drop the qalqala tag
+    changed["segments"][0]["words"][0][5][0][5] = []  # drop the qalqala rule
     assert snap.is_stale_after_restamp(report, changed) is True
 
 
@@ -136,7 +136,7 @@ def _bridge_doc() -> dict:
         10,
         [["ن", 0, 5]],
         [["n", 0, 5], ["m̃", 5, 10, False, False, "idgham_ghunnah"]],
-        [["ن", "base", "present", [0], 0, None, None]],
+        [["ن", "base", "present", [0], 0, [], None]],
     ]
     w1 = [
         1,
@@ -144,10 +144,10 @@ def _bridge_doc() -> dict:
         20,
         [["م", 10, 20]],
         [["m", 10, 20]],
-        [["م", "base", "present", [0], 0, None, None]],
+        [["م", "base", "present", [0], 0, [], None]],
     ]
     return {
-        "_meta": {"schema_version": 9, "chapter": 2, "audio_category": "by_ayah_audio"},
+        "_meta": {"schema_version": 11, "chapter": 2, "audio_category": "by_ayah_audio"},
         "segments": [{"ref": "2:45", "t": [0, 20], "words": [w0, w1]}],
     }
 
@@ -188,7 +188,7 @@ _GAP_TARGET = {"kind": "gap", "word_index": 0}
 def _two_word_doc(*, gap: bool) -> dict:
     """Two words "بَ" / "تَ"; the second starts at 30 (a gap after word 0) or at 20
     (contiguous, no gap)."""
-    w0 = [0, 0, 20, [["ب", 0, 20]], [["b", 0, 20]], [["ب", "base", "present", [0], 0, None, None]]]
+    w0 = [0, 0, 20, [["ب", 0, 20]], [["b", 0, 20]], [["ب", "base", "present", [0], 0, [], None]]]
     s1 = 30 if gap else 20
     w1 = [
         1,
@@ -196,10 +196,10 @@ def _two_word_doc(*, gap: bool) -> dict:
         s1 + 20,
         [["ت", s1, s1 + 20]],
         [["t", s1, s1 + 20]],
-        [["ت", "base", "present", [0], 0, None, None]],
+        [["ت", "base", "present", [0], 0, [], None]],
     ]
     return {
-        "_meta": {"schema_version": 9, "chapter": 2, "audio_category": "by_ayah_audio"},
+        "_meta": {"schema_version": 11, "chapter": 2, "audio_category": "by_ayah_audio"},
         "segments": [{"ref": "2:45", "t": [0, s1 + 20], "words": [w0, w1]}],
     }
 

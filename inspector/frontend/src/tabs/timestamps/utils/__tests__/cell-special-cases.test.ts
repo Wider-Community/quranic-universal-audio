@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { TsCell } from '../../../../lib/types/ts-client';
 import {
-    iqlabNoonMiniMeem,
+    foldRidingMarks,
+    iqlabMiniMeem,
     iqlabNoonSilentBase,
-    shedSilahMaddah,
-    silahMaddahSources,
-    wearSilahMaddah,
+    iqlabTanweenVowel,
+    isIqlabCell,
 } from '../cell-special-cases';
-import { MADDAH, MEEM_HI } from '../tajweed-script';
+import { DAGGER, DAMMA, DAMMATAN, FATHA, FATHATAN, KASRA, KASRATAN, MADDAH, MEEM_HI, MEEM_LO } from '../tajweed-script';
 
 const cell = (over: Partial<TsCell>): TsCell => ({
     chars: '',
@@ -15,53 +15,242 @@ const cell = (over: Partial<TsCell>): TsCell => ({
     status: 'present',
     phonemeIndices: [],
     sourceLetterIndex: 0,
-    tag: null,
+    rules: [],
     shareGroup: null,
     ...over,
 });
 
 describe('cell-special-cases — iqlab noon', () => {
-    const noon = cell({ chars: 'ن', phonemeIndices: [2], tag: 'iqlab_noon', sourceLetterIndex: 1 });
+    const noon = cell({ chars: 'ن', phonemeIndices: [2], rules: ['iqlab'], sourceLetterIndex: 1 });
 
-    it('silent base surrenders the nasal phone + underline, keeps an Iqlab hover tag', () => {
+    it('silent base surrenders the nasal phone + underline, keeps an Iqlab hover rule', () => {
         const silent = iqlabNoonSilentBase(noon);
         expect(silent.chars).toBe('ن'); // the glyph stays
         expect(silent.phonemeIndices).toEqual([]); // no own phone → renders silent
-        // a silent-only tag: draws no badge (absent from COLOR_RULES) but names "Iqlab"
-        expect(silent.tag).toBe('iqlab_silent_noon');
+        // a silent-only rule: draws no badge (absent from COLOR_RULES) but names "Iqlab"
+        expect(silent.rules).toEqual(['iqlab_silent_noon']);
         expect(silent.shareGroup).toBeNull();
     });
 
-    it('mini-meem owns the nasal phone + the lone iqlab tag', () => {
-        const meem = iqlabNoonMiniMeem(noon);
+    it('mini-meem owns the nasal phone + the lone iqlab rule', () => {
+        const meem = iqlabMiniMeem(noon);
         expect(meem.chars).toBe(MEEM_HI); // above-slot source glyph
         expect(meem.role).toBe('tanween');
-        expect(meem.status).toBe('inserted');
+        expect(meem.status).toBe('present'); // a written mark and a sounded nasal — never dashed
         expect(meem.phonemeIndices).toEqual([2]); // the click/loop target span
         expect(meem.sourceLetterIndex).toBe(1);
-        expect(meem.tag).toBe('iqlab_noon'); // the iqlab underline rides here
+        expect(meem.rules).toEqual(['iqlab']); // the iqlab underline rides here
     });
 });
 
-describe('cell-special-cases — silah madd', () => {
-    it('detects a bearing letter with a maddah + a dropped silah carrier', () => {
-        const cells: TsCell[] = [
-            cell({ chars: 'ه' + MADDAH, role: 'base', sourceLetterIndex: 3 }),
-            cell({ chars: 'ۥ', role: 'madd', status: 'dropped', sourceLetterIndex: 3 }),
-        ];
-        expect([...silahMaddahSources(cells, new Set([3]))]).toEqual([3]);
+describe('cell-special-cases — iqlab tanween', () => {
+    const tanween = (mark: string): TsCell =>
+        cell({ chars: mark, role: 'tanween', phonemeIndices: [4, 5], rules: ['iqlab'], sourceLetterIndex: 2 });
+
+    it('splits into the single written haraka and the mini-meem that sounds the nasal', () => {
+        const vowel = iqlabTanweenVowel(tanween(FATHATAN));
+        expect(vowel.chars).toBe(FATHA); // the mushaf writes ONE mark, not the doubled one
+        expect(vowel.role).toBe('haraka');
+        expect(vowel.phonemeIndices).toEqual([4]); // keeps only the vowel
+        expect(vowel.rules).toEqual([]); // the underline rides the meem alone
+
+        const meem = iqlabMiniMeem(tanween(FATHATAN));
+        expect(meem.chars).toBe(MEEM_HI);
+        expect(meem.phonemeIndices).toEqual([5]); // the nasal
+        expect(meem.rules).toEqual(['iqlab']);
     });
 
-    it('ignores a clean silah (no maddah merged onto the bearing letter)', () => {
-        const cells: TsCell[] = [
-            cell({ chars: 'ه', role: 'base', sourceLetterIndex: 3 }),
-            cell({ chars: 'ۦ', role: 'madd', status: 'dropped', sourceLetterIndex: 3 }),
-        ];
-        expect(silahMaddahSources(cells, new Set([3])).size).toBe(0);
+    it('picks the mini-meem slot from the vowel quality (fatha/damma high, kasra low)', () => {
+        expect(iqlabMiniMeem(tanween(FATHATAN)).chars).toBe(MEEM_HI);
+        expect(iqlabMiniMeem(tanween(DAMMATAN)).chars).toBe(MEEM_HI);
+        expect(iqlabMiniMeem(tanween(KASRATAN)).chars).toBe(MEEM_LO);
+        expect(iqlabTanweenVowel(tanween(DAMMATAN)).chars).toBe(DAMMA);
+        expect(iqlabTanweenVowel(tanween(KASRATAN)).chars).toBe(KASRA);
     });
 
-    it('relocates the maddah glyph off the base onto the carrier', () => {
-        expect(shedSilahMaddah('ه' + MADDAH)).toBe('ه');
-        expect(wearSilahMaddah('ۥ')).toBe('ۥ' + MADDAH);
+    it('recognises both iqlab origins and nothing else', () => {
+        expect(isIqlabCell(cell({ chars: 'ن', rules: ['iqlab'], phonemeIndices: [2] }))).toBe(true);
+        expect(isIqlabCell(tanween(FATHATAN))).toBe(true);
+        // a tanwīn with only its vowel stored has no nasal to hand over
+        expect(isIqlabCell(cell({ chars: FATHATAN, role: 'tanween', rules: ['iqlab'], phonemeIndices: [4] }))).toBe(false);
+        expect(isIqlabCell(cell({ chars: 'ن', rules: ['ikhfaa'], phonemeIndices: [2] }))).toBe(false);
+    });
+});
+
+describe('cell-special-cases — riding marks', () => {
+    it('folds a lone maddah onto the letter before it, merging phones + rules', () => {
+        const cells: TsCell[] = [
+            cell({ chars: 'ا', role: 'madd', phonemeIndices: [1], rules: ['madd_tabii'], sourceLetterIndex: 1 }),
+            cell({ chars: MADDAH, role: 'madd', phonemeIndices: [1], rules: ['madd_wajib_muttasil'], sourceLetterIndex: 1 }),
+        ];
+        const folded = foldRidingMarks(cells);
+        expect(folded).toHaveLength(1);
+        expect(folded[0]!.cell.chars).toBe('ا' + MADDAH);
+        expect(folded[0]!.cell.rules).toEqual(['madd_tabii', 'madd_wajib_muttasil']);
+        expect(folded[0]!.rawIndex).toBe(0); // the host keeps its own report index
+    });
+
+    it('folds a dagger onto the carrier it is written on (تُتْلَىٰ)', () => {
+        const cells: TsCell[] = [
+            cell({ chars: 'ى', role: 'madd', phonemeIndices: [4], rules: ['madd_tabii'], sourceLetterIndex: 3, shareGroup: 1 }),
+            cell({ chars: DAGGER, role: 'madd', phonemeIndices: [4], rules: ['madd_tabii'], sourceLetterIndex: 4, shareGroup: 1 }),
+        ];
+        const folded = foldRidingMarks(cells);
+        expect(folded).toHaveLength(1);
+        expect(folded[0]!.cell.chars).toBe('ى' + DAGGER);
+        expect(folded[0]!.cell.phonemeIndices).toEqual([4]);
+    });
+
+    it('leaves a dagger on a consonant its own cell — the ḥaraka is not its carrier (ذَٰلِكَ)', () => {
+        const cells: TsCell[] = [
+            cell({ chars: 'ذ', phonemeIndices: [0], sourceLetterIndex: 0 }),
+            cell({ chars: FATHA, role: 'haraka', phonemeIndices: [1], sourceLetterIndex: 0, shareGroup: 0 }),
+            cell({ chars: DAGGER, role: 'madd', phonemeIndices: [1], sourceLetterIndex: 1, shareGroup: 0 }),
+        ];
+        expect(foldRidingMarks(cells).map((f) => f.cell.chars)).toEqual(['ذ', FATHA, DAGGER]);
+    });
+
+    it('leaves an otiose alef alone — same phones, no share group, not one unit (لَقُوا۟)', () => {
+        const cells: TsCell[] = [
+            cell({ chars: 'و', role: 'madd', phonemeIndices: [3], sourceLetterIndex: 2 }),
+            cell({ chars: 'ا۟', role: 'madd', status: 'dropped', phonemeIndices: [3], sourceLetterIndex: 3 }),
+        ];
+        expect(foldRidingMarks(cells).map((f) => f.cell.chars)).toEqual(['و', 'ا۟']);
+    });
+
+    it('leaves every other cell (and its raw index) alone', () => {
+        const cells: TsCell[] = [
+            cell({ chars: 'ه', sourceLetterIndex: 3 }),
+            cell({ chars: 'ۥ', role: 'madd', status: 'dropped', sourceLetterIndex: 4 }),
+            cell({ chars: MADDAH, role: 'madd', status: 'dropped', sourceLetterIndex: 4 }),
+        ];
+        const folded = foldRidingMarks(cells);
+        expect(folded.map((f) => f.cell.chars)).toEqual(['ه', 'ۥ' + MADDAH]);
+        expect(folded.map((f) => f.rawIndex)).toEqual([0, 1]);
+    });
+});
+
+describe('cell-special-cases — folding per-phone rules', () => {
+    it('the maddah gives its madd to the sound it stretches (كٓهيعٓصٓ)', () => {
+        const cells: TsCell[] = [
+            cell({
+                chars: 'ع', phonemeIndices: [7, 8, 9, 10], sourceLetterIndex: 3,
+                rules: ['ikhfaa', 'tafkheem'],
+                phonemeRules: [[], [], [], ['ikhfaa', 'tafkheem']],
+            }),
+            cell({ chars: MADDAH, role: 'madd', phonemeIndices: [9], sourceLetterIndex: 3, rules: ['madd_lazim'] }),
+        ];
+        const folded = foldRidingMarks(cells);
+        expect(folded).toHaveLength(1);
+        // the leen the maddah lengthens, and the hidden noon the ikhfaa is on
+        expect(folded[0]!.cell.phonemeRules).toEqual([[], [], ['madd_lazim'], ['ikhfaa', 'tafkheem']]);
+        expect(folded[0]!.cell.rules).toEqual(['ikhfaa', 'tafkheem', 'madd_lazim']);
+    });
+
+    it('leaves an ordinary letter and its mark undistinguished', () => {
+        const cells: TsCell[] = [
+            cell({ chars: 'ا', role: 'madd', phonemeIndices: [1], rules: ['madd_tabii'] }),
+            cell({ chars: MADDAH, role: 'madd', phonemeIndices: [1], rules: ['madd_tabii'] }),
+        ];
+        expect(foldRidingMarks(cells)[0]!.cell.phonemeRules).toBeNull();
+    });
+});
+
+describe('cell-special-cases — a mark that says nothing', () => {
+    it('folds a soundless dagger onto the carrier it is written on (مَجْر۪ىٰهَا)', () => {
+        const cells: TsCell[] = [
+            cell({ chars: 'ى', role: 'madd', phonemeIndices: [5], rules: ['madd_tabii', 'imala'], sourceLetterIndex: 4 }),
+            cell({ chars: DAGGER, role: 'madd', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 5 }),
+        ];
+        const folded = foldRidingMarks(cells);
+        expect(folded).toHaveLength(1);
+        expect(folded[0]!.cell.chars).toBe('ى' + DAGGER);
+        expect(folded[0]!.cell.phonemeIndices).toEqual([5]);
+    });
+
+    it('still leaves the otiose alef alone — a silent letter is not a mark', () => {
+        const cells: TsCell[] = [
+            cell({ chars: 'و', role: 'madd', phonemeIndices: [3], sourceLetterIndex: 2 }),
+            cell({ chars: 'ا۟', role: 'madd', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 3 }),
+        ];
+        expect(foldRidingMarks(cells).map((f) => f.cell.chars)).toEqual(['و', 'ا۟']);
+    });
+});
+
+describe('foldRidingMarks — a letter read as its own name', () => {
+    it('7:1 مٓ — the fold gives the letter the length its maddah marks and leaves the rest per-phone', () => {
+        // The producer sends the letter naming nothing across `m̃ i: m` and the
+        // maddah naming the length; legacy wrote one row saying both.
+        const folded = foldRidingMarks([
+            cell({
+                chars: 'م',
+                phonemeIndices: [7, 8, 9],
+                rules: [],
+                shareGroup: 1,
+                phonemeRules: [['idgham_shafawi'], ['madd_lazim'], ['izhar_shafawi']],
+            }),
+            cell({ chars: MADDAH, role: 'madd', phonemeIndices: [8], rules: ['madd_lazim'], shareGroup: 2 }),
+        ]);
+        expect(folded).toHaveLength(1);
+        expect(folded[0]!.cell.chars).toBe('مٓ');
+        expect(folded[0]!.cell.rules).toEqual(['madd_lazim']);
+        expect(folded[0]!.cell.phonemeRules).toEqual([
+            ['idgham_shafawi'],
+            ['madd_lazim'],
+            ['izhar_shafawi'],
+        ]);
+    });
+
+    it('7:1 صٓ — the bounce closing the name stays off the letter', () => {
+        const folded = foldRidingMarks([
+            cell({
+                chars: 'ص',
+                phonemeIndices: [10, 11, 12],
+                rules: [],
+                shareGroup: 3,
+                phonemeRules: [['tafkheem'], ['madd_lazim', 'tafkheem'], ['qalqala_kubra']],
+            }),
+            cell({
+                chars: MADDAH,
+                role: 'madd',
+                phonemeIndices: [11],
+                rules: ['madd_lazim', 'tafkheem'],
+                shareGroup: 3,
+            }),
+        ]);
+        expect(folded[0]!.cell.rules).toEqual(['madd_lazim', 'tafkheem']);
+        expect(folded[0]!.cell.phonemeRules?.[2]).toEqual(['qalqala_kubra']);
+    });
+});
+
+describe('iqlab — each half of the split cell names its own phone', () => {
+    // 17:17 خَبِيرًۢا: the raa makes the fatha heavy and the noon is converted.
+    // One mark writes both, and the split must not hand either sound's news to
+    // the other.
+    const tanween = (): TsCell => cell({
+        chars: FATHATAN,
+        role: 'tanween',
+        phonemeIndices: [4, 5],
+        rules: ['iqlab'],
+        phonemeRules: [['tafkheem'], ['iqlab']],
+    });
+
+    it('leaves the heavy fatha on the haraka and the iqlab off it', () => {
+        const vowel = iqlabTanweenVowel(tanween());
+        expect(vowel.chars).toBe(FATHA);
+        expect(vowel.phonemeIndices).toEqual([4]);
+        expect(vowel.rules).toEqual(['tafkheem']);
+    });
+
+    it('gives the mini-meem the iqlab and nothing of the vowel', () => {
+        const meem = iqlabMiniMeem(tanween());
+        expect(meem.chars).toBe(MEEM_HI);
+        expect(meem.phonemeIndices).toEqual([5]);
+        expect(meem.rules).toEqual(['iqlab']);
+    });
+
+    it('drops per-phone lists covering phones the half no longer holds', () => {
+        expect(iqlabTanweenVowel(tanween()).phonemeRules).toBeNull();
+        expect(iqlabMiniMeem(tanween()).phonemeRules).toBeNull();
     });
 });

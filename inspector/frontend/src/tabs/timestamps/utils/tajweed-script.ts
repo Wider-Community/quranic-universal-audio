@@ -21,6 +21,9 @@ export const DAGGER = 'ٰ'; // U+0670 dagger-alef
 export const ALEF = 'ا'; // U+0627
 export const ALEF_MAKSURA = 'ى'; // U+0649
 export const MADDAH = 'ٓ'; // U+0653 maddah-above — the silah-madd mark
+/** U+06E0 small high upright rectangular zero — the seven alifs (أَنَا۠). It is
+ *  written on the alif before it and never opens a written unit of its own. */
+export const PAUSAL_ZERO = '۠';
 export const NOON = 'ن'; // U+0646
 export const MEEM = 'م'; // U+0645
 /** Mini-meem glyphs the phonemizer stamps onto an iqlab tanwīn's own meem cell —
@@ -43,13 +46,13 @@ export const OPEN_TANWEEN: Record<string, string> = {
     [KASRATAN]: 'ࣲ',
 };
 
-/** Tags whose tanwīn assimilates → render the OPEN form (else stacked). Mirrors
- *  the phonemizer's `TANWEEN_ASSIMILATES_VALUES`; iẓhar carries no tanwīn tag. The
+/** Rules whose tanwīn assimilates → render the OPEN form (else stacked). Consulted
+ *  only for a `tanween` cell, so the noon half of each rule never reaches it. The
  *  literal array is typed against `TajweedRule` so a rename is a compile error. */
 const OPEN_TANWEEN_RULES: readonly TajweedRule[] = [
-    'idgham_ghunnah_tanween',
-    'idgham_bila_ghunnah_tanween',
-    'ikhfaa_tanween',
+    'idgham_bi_ghunnah',
+    'idgham_bila_ghunnah',
+    'ikhfaa',
 ];
 export const OPEN_TANWEEN_TAGS: ReadonlySet<string> = new Set(OPEN_TANWEEN_RULES);
 
@@ -62,31 +65,27 @@ export function firstMark(chars: string): string {
     return arr[0]!;
 }
 
+/** The glyph for a length the rasm writes no letter for. The producer gives the
+ *  letter the reading writes; a mushaf draws that alef DAGGER-sized where it only
+ *  lengthens the ḥaraka it sits on (ٱللَّه, مِهَـٰد) and full where it stands in for
+ *  a tanwīn a stop replaced (بِنَآءَا) — the seat's own status says which, and
+ *  that is the only change made here. */
+export function insertedLengthGlyph(chars: string, seatReplaced: boolean): string {
+    return chars === ALEF && !seatReplaced ? DAGGER : chars;
+}
+
 /** Pin slot for a small cell's mark — top unless it's a below-mark. */
 export function cellSlot(glyph: string): 'top' | 'bottom' {
     return BELOW_MARKS.has(glyph) ? 'bottom' : 'top';
 }
 
-/** The DK glyph for a SMALL cell — its own mark, or derived for an implicit
- *  graphemeless cell (the phonemizer keeps `chars` empty + carries the tag). */
-export function cellGlyph(chars: string, tag: string | null, phone: string | undefined): string {
-    if (chars) {
-        // The iqlab mini-meem always DISPLAYS the low-meem glyph (cleaner than the
-        // isolated high-meem); pushSmall slots it by the source mark (MEEM_HI →
-        // above, MEEM_LO → below).
-        const mark = firstMark(chars);
-        return mark === MEEM_HI ? MEEM_LO : mark;
-    }
-    if (tag === 'allah_dagger_alef') return DAGGER;
-    if (tag === 'madd_iwad') return ALEF; // the added alef (full cell)
-    if (tag === 'iltiqaa_kasra' || tag === 'iltiqaa') return KASRA;
-    // hamza-waṣl connecting vowel: pick the haraka by the sounded vowel. Match the
-    // BASE vowel (first char) so the long ibtidaa form (i:/u:, ٱئْتُونِى) maps too.
-    const v = phone?.[0];
-    return v === 'i' ? KASRA : v === 'u' ? DAMMA : FATHA;
-}
-
-/** The FULL-cell glyph for an implicit madd (chars==='') — dagger / alef. */
-export function implicitMaddGlyph(tag: string | null): string {
-    return tag === 'madd_iwad' ? ALEF : DAGGER;
+/** The DK glyph for a SMALL cell — its own mark. A cell the rasm wrote nothing
+ *  for still carries one: the producer takes it from the reading (the kasra a
+ *  reader starting on `ٱئْتِ` says), so nothing here is inferred from a sound. */
+export function cellGlyph(chars: string): string {
+    // The iqlab mini-meem always DISPLAYS the low-meem glyph (cleaner than the
+    // isolated high-meem); pushSmall slots it by the source mark (MEEM_HI →
+    // above, MEEM_LO → below).
+    const mark = firstMark(chars);
+    return mark === MEEM_HI ? MEEM_LO : mark;
 }

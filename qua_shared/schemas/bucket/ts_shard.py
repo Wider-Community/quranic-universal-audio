@@ -28,23 +28,22 @@ may carry a cross-word tajweed bridge rule — see
 ``qua_sdk.components.timing.lib.cells``).
 
 The optional 6th slot ``cells`` (schema v5) is the per-character phoneme cells
-from the phonemizer's ``character_phoneme_mappings()`` — the full per-character
-breakdown. From the SDK annotator move, cells include ``role == 'base'``
-(consonant) rows alongside ``haraka``/``tanween``/``madd`` — the structure is
-unchanged (``CellTiming`` / ``ts_shard_cells.parse_cell`` already tolerate every
-role), only the role set written is wider. Each cell is the positional row
-``[chars, role, status, phoneme_indices, source_letter_index, tag, share_group
-(, phoneme_rule_tags)]``; see ``qua_shared/ts_shard_cells.py``. ``phoneme_indices``
-are **word-local indices over the word's indexable phones** (the qalqala ``Q``
-excluded, same coordinate space as the bridge index). The optional 8th slot
-``phoneme_rule_tags`` (schema v8) is a per-phoneme tag list parallel to
-``phoneme_indices`` — each entry a rule key or ``None`` — for cells whose phonemes
-carry distinct tajweed (muqattaat). Read via ``ts_shard_cells.parse_cell`` — never
-unpack positionally, and tolerate a missing 6th slot on v3/v4 shards and a missing
-8th slot on v5-v7 shards.
+the producer's projection writes — the full per-character breakdown, ``role ==
+'base'`` (consonant) rows alongside ``haraka``/``tanween``/``madd``. Each cell is
+the positional row ``[chars, role, status, phoneme_indices, source_letter_index,
+rules, share_group]`` plus an optional 8th ``phoneme_rules`` (one rule list per
+entry of ``phoneme_indices``, written only where the cell's phones do not all
+name the same thing); see ``qua_shared/ts_shard_cells.py``.
+``phoneme_indices`` are **word-local indices over the word's indexable phones**
+(the qalqala ``Q`` excluded, same coordinate space as the bridge index).
+``rules`` (schema v11) is the cell's ordered rule list — every rule the producer
+fired on the grapheme, no primary pick — and may be empty. Read via
+``ts_shard_cells.parse_cell`` — never unpack positionally, and tolerate a missing
+6th slot on v3/v4 shards.
 
-Extras handling: ``extra="forbid"`` + ``strip_and_warn`` on the document and
-``_meta``. The word/letter/phone tuples are positional and are validated by
+Extras handling: ``extra="forbid"`` + ``strip_and_warn`` on the document;
+``_meta`` is ``extra="allow"`` so aligner provenance the writer adds later rides
+through. The word/letter/phone tuples are positional and are validated by
 arity, not by a key set, so they carry no extras surface.
 """
 
@@ -71,35 +70,18 @@ LetterTiming = tuple[str, int | None, int | None] | tuple[str, int | None, int |
 # loose ``list`` of the union of cell types rather than a fixed tuple.
 PhoneTiming = list[str | int | bool]
 
-# Cell row (the 6th word slot): a per-character haraka/tanween cell.
-# ``[chars, role, status, phoneme_indices, source_letter_index, tag, share_group
-#   (, phoneme_rule_tags (, secondary_tags))]``.
+# Cell row (the 6th word slot): a per-character cell, seven slots plus an optional
+# 8th. ``[chars, role, status, phoneme_indices, source_letter_index, rules,
+# share_group(, phoneme_rules)]``.
 # ``role`` / ``status`` are the codegen-source enums (``bucket/cell_vocab``);
-# ``phoneme_indices`` are word-local indices over the word's indexable phones.
-# The optional 8th slot ``phoneme_rule_tags`` (schema v8) is a per-phoneme tag
-# list parallel to ``phoneme_indices`` (same length), each entry a rule key or
-# ``None`` — carries per-phoneme tajweed for cells whose phonemes diverge from
-# the cell ``tag`` (muqattaat: the long vowel gets its madd, a merged nasal gets
-# its idgham, etc.). The optional 9th slot ``secondary_tags`` (schema v9) lists
-# extra rules that co-occur on the grapheme but lost the single-``tag`` pick (in
-# practice ``["tafkheem"]`` on a heavy madd/qalqala cell); when only it is present
-# the 8th slot is padded ``None`` to keep it position-stable. Both absent on older
-# shards (readers tolerate the missing slots).
+# ``phoneme_indices`` are word-local indices over the word's indexable phones;
+# ``rules`` is the cell's ordered rule list (v11), possibly empty;
+# ``phoneme_rules`` is one such list per phone, present only where they differ.
 CellTiming = (
-    tuple[str, CellRole, CellStatus, list[int], int, str | None, int | None]
+    tuple[str, CellRole, CellStatus, list[int], int, list[str], int | None]
     | tuple[
-        str, CellRole, CellStatus, list[int], int, str | None, int | None, list[str | None] | None
-    ]
-    | tuple[
-        str,
-        CellRole,
-        CellStatus,
-        list[int],
-        int,
-        str | None,
-        int | None,
-        list[str | None] | None,
-        list[str],
+        str, CellRole, CellStatus, list[int], int, list[str], int | None,
+        list[list[str]] | None,
     ]
 )
 
@@ -127,7 +109,7 @@ class TsShardCell(BaseModel):
     ``CellRole`` / ``CellStatus`` / ``TajweedRule`` as TS string unions for the FE
     (json2ts drops enums referenced only inside a positional tuple), and documents
     the row's fields by name. It is never validated against real shard data (the
-    positional ``CellTiming`` is), so typing the rule slots as ``TajweedRule`` is a
+    positional ``CellTiming`` is), so typing ``rules`` as ``TajweedRule`` is a
     codegen convenience that does not constrain the byte-pass-through read.
     """
 
@@ -138,10 +120,9 @@ class TsShardCell(BaseModel):
     status: CellStatus
     phoneme_indices: list[int]
     source_letter_index: int
-    tag: TajweedRule | None = None
+    rules: list[TajweedRule] = Field(default_factory=list)
     share_group: int | None = None
-    phoneme_rule_tags: list[TajweedRule | None] | None = None
-    secondary_tags: list[TajweedRule] | None = None
+    phoneme_rules: list[list[TajweedRule]] | None = None
 
 
 class TsShardSegment(BaseModel):
@@ -171,7 +152,8 @@ class TsShardMeta(BaseModel):
 
     Aligner provenance (``padding``, ``beam``, ``method``, ``aligner_model``,
     ``shared_cmvn``, ``audio_source``, ``created_at``) passes through when the
-    source ``_meta`` carried it. Audio routing (reciter / url_template /
+    source ``_meta`` carried it, and ``phonemizer_version`` names the producer
+    that read the cells. Audio routing (reciter / url_template /
     audio_urls) is deliberately NOT here — the audio-manifest sidecar is the
     source of truth. ``extra="allow"`` so the optional provenance fields the
     writer copies through stay typed-open for the FE.
