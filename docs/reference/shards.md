@@ -694,7 +694,7 @@ absences a reader tolerates independently of it.
 | FE types | `scripts/codegen/regen_fe_types.py` | regenerates `lib/types/generated/schemas.ts`; CI fails the build on the diff |
 | Parity | `qua_shared/tests/test_cell_vocab_parity.py` | the literal value sets, plus the live-producer check that composes the SDK rename map |
 | Declared counts | `scripts/diagnostics/ts_bounded_vocab.py` | `DECLARED`, in the same commit (§9) |
-| Job image | `inspector/services/admin/timestamps_jobs.py` | `JOB_IMAGE` defaults to the prebuilt Space image `hf.co/spaces/hetchyy/quran-ts-job`, which bakes the phonemizer into `/env` — a **fresh generation** sees a new release only once that image is rebuilt ([timestamps-job.md](timestamps-job.md)). `_INSTALL` is the bootstrap fallback only (stock mambaforge base) and floors at `quranic-phonemizer>=2.8,<3`, so it resolves the newest 2.x at launch |
+| Job image | `inspector/services/admin/timestamps_jobs.py` | `JOB_IMAGE` defaults to the prebuilt Space image `hf.co/spaces/hetchyy/quran-ts-job`, which bakes the phonemizer into `/env` — a **fresh generation** sees a new release only once that image is rebuilt ([timestamps-job.md](timestamps-job.md)). `_INSTALL` is the bootstrap fallback only (stock mambaforge base) and floors at `quranic-phonemizer>=2.13,<3`, so it resolves the newest 2.x at launch. Keep the two floors in lockstep — the image bakes its pin at BUILD time, so a bump here without a Space rebuild leaves the job on the older producer |
 
 ### The pipeline
 
