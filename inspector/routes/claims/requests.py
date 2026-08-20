@@ -267,26 +267,12 @@ def list_requests(user):
 
 
 # ---------------------------------------------------------------------------
-# Owner: intake accept / probe / resolve (slugless new-combo / new-reciter)
+# Owner: intake probe / resolve / ingest (slugless new-combo / new-reciter)
+#
+# There is no accept step — a submission lands ``pending`` and is directly
+# ingestable (aligning it IS the acceptance). Ingest flips it to ``accepted``
+# when it back-fills the slug.
 # ---------------------------------------------------------------------------
-
-
-@requests_bp.route("/admin/requests/<rid>/accept", methods=["POST"])
-@require_same_origin
-@require_capability("intake.accept")
-def accept_intake(user, rid: str):
-    """Approve an intake request + queue it for offline ingest. Body (new-reciter
-    only): owner-confirmed canonical ``reciter_id``. No catalog write here —
-    source/channel/slug are determined by ingest from the actual audio."""
-    body = request.get_json(silent=True) or {}
-    reciter_id = body.get("reciter_id")
-    try:
-        intake_service.accept(rid, actor=actor_for(user), reciter_id=reciter_id)
-    except intake_service.NotIntakeRequest:
-        return jsonify({"error": "unknown intake request"}), 404
-    except intake_service.IntakeError as e:
-        return jsonify({"error": str(e)}), 400
-    return jsonify({"ok": True})
 
 
 def _resolve_owner_actor() -> tuple[Actor | None, tuple | None]:

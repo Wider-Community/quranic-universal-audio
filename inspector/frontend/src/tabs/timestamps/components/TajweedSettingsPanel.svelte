@@ -133,6 +133,7 @@
                     type="button"
                     class="tjs-swatch"
                     class:kubra={row.kubra}
+                    class:border={row.border}
                     style:--sw={`var(${row.colorVar})`}
                     title={changeColourTitle}
                     onclick={() => inputs[label]?.click()}
@@ -427,6 +428,13 @@
     .tjs-swatch:hover {
         border-color: var(--accent);
         box-shadow: inset 0 -3px 0 var(--sw), 0 0 0 2px var(--accent-tint);
+    }
+    /* Special-rules preview: the full ring the cell draws, not a bottom bar. */
+    .tjs-swatch.border {
+        box-shadow: inset 0 0 0 2px var(--sw);
+    }
+    .tjs-swatch.border:hover {
+        box-shadow: inset 0 0 0 2px var(--sw), 0 0 0 2px var(--accent-tint);
     }
     /* kubrā preview: short side-wraps curling up the chip's bottom corners. */
     .tjs-swatch.kubra .kl,

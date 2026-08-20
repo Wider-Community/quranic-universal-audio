@@ -1,13 +1,14 @@
-"""Request queue ops — list / show / resolve / accept / probe.
+"""Request queue ops — list / show / resolve / probe.
 
   admin_requests.py list                                     # default: pending
   admin_requests.py list --status accepted
   admin_requests.py show REQUEST_ID
   admin_requests.py resolve REQUEST_ID --status archived --reason "stale"
-  admin_requests.py accept REQUEST_ID [--reciter-id ID]      # intake-only
   admin_requests.py probe REQUEST_ID                         # intake reachability
 
 The "request" rows cover intake (slugless), edit, and admin-action kinds.
+There is no accept step — a slugless intake is ingested directly by the offline
+pipeline (aligning it is the acceptance); ingest flips it to ``accepted``.
 Open docs/reference/admin-dashboard.md for the Requests compartment shape.
 """
 
@@ -63,16 +64,6 @@ def _resolve(a, ctx) -> int:
     return 0
 
 
-def _accept(a, ctx) -> int:
-    from services.admin import intake  # noqa: E402
-    if a.dry_run:
-        print(f"DRY RUN — would accept {a.request_id}"); return 0
-    slug = intake.accept(a.request_id, actor=ctx.actor, reciter_id=a.reciter_id)
-    print(f"accepted; reciter_id={slug}")
-    bs.after_write_banner(a)
-    return 0
-
-
 def _probe(a, ctx) -> int:
     from services.admin import intake  # noqa: E402
     res = intake.probe(a.request_id)
@@ -93,18 +84,15 @@ def main() -> int:
     pr.add_argument("--status", choices=("accepted", "rejected", "archived"),
                     default="archived")
     pr.add_argument("--reason"); bs.add_common_args(pr)
-    pa = sub.add_parser("accept"); pa.add_argument("request_id")
-    pa.add_argument("--reciter-id", help="custom reciter id (intake mint flow)")
-    bs.add_common_args(pa)
     pp = sub.add_parser("probe"); pp.add_argument("request_id")
     bs.add_common_args(pp, mutating=False)
 
     a = p.parse_args()
-    write = a.cmd in ("resolve", "accept")
+    write = a.cmd == "resolve"
     return bs.run(
         a,
         lambda ctx: {"list": _list, "show": _show, "resolve": _resolve,
-                     "accept": _accept, "probe": _probe}[a.cmd](a, ctx),
+                     "probe": _probe}[a.cmd](a, ctx),
         need_actor=write, mutates=write, safe_write=write,
     )
 

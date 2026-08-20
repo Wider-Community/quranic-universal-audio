@@ -1,17 +1,23 @@
 <!--
   ThemeToggle — a single icon button cycling System → Light → Dark → System.
 
-  System (the default) follows the device's prefers-color-scheme live; Light and
-  Dark are explicit overrides. The icon shows the current MODE (monitor / sun /
-  moon) so "following the device" is legible, not hidden. Fully token-driven so
-  it re-skins itself.
+  The icon always shows the RESOLVED appearance (sun = light, moon = dark). In
+  System mode (the default, following the device's prefers-color-scheme live) a
+  small monitor badge is pinned to the corner to mark it as device-driven —
+  so the button reads as "this is what you're seeing, and it's automatic",
+  rather than hiding the current look behind a monitor glyph. Token-driven so it
+  re-skins itself.
 -->
 <script lang="ts">
     import * as m from '$lib/paraglide/messages';
     import { i18n } from '$lib/i18n/locale.svelte';
     import { themeStore } from '../stores/theme.svelte';
+    import AutoBadge from './AutoBadge.svelte';
 
     const mode = $derived(themeStore.mode);
+    const isSystem = $derived(mode === 'system');
+    // The icon reflects the resolved theme (what's on screen), in every mode.
+    const resolved = $derived(themeStore.current);
     const label = $derived(
         (i18n.locale,
         mode === 'system'
@@ -25,18 +31,12 @@
 <button
     type="button"
     class="theme-toggle"
+    class:auto={isSystem}
     title={label}
     aria-label={label}
     onclick={() => themeStore.cycle()}
 >
-    {#if mode === 'system'}
-        <!-- monitor (following device) -->
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <rect x="2" y="3" width="20" height="14" rx="2" />
-            <path d="M8 21h8M12 17v4" />
-        </svg>
-    {:else if mode === 'light'}
+    {#if resolved === 'light'}
         <!-- sun -->
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -50,10 +50,14 @@
             <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
         </svg>
     {/if}
+    {#if isSystem}
+        <AutoBadge />
+    {/if}
 </button>
 
 <style>
     .theme-toggle {
+        position: relative;
         display: grid;
         place-items: center;
         width: 32px;

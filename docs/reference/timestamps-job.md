@@ -1,28 +1,14 @@
-# Timestamps subsystem (format + read-path + generation job)
+# Timestamps subsystem (read-path + generation job)
 
-Two coupled surfaces: the **temporal segment-array format** the Timestamps tab serves, and the **admin-triggered HF Job** that generates it. Audio internals (peaks, Xing, VBR) live in the `inspector-audio` skill; this doc owns the timestamps shard format + the job lifecycle.
+Two coupled surfaces: the per-chapter **shard** the Timestamps tab serves, and the **admin-triggered HF Job** that generates it. The shard's own schema (word tuple, letter/phone/cell rows, the phonemizer/SDK/MFA/FE contracts) is [shards.md](shards.md); audio internals (peaks, Xing, VBR) live in the `inspector-audio` skill. This doc owns the write path, the consumer-side dedup, the read path and the job lifecycle.
 
-## 1. Format — temporal segment-array shards
+## 1. Where shards live and who writes them
 
 Per-chapter shards live at `reciters/<slug>/timestamps/<chapter>.json.gz` (gzipped). The bucket gz body **is the wire body** — the read path is a byte pass-through (no inflate/reshape/recompress on serve). One canonical artifact — no single-file `timestamps_full.json` / `timestamps.json` is written.
 
-A shard is a flat `segments[]` array in recitation order, every accepted segment stored **raw** (re-recitations + within-pass loopbacks retained verbatim — recitation truth). Dedup is not applied at write; it is a consumer-side projection (§1a).
+A shard is a flat `segments[]` array in recitation order, every accepted segment stored **raw** (re-recitations + within-pass loopbacks retained verbatim — recitation truth). Dedup is not applied at write; it is a consumer-side projection (§1a). `ref` is always a single verse `"surah:ayah"` — cross-verse refs cannot be expressed and the job blocks on them upstream (§3), so the bucket never carries one.
 
-```jsonc
-{
-  "_meta": { "schema_version": 2, "chapter": 1, "audio_category": "by_surah",
-             /* aligner provenance: padding, beam, method, aligner_model,
-                shared_cmvn, audio_source, created_at */ },
-  "segments": [
-    { "ref": "1:1", "t": [start_ms, end_ms],
-      "words": [[widx, start_ms, end_ms, [[char,s,e]...], [[phone,s,e]...]], ...] },
-    ...                                  // recitation order == array order (sortable by t[0])
-  ]
-}
-```
-
-- **`ref` is always a single verse** `"surah:ayah"`. Cross-verse refs cannot be expressed; the job blocks on them upstream (§3) so the bucket never carries one. `_meta` is slim — `reciter` (it's the path) and `url_template`/`audio_urls` (catalog + audio-manifest sidecar are ground truth) are excluded.
-- **Word shape** (per segment): `[widx, start_ms, end_ms, [[char,s,e(,silent)]...], [[phone,s,e]...]]` — letters/phones nested per word. From **schema v4**, each letter carries a 4th `silent` bool (phonemizer `silent_flags()`, stamped by the SDK annotator `qua_sdk.components.timing.lib.cells`) — true when the grapheme produces no audible phoneme at its own position (hamza wasl, lam shamsiyah, otiose tanween alef, …), so the Timestamps highlight skips it once letters are split one-per-cell. Legacy v3 shards omit it.
+> **Row schema → [shards.md](shards.md).** Document shape, `_meta`, the segment entry and `wasl` flag, the word tuple, the letter/phone/cell rows slot by slot, v11 and v10, and the accessors (`qua_shared/ts_shard_cells.py`, `ts_shard_letters.py`) a consumer must read them through.
 
 | Concept | What |
 |---|---|
@@ -66,14 +52,14 @@ Admin launches it from the Releases tab's in-row **Generate / Regenerate** expan
 
 | Piece | Detail |
 |---|---|
-| `launch(slug, *, settings: TsJobSettings)` | Stages `qua_shared` + `qua_jobs` + the **qua_sdk source** → `aligner-bucket/code/` (SDK tree resolved `QUA_SDK_SRC` env → sibling `../qua-sdk/src/qua_sdk` → installed package; not found → warn + reuse the existing bucket copy — the deployed Space has no checkout). SDK staging = `*.py` + `domain/data/*.json` + `py.typed`, excluding `__pycache__`/`_dp_core*`. Then `run_job()` (image `JOB_IMAGE`, command `_job_command()`, flavor `cpu-upgrade` default, mounts inspector bucket rw at `/data` + `aligner-bucket` ro at `/aux`, label `{task: timestamps, reciter: slug}`). |
+| `launch(slug, *, settings: TsJobSettings)` | Stages `qua_shared` + `qua_jobs` + the **qua_sdk source** → `aligner-bucket/code/` (SDK tree resolved `QUA_SDK_SRC` env → sibling `../qua-sdk/src/qua_sdk` → installed package). SDK staging = `*.py` + tree-wide `*.json` + `py.typed`, excluding `__pycache__`/`_dp_core*`, and **mirrors** — a path the source dropped is deleted, else a renamed module keeps shadowing the current one on `PYTHONPATH`. It also writes `code/qua_sdk_stage.json` recording the staged producer's `CELL_ROW_VERSION`. **The deployed Space resolves no SDK** (private workspace member, no wheel, no checkout) so it warns and reuses the bucket copy — then `stage_sdk.assert_staged_sdk(SEGMENT_SCHEMA_VERSION)` raises `JobStagingError` if that copy's marker disagrees with the schema this repo stamps. Re-stage from a machine with a checkout: `QUA_SDK_SRC=<path>/packages/sdk/src/qua_sdk`. Then `run_job()` (image `JOB_IMAGE`, command `_job_command()`, flavor `cpu-upgrade` default, mounts inspector bucket rw at `/data` + `aligner-bucket` ro at `/aux`, label `{task: timestamps, reciter: slug}`). |
 | **Canonical job id** | `run_job()` returns a **transient** id ≠ the container's injected `JOB_ID`. `_resolve_launched_job_id(slug)` resolves the real id from `list_jobs()` by label so the launcher link + the job's self-written record agree. (Verified: a run showed `…e80a` from `run_job` vs `…880b` canonical.) |
 | Linkage | Appends the canonical id to `delivery_states.timestamps_job_ids` via `state.record_timestamps_job` — **no lifecycle transition** (reciter stays UNDER_REVIEW). |
 | Single-flight | `running_job_for(slug)` rejects a 2nd in-flight job (two would race the same `timestamps/` shards). |
 
 ### Entrypoint (`qua_jobs/generate_timestamps.py`)
 
-Env-driven. **Alignment-only** — the job never persists audio nor bakes peaks (both are populated offline by katana extraction). MFA execution goes through qua_sdk's `MfaLocalAligner` (`qua_shared/timestamps_pipeline.py::LocalMfaBackend` serial when `WORKERS==1`, `_init_worker`/`_worker_align` process pool otherwise; `retry_beam` pinned to `beam` — no implicit retry). Reads `detailed.json` from the mount; **blocks before any alignment** if any saved segment carries a compound cross-verse `matched_ref` (`_find_cross_verse_segments` → records the failure + notifies, so the offending segs surface in the Reviews tab) — the segment-array shard requires single-verse refs. Otherwise injects per-chapter audio source — **bucket `audio/<ch>.mp3` first, CDN manifest URL fallback (transient, streamed)** — then runs `process()` (in-container MFA, `WORKERS` default `min(cpu_count, 8)`; higher OOMs at simultaneous KalpyEngine model-extraction). Startup logs the resolved model/dictionary paths + `qua_sdk` + `quranic-phonemizer` versions. On success `build_raw_v2` → `build_segment_shards` (§1) writes one `{_meta, segments[]}` shard per chapter.
+Env-driven. **Alignment-only** — the job never persists audio nor bakes peaks (both are populated offline by katana extraction). MFA execution goes through qua_sdk's `MfaLocalAligner` (`qua_shared/timestamps_pipeline.py::LocalMfaBackend` serial when `WORKERS==1`, `_init_worker`/`_worker_align` process pool otherwise; `retry_beam` pinned to `beam` — no implicit retry). Reads `detailed.json` from the mount; **blocks before any alignment** if any saved segment carries a compound cross-verse `matched_ref` (`_find_cross_verse_segments` → records the failure + notifies, so the offending segs surface in the Reviews tab) — the segment-array shard requires single-verse refs. Otherwise injects per-chapter audio source — **bucket `audio/<ch>.mp3` first, CDN manifest URL fallback (transient, streamed)** — then runs `process()` (in-container MFA, `WORKERS` default `min(cpu_count, 8)`; higher OOMs at simultaneous KalpyEngine model-extraction). Startup logs the resolved model/dictionary paths + `qua_sdk` + `quranic-phonemizer` versions. On success `build_raw_v2` → `annotate_v2_doc` (the SDK stamper: silent flags, phone spellings, bridge tags, cells — see [shards.md](shards.md)) → `build_segment_shards` writes one `{_meta, segments[]}` shard per chapter.
 
 | Env | Effect |
 |---|---|

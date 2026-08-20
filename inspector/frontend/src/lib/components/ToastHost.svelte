@@ -34,32 +34,26 @@
     .toast {
         pointer-events: auto;
         text-align: start;
-        max-width: 360px;
-        padding: 10px 14px;
-        border-radius: 6px;
-        border: 1px solid transparent;
-        font-size: 0.92rem;
-        line-height: 1.35;
+        min-width: 300px;
+        max-width: 420px;
+        padding: 13px 16px;
+        border-radius: 8px;
+        /* OPAQUE surface — never a translucent tint (a low-alpha fill lets the
+           page bleed through and the text becomes unreadable). Kind is conveyed
+           by an opaque colored left accent bar + border, not a see-through bg. */
+        background: var(--elevated);
+        border: 1px solid var(--border-default);
+        border-inline-start-width: 5px;
+        border-inline-start-color: var(--accent);
+        font-size: 0.94rem;
+        line-height: 1.4;
         color: var(--text-primary);
-        background: var(--panel);
         box-shadow: var(--shadow-pop);
         cursor: pointer;
     }
-    /* Toast kinds: surfaces with a tinted left-edge accent via border. */
-    .toast--info {
-        background: var(--panel);
-        border-color: var(--accent);
-    }
-    .toast--success {
-        background: var(--ok-tint);
-        border-color: var(--ok-solid);
-    }
-    .toast--warn {
-        background: var(--warn-tint);
-        border-color: var(--cta-bg);
-    }
-    .toast--error {
-        background: var(--bad-tint);
-        border-color: var(--bad-solid);
-    }
+    /* Toast kinds recolor only the left accent bar. */
+    .toast--info { border-inline-start-color: var(--accent); }
+    .toast--success { border-inline-start-color: var(--ok-solid); }
+    .toast--warn { border-inline-start-color: var(--cta-bg); }
+    .toast--error { border-inline-start-color: var(--bad-solid); }
 </style>

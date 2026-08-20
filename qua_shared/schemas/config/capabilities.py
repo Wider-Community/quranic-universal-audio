@@ -271,14 +271,6 @@ CAPABILITIES: tuple[Capability, ...] = (
         maintainer=False,
     ),
     _c(
-        "intake.accept",
-        G_REQUESTS,
-        "Accept an intake",
-        "Approve a new-combination / new-reciter intake for offline ingest.",
-        contributor=False,
-        maintainer=False,
-    ),
-    _c(
         "intake.probe",
         G_REQUESTS,
         "Probe an intake source",
@@ -585,6 +577,18 @@ CAPABILITIES: tuple[Capability, ...] = (
         anon=True,
         contributor=True,
         maintainer=True,
+    ),
+    _c(
+        "notify.owner_request_emails",
+        G_SUBSCRIPTIONS,
+        "Email me on new requests",
+        "Get a no-reply email when a new request or submission arrives — an "
+        "existing-delivery edit request, or a new/existing-reciter intake "
+        "submission. Owner-only by default; delegate to maintainers to share "
+        "triage. Toggled from the same email-notifications modal as the "
+        "public subscriptions, but only visible to holders of this capability.",
+        contributor=False,
+        maintainer=False,
     ),
 )
 

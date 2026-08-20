@@ -41,6 +41,11 @@ class EmailPreferences(BaseModel):
     github_release: bool = False
     riwayah_new_recitation: bool = False
     riwayah_first_available: bool = False
+    #: Owner-facing: email on a new request/submission. Only takes effect for a
+    #: holder of the ``notify.owner_request_emails`` capability (the route resets
+    #: it to ``False`` for anyone else on save; the emitter double-checks at send
+    #: time too, so a since-revoked holder stops receiving it).
+    owner_new_request: bool = False
     #: Shared reciter_ids powering every ``selected``-mode event.
     reciters: list[str] = Field(default_factory=list)
     #: Shared riwayah slugs powering both riwayah events.

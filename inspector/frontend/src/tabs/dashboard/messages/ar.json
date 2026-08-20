@@ -144,6 +144,10 @@
   "dashboard_email_prefs_email_invalid": "أدخل عنوان بريد إلكتروني صالحا.",
   "dashboard_email_prefs_email_required": "أضف عنوانا لتلقي هذه الرسائل.",
   "dashboard_email_prefs_email_help": "يستخدم للإشعارات أدناه فقط.",
+  "dashboard_email_prefs_group_owner": "تنبيهات المالك",
+  "dashboard_email_prefs_owner_new_request_title": "وصول طلب جديد",
+  "dashboard_email_prefs_owner_new_request_desc": "طلب تعديل على تلاوة موجودة، أو تقديم قارئ جديد أو تركيبة جديدة لقارئ موجود.",
+  "dashboard_email_prefs_owner_new_request_toggle_label": "راسلني عند وصول طلب جديد",
   "dashboard_email_prefs_group_contributions": "مساهماتك",
   "dashboard_email_prefs_request_processed_title": "تمت معالجة طلبك",
   "dashboard_email_prefs_request_processed_desc": "قارئ طلبته جاهز للمراجعة.",
@@ -263,7 +267,7 @@
   "dashboard_request_reject_soft_button": "أعد",
   "dashboard_request_reject_hard_button": "أهمل",
   "dashboard_submit_failed_fallback": "فشل التقديم.",
-  "dashboard_submit_queued_toast": "شكرا — تم وضع ما قدمته في قائمة المراجعة.",
+  "dashboard_submit_queued_toast": "شكرا — تم استلام ما قدمته وستتم معالجته قريبا. فعّل إشعارات البريد الإلكتروني لتصلك رسالة عند جهوز التلاوة.",
   "dashboard_submit_wizard_aria": "قدم تلاوة",
   "dashboard_submit_wizard_title": "قدم تلاوة",
   "dashboard_submit_stepper_aria": "التقدم",
@@ -307,6 +311,7 @@
   "dashboard_submit_reciter_search_placeholder": "اكتب اسما بالعربية أو اللاتينية…",
   "dashboard_submit_reciter_results_aria": "نتائج القراء",
   "dashboard_submit_reciter_no_match": "لا تطابق. جرب اسما جزئيا، أو انتقل إلى «قارئ جديد».",
+  "dashboard_submit_reciter_list_hint": "عرض {shown} من {total} — اكتب للبحث في القائمة الكاملة.",
   "dashboard_submit_reciter_combos_unit": [
     {
       "declarations": [

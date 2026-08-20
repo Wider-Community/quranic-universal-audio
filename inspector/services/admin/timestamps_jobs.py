@@ -44,6 +44,7 @@ from pathlib import Path
 from typing import Any
 
 from qua_shared.schemas import StaleReason, TsJobRecord, TsJobSettings
+from qua_shared.timestamps_shards import SEGMENT_SCHEMA_VERSION
 from services.state import state as state_service
 from services.storage.hf_bucket import StorageNotFound, get_backend, resolve_bucket_repo
 
@@ -125,7 +126,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 _INSTALL = (
     "mamba install -y -c conda-forge python=3.11 montreal-forced-aligner "
     "&& /opt/conda/bin/pip install gradio soundfile tgt numpy PyYAML requests psutil "
-    "'quranic-phonemizer>=2.8,<3' 'huggingface_hub>=1.8.0' "  # >=2.8: char-phoneme mappings + secondary tags (v9 cells); marks, maddah-token, carrier-waw silent
+    "'quranic-phonemizer>=2.13,<3' 'huggingface_hub>=1.8.0' "  # >=2.13: the v11 cell rows read this producer's rule attributions
     "&& mkdir -p /scratch"
 )
 _ENTRYPOINT = "python /aux/code/qua_jobs/generate_timestamps.py"
@@ -174,33 +175,21 @@ def _resolve_qua_sdk_src() -> Path | None:
     return None
 
 
-def _qua_sdk_stage_adds(sdk_src: Path) -> list[tuple[str, str]]:
-    """(local, bucket) pairs for the qua_sdk tree: ``*.py`` + ``py.typed`` +
-    ``domain/data/*.json``, excluding ``__pycache__`` and the compiled
-    ``_dp_core`` artefacts (the job uses timing only, never the DP core)."""
-    adds: list[tuple[str, str]] = []
-    for path in sdk_src.rglob("*"):
-        if not path.is_file() or "__pycache__" in path.parts:
-            continue
-        if path.name.startswith("_dp_core"):
-            continue
-        rel = path.relative_to(sdk_src).as_posix()
-        keep = (
-            path.suffix == ".py"
-            or path.name == "py.typed"
-            or (path.suffix == ".json" and rel.startswith("domain/data/"))
-        )
-        if keep:
-            adds.append((str(path), f"code/qua_sdk/{rel}"))
-    return adds
-
-
 def _stage_job_code() -> None:
     """Upload qua_shared + qua_jobs + the qua_sdk source to
     ``aligner-bucket/code/`` so the job can import the pipeline and the SDK
     aligner. Idempotent (Xet skips unchanged content); cheap enough to run on
-    every launch so the job always runs current code."""
+    every launch so the job always runs current code.
+
+    qua_shared + qua_jobs ship in the Space image, so they ride every deploy.
+    The SDK does not (private workspace member), so a Space launch leaves the
+    bucket copy alone and ``_assert_staged_sdk`` is what catches it going
+    stale. A host that DOES hold a checkout mirrors the tree — deleting what
+    the source dropped — and stamps the marker that gate reads."""
     from huggingface_hub import batch_bucket_files
+
+    # Lazy: services.admin.jobs.__init__ imports this module back through ts.py.
+    from services.admin.jobs import stage_sdk
 
     adds: list[tuple[str | Path | bytes, str]] = []
     for sub in ("qua_shared", "qua_jobs"):
@@ -210,6 +199,7 @@ def _stage_job_code() -> None:
                 continue
             rel = path.relative_to(_REPO_ROOT).as_posix()
             adds.append((str(path), f"code/{rel}"))
+    deletes: list[str] = []
     sdk_src = _resolve_qua_sdk_src()
     if sdk_src is None:
         log.warning(
@@ -218,10 +208,18 @@ def _stage_job_code() -> None:
             "existing bucket copy"
         )
     else:
-        adds.extend(_qua_sdk_stage_adds(sdk_src))
-    if adds:
-        batch_bucket_files(ALIGNER_BUCKET, add=adds)
-        log.info("staged %d job-code files to %s/code/", len(adds), ALIGNER_BUCKET)
+        sdk_adds = stage_sdk.stage_adds(sdk_src)
+        adds.extend(sdk_adds)
+        adds.append((stage_sdk.marker_bytes(sdk_src, len(sdk_adds)), stage_sdk.MARKER_PATH))
+        deletes = stage_sdk.stale_targets({target for _, target in sdk_adds})
+    if adds or deletes:
+        batch_bucket_files(ALIGNER_BUCKET, add=adds or None, delete=deletes or None)
+        log.info(
+            "staged %d job-code files to %s/code/ (%d stale removed)",
+            len(adds),
+            ALIGNER_BUCKET,
+            len(deletes),
+        )
 
 
 def running_job_for(slug: str) -> str | None:
@@ -383,11 +381,17 @@ def launch(slug: str, *, settings: TsJobSettings, webhook_base: str | None = Non
     """
     from huggingface_hub import Volume, get_token, run_job
 
+    from services.admin.jobs import stage_sdk
+
     row = state_service.get_row(slug)
     if row is None:
         raise ValueError(f"unknown slug {slug}")
 
     _stage_job_code()
+    # The job builds cell rows with the STAGED producer and stamps them with the
+    # version this repo carries. Launching on a mismatch writes a shard whose
+    # rows and whose version disagree, which no reader recovers from.
+    stage_sdk.assert_staged_sdk(SEGMENT_SCHEMA_VERSION)
     bucket = resolve_bucket_repo()
 
     env = {

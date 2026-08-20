@@ -38,6 +38,9 @@ logger = logging.getLogger(__name__)
 email_prefs_bp = Blueprint("email_prefs", __name__, url_prefix="/api")
 
 _CAP = "notify.email_subscriptions"
+#: Gates the owner-facing `owner_new_request` field specifically — separate
+#: from `_CAP`, which just gates the feature existing at all.
+_OWNER_REQUEST_CAP = "notify.owner_request_emails"
 
 # Mirror of the FE `isValidEmail` — a single `@` with non-empty local + domain.
 _EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
@@ -83,6 +86,12 @@ def set_email_preferences():
         prefs = EmailPreferences.model_validate(request.get_json(silent=True) or {})
     except ValidationError as e:
         return jsonify({"error": "invalid preferences", "detail": e.errors(include_url=False)}), 400
+
+    # Defense in depth: the FE hides this toggle for non-holders, but a direct
+    # POST could still try to flip it — silently drop it rather than 403 the
+    # whole save.
+    if prefs.owner_new_request and not cap_service.can(user, _OWNER_REQUEST_CAP):
+        prefs.owner_new_request = False
 
     email = repo_subs.normalize_email(prefs.email)
     if not _EMAIL_RE.match(email):

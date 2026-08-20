@@ -137,7 +137,7 @@ def _resolve_row(
 ) -> bool:
     """Shared resolution core. Stamps the terminal status + archival metadata on
     one already-fetched pending row. ``slug`` back-fills ``requests.slug`` when
-    given (intake accept mints a delivery and links it); ``None`` keeps the
+    given (intake ingest mints a delivery and links it); ``None`` keeps the
     existing slug. Both the slug-keyed and id-keyed entry points funnel here so
     the status-mutation logic lives in exactly one place."""
     repo_access.ensure_user(transitioned_by.hf_user_id, login=transitioned_by.login_at_time)
@@ -199,15 +199,15 @@ def resolve_by_id(
     at: datetime | None = None,
 ) -> bool:
     """Resolve a pending request by id (slugless intake flow — no state machine).
-    ``slug`` optionally links a freshly-minted delivery on accept. Returns False
-    if the id is unknown or already terminal.
+    ``slug`` optionally links a freshly-minted delivery. Returns False if the id
+    is unknown or already terminal. There is no accept step — ingest resolves a
+    ``pending`` intake straight to ``accepted`` while attaching the minted slug.
 
     Back-fill exception: an already-``accepted`` intake row whose slug is still
-    NULL may be re-resolved to ``accepted`` *to attach* the minted ``slug`` (the
-    ingest step — accept flips the row to ``accepted`` before ingest mints the
-    delivery). The status doesn't change; only the slug is attached. Re-resolving
-    a non-accepted terminal row, or one whose slug is already set, returns
-    False."""
+    NULL may be re-resolved to ``accepted`` *to attach* the minted ``slug``
+    (covers a row that was accepted under the legacy flow before ingest mints).
+    The status doesn't change; only the slug is attached. Re-resolving a
+    non-accepted terminal row, or one whose slug is already set, returns False."""
     row = get_by_id(request_id)
     if row is None:
         return False

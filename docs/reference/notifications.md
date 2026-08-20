@@ -229,8 +229,24 @@ two *shared* selections reused across events (pick once, applies to both):
 | `github_release` | bool | A new GitHub release is cut |
 | `riwayah_new_recitation` | bool | New recitation in a followed riwayah |
 | `riwayah_first_available` | bool | A followed riwayah becomes available (one-time) |
+| `owner_new_request` | bool | (owner-gated, see below) A new request/submission arrives |
 | `reciters` | `reciter_id[]` | shared target for every `selected`-scope event |
 | `riwayahs` | slug[] | shared follow-list for both riwayah events |
+
+**`owner_new_request` is capability-gated, not open self-service.** Unlike the
+other six fields, its row in `EmailPrefsModal` only renders for a holder of the
+`notify.owner_request_emails` capability (owner-default, delegatable to
+maintainers — mirrors `notifications.receive_review_alerts` but for the email
+channel). The route also re-checks server-side on save (silently drops the flag
+to `False` for a non-holder rather than 403ing the whole save), and the emitter
+(`emit_owners_new_request`) re-checks *again* at send time against the live
+capability set, so a since-revoked delegate stops receiving it without anyone
+touching their subscription row. Fires immediately (not digested) from
+`services/notifications/emit.py::notify_owners_new_request` — the same call site
+that fans the in-app `request.received` rail card out to review-alert
+recipients — for both request-creation paths (slug-based edit request, slugless
+intake submit). Self-suppressed for the requester. Template:
+`services/email/templates/owner_new_request.html`.
 
 An enabled event whose backing selection is empty is a no-op; the modal warns
 inline rather than blocking save. The reciter/riwayah option sets are derived

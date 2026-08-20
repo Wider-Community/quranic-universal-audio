@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
     badgeForTag,
     badgesForTags,
+    bridgeCellTag,
     DEFAULT_ENABLED,
     isBridgeTag,
     LEGEND,
@@ -21,10 +22,10 @@ const none = (_k: string): boolean => false;
 describe('tajweed-rules — colour map', () => {
     it('keeps the existing tag → CSS-var mapping', () => {
         expect(tajweedColorVar('madd_wajib_muttasil')).toBe('var(--tj-madd-wajib)');
-        expect(tajweedColorVar('idgham_ghunnah_tanween')).toBe('var(--tj-idgham-ghunnah)');
-        expect(tajweedColorVar('noon_ghunnah')).toBe('var(--tj-ghunnah)');
-        expect(tajweedColorVar('iqlab_tanween')).toBe('var(--tj-iqlab)');
-        expect(tajweedColorVar('izhar_halqi')).toBe('var(--tj-izhar-halqi)');
+        expect(tajweedColorVar('idgham_bi_ghunnah')).toBe('var(--tj-idgham-ghunnah)');
+        expect(tajweedColorVar('ghunnah')).toBe('var(--tj-ghunnah)');
+        expect(tajweedColorVar('iqlab')).toBe('var(--tj-iqlab)');
+        expect(tajweedColorVar('izhar')).toBe('var(--tj-izhar-halqi)');
     });
 
     it('now colours the rules promoted in this pass', () => {
@@ -32,17 +33,16 @@ describe('tajweed-rules — colour map', () => {
         expect(tajweedColorVar('madd_tabii')).toBe('var(--tj-madd-tabii)');
         expect(tajweedColorVar('qalqala_sughra')).toBe('var(--tj-qalqala)');
         expect(tajweedColorVar('qalqala_kubra')).toBe('var(--tj-qalqala)');
-        expect(tajweedColorVar('idgham_bila_ghunnah_noon')).toBe('var(--tj-idgham-bila)');
+        expect(tajweedColorVar('idgham_bila_ghunnah')).toBe('var(--tj-idgham-bila)');
         expect(tajweedColorVar('idgham_mutajanisayn_kamil')).toBe('var(--tj-mutajanisayn)');
     });
 
-    it('aliases allah-dagger-alef + madd-iwad to the madd-ṭabīʿī colour', () => {
-        expect(tajweedColorVar('allah_dagger_alef')).toBe('var(--tj-madd-tabii)');
+    it('aliases madd-iwad to the madd-ṭabīʿī colour', () => {
         expect(tajweedColorVar('madd_iwad')).toBe('var(--tj-madd-tabii)');
     });
 
     it('leaves the silent + structural rules uncoloured', () => {
-        for (const t of ['vowel_silent', 'hamza_wasl_silent', 'lam_shamsiyah', 'silent_iltiqaa_sakinayn', 'hamza_wasl_vowel', 'iltiqaa_kasra']) {
+        for (const t of ['hamza_wasl_elision', 'lam_shamsiyyah', 'pausal_sukun', 'hamza_wasl_kasra', 'iltiqaa_kasra']) {
             expect(tajweedColorVar(t)).toBeNull();
         }
         expect(tajweedColorVar(null)).toBeNull();
@@ -58,15 +58,15 @@ describe('tajweed-rules — badge stacking', () => {
 
     it('the first colourable base tag wins (own over propagated); order-independent for tafkheem', () => {
         // a cell carrying its own madd + a propagated idgham keeps the FIRST base
-        expect(badgesForTags(['madd_arid_lissukun', 'idgham_bila_ghunnah_noon']).map((b) => b.legendKey)).toEqual(['madd_arid']);
+        expect(badgesForTags(['madd_arid_lil_sukun', 'idgham_bila_ghunnah']).map((b) => b.legendKey)).toEqual(['madd_arid']);
         // tafkheem listed first still ends up on top
-        expect(badgesForTags(['tafkheem', 'idgham_bila_ghunnah_noon']).map((b) => b.legendKey)).toEqual(['idgham_bila', 'tafkheem']);
+        expect(badgesForTags(['tafkheem', 'idgham_bila_ghunnah']).map((b) => b.legendKey)).toEqual(['idgham_bila', 'tafkheem']);
     });
 
     it('stacks base < merge < tafkheem (a consonant idgham rides ON the target rule)', () => {
         // ٱرْكَب مَّعَنَا: the receiving mīm sounds ghunnah (base) AND is the mutajānisayn
         // target (merge) — the merge bar sits above ghunnah, tafkheem above that.
-        const b = badgesForTags(['meem_ghunnah', 'idgham_mutajanisayn_kamil', 'tafkheem']);
+        const b = badgesForTags(['ghunnah', 'idgham_mutajanisayn_kamil', 'tafkheem']);
         expect(b.map((x) => x.legendKey)).toEqual(['ghunnah', 'mutajanisayn', 'tafkheem']);
         expect(b.map((x) => x.stack)).toEqual(['base', 'merge', 'top']);
         expect(tjShadow(b, all)).toBe(
@@ -80,12 +80,12 @@ describe('tajweed-rules — badge stacking', () => {
     });
 
     it('drops uncolourable + null tags', () => {
-        expect(badgesForTags(['lam_shamsiyah', null, undefined])).toEqual([]);
+        expect(badgesForTags(['lam_shamsiyyah', null, undefined])).toEqual([]);
     });
 });
 
 describe('tajweed-rules — tjShadow', () => {
-    const badges: TjBadge[] = badgesForTags(['idgham_bila_ghunnah_noon', 'tafkheem']);
+    const badges: TjBadge[] = badgesForTags(['idgham_bila_ghunnah', 'tafkheem']);
 
     it('stacks inset bars bottom→top, accumulating the offset', () => {
         const shadow = tjShadow(badges, all);
@@ -137,8 +137,8 @@ describe('tajweed-rules — tooltip names', () => {
     });
 
     it('maps the silent rules to display names', () => {
-        expect(silentTooltip('lam_shamsiyah')).toBe('Lam Shamsiyyah');
-        expect(silentTooltip('silent_iltiqaa_sakinayn')).toBe("Iltiqa' 'as-sakinayn");
+        expect(silentTooltip('lam_shamsiyyah')).toBe('Lam Shamsiyyah');
+        expect(silentTooltip('iltiqaa')).toBe("Iltiqa' 'as-sakinayn");
         expect(silentTooltip('iltiqaa_kasra')).toBe("Iltiqa' 'as-sakinayn");
         expect(silentTooltip('iqlab_silent_noon')).toBe('Iqlab'); // the iqlab silent ن
         expect(silentTooltip('madd_lazim')).toBeNull(); // coloured, not silent-only
@@ -147,9 +147,9 @@ describe('tajweed-rules — tooltip names', () => {
     it('uses the full second-pass tooltip spellings', () => {
         expect(badgeForTag('madd_jaiz_munfasil')!.tooltip()).toBe("Madd Ja'iz Munfassil");
         expect(badgeForTag('madd_wajib_muttasil')!.tooltip()).toBe('Madd Wajib Muttassil');
-        expect(badgeForTag('madd_arid_lissukun')!.tooltip()).toBe("Madd 'Arid-lissukun");
+        expect(badgeForTag('madd_arid_lil_sukun')!.tooltip()).toBe("Madd 'Arid-lissukun");
         expect(badgeForTag('madd_tabii')!.tooltip()).toBe("Madd Tabi'i");
-        expect(badgeForTag('izhar_halqi')!.tooltip()).toBe('Izhar Halqi');
+        expect(badgeForTag('izhar')!.tooltip()).toBe('Izhar Halqi');
         expect(badgeForTag('idgham_mutamathilayn')!.tooltip()).toBe('Idgham Mutamathilayn');
         expect(badgeForTag('idgham_mutajanisayn_naqis')!.tooltip()).toBe('Idgham Mutajanisayn Naqis');
     });
@@ -211,9 +211,74 @@ describe('tajweed-rules — legend + defaults', () => {
 describe('tajweed-rules — bridge tags', () => {
     it('recognises the cross-word idgham mergers', () => {
         expect(isBridgeTag('idgham_shafawi')).toBe(true);
-        expect(isBridgeTag('idgham_bila_ghunnah_tanween')).toBe(true);
+        expect(isBridgeTag('idgham_bila_ghunnah')).toBe(true);
         expect(isBridgeTag('idgham_mutajanisayn_naqis')).toBe(true);
-        expect(isBridgeTag('noon_ghunnah')).toBe(false);
+        expect(isBridgeTag('ghunnah')).toBe(false);
         expect(isBridgeTag(null)).toBe(false);
+    });
+
+    it('folds the bridge vocabulary\'s noon/tanwīn split back onto one cell tag', () => {
+        // A merger phone still names the origin; a cell tag does not.
+        expect(bridgeCellTag('idgham_ghunnah_noon')).toBe('idgham_bi_ghunnah');
+        expect(bridgeCellTag('idgham_ghunnah_tanween')).toBe('idgham_bi_ghunnah');
+        expect(bridgeCellTag('idgham_bila_ghunnah_tanween')).toBe('idgham_bila_ghunnah');
+        // the six spelt the same in both vocabularies pass straight through
+        expect(bridgeCellTag('idgham_shafawi')).toBe('idgham_shafawi');
+        expect(bridgeCellTag('idgham_mutajanisayn_kamil')).toBe('idgham_mutajanisayn_kamil');
+        expect(bridgeCellTag(null)).toBeNull();
+        // and every folded name resolves to a badge
+        for (const b of ['idgham_ghunnah_noon', 'idgham_bila_ghunnah_noon', 'idgham_shafawi']) {
+            expect(badgeForTag(bridgeCellTag(b))).not.toBeNull();
+        }
+    });
+});
+
+describe('tajweed-rules — special rules (the border channel)', () => {
+    it('draws a full inset ring, and leaves the bar offsets alone', () => {
+        const b = badgesForTags(['ghunnah', 'imala', 'tafkheem']);
+        expect(b.map((x) => x.legendKey)).toEqual(['ghunnah', 'tafkheem', 'special']);
+        expect(b.map((x) => x.stack)).toEqual(['base', 'top', 'border']);
+        // the ring is drawn last (so the bars paint over it) and does NOT shift the
+        // 2px/4px bar offsets a ghunnah+tafkheem cell would draw on its own.
+        expect(tjShadow(b, all)).toBe(
+            'inset 0 -2px 0 var(--tj-ghunnah), inset 0 -4px 0 var(--tj-tafkheem), inset 0 0 0 2px var(--tj-special)',
+        );
+        expect(tjShadow(badgesForTags(['ghunnah', 'tafkheem']), all)).toBe(
+            'inset 0 -2px 0 var(--tj-ghunnah), inset 0 -4px 0 var(--tj-tafkheem)',
+        );
+    });
+
+    it('shares one legend row + toggle across the four rules, each keeping its name', () => {
+        for (const t of ['imala', 'ishmam', 'tashil', 'ibdal_hamza']) {
+            expect(badgeForTag(t)!.legendKey).toBe('special');
+            expect(badgeForTag(t)!.colorVar).toBe('--tj-special');
+        }
+        expect(badgeForTag('imala')!.tooltip()).toBe('Imala');
+        expect(badgeForTag('ibdal_hamza')!.tooltip()).toBe('Ibdal al-Hamzah');
+        // one row, under Other rules, and it is on by default
+        const other = LEGEND.find((g) => g.category === 'other')!;
+        const rows = legendRows(other).filter((r) => r.legendKey === 'special');
+        expect(rows).toHaveLength(1);
+        expect(rows[0]!.label()).toBe('Special rules');
+        expect(rows[0]!.border).toBe(true);
+        expect(DEFAULT_ENABLED.special).toBe(true);
+        // the toggle gates the ring like any other bar
+        expect(tjShadow(badgesForTags(['tashil']), (k) => k !== 'special')).toBe('');
+    });
+});
+
+describe('tajweed-rules — the silent rules the producer now names', () => {
+    it('names the waqf sukūn, the ʿiwaḍ madd and the orthographic silences', () => {
+        expect(silentTooltip('pausal_sukun')).toBe('Waqf');
+        expect(silentTooltip('orthographic_silence')).toBe("Silent Letter");
+        expect(silentTooltip('madd_iwad')).toBe("Madd 'Iwad");
+        expect(silentTooltip('taa_marbuta_pausal')).toBe("Ta' Marbutah (waqf)");
+        expect(silentTooltip('hamza_wasl_elision')).toBe('Hamzat-al-wasl (silent)');
+    });
+
+    it('keeps the ʿiwaḍ madd nameable while its bar is toggled off', () => {
+        const b = badgesForTags(['madd_iwad']);
+        expect(tjShadow(b, none)).toBe('');
+        expect(tjRuleNames(b, [silentTooltip('madd_iwad')!], none)).toBe("Madd 'Iwad");
     });
 });

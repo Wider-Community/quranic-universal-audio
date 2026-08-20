@@ -404,35 +404,35 @@
 .haraka-cell.dia-dropped .g {
     color: var(--ts-silent-fg);
 }
-/* Small diacritic cells render as plain marks — no replaced/shortened affordance
-   (those would read as "special" on what should look like an ordinary haraka).
-   Only `dia-dropped` (greyed) marks a silenced one. The ONE exception is an
-   INSERTED graphemeless vowel (hamzat-waṣl / iltiqaa connecting kasra) — not in
-   the rasm — which carries the same muted dashed border as the inserted/implicit
-   madd FULL cell below, so it reads as "added, not written". */
-.haraka-cell.dia-inserted {
+/* Small diacritic cells render as plain marks — a `present` one gets no
+   affordance at all, and `dia-dropped` (greyed) marks a silenced one. The two
+   the reading altered carry a muted dashed border so they read as "not what
+   the rasm wrote": `dia-inserted` for a vowel not in it at all (hamzat-waṣl /
+   iltiqaa connecting kasra), `dia-replaced` for one written and shown as
+   another mark (the ʿiwaḍ fatḥa a stop makes of a fatḥatan). The shard tells
+   the two apart; here they look alike. */
+.haraka-cell.dia-inserted,
+.haraka-cell.dia-replaced {
     border-style: dashed;
     border-color: var(--ts-inserted-border);
 }
 
-/* --- Implicit-madd FULL cell affordance ---------------------------------- */
-/* An implicit madd (Allah dagger-alef / madd-ʿiwaḍ alef — chars==='') is a
-   full letter-sized cell with an inserted/replaced glow so it reads as
-   "not in the rasm". */
+/* --- Altered FULL cell affordance ---------------------------------------- */
+/* An inserted madd (Allah's alef, the one a stop supplies for a tanwīn fatḥ)
+   is a full letter-sized cell the letter row has no slot for. */
 .mega-letter.implicit {
     border-style: dashed;
     border-color: var(--ts-inserted-border);
     color: var(--hl-letter-idle, var(--ts-idle-fg));
 }
-/* A WRITTEN-but-"added" full cell (the madd-ʿiwaḍ alef substituted for the
-   fatḥatan at waqf) — same muted dashed border as the implicit madd, but it
-   keeps its own ink + interactivity (it's a real, sounding letter). */
-.mega-letter.dia-inserted {
+/* A full cell the rasm DID write, shown as the letter the reading gives it —
+   the started-on ٱ read أ/إ, the ئ read as its madd letter, the ة read as a
+   haa. Same muted dashed border, but it keeps its own ink + interactivity
+   (it is a real, sounding letter of the word). */
+.mega-letter.dia-inserted,
+.mega-letter.dia-replaced {
     border-style: dashed;
     border-color: var(--ts-inserted-border);
-}
-.mega-letter.implicit.dia-replaced {
-    border-style: solid;
 }
 .mega-letter.implicit.dia-dropped {
     opacity: var(--ts-mute-opacity);
