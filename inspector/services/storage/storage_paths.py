@@ -154,7 +154,7 @@ def timestamps_path(slug: str, chapter: str | int) -> str:
 
 
 def timestamps_path_gz(slug: str, chapter: str | int) -> str:
-    """Gzipped per-chapter segment-array shard. The job writes these; the
+    """Gzipped per-chapter native v12 shard. The job writes these; the
     read path serves the gz body verbatim as a byte pass-through."""
     return reciter_file(slug, f"timestamps/{chapter}.json.gz")
 

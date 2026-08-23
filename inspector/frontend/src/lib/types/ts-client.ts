@@ -1,36 +1,30 @@
 /**
  * Timestamps-tab client types — FE-only.
  *
- * The verse model (`TsVerseData` + `PhonemeInterval`/`Letter`/`TsWord`) is
- * assembled client-side by the ts_client from a chapter shard — no wire
- * producer. The slim catalog projection (`TsCatalog*`), the positionally-typed
- * shard reads (`TsShardWord`/`SegmentEntry`/`TsShardResponse`), the surah-info
- * map, and the deprecated legacy `/api/ts/*` response shapes all live here too:
- * none has a generated equivalent (the catalog schema is not codegen'd to the
- * FE; the shard `words`/`segments` fields are opaque in the generated models).
- * The codegen'd `Ts*` wire types are imported from `./generated/schemas`.
+ * The timing view is assembled client-side from native v12 readings. Shard
+ * metadata and timing sidecars reuse generated wire types; native phonemizer
+ * documents reuse the renderer package types.
  */
 
-import type { CellRole, CellStatus, ErrorEnvelope, TsShardMeta } from './generated/schemas';
+import type { AnalysisDocument, CellDocument, WirePayload } from '@quranic-phonemizer/cells';
+import type {
+    TsBoundaryTiming,
+    TsShardMeta,
+    TsSoundTiming,
+    TsUnitTiming,
+    TsWordTiming,
+} from './generated/schemas';
 import type { VerseRef } from './view-models';
 
 // ---------------------------------------------------------------------------
 // Client verse model (assembled by ts_client)
 // ---------------------------------------------------------------------------
 
-/** Single phoneme interval as returned by /api/ts/data.intervals. */
+/** One audio-relative sound interval used by animation and waveform surfaces. */
 export interface PhonemeInterval {
     phone: string;
     start: number; // seconds
     end: number; // seconds
-    /** Set when the MFA aligner split a geminate into two tokens. */
-    geminate_start?: boolean;
-    /** Set on the second half of a split geminate; consumers use this to skip rendering. */
-    geminate_end?: boolean;
-    /** Cross-word tajweed bridge rule (idgham) when this phone is a merger that
-     *  fuses with the previous word; the Timestamps tab renders it as a tile
-     *  between word blocks. Baked into the shard at generation (schema v3). */
-    bridge?: string;
 }
 
 /** Single letter with optional per-letter timing. */
@@ -38,74 +32,8 @@ export interface Letter {
     char: string;
     start: number | null;
     end: number | null;
-    /** True when the grapheme is silent (no audible phoneme at its own
-     *  position) — the highlight skips it. From shard schema v4; absent on v3. */
+    /** True when the native source unit owns or presents no sound. */
     silent?: boolean;
-}
-
-/** One per-character cell — the ordered source for the analysis letter row.
- *  Cells include `base` consonant/carrier cells (which anchor a group + carry
- *  its full-letter glyph via `sourceLetterIndex`) alongside the haraka / tanween
- *  / long-vowel-carrier / implicit cells the producer projects. All script/visual
- *  specifics (mini-meem glyph, open/closed/iqlab form, above/below placement) are
- *  derived in the FE from `rules` + `chars`. */
-export interface TsCell {
-    /** canonical source char(s); '' for a fully implicit cell */
-    chars: string;
-    role: CellRole;
-    status: CellStatus;
-    /** indices into the verse-flat `intervals[]` — the cell's timing anchor ([] = silent) */
-    phonemeIndices: number[];
-    /** the letter (index into this word's `letters`) the cell sits on/after; -1 if implicit */
-    sourceLetterIndex: number;
-    /** every rule the producer fired on this grapheme, in its order and possibly
-     *  empty — there is no primary. The renderer resolves the list into at most
-     *  three ordered badges (`badgesForTags`) plus the silent-rule hover names. */
-    rules: string[];
-    /** cells sharing one id highlight together (long vowel; cross-word idgham) */
-    shareGroup: number | null;
-    /** which of `phonemeIndices` each rule is on, one list per phone in that
-     *  order — `null` for the ordinary cell, whose phones all name what `rules`
-     *  names. A letter read as a whole word is why it exists: `عٓ` says four
-     *  sounds and only the hidden noon carries the ikhfaa, so drawing `rules`
-     *  across the whole cell lights all four. */
-    phonemeRules?: string[][] | null;
-}
-
-/** A raw positional shard cell row (the 6th word slot), schema v11 —
- *  `[chars, role, status, phoneme_indices, source_letter_index, rules, share_group,
- *  phoneme_rules]`. `phoneme_indices` are word-local indexable-phone indices, and
- *  the trailing `phoneme_rules` is present only on a cell whose phones do not all
- *  name the same thing. */
-export type TsShardCellRow = [
-    string,
-    string,
-    string,
-    number[],
-    number,
-    (string[] | null)?,
-    (number | null)?,
-    (string[][] | null)?,
-];
-
-/** Read a positional shard cell row by name — the FE mirror of
- *  `qua_shared/ts_shard_cells.parse_cell`, so no consumer unpacks `row[0..6]`
- *  inline. `phonemeIndices` stay WORD-LOCAL here; the caller maps them to the
- *  verse-flat `intervals[]`. A pre-v11 row carried a bare tag string in slot 5;
- *  reading it as characters would be silent nonsense, so it reads as a one-rule
- *  list instead. */
-export function parseShardCell(row: TsShardCellRow): TsCell {
-    const raw = row[5];
-    return {
-        chars: row[0],
-        role: row[1] as CellRole,
-        status: row[2] as CellStatus,
-        phonemeIndices: row[3] ?? [],
-        sourceLetterIndex: row[4],
-        rules: !raw ? [] : typeof raw === 'string' ? [raw] : [...raw],
-        shareGroup: (row[6] ?? null) as number | null,
-        phonemeRules: row[7] ? row[7].map((tags) => [...tags]) : null,
-    };
 }
 
 /** Single word with text + timing + letters + phoneme indices into the flat intervals list. */
@@ -117,11 +45,6 @@ export interface TsWord {
     end: number;
     phoneme_indices: number[];
     letters: Letter[];
-    /** Ordered per-character cells (schema v5) — includes `base` cells; the
-     *  single source for the analysis letter row. Always present on real shard
-     *  data; optional only so lightweight unit-test fixtures may omit it (the
-     *  renderer synthesizes base cells from `letters` when absent). */
-    cells?: TsCell[];
 }
 
 /** Full verse data for the timestamps tab. */
@@ -136,11 +59,9 @@ export interface TsVerseData {
     time_end_ms: number;
     intervals: PhonemeInterval[];
     words: TsWord[];
+    /** Native schema-v2 readings rendered by quran-cells, in audio order. */
+    native: TsShardReading[];
 }
-
-/** Verse payload assembled by the frontend ts_client. Built client-side, no
- *  wire producer (mirrors the legacy `/api/ts/data` shape). */
-export type TsDataResponse = TsVerseData;
 
 // ---------------------------------------------------------------------------
 // Reciters (Timestamps tab)
@@ -189,48 +110,56 @@ export interface TsCatalogResponse {
 }
 
 // ---------------------------------------------------------------------------
-// Shard reads (positionally-typed projections of the opaque generated shards)
+// Native shard v12
 // ---------------------------------------------------------------------------
 
-/** Encoded word inside a segment. FE-typed positional projection of the
- *  codegen'd `TsShardWord` (which is the opaque `[unknown × 5]` json2ts emits
- *  for the `list`-typed Pydantic field). The wire really carries these precise
- *  element types — the shard decoder (`ts-source.ts`) reads them positionally. */
-export type TsShardWord = [
-    /** word_idx (1-based) */ number,
-    /** start_ms */ number,
-    /** end_ms */ number,
-    /** letters: [char, start_ms|null, end_ms|null(, silent)][] (4th slot from schema v4) */
-    Array<[string, number | null, number | null, boolean?]>,
-    /** phones: [phone, start_ms, end_ms, ...optional flags][] */ Array<(string | number | boolean)[]>,
-    /** cells (schema v5, optional): the positional `TsShardCellRow` rows.
-     *  phoneme_indices are word-local indices over the word's INDEXABLE phones
-     *  (qalqala `Q` excluded). */
-    TsShardCellRow[]?,
-];
-
-/** One recited segment in a chapter's temporal `segments[]` array. FE-typed
- *  projection of the codegen'd `TsShardSegment` (`t` is `[unknown, unknown]`
- *  and `words` is opaque there). `ref` is always a single verse `"surah:ayah"`;
- *  `t` is the `[start_ms, end_ms]` span; a verse may recur across entries. */
-export interface SegmentEntry {
+export interface TsShardPart {
     ref: string;
     t: [number, number];
-    words: TsShardWord[];
-    /** Schema v10: present (and `true`) ONLY when this take continues into the
-     *  next segment without a stop (cross-verse waṣl). Absent on v9- shards, so
-     *  every waṣl consumer treats `undefined` as "no bridge" and no-ops. */
-    wasl?: boolean;
+    word_ids: number[];
 }
 
-/** Body of one chapter shard (decompressed): slim `_meta` + a flat
- *  recitation-ordered `segments[]` array. FE-typed projection of `TsShardDoc`
- *  (segments required + richly-typed via `SegmentEntry`). The codegen'd
- *  `TsShardMeta` types the `_meta` block. */
+export interface TsSourceUnit {
+    id: number;
+    word_id: number;
+    text: string;
+    kind: string;
+    owned_sound_ids: number[];
+    presented_sound_ids: number[];
+}
+
+export interface TsSourceDocument {
+    schema_version: 2;
+    source: {
+        text: string;
+        units: TsSourceUnit[];
+        [key: string]: unknown;
+    };
+}
+
+export interface TsShardReading {
+    id: string;
+    parts: TsShardPart[];
+    analysis: AnalysisDocument;
+    source: TsSourceDocument;
+    cells: CellDocument;
+    timing: {
+        words: TsWordTiming[];
+        sounds: TsSoundTiming[];
+        units: TsUnitTiming[];
+        boundaries: TsBoundaryTiming[];
+    };
+}
+
 export interface TsShardResponse {
     _meta: TsShardMeta;
-    segments: SegmentEntry[];
+    readings: TsShardReading[];
 }
+
+export const nativePayload = (reading: TsShardReading): WirePayload => ({
+    analysis: reading.analysis,
+    cells: reading.cells,
+});
 
 // ---------------------------------------------------------------------------
 // Surah info (cross-tab) — route emits a bare map, no wire model
@@ -247,23 +176,8 @@ export type SurahInfoMap = Record<string, SurahInfo>;
 /** GET /api/surah-info — the route emits a bare map. */
 export type SurahInfoResponse = SurahInfoMap;
 
-// ---------------------------------------------------------------------------
-// Deprecated legacy /api/ts/* response shapes
-// ---------------------------------------------------------------------------
-
 /** GET /api/ts/vbr/:reciter — fallback for older HF manifests. */
 export interface TsVbrResponse {
     vbr_chapters: number[];
     error?: string;
-}
-
-/** @deprecated Reciter list now read from the manifest. */
-export type TsRecitersResponse = TsReciter[];
-
-/** @deprecated Chapter list now read from the manifest reciter block. */
-export type TsChaptersResponse = number[] | ErrorEnvelope;
-
-/** @deprecated Verse list now derived client-side from a chapter shard. */
-export interface TsVersesResponse {
-    verses: Array<{ ref: VerseRef; audio_url: string }>;
 }

@@ -23,7 +23,7 @@ What is modelled here, by source route/service:
   ``ts_vbr``.
 - the per-chapter shard (``GET /api/ts/shard/<reciter>/<chapter>``,
   decompressed) reuses :class:`~qua_shared.schemas.bucket.ts_shard.TsShardDoc`
-  / ``TsShardSegment`` / ``TsShardWord`` — imported, never redefined.
+  / ``TsShardReading`` / ``TsShardPart`` — imported, never redefined.
 - the verse payload the FE ``ts_client`` assembles from a shard (the legacy
   ``/api/ts/data`` shape, no live route today) → :class:`TsVerseData` +
   :class:`TsWord` / :class:`Letter` / :class:`PhonemeInterval`.
@@ -32,12 +32,6 @@ What is modelled here, by source route/service:
 FE-facing: re-exported from ``fe_types.py`` and code-generated into
 ``inspector/frontend/src/lib/types/generated/schemas.ts``.
 
-json2ts caveat (the typed-tuple limitation): ``TsShardWord`` and the ``t``
-spans here are positional tuples. Pydantic v2 emits JSON-Schema-2020-12
-``prefixItems`` for them (correctly typed), but the pinned json2ts (15.0.4)
-only understands the Draft-07 ``items: [...]`` tuple form and renders
-``prefixItems`` as ``[unknown, ...]``. The models below are correct; the FE
-narrows them with positional projections in ``ts-client.ts``.
 """
 
 from __future__ import annotations
@@ -47,7 +41,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..bucket.catalog import AudioCategory
-from ..bucket.ts_shard import TsShardDoc, TsShardSegment, TsShardWord
+from ..bucket.ts_shard import TsShardDoc, TsShardPart, TsShardReading
 
 __all__ = [
     "TsConfigResponse",
@@ -65,8 +59,8 @@ __all__ = [
     "TsVerseData",
     # Re-exported shard shapes (single source of truth — imported, not redefined).
     "TsShardDoc",
-    "TsShardSegment",
-    "TsShardWord",
+    "TsShardPart",
+    "TsShardReading",
 ]
 
 

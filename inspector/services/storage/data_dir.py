@@ -185,7 +185,7 @@ def iter_peaks_history(slug: str) -> Iterator[dict]:
 def read_timestamps_chapter_gz(slug: str, chapter: int) -> bytes | None:
     """Return the raw gzipped timestamps-shard bytes for a chapter, or ``None``.
 
-    Reads ``timestamps/<chapter>.json.gz`` (the segment-array shard the job
+    Reads ``timestamps/<chapter>.json.gz`` (the native v12 shard the job
     writes) and returns it **uninflated** — the bucket gz body is exactly the
     wire body the shard route serves, so the read path is a byte pass-through.
     """

@@ -923,7 +923,7 @@ def publish_slug(
     # recited) is dropped — no row, no audio slice. Coverage falls by that count.
     # The editor/TS tab still shows these (only the published artifacts gate).
     from qua_shared.surah_words import word_counts_from_surah_info
-    from qua_shared.timestamps_dedup import select_complete_verses
+    from qua_shared.timestamps_native import select_complete_verses
 
     timestamps, dropped_incomplete = select_complete_verses(
         timestamps, word_counts_from_surah_info(surah_info)

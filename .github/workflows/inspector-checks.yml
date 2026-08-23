@@ -5,6 +5,10 @@ name: Inspector checks (reusable)
 
 on:
   workflow_call:
+    secrets:
+      PAT_TOKEN:
+        description: Read access to the private quranic-phonemizer-web renderer tag
+        required: true
 
 jobs:
   frontend-checks:
@@ -24,6 +28,11 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: inspector/frontend/package-lock.json
+
+      - name: Configure private renderer access
+        env:
+          CELLS_REPO_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: git config --global url."https://x-access-token:${CELLS_REPO_TOKEN}@github.com/".insteadOf "ssh://git@github.com/"
 
       - name: Install deps
         run: npm ci
@@ -124,6 +133,11 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: inspector/frontend/package-lock.json
+
+      - name: Configure private renderer access
+        env:
+          CELLS_REPO_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: git config --global url."https://x-access-token:${CELLS_REPO_TOKEN}@github.com/".insteadOf "ssh://git@github.com/"
 
       - name: Install codegen deps
         run: |

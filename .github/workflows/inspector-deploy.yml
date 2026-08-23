@@ -56,6 +56,7 @@ jobs:
             (inputs.env == 'dev' ||
              (inputs.env == 'auto' && github.ref_name != 'main'))) }}
     uses: ./.github/workflows/inspector-checks.yml
+    secrets: inherit
 
   # Opt-in, prod-only: build the image and assert it boots (/healthz) before
   # deploying. Runs ONLY on a manual workflow_dispatch with verify_boot=true

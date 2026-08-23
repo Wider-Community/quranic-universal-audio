@@ -21,6 +21,7 @@
     "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
+    "@quranic-phonemizer/cells": "git+https://github.com/Hetchy/quranic-phonemizer-web.git#cells-v2.1.0",
     "chart.js": "^4.4.0",
     "chartjs-plugin-annotation": "^3.0.1"
   },

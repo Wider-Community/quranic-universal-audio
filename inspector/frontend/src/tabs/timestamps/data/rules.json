@@ -1,0 +1,272 @@
+[
+  {
+    "id": "izhar",
+    "name": "Izhar",
+    "arabic_name": "إظهار",
+    "summary": "A quiescent noon or tanween keeps its own sound before a throat letter."
+  },
+  {
+    "id": "ikhfaa",
+    "name": "Ikhfaa",
+    "arabic_name": "إخفاء",
+    "summary": "A quiescent noon or tanween is hidden as a hum held at the following letter's place."
+  },
+  {
+    "id": "iqlab",
+    "name": "Iqlab",
+    "arabic_name": "إقلاب",
+    "summary": "A quiescent noon or tanween becomes a hummed meem before baa."
+  },
+  {
+    "id": "idgham_bi_ghunnah",
+    "name": "Idgham bi-Ghunnah",
+    "arabic_name": "إدغام بغنة",
+    "summary": "A quiescent noon or tanween merges into the letter after it and the hum is kept."
+  },
+  {
+    "id": "idgham_bila_ghunnah",
+    "name": "Idgham bila-Ghunnah",
+    "arabic_name": "إدغام بلا غنة",
+    "summary": "A quiescent noon or tanween merges into a following lam or raa with no hum."
+  },
+  {
+    "id": "ghunnah_mushaddadah",
+    "name": "Ghunnah Mushaddadah",
+    "arabic_name": "غنة مشددة",
+    "summary": "A doubled noon or meem is held on its hum."
+  },
+  {
+    "id": "izhar_shafawi",
+    "name": "Izhar Shafawi",
+    "arabic_name": "إظهار شفوي",
+    "summary": "A quiescent meem keeps its own sound before a letter that is neither meem nor baa."
+  },
+  {
+    "id": "ikhfaa_shafawi",
+    "name": "Ikhfaa Shafawi",
+    "arabic_name": "إخفاء شفوي",
+    "summary": "A quiescent meem is hidden as a hum on the lips before baa."
+  },
+  {
+    "id": "idgham_shafawi",
+    "name": "Idgham Shafawi",
+    "arabic_name": "إدغام شفوي",
+    "summary": "A quiescent meem merges into a following meem."
+  },
+  {
+    "id": "idgham_mutamathilayn",
+    "name": "Idgham Mutamathilayn",
+    "arabic_name": "إدغام متماثلين",
+    "summary": "A quiescent letter merges into an identical letter after it."
+  },
+  {
+    "id": "idgham_mutaqaribayn",
+    "name": "Idgham Mutaqaribayn",
+    "arabic_name": "إدغام متقاربين",
+    "summary": "A quiescent letter merges into a letter of a near place after it."
+  },
+  {
+    "id": "idgham_mutajanisayn_kamil",
+    "name": "Idgham Mutajanisayn Kamil",
+    "arabic_name": "إدغام متجانسين كامل",
+    "summary": "A quiescent letter merges completely into a letter of its own place."
+  },
+  {
+    "id": "idgham_mutajanisayn_naqis",
+    "name": "Idgham Mutajanisayn Naqis",
+    "arabic_name": "إدغام متجانسين ناقص",
+    "summary": "A quiescent letter merges into a letter of its own place but keeps a trait of its own."
+  },
+  {
+    "id": "lam_shamsiyyah",
+    "name": "Lam Shamsiyyah",
+    "arabic_name": "لام شمسية",
+    "summary": "The article's lam merges into the sun letter after it."
+  },
+  {
+    "id": "lam_qamariyyah",
+    "name": "Lam Qamariyyah",
+    "arabic_name": "لام قمرية",
+    "summary": "The article's lam keeps its own sound before a moon letter."
+  },
+  {
+    "id": "qalqala_sughra",
+    "name": "Qalqala Sughra",
+    "arabic_name": "قلقلة صغرى",
+    "summary": "A quiescent qalqala letter inside the reading is released with a light echo."
+  },
+  {
+    "id": "qalqala_kubra",
+    "name": "Qalqala Kubra",
+    "arabic_name": "قلقلة كبرى",
+    "summary": "A qalqala letter the stop makes quiescent is released with a fuller echo."
+  },
+  {
+    "id": "qalqala_akbar",
+    "name": "Qalqala Akbar",
+    "arabic_name": "قلقلة أكبر",
+    "summary": "A doubled qalqala letter stopped on is released with the fullest echo."
+  },
+  {
+    "id": "tafkheem",
+    "name": "Tafkheem",
+    "arabic_name": "تفخيم",
+    "summary": "The letter is sounded heavy, and a fatha on it with it."
+  },
+  {
+    "id": "tarqeeq",
+    "name": "Tarqeeq",
+    "arabic_name": "ترقيق",
+    "summary": "The raa is sounded light."
+  },
+  {
+    "id": "imala",
+    "name": "Imala",
+    "arabic_name": "إمالة",
+    "summary": "A long aa is tilted towards a long ee."
+  },
+  {
+    "id": "tashil",
+    "name": "Tashil",
+    "arabic_name": "تسهيل",
+    "summary": "A hamza is eased rather than fully articulated."
+  },
+  {
+    "id": "ishmam",
+    "name": "Ishmam",
+    "arabic_name": "إشمام",
+    "summary": "The lips round for a vowel that is not sounded."
+  },
+  {
+    "id": "madd_tabii",
+    "name": "Madd Tabii",
+    "arabic_name": "مد طبيعي",
+    "summary": "A long vowel is held for its plain length, with nothing after it to extend it."
+  },
+  {
+    "id": "madd_muttasil",
+    "name": "Madd Muttasil",
+    "arabic_name": "مد متصل",
+    "summary": "A long vowel is extended before a hamza in the same word."
+  },
+  {
+    "id": "madd_munfasil",
+    "name": "Madd Munfasil",
+    "arabic_name": "مد منفصل",
+    "summary": "A long vowel is extended before a hamza opening the next word."
+  },
+  {
+    "id": "madd_lazim",
+    "name": "Madd Lazim",
+    "arabic_name": "مد لازم",
+    "summary": "A long vowel is extended before a letter the reading keeps quiescent."
+  },
+  {
+    "id": "madd_arid_lissukun",
+    "name": "Madd Arid Lissukun",
+    "arabic_name": "مد عارض للسكون",
+    "summary": "A long vowel is extended before a letter the stop makes quiescent."
+  },
+  {
+    "id": "madd_leen",
+    "name": "Madd Leen",
+    "arabic_name": "مد لين",
+    "summary": "A waw or yaa after a fatha is extended before a letter the stop makes quiescent."
+  },
+  {
+    "id": "madd_iwad",
+    "name": "Madd Iwad",
+    "arabic_name": "مد عوض",
+    "summary": "A fathatan stopped on is exchanged for a long aa."
+  },
+  {
+    "id": "madd_badal",
+    "name": "Madd Badal",
+    "arabic_name": "مد بدل",
+    "summary": "A long vowel on a hamza stands in for a second hamza the reading does not say."
+  },
+  {
+    "id": "madd_silah",
+    "name": "Madd Silah",
+    "arabic_name": "مد صلة",
+    "summary": "A pronoun haa is drawn out because the word is joined to the one after it."
+  },
+  {
+    "id": "ibdal_hamza",
+    "name": "Ibdal Hamza",
+    "arabic_name": "إبدال الهمزة",
+    "summary": "Started on, a prosthetic hamza lengthens its vowel over the quiescent hamza after it."
+  },
+  {
+    "id": "hamza_wasl_silent",
+    "name": "Hamza Wasl Silent",
+    "arabic_name": "حذف همزة الوصل",
+    "summary": "A prosthetic hamza is not sounded when the word before it is joined to it."
+  },
+  {
+    "id": "hamza_wasl_fatha",
+    "name": "Hamza Wasl with Fatha",
+    "arabic_name": "همزة الوصل بالفتح",
+    "summary": "A prosthetic hamza the reading starts on is sounded with a fatha."
+  },
+  {
+    "id": "hamza_wasl_kasra",
+    "name": "Hamza Wasl with Kasra",
+    "arabic_name": "همزة الوصل بالكسر",
+    "summary": "A prosthetic hamza the reading starts on is sounded with a kasra."
+  },
+  {
+    "id": "hamza_wasl_damma",
+    "name": "Hamza Wasl with Damma",
+    "arabic_name": "همزة الوصل بالضم",
+    "summary": "A prosthetic hamza the reading starts on is sounded with a damma."
+  },
+  {
+    "id": "iltiqa_haraka",
+    "name": "Iltiqa Haraka",
+    "arabic_name": "تحريك التقاء الساكنين",
+    "summary": "A letter takes a haraka so that it does not meet the quiescent letter after it."
+  },
+  {
+    "id": "iltiqa_shortening",
+    "name": "Iltiqa Shortening",
+    "arabic_name": "قصر عند التقاء الساكنين",
+    "summary": "A long vowel is shortened where it would meet a quiescent letter."
+  },
+  {
+    "id": "waqf_diacritic_drop",
+    "name": "Waqf Diacritic Drop",
+    "arabic_name": "حذف الحركة عند الوقف",
+    "summary": "A haraka or tanween written at the end of a word stopped on is not sounded."
+  },
+  {
+    "id": "waqf_silah_drop",
+    "name": "Waqf Silah Drop",
+    "arabic_name": "حذف الصلة عند الوقف",
+    "summary": "The length drawing out a pronoun haa is absent when the word is stopped on."
+  },
+  {
+    "id": "waqf_taa_marbuta",
+    "name": "Taa Marbuta at a Pause",
+    "arabic_name": "تاء مربوطة عند الوقف",
+    "summary": "A final taa marbuta is sounded as a haa at a stop."
+  },
+  {
+    "id": "pausal_alif",
+    "name": "Pausal Alif",
+    "arabic_name": "ألف الوقف",
+    "summary": "A pausal alif is sounded long at a stop and shortened where the word is joined to the one after it."
+  },
+  {
+    "id": "orthographic_silence",
+    "name": "Orthographic Silence",
+    "arabic_name": "حرف لا ينطق به",
+    "summary": "A letter the script writes and no reading ever says."
+  },
+  {
+    "id": "variant_silence",
+    "name": "Variant Silence",
+    "arabic_name": "حذف في وجه من الخلاف",
+    "summary": "A written letter the selected reading option leaves unsaid."
+  }
+]

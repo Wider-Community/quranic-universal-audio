@@ -5,7 +5,7 @@
  * mutation); colour overrides are written to the `--tj-*` custom properties on the
  * document root so both the legend swatches and the per-cell underlines recolour
  * with no re-render. The enable toggles drive `tjShadow` filtering in
- * `UnifiedDisplay` (reactive on the store), so disabling a rule clears its bar.
+ * `TimedAnalysisRow` (reactive on the store), so disabling a rule clears its bar.
  *
  * Defaults come from the rule registry (`tajweed-rules.ts`): everything on except
  * iẓhar and madd ṭabīʿī.

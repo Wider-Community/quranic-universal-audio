@@ -2,8 +2,8 @@
 
 Backs the categorized, cell-addressable Report flow on the Timestamps tab. A
 report names a ``category`` with an optional per-category ``subtype`` and points
-at a flexible ``target`` — the whole verse, a word, a letter/grapheme cell, a
-phoneme, or a co-timed cell-group.
+at a native v12 shard target. Targets carry a reading id plus a native entity id;
+renderer positions are never persisted.
 
 Served by ``inspector/routes/timestamps/reports.py``:
 - ``GET    /api/ts/<slug>/reports``               → ``TsReciterReports`` (per-verse counts)
@@ -11,7 +11,7 @@ Served by ``inspector/routes/timestamps/reports.py``:
 - ``POST   /api/ts/<slug>/reports``               ← ``TsReportCreateRequest`` → ``TsReport``
 - ``POST   /api/ts/<slug>/reports/batch``         ← ``TsReportBatchCreateRequest`` → ``TsReportBatchResult``
 - ``POST   /api/ts/<slug>/reports/<id>/resolve``  ← ``TsReportResolveRequest`` → ``TsReport``
-- ``POST   /api/ts/<slug>/reports/<verse>/word/<wi>/<cat>/resolve`` ← ``TsReportResolveRequest`` → ``TsVerseReports``
+- ``POST   /api/ts/<slug>/reports/<verse>/reading/<reading>/word/<word>/<cat>/resolve`` ← ``TsReportResolveRequest`` → ``TsVerseReports``
 - ``DELETE /api/ts/<slug>/reports/<id>``
 
 ``author`` on a report is populated only when the caller holds
@@ -23,12 +23,11 @@ is set when a timestamp regeneration changed the targeted content.
 Per-category rules (enforced by ``TsReportCreateRequest`` validators):
 - ``audio``   — comment mandatory; target verse|word.
 - ``timing``  — two boundary axes ``onset``/``offset`` (each early|late, ≥1 set),
-                no subtype; comment optional; target word|cell|phoneme|cell_group.
+                no subtype; comment optional; target native timed entities.
                 The human label is derived via ``timing_label``.
 - ``tajweed`` — subtype wrong_rule|missing_rule;
-                comment mandatory; target cell|phoneme|cell_group.
-- ``silence`` — pauses live BETWEEN words, so the target is a word-boundary ``gap``
-                (``word_index`` = the word before the gap). Subtype pause_boundary
+                comment mandatory; target column|sound|group|bridge.
+- ``silence`` — targets a native boundary. Subtype pause_boundary
                 |pause_wasl|pause_missed; selection-only (no comment); ``pause_boundary``
                 carries the ``onset``/``offset`` axes (the other two are binary). Public.
 - ``other``   — no subtype; comment mandatory; any target.
@@ -42,7 +41,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 ReportCategory = Literal["audio", "timing", "tajweed", "phonemes", "silence", "other"]
-TargetKind = Literal["verse", "word", "cell", "phoneme", "cell_group", "gap"]
+TargetKind = Literal["verse", "word", "column", "sound", "group", "boundary", "bridge"]
 
 #: Per-category subtype — tajweed + silence. The owning category constrains which
 #: values are valid (see ``TsReportCreateRequest._check``). Timing does NOT use
@@ -62,16 +61,16 @@ TimingDir = Literal["early", "late"]
 
 _TAJWEED_SUBTYPES = frozenset({"wrong_rule", "missing_rule"})
 #: silence subtypes — a wrong-boundary pause (dual-axis), a pause that shouldn't
-#: exist (should be waṣl), and a missing pause. All target a ``gap``.
+#: exist (should be waṣl), and a missing pause. All target a native boundary.
 _SILENCE_SUBTYPES = frozenset({"pause_boundary", "pause_wasl", "pause_missed"})
 #: target_kind values allowed per category.
 _ALLOWED_KINDS: dict[str, frozenset[str]] = {
     "audio": frozenset({"verse", "word"}),
-    "timing": frozenset({"word", "cell", "phoneme", "cell_group"}),
-    "tajweed": frozenset({"cell", "phoneme", "cell_group"}),
-    "phonemes": frozenset({"phoneme"}),
-    "silence": frozenset({"gap"}),
-    "other": frozenset({"verse", "word", "cell", "phoneme", "cell_group"}),
+    "timing": frozenset({"word", "column", "sound", "group", "boundary", "bridge"}),
+    "tajweed": frozenset({"column", "sound", "group", "bridge"}),
+    "phonemes": frozenset({"sound", "bridge"}),
+    "silence": frozenset({"boundary"}),
+    "other": frozenset(TargetKind.__args__),
 }
 #: categories whose comment is always mandatory.
 _COMMENT_REQUIRED = frozenset({"audio", "tajweed", "other"})
@@ -159,63 +158,33 @@ def timing_label(onset: str | None, offset: str | None) -> str:
 
 
 class TsReportTarget(BaseModel):
-    """What a report points at within a verse.
-
-    Indices are word-scoped (``word_index`` 0-based in the verse;
-    ``source_letter_index`` the anchoring letter; ``cell_index`` into the word's
-    ``cells[]``; ``phoneme_flat_index`` a word-local indexable-phone index;
-    ``share_group`` a co-timed cell-group id). A ``gap`` target (silence reports)
-    addresses the word-boundary between ``word_index`` and ``word_index + 1`` and
-    needs only ``word_index``. Required fields per ``kind`` are enforced below — a
-    ``verse`` target leaves them all unset.
-    """
+    """Stable native entity identity within a v12 connected reading."""
 
     model_config = ConfigDict(extra="forbid")
 
+    reading_id: str = Field(min_length=1)
     kind: TargetKind
-    word_index: int | None = None
-    source_letter_index: int | None = None
-    cell_index: int | None = None
-    phoneme_flat_index: int | None = None
-    share_group: int | None = None
+    target_id: str = Field(min_length=1)
 
-    @model_validator(mode="after")
-    def _check(self) -> TsReportTarget:
-        k = self.kind
-        if k == "verse":
-            return self
-        if self.word_index is None:
-            raise ValueError(f"target kind {k!r} requires word_index")
-        if k == "cell" and self.cell_index is None and self.source_letter_index is None:
-            raise ValueError("target kind 'cell' requires cell_index or source_letter_index")
-        if k == "phoneme" and self.phoneme_flat_index is None:
-            raise ValueError("target kind 'phoneme' requires phoneme_flat_index")
-        if k == "cell_group" and self.share_group is None:
-            raise ValueError("target kind 'cell_group' requires share_group")
-        return self
+
+class TsReportTimingSnapshot(BaseModel):
+    """Absolute audio interval of the native target when the report was filed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    start_ms: int | None = None
+    end_ms: int | None = None
 
 
 class TsReportSnapshot(BaseModel):
-    """Denormalized snapshot of the targeted shard content at create time.
-
-    Informational + the drift fingerprint used to detect staleness on a
-    re-stamp. ``rule_tags`` collapses the cell ``tag`` + ``secondary_tags``;
-    ``phoneme_rule_tags`` parallels the cell's phoneme indices; ``phones`` is the
-    mapped phone list.
-    """
+    """Native entity plus timing fingerprint captured at report creation."""
 
     model_config = ConfigDict(extra="forbid")
 
-    chars: str | None = None
-    role: str | None = None
-    status: str | None = None
-    rule_tags: list[str] = Field(default_factory=list)
-    phoneme_rule_tags: list[str | None] = Field(default_factory=list)
-    phones: list[str] = Field(default_factory=list)
-    share_group: int | None = None
-    word_text: str | None = None
-    verse_text: str | None = None
-    schema_version: int | None = None
+    native_schema_version: Literal[2] = 2
+    shard_schema_version: Literal[12] = 12
+    native: dict[str, object] = Field(default_factory=dict)
+    timing: TsReportTimingSnapshot | None = None
 
 
 class TsReportAuthor(BaseModel):
@@ -333,7 +302,7 @@ class TsReportCreateRequest(BaseModel):
 
 class TsReportResolveRequest(BaseModel):
     """Resolve a report (``POST .../reports/<id>/resolve``, or a timing
-    word-group via ``.../word/<word_index>/<category>/resolve``). Owner-gated."""
+    word-group via its reading and native word id). Owner-gated."""
 
     model_config = ConfigDict(extra="forbid")
 

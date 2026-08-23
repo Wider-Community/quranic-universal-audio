@@ -11,12 +11,12 @@
      *
      * Boundary markers respect the active view/granularity: word lines are
      * always drawn; letter and phoneme lines are gated on the same toggles
-     * that drive UnifiedDisplay. Precedence prevents double-draws: word > letter > phoneme.
+     * that drive TimedAnalysisRow. Precedence prevents double-draws: word > column > sound.
      *
      * Hover behavior:
      *   - Pointer on the waveform: translucent word-region band, plus letter
      *     and phoneme bands layered on top when the respective tiers are active.
-     *   - Pointer on a UnifiedDisplay block (via `tsHoveredElement` store):
+     *   - Pointer on a TimedAnalysisRow entity (via `tsHoveredElement` store):
      *     single-tier matching-color band. Waveform-origin hover wins.
      *
      * Click: always snaps to the enclosing word's start time.

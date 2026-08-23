@@ -25,8 +25,8 @@ export interface AssembledVerse {
     verseRef: string;
     data: TsVerseData;
     /** Target ayahKey when this occasion's LAST word continues into the next
-     *  verse without a stop (cross-verse waṣl); from `ChapterOccasion.bridgesOutTo`. */
-    bridgesOutTo?: string | null;
+     *  verse without a stop (cross-verse waṣl); from `ChapterOccasion.waslOutTo`. */
+    waslOutTo?: string | null;
 }
 
 function parseLocation(location: string): { surah: number; ayah: number; word: number } {
@@ -61,7 +61,7 @@ export function buildChapterRecitation(
     // Flatten every occasion's words to chapter-absolute units — one per recited
     // occurrence (repeats included).
     const flat: AnimUnit[] = [];
-    for (const { data, bridgesOutTo } of occasions) {
+    for (const { data, waslOutTo } of occasions) {
         const offsetSec = data.time_start_ms / 1000;
         for (let wi = 0; wi < data.words.length; wi++) {
             const w = data.words[wi]!;
@@ -71,8 +71,8 @@ export function buildChapterRecitation(
             // The waṣl flag rides the LAST word of the bridging take only.
             const isLastWord = wi === data.words.length - 1;
             const span: TimeSpan =
-                isLastWord && bridgesOutTo
-                    ? { start, end, waslTo: bridgesOutTo }
+                isLastWord && waslOutTo
+                    ? { start, end, waslTo: waslOutTo }
                     : { start, end };
             flat.push({
                 location: w.location,

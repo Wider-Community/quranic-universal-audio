@@ -3,8 +3,7 @@ channels consume so they cannot drift.
 
 The HF dataset (``qua_jobs/publish_hf.py``) and the GitHub release
 (``qua_jobs/cut_release.py``) used to reconstruct verse geometry independently.
-They agree on the source (the canonical ``project_segment_shard`` projection,
-completion-based occasion dedup) but had two copies of the loader, the
+They agree on the source (the canonical native-v12 timing projection) but had two copies of the loader, the
 projection→rows reshape, and the clip-window math — which is exactly where they
 drifted. This module owns all three so there is one source of truth.
 
@@ -38,7 +37,6 @@ from pathlib import Path
 from typing import TypedDict
 
 from qua_shared.letter_vocab import to_external_char
-from qua_shared.ts_shard_letters import iter_letters
 
 
 class PadParams(TypedDict):
@@ -53,6 +51,11 @@ class PadParams(TypedDict):
 #: Default clip-edge knobs (ms). pad_start before the first word, pad_end after
 #: the last word, min_gap minimum silence kept between adjacent verse clips.
 PAD_DEFAULTS: PadParams = {"pad_start": 100, "pad_end": 300, "min_gap": 100}
+_NONLETTER_MARKS = frozenset("ـّۣ۪ۜ۫۬")
+
+
+def _external_letter(text: str) -> str:
+    return to_external_char("".join(char for char in text if char not in _NONLETTER_MARKS))
 
 
 def pad_params_from_env() -> PadParams:
@@ -98,16 +101,8 @@ def _fit_boundary(
 
 
 def load_canonical_verses(ts_dir: Path) -> dict[str, dict]:
-    """Read every ``<ts_dir>/<ch>.json.gz`` segment-array shard, project each to
-    the canonical verse map (completion-based occasion dedup, the EARLIEST
-    completing occasion), and merge into one global dict.
-
-    Returns ``{ref: {"words", "verse_start_ms", "verse_end_ms", "segments"}}``;
-    ``segments`` carries the per-segment occurrence spans (see
-    ``timestamps_dedup._canonical_verse``). Both release channels load shards
-    through here so the dedup + merge are identical.
-    """
-    from qua_shared.timestamps_dedup import project_segment_shard
+    """Project every native-v12 chapter shard into canonical verse timings."""
+    from qua_shared.timestamps_native import project_native_shard
 
     out: dict[str, dict] = {}
     if not ts_dir.exists():
@@ -122,7 +117,7 @@ def load_canonical_verses(ts_dir: Path) -> dict[str, dict]:
         raw = path.read_bytes()
         if name.endswith(".gz"):
             raw = gzip.decompress(raw)
-        out.update(project_segment_shard(json.loads(raw)))
+        out.update(project_native_shard(json.loads(raw)))
     return out
 
 
@@ -130,7 +125,7 @@ def reshape_canonical(canonical: dict) -> dict[str, dict]:
     """Convert the canonical verse-map shape into ``build_verse_layouts`` input.
 
     ``canonical[ref]`` is the projection body
-    (``{"words": [[widx, s, e, letters, ...], ...], "verse_start_ms",
+    (``{"words": [{"index", "start_ms", "end_ms", "letters"}, ...], "verse_start_ms",
     "verse_end_ms", "segments"}``). For each verse this returns
     ``{"words": [[widx, s, e], ...], "letters": [(widx, letters), ...],
     "verse_start_ms": int, "verse_end_ms": int, "seg_spans": [...] | None}``.
@@ -139,7 +134,7 @@ def reshape_canonical(canonical: dict) -> dict[str, dict]:
     for ref, val in canonical.items():
         if ref.startswith("_"):
             continue
-        words = val.get("words") if isinstance(val, dict) else val
+        words = val.get("words") or []
         if not words:
             ts[ref] = {
                 "words": [],
@@ -149,22 +144,18 @@ def reshape_canonical(canonical: dict) -> dict[str, dict]:
                 "seg_spans": [],
             }
             continue
-        vs = val.get("verse_start_ms") if isinstance(val, dict) else None
-        ve = val.get("verse_end_ms") if isinstance(val, dict) else None
-        if vs is None or ve is None:
-            vs = words[0][1]
-            ve = max(int(w[2]) for w in words)
-        slim_words = [[int(w[0]), int(w[1]), int(w[2])] for w in words]
-        letters = [(int(w[0]), w[3] if len(w) > 3 else []) for w in words]
+        vs = val["verse_start_ms"]
+        ve = val["verse_end_ms"]
+        slim_words = [
+            [int(word["index"]), int(word["start_ms"]), int(word["end_ms"])] for word in words
+        ]
+        letters = [(int(word["index"]), word.get("letters") or []) for word in words]
         ts[ref] = {
             "words": slim_words,
             "letters": letters,
             "verse_start_ms": int(vs),
             "verse_end_ms": int(ve),
-            # Per-segment occurrence spans (None for legacy word-only inputs) —
-            # the faithful source for segment boundaries when a boundary word
-            # index repeats; build_verse_layouts falls back to the word-index map.
-            "seg_spans": val.get("segments") if isinstance(val, dict) else None,
+            "seg_spans": val.get("segments") or [],
         }
     return ts
 
@@ -283,13 +274,18 @@ def build_verse_layouts(
         # the named accessor; the shard's trailing ``silent`` flag isn't exposed.
         verse_letters: list[tuple[int, str, int, int]] = []
         for widx, letters in tdata.get("letters", []):
-            for lt in iter_letters(letters):
+            for letter in letters:
                 # The published letter tier can't encode an unplaced letter — fail
                 # loud if the aligner left a None timing (also narrows int | None).
-                if lt.start_ms is None or lt.end_ms is None:
-                    raise ValueError(f"letter {lt.char!r} in {ref} has unplaced timing: {lt!r}")
+                if letter["start_ms"] is None or letter["end_ms"] is None:
+                    raise ValueError(f"letter {letter['text']!r} in {ref} has unplaced timing")
                 verse_letters.append(
-                    (int(widx), to_external_char(lt.char), int(lt.start_ms), int(lt.end_ms))
+                    (
+                        int(widx),
+                        _external_letter(letter["text"]),
+                        int(letter["start_ms"]),
+                        int(letter["end_ms"]),
+                    )
                 )
 
         layouts[ref] = {

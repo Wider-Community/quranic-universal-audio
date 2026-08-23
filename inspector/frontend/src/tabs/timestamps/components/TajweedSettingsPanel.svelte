@@ -20,7 +20,7 @@
     import * as m from '$lib/paraglide/messages';
     import { i18n } from '$lib/i18n/locale.svelte';
     import { themeStore } from '../../../lib/stores/theme.svelte';
-    import { harakaRenderStyle } from '../utils/haraka-render';
+    import { markRenderStyle as harakaRenderStyle, waqfRenderStyle } from '@quranic-phonemizer/cells';
     import { LEGEND, type LegendRow } from '../utils/tajweed-rules';
     import {
         isGroupEnabled,
@@ -30,7 +30,6 @@
         setRuleEnabled,
         tajweedSettings,
     } from '../stores/tajweed-settings';
-    import { waqfRenderStyle } from '../utils/waqf-render';
 
     /** Distinct legendKeys of a row list, in order — the set a group toggle drives
      *  (qalqala's two rows collapse to one key). */

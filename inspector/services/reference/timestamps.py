@@ -5,7 +5,7 @@ Bucket-only: manifest is composed from state (released reciters)
 the manifest — the FE reads them from the canonical ``/api/audio/surahs``
 endpoint. Per-chapter shards are read as raw gzip from
 ``<bucket>/reciters/<slug>/timestamps/<chapter>.json.gz`` on demand — the
-bucket gz body is the wire body (segment-array shape), so serving is a byte
+bucket gz body is the native v12 wire body, so serving is a byte
 pass-through cached through a small per-process LRU so chapter scrubbing
 within one reciter doesn't re-pay the bucket fetch.
 
@@ -25,7 +25,7 @@ from pathlib import Path
 
 from config import DK_SCRIPT_PATH
 from qua_shared.schemas import ReciterCatalog, TsManifestResponse
-from qua_shared.timestamps_shards import SCHEMA_VERSION
+from qua_shared.timestamps_shards import MANIFEST_SCHEMA_VERSION
 from services.audio.audio_meta import chapter_numbers, vbr_chapters_for_reciter
 from services.state import catalog as catalog_service
 from services.state import state as state_service
@@ -75,7 +75,7 @@ def _build_manifest_dict(reciters_block: dict[str, dict]) -> dict:
     """
     manifest = TsManifestResponse.model_validate(
         {
-            "schema_version": SCHEMA_VERSION,
+            "schema_version": MANIFEST_SCHEMA_VERSION,
             "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "commit": "",
             "dataset_base_url": "",
@@ -256,7 +256,7 @@ def _dev_fixture_shard(reciter: str, chapter: int) -> bytes | None:
 def _load_bucket_shard(reciter: str, chapter: int) -> bytes | None:
     """Return the raw gzipped per-chapter shard from the bucket, or ``None``.
 
-    The bucket gz body IS the wire body (segment-array shape, slim ``_meta``) —
+    The bucket gz body IS the native v12 wire body —
     the read path is a byte pass-through, no inflate/reshape/recompress. LRU
     so chapter scrubbing within one reciter doesn't re-pay the bucket fetch.
     """

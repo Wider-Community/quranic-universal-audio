@@ -2,8 +2,8 @@
 
 Read-only: pulls reciters/<slug>/timestamps/*.json.gz from the PROD bucket into a
 bucket-shaped local tree so the inspector can serve them via TS_DEV_FIXTURES
-without ever hitting the bucket. Backfill to v5 afterwards with
-``backfill_cells.py --local-root inspector/dev_fixtures``.
+without ever hitting the bucket. Files are read-only local evidence; migration
+commands write a separate staging directory.
 """
 
 from __future__ import annotations
@@ -27,7 +27,8 @@ bucket = bs.BUCKETS["prod"]
 def _read(path: str) -> bytes:
     for _attempt in range(6):
         try:
-            return fs.read_bytes(path)
+            payload = fs.read_bytes(path)
+            return payload if isinstance(payload, bytes) else payload.encode()
         except Exception as e:  # noqa: BLE001
             if "429" in str(e) or "rate limit" in str(e).lower():
                 time.sleep(30)
@@ -39,7 +40,11 @@ def _read(path: str) -> bytes:
 def fetch_reciter(slug: str) -> tuple[str, int]:
     tpath = bs.abs_path(bucket, f"reciters/{slug}/timestamps")
     try:
-        files = [f for f in fs.ls(tpath, detail=False) if f.endswith(".json.gz")]
+        files = [
+            path
+            for path in fs.ls(tpath, detail=False)
+            if isinstance(path, str) and path.endswith(".json.gz")
+        ]
     except FileNotFoundError:
         return slug, 0
     outdir = DEST / "reciters" / slug / "timestamps"
@@ -53,7 +58,9 @@ def fetch_reciter(slug: str) -> tuple[str, int]:
 
 def main() -> None:
     base = bs.abs_path(bucket, "reciters")
-    recs = sorted(p.split("/")[-1] for p in fs.ls(base, detail=False))
+    recs = sorted(
+        path.split("/")[-1] for path in fs.ls(base, detail=False) if isinstance(path, str)
+    )
     total = 0
     with ThreadPoolExecutor(max_workers=8) as ex:
         for slug, n in ex.map(fetch_reciter, recs):

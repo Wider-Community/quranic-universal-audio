@@ -45,7 +45,17 @@ from .bucket.segment import (
 )
 from .bucket.segments_doc import SegmentsDoc
 from .bucket.ts_job_record import TsJobRecord, TsJobSettings
-from .bucket.ts_shard import TsShardDoc, TsShardMeta, TsShardSegment, TsShardWord
+from .bucket.ts_shard import (
+    TsBoundaryTiming,
+    TsShardDoc,
+    TsShardMeta,
+    TsShardPart,
+    TsShardReading,
+    TsShardTiming,
+    TsSoundTiming,
+    TsUnitTiming,
+    TsWordTiming,
+)
 from .bucket.ts_validation import TsValidationDoc, TsValidationMeta, TsValidationVerse
 from .config.access import Member, Role, RolesFile
 from .config.activity_state import ActivityState
@@ -428,8 +438,13 @@ __all__ = [
     "TsJobSettings",
     "TsShardDoc",
     "TsShardMeta",
-    "TsShardSegment",
-    "TsShardWord",
+    "TsShardPart",
+    "TsShardReading",
+    "TsShardTiming",
+    "TsBoundaryTiming",
+    "TsSoundTiming",
+    "TsUnitTiming",
+    "TsWordTiming",
     "TsConfigResponse",
     "TsManifestReciter",
     "TsManifestResponse",
