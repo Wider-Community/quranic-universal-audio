@@ -127,11 +127,12 @@ variant profile remains in `_meta` for reproducibility.
 | `l` | `[unit_id, word_id, text, start_ms, end_ms, silent]` | Native letter-unit timing; nullable spans are retained. |
 | `c` | `[column_id, start_ms, end_ms]` | Sparse exact column-span override; a null pair suppresses a derived span. |
 
-Non-letter source units are omitted. A column span is normally reconstructed
-from its timed letter units and native cell-sound spans. During encoding the
-SDK compares that result with the full source-unit calculation and stores an
-entry in `c` only when they differ. This preserves highlighting exactly without
-repeating every mark-unit interval.
+Non-letter source units are omitted. A sounding column is timed exclusively by
+its native cell sounds; source-unit timing is only the fallback for a soundless
+column. During encoding the SDK compares the letter-only fallback with the full
+source-unit fallback and stores an entry in `c` only when they differ. This
+prevents an attached or inserted mark from extending a neighbouring sounding
+cell while preserving exact timing for genuinely soundless columns.
 
 Boundary timing is derived losslessly: the initial/final boundaries use the
 reading part edges, and each internal boundary runs from the preceding word end

@@ -63,6 +63,14 @@
     display: contents;
 }
 
+/* A recorded pause can end one native reading while the following word starts
+   the next. The outer row distributes spare space between those two runs; the
+   word-to-pause side does not. Cancel only that distributed excess so the
+   boundary tile remains exactly symmetric between its two words. */
+.timed-analysis .word-run:has(> .word-pair:last-child > .qc-recorded-pause) {
+    margin-inline-end: calc(16px - var(--inspector-row-gap, 16px));
+}
+
 .timed-analysis .mega-block {
     user-select: none;
     cursor: pointer;
@@ -246,6 +254,29 @@
 .timed-analysis :is(.mega-block, .pause-bridge).report-flag-staged,
 .timed-analysis :is(.mega-block, .pause-bridge).report-focused {
     outline-offset: 2px;
+}
+
+.cell-tip {
+    position: fixed;
+    z-index: 60;
+    padding: 3px 8px;
+    color: var(--text-primary);
+    font-size: 0.72rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.35;
+    text-align: center;
+    white-space: nowrap;
+    pointer-events: none;
+    background: var(--popover-bg);
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    box-shadow: var(--shadow-pop);
+    transform: translate(-50%, calc(-100% - 8px));
+}
+
+.cell-tip .tip-rule {
+    color: var(--text-secondary);
+    font-size: 0.68rem;
 }
 
 @media (prefers-reduced-motion: reduce) {

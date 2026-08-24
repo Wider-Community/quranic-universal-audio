@@ -184,10 +184,10 @@ function bindHooks(options: BindOptions): void {
         if (!id) return;
         const word = element.closest<HTMLElement>('[data-qc-word-id]');
         const wordId = word?.dataset.qcWordId ?? '';
-        const span = options.spans.get(id);
-        if (!span) return;
         const rules = options.rules?.get(id) ?? [];
         if (rules.length) element.dataset.qcRuleIds = rules.join(' ');
+        const span = options.spans.get(id);
+        if (!span) return;
         const entity: TimedEntity = {
             kind: options.kind,
             id,

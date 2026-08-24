@@ -7,7 +7,7 @@
         type HostClasses,
     } from '@quranic-phonemizer/cells';
     import { get } from 'svelte/store';
-    import { tick } from 'svelte';
+    import { onDestroy, tick } from 'svelte';
 
     import { dashPort } from '../../../lib/playback/dash-port';
     import { nativePayload } from '../../../lib/types/ts-client';
@@ -40,7 +40,7 @@
         type ParsedReading,
         type TimedEntity,
     } from '../utils/timed-entities';
-    import { defineInspectorRule } from '../utils/tajweed-rules';
+    import { defineInspectorRule, ruleLabel } from '../utils/tajweed-rules';
     import {
         cellTargetFromEl,
         ruleIdsFromEl,
@@ -53,6 +53,13 @@
     let entityByElement = new Map<HTMLElement, TimedEntity>();
     let clickTimer: ReturnType<typeof setTimeout> | null = null;
     let rowGap = $state(16);
+    let tipText = $state<string | null>(null);
+    let tipX = $state(0);
+    let tipY = $state(0);
+    let tipElement: HTMLElement | null = null;
+    let tipWarm = false;
+    let tipShowTimer: ReturnType<typeof setTimeout> | null = null;
+    let tipCoolTimer: ReturnType<typeof setTimeout> | null = null;
 
     type DisplayReading = ParsedReading & {
         boundaryPolicies: Map<string, BoundaryPolicy>;
@@ -84,9 +91,10 @@
                 const boundary = item.view.boundaries[index];
                 const sourceText = text.get(word.location) ?? word.display_text;
                 const policy = boundary && boundaryPolicies.get(String(boundary.boundary_id));
-                word.display_text = policy?.showMarker
-                    ? stripBoundaryMarks(sourceText, boundary)
-                    : sourceText;
+                word.display_text = stripBoundaryMarks(
+                    sourceText,
+                    policy?.showMarker ? boundary : undefined,
+                );
             });
             return { ...item, boundaryPolicies };
         });
@@ -394,18 +402,72 @@
 
     function onPointerOver(event: PointerEvent): void {
         const entity = entityOf(event.target);
-        if (!entity) return;
-        tsHoveredElement.set({
-            kind: entity.kind === 'sound' || entity.kind === 'bridge' ? 'phoneme' :
-                entity.kind === 'word' ? 'word' : 'letter',
-            startSec: entity.start,
-            endSec: entity.end,
-        });
+        if (entity) {
+            tsHoveredElement.set({
+                kind: entity.kind === 'sound' || entity.kind === 'bridge' ? 'phoneme' :
+                    entity.kind === 'word' ? 'word' : 'letter',
+                startSec: entity.start,
+                endSec: entity.end,
+            });
+        }
+        const target = entity?.element ?? (
+            event.target instanceof Element
+                ? event.target.closest<HTMLElement>('[data-qc-rule-ids]')
+                : null
+        );
+        if (!target) {
+            hideTip(false);
+            return;
+        }
+        if (target === tipElement) return;
+        hideTip(false);
+        tipElement = target;
+        const rules = (target.dataset.qcRuleIds ?? '').split(' ').filter(Boolean);
+        const duration = entity
+            ? `${Math.round(((entity.end - entity.start) * 1000) / 10) * 10} ms`
+            : null;
+        const lines = [duration, ...rules.map(ruleLabel)].filter(Boolean) as string[];
+        if (!lines.length) return;
+        if (tipCoolTimer) {
+            clearTimeout(tipCoolTimer);
+            tipCoolTimer = null;
+        }
+        const show = () => {
+            if (!target.isConnected || tipElement !== target) return;
+            const box = target.getBoundingClientRect();
+            tipX = box.left + box.width / 2;
+            tipY = box.top;
+            tipText = lines.join('\n');
+            tipWarm = true;
+        };
+        if (tipWarm) show();
+        else tipShowTimer = setTimeout(show, 500);
+    }
+
+    function hideTip(cool = true): void {
+        if (tipShowTimer) clearTimeout(tipShowTimer);
+        tipShowTimer = null;
+        tipText = null;
+        tipElement = null;
+        if (!cool) return;
+        if (tipCoolTimer) clearTimeout(tipCoolTimer);
+        tipCoolTimer = setTimeout(() => {
+            tipWarm = false;
+            tipCoolTimer = null;
+        }, 2000);
     }
 
     function onPointerLeave(): void {
         tsHoveredElement.set(null);
+        hideTip();
     }
+
+    onDestroy(() => {
+        if (clickTimer) clearTimeout(clickTimer);
+        if (tipShowTimer) clearTimeout(tipShowTimer);
+        if (tipCoolTimer) clearTimeout(tipCoolTimer);
+        tsHoveredElement.set(null);
+    });
 </script>
 
 {#snippet addon(word: { location: string })}
@@ -440,7 +502,7 @@
                 context={item.context}
                 crossWordMergers="compact"
                 verseFlow="inline"
-                showTooltips={true}
+                showTooltips={false}
                 hostClasses={hostClasses(item)}
                 keepBoundaryWithNext={keepBoundaryWithNext(item)}
                 wordAddon={addon}
@@ -448,3 +510,11 @@
         </div>
     {/each}
 </div>
+
+{#if tipText}
+    <div class="cell-tip" dir="ltr" style:left={`${tipX}px`} style:top={`${tipY}px`} role="tooltip">
+        {#each tipText.split('\n') as line (line)}
+            <div class:tip-rule={!line.endsWith(' ms')}>{line}</div>
+        {/each}
+    </div>
+{/if}
