@@ -46,7 +46,7 @@ def _shard(readings: list[dict]) -> dict:
             "schema_version": 12,
             "chapter": 1,
             "audio_category": "by_surah",
-            "phonemizer_version": "2.14",
+            "phonemizer_version": "2.15",
             "native_schema_version": 2,
             "renderer_codec_version": 1,
             "native_profile": {

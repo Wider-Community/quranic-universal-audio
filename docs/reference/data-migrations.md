@@ -88,8 +88,8 @@ all positional report coordinates with native targets. It does not rerun MFA.
 
 1. Download a reciter's chapters read-only into a local evidence directory.
 2. Run `scripts/migrations/restamp_timestamps_v12.py` into a fresh staging directory. It rebuilds
-   each maximal connected wasl reading with phonemizer 2.14, transfers intervals only after exact
-   token/identity checks, recuts source units, validates schema closure, and checks deterministic gzip.
+   each maximal connected wasl reading with phonemizer 2.15, transfers intervals only after exact
+   reading-level token/identity checks, recuts grouped source units, validates schema closure, and checks deterministic Brotli.
 3. Run the full reciter audit and canonical release projection against the staged output.
 4. Run `scripts/migrations/migrate_ts_reports_v12.py` against a disposable DB copy and the same
    staged chapters. Every report must resolve exactly once.

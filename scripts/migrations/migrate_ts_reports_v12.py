@@ -87,22 +87,29 @@ def _recut_units(reading: dict, word: dict, stored: list) -> list[set[int]]:
         for row in reading["source"]["source"]["units"]
         if row["word_id"] == word["id"] and row["kind"] == "letter"
     ]
+    native_text = [_written(str(unit["text"])) for unit in units]
+    stored_text = [_written(str(old[0])) for old in stored[3]]
+    if "".join(native_text) != "".join(stored_text):
+        raise MappingError(f"letter recut failed at {word['ref']}")
+
+    native_ranges: list[tuple[int, int]] = []
+    at = 0
+    for text in native_text:
+        native_ranges.append((at, at + len(text)))
+        at += len(text)
+
     out: list[set[int]] = []
     at = 0
-    for old in stored[3]:
-        wanted, seen, ids = _written(old[0]), "", set()
-        while seen != wanted and at < len(units):
-            piece = _written(units[at]["text"])
-            if not piece or not wanted.startswith(seen + piece):
-                break
-            seen += piece
-            ids.add(int(units[at]["id"]))
-            at += 1
-        if seen != wanted:
-            raise MappingError(f"letter recut failed at {word['ref']}")
-        out.append(ids)
-    if at != len(units):
-        raise MappingError(f"letter recut left units at {word['ref']}")
+    for text in stored_text:
+        end = at + len(text)
+        out.append(
+            {
+                int(units[index]["id"])
+                for index, (start, stop) in enumerate(native_ranges)
+                if start < end and stop > at
+            }
+        )
+        at = end
     return out
 
 
@@ -117,13 +124,22 @@ def _column_sound_sets(owner: dict) -> dict[int, list[set[int]]]:
     return out
 
 
-def _mapped_column(reading: dict, word: dict, stored: list, cell_index: int) -> dict:
+def _mapped_column(
+    reading: dict,
+    word: dict,
+    stored: list,
+    legacy_sound_ids: list[int],
+    cell_index: int,
+) -> dict:
     cells = stored[5] if len(stored) > 5 else []
     if not 0 <= cell_index < len(cells):
         raise MappingError(f"cell {cell_index} absent at {word['ref']}")
     old = cells[cell_index]
     owner = _owner(reading, int(word["id"]))
-    sounds = {int(word["sound_ids"][index]) for index in old[3]}
+    sound_indexes = [int(index) for index in old[3]]
+    if any(index < 0 or index >= len(legacy_sound_ids) for index in sound_indexes):
+        raise MappingError(f"cell sound index absent at {word['ref']}:{cell_index}")
+    sounds = {legacy_sound_ids[index] for index in sound_indexes}
     unit_sets = _recut_units(reading, word, stored)
     letter_index = int(old[4])
     units = unit_sets[letter_index] if 0 <= letter_index < len(unit_sets) else set()
@@ -139,7 +155,9 @@ def _mapped_column(reading: dict, word: dict, stored: list, cell_index: int) -> 
     for column in owner["columns"]:
         column_id = int(column["id"])
         sound_match = bool(sounds) and sounds in by_column[column_id]
-        unit_match = bool(units & set(map(int, column["source_unit_ids"])))
+        source_units = set(map(int, column["source_unit_ids"]))
+        anchor = column.get("anchor_unit_id")
+        unit_match = bool(units & source_units) or (anchor is not None and int(anchor) in units)
         text_match = not old[0] or _written(str(old[0])) in _written(str(column["text"]))
         if (sound_match or unit_match) and column["role"] in allowed and text_match:
             matches.append(column)
@@ -150,7 +168,13 @@ def _mapped_column(reading: dict, word: dict, stored: list, cell_index: int) -> 
     return matches[0]
 
 
-def _target_for(row: sqlite3.Row, reading: dict, word: dict | None, stored: list | None) -> dict:
+def _target_for(
+    row: sqlite3.Row,
+    reading: dict,
+    word: dict | None,
+    stored: list | None,
+    legacy_sound_ids: list[int] | None,
+) -> dict:
     old_kind = str(row["target_kind"])
     kind = _KINDS.get(old_kind)
     if kind is None:
@@ -165,13 +189,13 @@ def _target_for(row: sqlite3.Row, reading: dict, word: dict | None, stored: list
         target_id = word["after_boundary_id"]
     elif kind == "sound":
         index = int(row["phoneme_flat_index"])
-        if not 0 <= index < len(word["sound_ids"]):
+        if legacy_sound_ids is None or not 0 <= index < len(legacy_sound_ids):
             raise MappingError(f"sound index {index} absent at {word['ref']}")
-        target_id = word["sound_ids"][index]
+        target_id = legacy_sound_ids[index]
     else:
-        if stored is None:
+        if stored is None or legacy_sound_ids is None:
             raise MappingError(f"{old_kind} target has no legacy word")
-        column = _mapped_column(reading, word, stored, int(row["cell_index"]))
+        column = _mapped_column(reading, word, stored, legacy_sound_ids, int(row["cell_index"]))
         if kind == "column":
             target_id = column["id"]
         else:
@@ -196,7 +220,39 @@ def _occasions(legacy: dict) -> list[list[dict]]:
     return out
 
 
-def _word_candidates(row: sqlite3.Row, legacy: dict, new: dict) -> list[tuple[dict, dict, list]]:
+def _legacy_sound_ids(reading: dict, legacy: dict, wanted: list) -> list[int]:
+    legacy_parts = []
+    for part in reading["parts"]:
+        matches = [
+            segment
+            for segment in legacy["segments"]
+            if segment["ref"] == part["ref"] and segment["t"] == part["t"]
+        ]
+        if len(matches) != 1:
+            raise MappingError(
+                f"reading {reading['id']} part {part['ref']} resolved {len(matches)} legacy rows"
+            )
+        legacy_parts.append(matches[0])
+
+    native_ids = [int(sound["id"]) for sound in reading["analysis"]["result"]["sounds"]]
+    at = 0
+    answer: list[int] | None = None
+    for segment in legacy_parts:
+        for stored in segment["words"]:
+            count = len(stored[4]) if len(stored) > 4 else 0
+            if stored is wanted:
+                answer = native_ids[at : at + count]
+            at += count
+    if at != len(native_ids):
+        raise MappingError(f"sound stream length drift in reading {reading['id']}")
+    if answer is None:
+        raise MappingError(f"legacy word missing from reading {reading['id']}")
+    return answer
+
+
+def _word_candidates(
+    row: sqlite3.Row, legacy: dict, new: dict
+) -> list[tuple[dict, dict, list, list[int]]]:
     position = int(row["word_index"])
     out = []
     for occasion in _occasions(legacy):
@@ -225,7 +281,7 @@ def _word_candidates(row: sqlite3.Row, legacy: dict, new: dict) -> list[tuple[di
             word = next(
                 one for one in reading["analysis"]["result"]["words"] if one["id"] == word_id
             )
-            out.append((reading, word, stored))
+            out.append((reading, word, stored, _legacy_sound_ids(reading, legacy, stored)))
     return out
 
 
@@ -233,15 +289,15 @@ def _map_one(row: sqlite3.Row, legacy: dict, new: dict) -> dict:
     candidates = []
     if row["word_index"] is None:
         sources = [
-            (reading, None, None)
+            (reading, None, None, None)
             for reading in new["readings"]
             if _part_has(reading, row["verse_key"])
         ]
     else:
         sources = _word_candidates(row, legacy, new)
-    for reading, word, stored in sources:
+    for reading, word, stored, legacy_sound_ids in sources:
         try:
-            target = _target_for(row, reading, word, stored)
+            target = _target_for(row, reading, word, stored, legacy_sound_ids)
             snapshot = resolve_target(new, row["verse_key"], target)
             if snapshot is not None:
                 candidates.append((target, snapshot))

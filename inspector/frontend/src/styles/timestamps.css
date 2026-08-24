@@ -45,14 +45,22 @@
     --qc-dur: var(--hl-release-dur, 100ms);
     --qc-ease: var(--hl-release-ease, ease);
     max-height: var(--unified-display-max-height, 800px);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: center;
+    direction: rtl;
+    column-gap: var(--inspector-row-gap, 16px);
+    row-gap: var(--mega-line-gap, 16px);
     padding: 20px;
     overflow-y: auto;
     background: var(--hl-frame-bg, var(--panel));
     border-radius: 10px;
 }
 
-.timed-reading + .timed-reading {
-    margin-top: var(--mega-line-gap, 16px);
+.timed-reading,
+.timed-reading > .analysis-row {
+    display: contents;
 }
 
 .timed-analysis .mega-block {
@@ -133,14 +141,6 @@
     color: var(--hl-letter-ink, var(--ink-on-color));
 }
 
-.timed-analysis.hl-track .mega-block.active .mega-word {
-    background: linear-gradient(
-        to left,
-        var(--ts-word-deep, var(--anim-highlight-color)) calc(var(--fill, 0) * 100%),
-        var(--hl-word-track, var(--hl-cell-rest)) 0
-    );
-}
-
 .timed-analysis.hl-track .mega-letter.active,
 .timed-analysis.hl-track .haraka-cell.active {
     background: linear-gradient(
@@ -153,7 +153,7 @@
 
 .timed-analysis.hl-track .mega-phoneme.active {
     background: linear-gradient(
-        to right,
+        to left,
         var(--ts-phoneme-deep, var(--hl-phoneme-color)) calc(var(--fill, 0) * 100%),
         var(--hl-phoneme-track, var(--hl-cell-rest)) 0
     );
@@ -165,6 +165,46 @@
     z-index: 1;
     outline: 2px solid var(--anim-highlight-color);
     outline-offset: 2px;
+}
+
+.timed-analysis .boundary-tile.qc-boundary-empty {
+    display: none;
+}
+
+.timed-analysis .boundary-tile.qc-boundary-hidden > .pause-bridge {
+    display: none;
+}
+
+.timed-analysis.report-missed .boundary-tile.qc-boundary-empty {
+    display: flex;
+}
+
+.timed-analysis.report-missed .boundary-tile.qc-boundary-hidden > .pause-bridge {
+    display: flex;
+}
+
+.timed-analysis.report-existing .boundary-tile.qc-boundary-hidden {
+    display: none;
+}
+
+.timed-analysis .boundary-tile.qc-recorded-pause > .pause-bridge {
+    color: var(--qc-idle-fg);
+    background: var(--qc-cell-rest);
+    border-color: transparent;
+}
+
+.timed-analysis .boundary-tile.qc-recorded-pause.active > .pause-bridge:not(.verse-mark) {
+    color: var(--hl-word-ink, var(--ink-on-color));
+    background: var(--ts-word-deep, var(--anim-highlight-color));
+    border-color: var(--anim-highlight-color);
+}
+
+.timed-analysis .boundary-tile.qc-verse-end > .pause-bridge,
+.timed-analysis .boundary-tile.qc-verse-end.active > .pause-bridge {
+    color: var(--qc-word-ink);
+    background: transparent;
+    border-color: transparent;
+    opacity: 1;
 }
 
 .timed-analysis.report-mode :is(

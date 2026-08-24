@@ -15,7 +15,7 @@ schema-v12 JSON document compressed with deterministic Brotli quality 6:
     "schema_version": 12,
     "chapter": 1,
     "audio_category": "by_surah",
-    "phonemizer_version": "2.14.0",
+    "phonemizer_version": "2.15.0",
     "native_schema_version": 2,
     "renderer_codec_version": 1,
     "native_profile": {
@@ -38,7 +38,7 @@ schema-v12 JSON document compressed with deterministic Brotli quality 6:
 }
 ```
 
-There is no v11 reader. Historical v11 objects are accepted only by the
+There is no legacy reader. Historical v9/v11 objects are accepted only by the
 one-time restamper, which emits this final v12 shape and validates it before
 upload.
 

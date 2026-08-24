@@ -92,7 +92,7 @@ export function nativeShard(readings: TsShardReading[]): TsShardResponse {
             },
             chapter: 1,
             audio_category: 'by_surah',
-            phonemizer_version: '2.14',
+            phonemizer_version: '2.15',
         },
         readings,
     };

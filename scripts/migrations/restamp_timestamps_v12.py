@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One-time strict local restamp from timestamp shard v11 to native v12."""
+"""One-time strict local restamp from historical timestamp shards to native v12."""
 
 from __future__ import annotations
 
@@ -81,8 +81,8 @@ def run(source: Path, output: Path, *, require_chapters: int) -> dict:
         versions.add(str(document["_meta"]["phonemizer_version"]))
         (output / f"{chapter}.json.br").write_bytes(payload)
         _add(summary, document, len(payload))
-    if len(versions) != 1 or next(iter(versions)).removesuffix(".0") != "2.14":
-        raise RuntimeError(f"expected phonemizer 2.14, got {sorted(versions)}")
+    if versions != {"2.15"} and versions != {"2.15.0"}:
+        raise RuntimeError(f"expected phonemizer 2.15, got {sorted(versions)}")
     return {"status": "ok", "phonemizer_versions": sorted(versions), **dict(summary)}
 
 

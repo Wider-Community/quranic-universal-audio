@@ -3,6 +3,8 @@
         AnalysisRow,
         parse,
         stripBoundaryMarks,
+        type CellBoundary,
+        type HostClasses,
     } from '@quranic-phonemizer/cells';
     import { get } from 'svelte/store';
     import { tick } from 'svelte';
@@ -32,7 +34,9 @@
     import { tajweedSettings } from '../stores/tajweed-settings';
     import { TS_CLICK_DELAY_MS } from '../utils/constants';
     import {
+        buildBoundaryPolicies,
         buildTimedEntityCache,
+        type BoundaryPolicy,
         type ParsedReading,
         type TimedEntity,
     } from '../utils/timed-entities';
@@ -48,6 +52,11 @@
     let entities: TimedEntity[] = [];
     let entityByElement = new Map<HTMLElement, TimedEntity>();
     let clickTimer: ReturnType<typeof setTimeout> | null = null;
+    let rowGap = $state(16);
+
+    type DisplayReading = ParsedReading & {
+        boundaryPolicies: Map<string, BoundaryPolicy>;
+    };
 
     const displayData = $derived($focusWaslGroup?.data ?? $loadedVerse?.data ?? null);
     const focusRef = $derived($focusWaslGroup?.focusRef ?? $loadedVerse?.data.verse_ref ?? '');
@@ -55,28 +64,55 @@
         Object.entries($tajweedSettings).filter(([, value]) => !value.enabled).map(([key]) => key),
     ));
 
-    const parsed = $derived.by((): ParsedReading[] => {
+    const parsed = $derived.by((): DisplayReading[] => {
         void i18n.locale;
         const data = displayData;
         const text = new Map(data?.words.map((word) => [word.location, word.display_text]) ?? []);
-        return data?.native.map((reading) => {
+        const readings: ParsedReading[] = data?.native.map((reading) => {
             const result = parse(nativePayload(reading), defineInspectorRule, {
                 iqlabTanween: 'mini-meem',
                 iqlabNoon: 'mini-meem',
                 openTanween: true,
             });
             result.context.disabled = disabled;
-            result.view.words.forEach((word, index) => {
-                const boundary = result.view.boundaries[index];
-                word.display_text = stripBoundaryMarks(text.get(word.location) ?? word.display_text, boundary);
-            });
             return { reading, ...result };
         }) ?? [];
+        const policies = buildBoundaryPolicies(readings);
+        return readings.map((item) => {
+            const boundaryPolicies = policies.get(item.reading.id) ?? new Map();
+            item.view.words.forEach((word, index) => {
+                const boundary = item.view.boundaries[index];
+                const sourceText = text.get(word.location) ?? word.display_text;
+                const policy = boundary && boundaryPolicies.get(String(boundary.boundary_id));
+                word.display_text = policy?.showMarker
+                    ? stripBoundaryMarks(sourceText, boundary)
+                    : sourceText;
+            });
+            return { ...item, boundaryPolicies };
+        });
     });
 
     const verseOf = (location: string): string => location.split(':').slice(0, 2).join(':');
     const wordClass = (word: { location: string }): string =>
         verseOf(word.location) === focusRef ? '' : 'qc-context';
+
+    function boundaryClass(item: DisplayReading, boundary: CellBoundary): string {
+        const policy = item.boundaryPolicies.get(String(boundary.boundary_id));
+        const hasContent = boundary.bridges.length > 0
+            || boundary.columns.some((column) => column.role !== 'stop_sign');
+        return [
+            policy?.showMarker ? '' : 'qc-boundary-hidden',
+            !policy?.showMarker && !hasContent ? 'qc-boundary-empty' : '',
+            policy?.recordedPause ? 'qc-recorded-pause' : '',
+            policy?.verseEnd ? 'qc-verse-end' : '',
+            policy?.sakt ? 'qc-sakt' : '',
+        ].filter(Boolean).join(' ');
+    }
+
+    const hostClasses = (item: DisplayReading): HostClasses => ({
+        word: wordClass,
+        boundary: (boundary) => boundaryClass(item, boundary),
+    });
 
     function offsetSeconds(): number {
         const group = get(focusWaslGroup);
@@ -94,12 +130,40 @@
         entities = cache.entities;
         entityByElement = cache.byElement;
         for (const entity of entities) {
+            if (entity.kind === 'boundary') continue;
             entity.element.tabIndex = 0;
             entity.element.setAttribute('role', 'button');
         }
     }
 
+    function recomputeRowGap(): void {
+        if (!root) return;
+        const units = root.querySelectorAll<HTMLElement>('.word-run');
+        if (units.length < 2) {
+            rowGap = 16;
+            return;
+        }
+        const style = getComputedStyle(root);
+        const width = root.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+        const rows = new Map<number, { free: number; count: number }>();
+        units.forEach((unit) => {
+            const box = unit.getBoundingClientRect();
+            const key = [...rows.keys()].find((row) => Math.abs(row - box.bottom) <= 1)
+                ?? Math.round(box.bottom);
+            const value = rows.get(key) ?? { free: width, count: 0 };
+            value.free -= box.width;
+            value.count += 1;
+            rows.set(key, value);
+        });
+        const candidates = [...rows.values()]
+            .filter((row) => row.count > 1)
+            .map((row) => row.free / (row.count - 1));
+        const next = candidates.length ? Math.min(...candidates) : 16;
+        rowGap = Math.max(16, Math.min(next, 40));
+    }
+
     function updateReportClasses(): void {
+        const mode = $reportMode;
         const reports = new Map($currentVerseReports
             .filter((report) => report.status === 'open')
             .map((report) => [targetCellKey(report.target), report]));
@@ -111,20 +175,28 @@
             entity.element.classList.toggle('report-focused', $focusedCellKey === key);
             if (report) entity.element.dataset.qcReportCategory = report.category;
             else delete entity.element.dataset.qcReportCategory;
+            if (entity.kind === 'boundary') {
+                const targetable = mode.kind === 'silence';
+                entity.element.tabIndex = targetable ? 0 : -1;
+                if (targetable) entity.element.setAttribute('role', 'button');
+                else entity.element.removeAttribute('role');
+            }
         }
     }
 
     function updateLoopClasses(): void {
         const target = $loopTarget;
         for (const entity of entities) {
-            const kindMatches = target?.kind === 'word' ? entity.kind === 'word'
-                : target?.kind === 'phoneme' ? entity.kind === 'sound' || entity.kind === 'bridge'
-                : entity.kind === 'column' || entity.kind === 'group';
-            const spanMatches = target
-                && Math.abs(entity.start - target.startSec) < 0.001
-                && Math.abs(entity.end - target.endSec) < 0.001;
+            const kindMatches = target?.kind === 'word'
+                ? entity.kind === 'word'
+                : target?.kind === 'phoneme'
+                    ? entity.kind === 'sound'
+                    : entity.kind === 'column';
+            const identityMatches = target?.kind === 'word'
+                ? entity.wordIndex === target.wordIndex
+                : entity.childIndex === target?.childIndex;
             entity.element.classList.toggle(
-                'loop', Boolean(target && kindMatches && spanMatches && entity.wordIndex === target.wordIndex),
+                'loop', Boolean(target && kindMatches && identityMatches),
             );
         }
     }
@@ -136,7 +208,23 @@
             rebuildCache();
             updateReportClasses();
             updateLoopClasses();
+            recomputeRowGap();
         });
+    });
+
+    $effect(() => {
+        void $showLetters;
+        void $showPhonemes;
+        void $showTranslations;
+        void tick().then(recomputeRowGap);
+    });
+
+    $effect(() => {
+        if (!root || typeof ResizeObserver === 'undefined') return;
+        const observer = new ResizeObserver(recomputeRowGap);
+        observer.observe(root);
+        if (document.fonts) void document.fonts.ready.then(recomputeRowGap);
+        return () => observer.disconnect();
     });
 
     $effect(() => {
@@ -163,8 +251,8 @@
         for (const entity of entities) {
             const active = time >= entity.start && time < entity.end;
             entity.element.classList.toggle('active', active);
-            if (entity.kind === 'word') entity.element.classList.toggle('past', time >= entity.end);
-            if (wipe && active) {
+            const tracks = entity.kind === 'column' || entity.kind === 'sound';
+            if (wipe && active && tracks) {
                 const fill = (time - entity.start) / Math.max(entity.end - entity.start, 0.001);
                 entity.element.style.setProperty('--fill', String(Math.max(0, Math.min(fill, 1))));
             } else entity.element.style.removeProperty('--fill');
@@ -211,6 +299,7 @@
         const next = loopFor(entity);
         return current?.kind === next.kind
             && current.wordIndex === next.wordIndex
+            && current.childIndex === next.childIndex
             && Math.abs(current.startSec - next.startSec) < 0.001
             && Math.abs(current.endSec - next.endSec) < 0.001;
     }
@@ -327,6 +416,10 @@
     class:no-phonemes={!$showPhonemes}
     class:hl-track={$highlightWipe}
     class:report-mode={$reportMode.kind !== 'inactive'}
+    class:report-silence={$reportMode.kind === 'silence'}
+    class:report-missed={$reportMode.kind === 'silence' && $reportMode.subtype === 'pause_missed'}
+    class:report-existing={$reportMode.kind === 'silence' && $reportMode.subtype !== 'pause_missed'}
+    style:--inspector-row-gap={`${rowGap}px`}
     bind:this={root}
     tabindex="-1"
     onclick={onClick}
@@ -343,7 +436,7 @@
                 crossWordMergers="compact"
                 verseFlow="inline"
                 showTooltips={true}
-                hostClasses={{ word: wordClass }}
+                hostClasses={hostClasses(item)}
                 wordAddon={addon}
             />
         </div>
