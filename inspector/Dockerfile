@@ -21,9 +21,16 @@ RUN apk add --no-cache git openssh-client
 # Copy the full frontend before `npm ci`: the root `postinstall` hook runs
 # `paraglide:compile`, which needs `project.inlang/` + the message sources.
 COPY inspector/frontend ./
-RUN --mount=type=ssh mkdir -p -m 700 /root/.ssh && \
+RUN --mount=type=ssh,required=false \
+    --mount=type=secret,id=CELLS_DEPLOY_KEY,required=false \
+    mkdir -p -m 700 /root/.ssh && \
+    if [ -f /run/secrets/CELLS_DEPLOY_KEY ]; then \
+      cp /run/secrets/CELLS_DEPLOY_KEY /root/.ssh/id_ed25519 && \
+      chmod 600 /root/.ssh/id_ed25519; \
+    fi && \
     ssh-keyscan -H github.com >> /root/.ssh/known_hosts && \
-    npm ci
+    npm ci && \
+    rm -f /root/.ssh/id_ed25519
 RUN npm run build
 
 

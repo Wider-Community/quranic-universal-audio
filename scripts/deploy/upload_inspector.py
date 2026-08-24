@@ -273,7 +273,9 @@ def _retry_on_429(label: str, fn, *args, **kwargs):
             time.sleep(wait)
 
 
-def _upload(stage_root: Path, repo_id: str, token: str, commit_msg: str) -> str:
+def _upload(
+    stage_root: Path, repo_id: str, token: str, commit_msg: str, cells_deploy_key: str
+) -> str:
     api = HfApi(token=token)
     # The prod/dev Spaces are permanent — skip the create_repo call (it 409s on
     # every deploy and still spends a request) unless the Space is actually
@@ -288,6 +290,13 @@ def _upload(stage_root: Path, repo_id: str, token: str, commit_msg: str) -> str:
             private=True,
             exist_ok=True,
         )
+    _retry_on_429(
+        "add_space_secret",
+        api.add_space_secret,
+        repo_id=repo_id,
+        key="CELLS_DEPLOY_KEY",
+        value=cells_deploy_key,
+    )
     _retry_on_429(
         "upload_folder",
         api.upload_folder,
@@ -347,6 +356,10 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
+    cells_deploy_key = os.environ.get("CELLS_DEPLOY_KEY")
+    if not cells_deploy_key and not args.dry_run:
+        print("ERROR: CELLS_DEPLOY_KEY missing in env.", file=sys.stderr)
+        return 2
 
     repo = repo_root()
     repo_id = SPACE_REPOS[args.env]
@@ -381,7 +394,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         print(f"==> Uploading to {repo_id}")
-        url = _upload(stage_root, repo_id, token, commit_msg)
+        url = _upload(stage_root, repo_id, token, commit_msg, cells_deploy_key or "")
         print(f"==> Done. Space: {url}")
 
     return 0

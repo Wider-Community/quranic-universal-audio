@@ -84,6 +84,15 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
+      - name: Start renderer SSH agent
+        env:
+          CELLS_DEPLOY_KEY: ${{ secrets.CELLS_DEPLOY_KEY }}
+        run: |
+          eval "$(ssh-agent -s)"
+          ssh-add - <<< "$CELLS_DEPLOY_KEY"
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+          echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> "$GITHUB_ENV"
+
       - name: Build image (cached)
         uses: docker/build-push-action@v6
         with:
@@ -94,6 +103,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
+          ssh: default
 
       - name: Boot smoke test (/healthz)
         run: python scripts/deploy/smoke_boot.py --skip-build --tag inspector-smoke:latest
@@ -138,5 +148,6 @@ jobs:
       - name: Upload to Hugging Face Space
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          CELLS_DEPLOY_KEY: ${{ secrets.CELLS_DEPLOY_KEY }}
         run: |
           python scripts/deploy/upload_inspector.py "${{ steps.env.outputs.env }}"

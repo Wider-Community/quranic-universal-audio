@@ -238,6 +238,9 @@ CI gate is green. The v11 application continues to read `.json.gz` while that
 upload completes. Then merge/deploy the v12-only SDK, renderer, and Inspector
 changes as one coordinated consumer switch. This makes the visible cutover the
 application deployment, not thousands of sequential bucket writes.
+The deploy workflow synchronizes the renderer repository's read-only
+`CELLS_DEPLOY_KEY` into each Docker Space before upload; the Docker build reads
+it through a build-secret mount and never stores it in an image layer.
 
 Rollback is the inverse consumer switch: redeploy the v11 application, which
 still finds the untouched `.json.gz` objects. If a legacy object ever needs
