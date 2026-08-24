@@ -123,6 +123,7 @@ Stop-sign detection is one shared util — `lib/utils/waqf.ts` (`splitWaqf`/`has
 - **Teleprompter** (`LineAnimation`) — `wasl-chains.ts` precomputes the chains from `units`; the page extends to the whole chain (`ayahEndIdx`) and clears only on a chain change, so N+1's words flow onto the same line and the `۝` marker sits inline. The marker silence-colours (`.marker-pause`) on a real waqf stop at a non-bridging verse end.
 - **Analysis + waveform** (Timestamps) — `TimestampsTab` selects the native reading containing the active occasion and passes it to `TimedAnalysisRow`. Cross-verse parts stay one wasl reading and render as inline verse blocks; non-focus parts dim and become non-editable without changing phonemes. `TimestampsWaveform` spans the connected audio window and uses the same native timing index for highlight, seek, loop, and hover.
   - **Native junction** — the reading's existing native merger/bridge crosses the verse boundary unchanged. The frontend never synthesizes it.
+  - **Recorded-pause packing** — the timing sidecar identifies recorded pauses and passes them through the renderer's `keepBoundaryWithNext` host predicate. The renderer keeps `word + pause + word` as one unbreakable run, so the Inspector's dynamic row spacing stays outside the junction and the pause marker remains symmetric between its words.
 
 ### `lib/catalog/`, `lib/refs/`, `lib/icons/`
 

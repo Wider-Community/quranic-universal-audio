@@ -114,6 +114,11 @@
         boundary: (boundary) => boundaryClass(item, boundary),
     });
 
+    const keepBoundaryWithNext = (item: DisplayReading) =>
+        (boundary: CellBoundary): boolean => Boolean(
+            item.boundaryPolicies.get(String(boundary.boundary_id))?.recordedPause,
+        );
+
     function offsetSeconds(): number {
         const group = get(focusWaslGroup);
         if (group) return group.span[0] / 1000;
@@ -437,6 +442,7 @@
                 verseFlow="inline"
                 showTooltips={true}
                 hostClasses={hostClasses(item)}
+                keepBoundaryWithNext={keepBoundaryWithNext(item)}
                 wordAddon={addon}
             />
         </div>
