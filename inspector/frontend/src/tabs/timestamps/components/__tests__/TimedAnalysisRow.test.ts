@@ -1,4 +1,4 @@
-import { cleanup, render, waitFor } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { chapterOccasions } from '../../../../lib/recitation-data/occasions';
@@ -43,5 +43,85 @@ describe('TimedAnalysisRow native renderer integration', () => {
         expect(container.querySelectorAll('[data-qc-column-id]')).toHaveLength(2);
         expect(container.querySelectorAll('[data-qc-sound-id]')).toHaveLength(2);
         expect(container.querySelector('.verse-glyph')).not.toBeNull();
+    });
+
+    it('shows the native merger rule when its compact bridge phoneme is hovered', async () => {
+        const reading = nativeReading('r1', [
+            { ref: '1:1', start: 100, end: 300, text: 'a' },
+            { ref: '1:1', start: 300, end: 500, text: 'b' },
+        ]);
+        const firstColumn = Number(reading.wire.cells.cell_view.words[0]!.columns[0]!.id);
+        const secondColumn = Number(reading.wire.cells.cell_view.words[1]!.columns[0]!.id);
+        reading.wire.analysis.result.rule_occurrences = [{
+            id: 7,
+            rule_id: 'idgham_mutamathilayn',
+        }];
+        reading.wire.cells.cell_view.boundaries[0]!.bridges = [{
+            merger_id: 9,
+            before_column_ids: [firstColumn],
+            after_column_ids: [secondColumn],
+            sound: { sound_id: 1, column_ids: [firstColumn, secondColumn], rule_occurrence_ids: [7] },
+        }];
+        const data = assembleWaslGroup(
+            'r', chapterOccasions([reading]), '1:1', {}, {}, { audio_category: 'by_surah' }, '',
+        );
+        loadedVerse.set({ data, tsSegOffset: 0.1, tsSegEnd: 0.5 });
+
+        const { container } = render(TimedAnalysisRow);
+        await waitFor(() => expect(container.querySelector('[data-qc-bridge-id="9"]')).not.toBeNull());
+        const bridgeSound = container.querySelector<HTMLElement>(
+            '[data-qc-bridge-id="9"] [data-qc-sound-id="1"]',
+        )!;
+        await fireEvent.pointerOver(bridgeSound.querySelector('.ph-base')!);
+
+        await waitFor(
+            () => expect(container.querySelector('.cell-tip')?.textContent)
+                .toContain('Idgham Mutamathilayn'),
+            { timeout: 1_000 },
+        );
+    });
+
+    it.each([
+        ['lam_shamsiyyah', 'Lam Shamsiyyah'],
+        ['waqf_silah_drop', 'Waqf Silah Drop'],
+    ])('shows %s on an untimed native column', async (ruleId, label) => {
+        const reading = nativeReading('r1', [
+            { ref: '1:1', start: 100, end: 300, text: 'a' },
+        ]);
+        const word = reading.wire.cells.cell_view.words[0]!;
+        const column = word.columns[0]!;
+        const sounding = {
+            ...column,
+            id: Number(column.id) + 1,
+            text: 'b',
+            owned_sound_ids: [0],
+            rule_occurrence_ids: [],
+            silence: null,
+        };
+        reading.wire.analysis.result.rule_occurrences = [{ id: 7, rule_id: ruleId }];
+        column.owned_sound_ids = [];
+        column.rule_occurrence_ids = [7];
+        column.silence = 7;
+        word.columns = [column, sounding];
+        word.sounds[0]!.column_ids = [Number(sounding.id)];
+        word.groups = [
+            { key: column.id, kind: 'base', column_ids: [column.id], sound_ids: [] },
+            { key: sounding.id, kind: 'base', column_ids: [sounding.id], sound_ids: [0] },
+        ];
+
+        const data = assembleWaslGroup(
+            'r', chapterOccasions([reading]), '1:1', {}, {}, { audio_category: 'by_surah' }, '',
+        );
+        loadedVerse.set({ data, tsSegOffset: 0.1, tsSegEnd: 0.3 });
+
+        const { container } = render(TimedAnalysisRow);
+        const selector = `[data-qc-column-id="${String(column.id)}"]`;
+        await waitFor(() => expect(container.querySelector(selector)).not.toBeNull());
+        await fireEvent.pointerOver(container.querySelector(`${selector} .cell-ink`)!);
+
+        await waitFor(
+            () => expect(container.querySelector('.cell-tip')?.textContent).toContain(label),
+            { timeout: 1_000 },
+        );
     });
 });

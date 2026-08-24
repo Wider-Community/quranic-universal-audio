@@ -410,11 +410,10 @@
                 endSec: entity.end,
             });
         }
-        const target = entity?.element ?? (
-            event.target instanceof Element
-                ? event.target.closest<HTMLElement>('[data-qc-rule-ids]')
-                : null
-        );
+        const ruleTarget = event.target instanceof Element
+            ? event.target.closest<HTMLElement>('[data-qc-rule-ids]')
+            : null;
+        const target = ruleTarget ?? entity?.element ?? null;
         if (!target) {
             hideTip(false);
             return;
@@ -423,7 +422,10 @@
         hideTip(false);
         tipElement = target;
         const rules = (target.dataset.qcRuleIds ?? '').split(' ').filter(Boolean);
-        const duration = entity
+        const ownsTiming = entity && (
+            target === entity.element || target.contains(entity.element)
+        );
+        const duration = ownsTiming
             ? `${Math.round(((entity.end - entity.start) * 1000) / 10) * 10} ms`
             : null;
         const lines = [duration, ...rules.map(ruleLabel)].filter(Boolean) as string[];

@@ -148,9 +148,17 @@ function entityRules(item: ParsedReading) {
         if (column.silence && item.context.rules[column.silence]) rules.push(column.silence);
         return [String(column.id), [...new Set(rules)]] as const;
     })));
-    const sounds = new Map<string, string[]>(owners.flatMap((owner) => owner.sounds.map((sound) => [
-        String(sound.sound_id), rulesOn(item, sound.rule_occurrence_ids),
-    ] as const)));
+    const sounds = new Map<string, string[]>();
+    owners.flatMap((owner) => [
+        ...owner.sounds,
+        ...owner.bridges.map((bridge) => bridge.sound),
+    ]).forEach((sound) => {
+        const id = String(sound.sound_id);
+        sounds.set(id, [...new Set([
+            ...(sounds.get(id) ?? []),
+            ...rulesOn(item, sound.rule_occurrence_ids),
+        ])]);
+    });
     const groups = new Map<string, string[]>(item.view.words.flatMap((word) => word.groups.map((group) => [
         groupKey(group),
         [...new Set([
