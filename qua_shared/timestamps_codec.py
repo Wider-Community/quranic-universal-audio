@@ -273,7 +273,7 @@ def decode_document(document: dict[str, Any]) -> dict[str, Any]:
     """Return a document with compact readings expanded for Python consumers."""
     readings = [decode_reading(one) for one in document["readings"]]
     ordered = sorted(readings, key=lambda row: row["parts"][0]["t"][0])
-    for current, following in zip(ordered, ordered[1:], strict=True):
+    for current, following in zip(ordered, ordered[1:], strict=False):
         boundary = current["timing"]["boundaries"][-1]
         boundary["end_ms"] = max(boundary["end_ms"], following["parts"][0]["t"][0])
     return {**document, "readings": readings}
