@@ -17,7 +17,24 @@ fi
 root="$(git rev-parse --show-toplevel)"
 cd "$root"
 branch="$(git rev-parse --abbrev-ref HEAD)"
+python_cmd="${PYTHON:-}"
+python_args=(-u)
+if [[ -z "$python_cmd" ]]; then
+    for candidate in python python3 python.exe py.exe; do
+        if command -v "$candidate" >/dev/null 2>&1; then
+            python_cmd="$candidate"
+            break
+        fi
+    done
+fi
+if [[ -z "$python_cmd" ]]; then
+    echo "python interpreter not found" >&2
+    exit 127
+fi
+if [[ "$python_cmd" == "py" || "$python_cmd" == "py.exe" ]]; then
+    python_args=(-3 -u)
+fi
 echo "==> Deploying checkout '$branch' to the $env Space"
-PYTHONUNBUFFERED=1 python -u scripts/deploy/upload_inspector.py "$env"
+PYTHONUNBUFFERED=1 "$python_cmd" "${python_args[@]}" scripts/deploy/upload_inspector.py "$env"
 echo "==> Upload done + Space factory-rebooting. Monitor readiness with:"
-echo "      python .claude/skills/deploy/scripts/wait_space.py $env   (run in background)"
+echo "      $python_cmd .claude/skills/deploy/scripts/wait_space.py $env   (run in background)"
