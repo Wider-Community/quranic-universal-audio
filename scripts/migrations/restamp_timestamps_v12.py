@@ -10,6 +10,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+import brotli
 import orjson
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -26,6 +27,11 @@ def _args() -> argparse.Namespace:
     parser.add_argument("output", type=Path, help="fresh local staging directory for v12 files")
     parser.add_argument("--summary", type=Path, help="write the audit summary as JSON")
     parser.add_argument("--require-chapters", type=int, default=114)
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="re-audit valid existing outputs and generate only missing chapters",
+    )
     return parser.parse_args()
 
 
@@ -36,9 +42,9 @@ def _files(root: Path) -> list[Path]:
     return files
 
 
-def _fresh_output(path: Path) -> None:
+def _prepare_output(path: Path, *, resume: bool) -> None:
     path.mkdir(parents=True, exist_ok=True)
-    if any(path.iterdir()):
+    if not resume and any(path.iterdir()):
         raise SystemExit(f"output directory must be empty: {path}")
 
 
@@ -55,6 +61,15 @@ def _restamp(path: Path) -> tuple[dict, bytes]:
     return document, first
 
 
+def _existing(path: Path) -> tuple[dict, bytes]:
+    payload = path.read_bytes()
+    document = orjson.loads(brotli.decompress(payload))
+    audit_v12_document(document)
+    if brotli_shard(document) != payload:
+        raise RuntimeError(f"existing output is not deterministic: {path}")
+    return document, payload
+
+
 def _add(summary: Counter, document: dict, size: int) -> None:
     counts = audit_v12_document(document)
     summary.update(counts)
@@ -66,30 +81,35 @@ def _add(summary: Counter, document: dict, size: int) -> None:
             summary["cross_verse_readings"] += 1
 
 
-def run(source: Path, output: Path, *, require_chapters: int) -> dict:
+def run(source: Path, output: Path, *, require_chapters: int, resume: bool = False) -> dict:
     files = _files(source)
     if require_chapters and len(files) != require_chapters:
         raise SystemExit(f"expected {require_chapters} chapters, found {len(files)}")
-    _fresh_output(output)
+    _prepare_output(output, resume=resume)
     summary: Counter = Counter()
     versions: set[str] = set()
     for path in files:
-        document, payload = _restamp(path)
+        target = output / f"{int(path.name.split('.', 1)[0])}.json.br"
+        document, payload = _existing(target) if resume and target.exists() else _restamp(path)
         chapter = int(document["_meta"]["chapter"])
         if chapter != int(path.name.split(".", 1)[0]):
             raise RuntimeError(f"chapter/path mismatch in {path}")
         versions.add(str(document["_meta"]["phonemizer_version"]))
-        (output / f"{chapter}.json.br").write_bytes(payload)
+        if not target.exists():
+            target.write_bytes(payload)
         _add(summary, document, len(payload))
-    if versions != {"2.15.1"}:
-        raise RuntimeError(f"expected phonemizer 2.15.1, got {sorted(versions)}")
+    if versions != {"2.15.3"}:
+        raise RuntimeError(f"expected phonemizer 2.15.3, got {sorted(versions)}")
     return {"status": "ok", "phonemizer_versions": sorted(versions), **dict(summary)}
 
 
 def main() -> int:
     args = _args()
     summary = run(
-        args.input.resolve(), args.output.resolve(), require_chapters=args.require_chapters
+        args.input.resolve(),
+        args.output.resolve(),
+        require_chapters=args.require_chapters,
+        resume=args.resume,
     )
     rendered = json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True)
     print(rendered)

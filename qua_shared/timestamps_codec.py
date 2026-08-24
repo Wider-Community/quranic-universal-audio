@@ -271,7 +271,12 @@ def decode_reading(reading: dict[str, Any]) -> dict[str, Any]:
 
 def decode_document(document: dict[str, Any]) -> dict[str, Any]:
     """Return a document with compact readings expanded for Python consumers."""
-    return {**document, "readings": [decode_reading(one) for one in document["readings"]]}
+    readings = [decode_reading(one) for one in document["readings"]]
+    ordered = sorted(readings, key=lambda row: row["parts"][0]["t"][0])
+    for current, following in zip(ordered, ordered[1:], strict=True):
+        boundary = current["timing"]["boundaries"][-1]
+        boundary["end_ms"] = max(boundary["end_ms"], following["parts"][0]["t"][0])
+    return {**document, "readings": readings}
 
 
 __all__ = [

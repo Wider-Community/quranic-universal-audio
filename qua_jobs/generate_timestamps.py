@@ -70,6 +70,7 @@ from qua_shared.timestamps_pipeline import (  # noqa: E402
 )
 
 log = logging.getLogger("generate_timestamps")
+EXPECTED_PHONEMIZER_VERSION = "2.15.3"
 
 
 def _beams(raw: str) -> list[int]:
@@ -232,12 +233,20 @@ def main() -> int:
 
     import qua_sdk
 
+    phonemizer_version = importlib.metadata.version("quranic-phonemizer")
+    if phonemizer_version != EXPECTED_PHONEMIZER_VERSION:
+        log.error(
+            "quranic-phonemizer %s required; found %s",
+            EXPECTED_PHONEMIZER_VERSION,
+            phonemizer_version,
+        )
+        return 3
     log.info(
         "mfa runtime: model=%s dictionary=%s qua_sdk=%s quranic-phonemizer=%s",
         model_path,
         dictionary_path,
         qua_sdk.__version__,
-        importlib.metadata.version("quranic-phonemizer"),
+        phonemizer_version,
     )
 
     beams = _beams(os.environ.get("BEAMS", "50"))

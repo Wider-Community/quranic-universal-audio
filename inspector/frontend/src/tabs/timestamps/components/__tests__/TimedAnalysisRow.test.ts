@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/svelte';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { dashPort } from '../../../../lib/playback/dash-port';
 import { chapterOccasions } from '../../../../lib/recitation-data/occasions';
 import { nativeReading } from '../../../../lib/recitation-data/test-native-fixture';
 import { assembleWaslGroup } from '../../../../lib/recitation-data/ts-source';
@@ -14,9 +15,31 @@ describe('TimedAnalysisRow native renderer integration', () => {
     });
 
     afterEach(() => {
+        vi.restoreAllMocks();
         cleanup();
         loadedVerse.set(null);
         focusWaslGroup.set(null);
+    });
+
+    it('highlights a verse marker for the recorded pause after its final word', async () => {
+        const reading = nativeReading('r1', [
+            { ref: '1:1', start: 100, end: 300, text: 'a' },
+        ]);
+        reading.parts[0]!.t[1] = 500;
+        reading.timing.boundaries = [{
+            boundary_id: 1, start_ms: 300, end_ms: 500,
+        }];
+        const data = assembleWaslGroup(
+            'r', chapterOccasions([reading]), '1:1', {}, {}, { audio_category: 'by_surah' }, '',
+        );
+        loadedVerse.set({ data, tsSegOffset: 0.1, tsSegEnd: 0.5 });
+        vi.spyOn(dashPort, 'currentTimeMs').mockReturnValue(400);
+
+        const { component, container } = render(TimedAnalysisRow);
+        await waitFor(() => expect(container.querySelector('.verse-mark')).not.toBeNull());
+        (component as unknown as { updateHighlights: () => void }).updateHighlights();
+
+        expect(container.querySelector('[data-qc-boundary-id]')?.classList).toContain('active');
     });
 
     it('renders connected verses with native hooks, a verse marker, and context opacity', async () => {

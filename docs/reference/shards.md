@@ -15,7 +15,7 @@ schema-v12 JSON document compressed with deterministic Brotli quality 6:
     "schema_version": 12,
     "chapter": 1,
     "audio_category": "by_surah",
-    "phonemizer_version": "2.15.1",
+    "phonemizer_version": "2.15.3",
     "native_schema_version": 2,
     "renderer_codec_version": 1,
     "native_profile": {
@@ -134,10 +134,11 @@ source-unit fallback and stores an entry in `c` only when they differ. This
 prevents an attached or inserted mark from extending a neighbouring sounding
 cell while preserving exact timing for genuinely soundless columns.
 
-Boundary timing is derived losslessly: the initial/final boundaries use the
-reading part edges, and each internal boundary runs from the preceding word end
-to the following word start, clamped to an empty interval on overlap. Boundary
-timing never changes the native semantic state.
+Boundary timing is derived losslessly: each internal boundary runs from the
+preceding word end to the following word start. A reading's final boundary runs
+through the next reading's start when the recording leaves an inter-reading
+gap; the chapter-final boundary ends at its final part edge. Overlaps clamp to
+an empty interval. Boundary timing never changes the native semantic state.
 
 ## Renderer policy is not shard schema
 
@@ -186,11 +187,70 @@ The Flask shard route passes the stored bytes through as `application/json`
 with `Content-Encoding: br`; browsers perform HTTP decompression and parse
 normal JSON. Manifest and reference-resource compression remain independent.
 
+## Production restamp runbook
+
+The v11-to-v12 cutover is backup-first and uses a frozen source. Never restamp
+from live paths while files can still change.
+
+1. Inventory every production `reciters/<slug>/timestamps/` tree. Record the
+   per-reciter filename/size map, total files, and total bytes.
+2. Choose a unique UTC-labelled backup prefix and prove it does not exist.
+3. Copy each timestamp directory server-side with the repository bucket tool:
+
+   ```powershell
+   python scripts/bucket/bucket_cp.py `
+     reciters/<slug>/timestamps `
+     backups/timestamps-v11-pre-v12-<UTC>/reciters/<slug>/timestamps `
+     --bucket prod --yes-prod
+   ```
+
+4. List source and backup independently and require identical relative
+   filenames and byte sizes for every reciter. A copy command's success message
+   alone is not a backup verification.
+5. Download from the verified backup prefix into local staging. Pin the
+   generation environment to `quranic-phonemizer==2.15.3` and the exact SDK
+   cutover commit, then run:
+
+   ```powershell
+   python scripts/migrations/restamp_timestamps_v12.py `
+     <stage>/v11/<slug> <stage>/v12/<slug> `
+     --require-chapters <backed-up-source-count> `
+     --summary <stage>/summaries/<slug>.json
+   ```
+
+6. Require one summary per source reciter, identical source/output chapter
+   sets, schema/native/codec versions `12/2/1`, phonemizer `2.15.3`, structural
+   audit success, deterministic Brotli, and byte-identical timing intervals.
+   Complete reciters require all 114 chapters. Pre-existing partial reciters
+   remain explicitly partial; missing chapters are never fabricated.
+
+The 2026-08-24 production freeze is
+`backups/timestamps-v11-pre-v12-20260824T133756Z`: 37 reciters, 4,126 files,
+and 282,951,608 bytes. Source and backup filename/size maps matched exactly.
+Thirty-five reciters have 114 chapters; `islam_sobhi_mp3quran` has 106 and
+`ahmed_saud_mp3quran` has 30.
+
+### Coordinated cutover and rollback
+
+Do not delete or overwrite `.json.gz` during the first v12 release. Upload the
+audited `.json.br` files alongside them only after every code PR and the audio
+CI gate is green. The v11 application continues to read `.json.gz` while that
+upload completes. Then merge/deploy the v12-only SDK, renderer, and Inspector
+changes as one coordinated consumer switch. This makes the visible cutover the
+application deployment, not thousands of sequential bucket writes.
+
+Rollback is the inverse consumer switch: redeploy the v11 application, which
+still finds the untouched `.json.gz` objects. If a legacy object ever needs
+restoration, copy its timestamp tree back from the verified backup prefix with
+`bucket_cp.py`. Remove v11 objects only after production acceptance and a
+separate, explicitly approved cleanup.
+
 ## Validation and cutover gate
 
-For every reciter, the audit requires 114 objects, schema 12/native schema 2/
+For every backed-up chapter, the audit requires schema 12/native schema 2/
 codec 1, complete ID closure, byte-identical word and sound intervals, exact
 letter recutting, complete part coverage, valid sparse overrides,
 deterministic Brotli output, retained known cross-verse wasl chains, and zero
-heuristic fallbacks. A sound-count or sound-order mismatch blocks that reading
-and is the only reason to consider acoustic realignment.
+heuristic fallbacks. Complete reciters additionally require all 114 objects.
+A sound-count or sound-order mismatch blocks that reading and is the only
+reason to consider acoustic realignment.

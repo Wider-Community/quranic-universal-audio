@@ -24,7 +24,7 @@ For each chapter the builder:
 
 1. Orders original occurrences by absolute audio time.
 2. Joins adjacent occurrences while the preceding occurrence carries `wasl`.
-3. Phonemizes each maximal connected reading once with quranic-phonemizer 2.15.
+3. Phonemizes each maximal connected reading once with quranic-phonemizer 2.15.3.
 4. Builds native schema-2 analysis, source, and transformed-cell documents using `emphatic_fatha`, `emphatic_ikhfaa`, `imala`, and `tashil` for display.
 5. Checks the recovered acoustic sound sequence against the acoustic native surface.
 6. Transfers word and sound intervals to native IDs and recuts written-letter intervals to source-unit IDs.
@@ -34,7 +34,7 @@ Cross-verse wasl is never split or rephonemized as pausal. Known chains such as 
 
 ## Version pinning
 
-The staged SDK marker records the timestamp-shard schema version. The generation environment pins quranic-phonemizer `2.15.*`; a mismatched package or staged SDK marker blocks the job before alignment output is published.
+The staged SDK marker records the timestamp-shard schema version. The generation environment pins quranic-phonemizer `2.15.3`; a mismatched package or staged SDK marker blocks the job before alignment output is published.
 
 MFA remains acoustic emphatic-fatha-only. The additional display phonemes are same-cardinality notation choices and never enter the acoustic model or redistribute intervals.
 

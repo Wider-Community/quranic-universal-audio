@@ -51,11 +51,14 @@ describe('native timing ownership', () => {
         expect(spans.has(String(first.id))).toBe(false);
     });
 
-    it('derives a pause across reading boundaries and keeps verse markers static', () => {
+    it('uses the shard boundary span and keeps verse markers static', () => {
         const first = parsed(nativeReading('r1', [
             { ref: '1:1', start: 100, end: 200, text: 'a' },
         ]));
         first.view.boundaries[0]!.verse_end = null;
+        first.reading.timing.boundaries = [{
+            boundary_id: 1, start_ms: 200, end_ms: 350,
+        }];
         const second = parsed(nativeReading('r2', [
             { ref: '1:1', start: 350, end: 500, text: 'b' },
         ]));

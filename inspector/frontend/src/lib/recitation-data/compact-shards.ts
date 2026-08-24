@@ -91,6 +91,19 @@ function readingOf(raw: StoredReading): TsShardReading {
     };
 }
 
+function stitchInterReadingPauses(readings: TsShardReading[]): void {
+    const ordered = [...readings].sort((a, b) =>
+        (a.parts[0]?.t[0] ?? 0) - (b.parts[0]?.t[0] ?? 0),
+    );
+    ordered.slice(0, -1).forEach((reading, index) => {
+        const boundary = reading.timing.boundaries.at(-1);
+        const nextStart = ordered[index + 1]?.parts[0]?.t[0];
+        if (boundary && nextStart !== undefined) {
+            boundary.end_ms = Math.max(boundary.end_ms, nextStart);
+        }
+    });
+}
+
 function storedShard(raw: unknown): StoredShard {
     if (!raw || typeof raw !== 'object') throw new Error('Timestamp shard is not an object');
     const shard = raw as StoredShard;
@@ -105,5 +118,7 @@ function storedShard(raw: unknown): StoredShard {
 
 export function decodeTimestampShard(raw: unknown): TsShardResponse {
     const shard = storedShard(raw);
-    return { _meta: shard._meta, readings: shard.readings.map(readingOf) };
+    const readings = shard.readings.map(readingOf);
+    stitchInterReadingPauses(readings);
+    return { _meta: shard._meta, readings };
 }

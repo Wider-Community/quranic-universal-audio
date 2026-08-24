@@ -17,7 +17,7 @@ from quranic_phonemizer import tajweed_rules
 
 REPO = Path(__file__).resolve().parents[2]
 OUTPUT = REPO / "inspector" / "frontend" / "src" / "tabs" / "timestamps" / "data" / "rules.json"
-EXPECTED_PHONEMIZER = Version("2.15.1")
+EXPECTED_PHONEMIZER = Version("2.15.3")
 EXPECTED_RULE_COUNT = 45
 
 

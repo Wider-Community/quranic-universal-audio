@@ -86,9 +86,7 @@ export function columnSpans(item: ParsedReading): Map<string, Span> {
 interface FlatWord {
     readingId: string;
     boundaryId: string;
-    start: number;
-    end: number;
-    finalEnd: number;
+    span: Span;
     verseEnd: boolean;
     sakt: boolean;
 }
@@ -96,17 +94,19 @@ interface FlatWord {
 function flatWords(parsed: ParsedReading[]): FlatWord[] {
     return parsed.flatMap((item) => {
         const timings = new Map(item.reading.timing.words.map((row) => [String(row.word_id), row]));
-        const finalEnd = item.reading.parts.at(-1)?.t[1] ?? 0;
+        const boundaries = new Map(item.reading.timing.boundaries.map((row) => [
+            String(row.boundary_id), [row.start_ms, row.end_ms] as Span,
+        ]));
         return item.view.words.flatMap((word, index) => {
             const timing = timings.get(String(word.word_id));
             const boundary = item.view.boundaries[index];
             if (!timing || !boundary) return [];
+            const span = boundaries.get(String(boundary.boundary_id))
+                ?? [timing.end_ms, timing.end_ms];
             return [{
                 readingId: item.reading.id,
                 boundaryId: String(boundary.boundary_id),
-                start: timing.start_ms,
-                end: timing.end_ms,
-                finalEnd,
+                span,
                 verseEnd: Boolean(boundary.verse_end),
                 sakt: boundary.state === 'sakt',
             }];
@@ -117,13 +117,11 @@ function flatWords(parsed: ParsedReading[]): FlatWord[] {
 export function buildBoundaryPolicies(parsed: ParsedReading[]): BoundaryPolicies {
     const words = flatWords(parsed);
     const policies: BoundaryPolicies = new Map();
-    words.forEach((word, index) => {
-        const next = words[index + 1];
-        const end = Math.max(word.end, next?.start ?? word.finalEnd);
-        const recordedPause = end > word.end;
+    words.forEach((word) => {
+        const recordedPause = word.span[1] > word.span[0];
         const reading = policies.get(word.readingId) ?? new Map<string, BoundaryPolicy>();
         reading.set(word.boundaryId, {
-            span: [word.end, end],
+            span: word.span,
             recordedPause,
             showMarker: recordedPause || word.verseEnd || word.sakt,
             verseEnd: word.verseEnd,
