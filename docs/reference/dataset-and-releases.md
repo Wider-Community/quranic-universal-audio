@@ -101,7 +101,7 @@ The same predicate drives the Releases-tab buckets and the cut job's member disc
 [qua_jobs/cut_release.py](../../qua_jobs/cut_release.py). The job:
 
 1. Reads the bucket DB read-only → eligible reciters + the prior release's membership.
-2. Per reciter: reads every native v12 `timestamps/<ch>.json.gz` shard and projects the canonical
+2. Per reciter: reads every compact native v12 `timestamps/<ch>.json.br` shard and projects the canonical
    verse map (`_load_canonical_verses` → `select_complete_verses`, the earliest completing occasion),
    then drops incomplete verses via `select_complete_verses` (missing a reference word index)
    → builds the three
@@ -173,7 +173,7 @@ Each tier self-contains the level below; all times are relative to the matching 
 startup speed, and network transfer cheap: download verse, word, or letter detail independently.
 Use `shard.py` when an app prefers local per-surah files. There is no per-reciter `README.md`.
 
-**Letter-tier `char` alphabet.** Internal shards (`reciters/<slug>/timestamps/<ch>.json.gz`,
+**Letter-tier `char` alphabet.** Internal shards (`reciters/<slug>/timestamps/<ch>.json.br`,
 [shards.md](shards.md)) carry a 57-token grapheme alphabet (haraka stripped upstream, but the maddah
 mark and madd composites retained). At publish time **both** `cut_release` and `publish_hf` map each `char`
 through `qua_shared/letter_vocab.to_external_char`, which drops the maddah mark (`U+0653`) to

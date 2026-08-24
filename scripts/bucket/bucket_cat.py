@@ -2,6 +2,7 @@
 
 bucket_cat.py catalog/audio_manifest/husary_mp3quran.json --json --bucket prod
 bucket_cat.py reciters/<slug>/peaks/2.json.gz --gz --json --head 50
+bucket_cat.py reciters/<slug>/timestamps/2.json.br --br --json --head 50
 bucket_cat.py reciters/<slug>/audio/2.mp3 --bytes 4   # first 4 bytes (sanity peek)
 """
 
@@ -12,6 +13,9 @@ import gzip
 import json
 import sys
 from pathlib import Path
+from typing import cast
+
+import brotli
 
 sys.path.insert(0, str(Path(__file__).parent))
 import _bootstrap as bs  # noqa: E402
@@ -32,6 +36,7 @@ def main() -> int:
     )
     p.add_argument("--json", action="store_true", help="parse + pretty-print as JSON")
     p.add_argument("--gz", action="store_true", help="gunzip before processing")
+    p.add_argument("--br", action="store_true", help="Brotli-decompress before processing")
     bs.add_bucket_args(p)
     a = p.parse_args()
 
@@ -39,7 +44,7 @@ def main() -> int:
     target = bs.abs_path(bucket, a.path)
 
     with fs.open(target, "rb") as f:
-        raw = f.read()
+        raw = cast(bytes, f.read())
 
     if a.byte_limit > 0:
         chunk = raw[: a.byte_limit]
@@ -49,6 +54,8 @@ def main() -> int:
 
     if a.gz:
         raw = gzip.decompress(raw)
+    if a.br:
+        raw = brotli.decompress(raw)
 
     if a.json:
         doc = json.loads(raw.decode("utf-8"))

@@ -1,6 +1,6 @@
 """Download all prod-bucket timestamp shards into inspector/dev_fixtures/ (local).
 
-Read-only: pulls reciters/<slug>/timestamps/*.json.gz from the PROD bucket into a
+Read-only: pulls reciters/<slug>/timestamps/*.json.br from the PROD bucket into a
 bucket-shaped local tree so the inspector can serve them via TS_DEV_FIXTURES
 without ever hitting the bucket. Files are read-only local evidence; migration
 commands write a separate staging directory.
@@ -43,7 +43,7 @@ def fetch_reciter(slug: str) -> tuple[str, int]:
         files = [
             path
             for path in fs.ls(tpath, detail=False)
-            if isinstance(path, str) and path.endswith(".json.gz")
+            if isinstance(path, str) and path.endswith(".json.br")
         ]
     except FileNotFoundError:
         return slug, 0

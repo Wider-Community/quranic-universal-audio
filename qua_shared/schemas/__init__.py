@@ -46,7 +46,9 @@ from .bucket.segment import (
 from .bucket.segments_doc import SegmentsDoc
 from .bucket.ts_job_record import TsJobRecord, TsJobSettings
 from .bucket.ts_shard import (
-    TsBoundaryTiming,
+    TsColumnTiming,
+    TsCompactRender,
+    TsNativeProfile,
     TsShardDoc,
     TsShardMeta,
     TsShardPart,
@@ -441,7 +443,9 @@ __all__ = [
     "TsShardPart",
     "TsShardReading",
     "TsShardTiming",
-    "TsBoundaryTiming",
+    "TsColumnTiming",
+    "TsCompactRender",
+    "TsNativeProfile",
     "TsSoundTiming",
     "TsUnitTiming",
     "TsWordTiming",

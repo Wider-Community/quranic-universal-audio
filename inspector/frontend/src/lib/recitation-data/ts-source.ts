@@ -32,6 +32,7 @@ import type {
     TsWord,
 } from '../types/ts-client';
 import type { ChapterOccasion } from './occasions';
+import { decodeTimestampShard } from './compact-shards';
 import {
     assembleNative,
     chapterVerseRefs,
@@ -121,9 +122,10 @@ export async function loadManifest(): Promise<TsManifestResponse> {
 }
 
 /**
- * Fetch a per-chapter shard. The shard URL is templated against
- * `tsConfig.shard_url_template` (full URL in HF mode; `/api/ts/shard/...`
- * locally). Concurrent calls dedupe via the in-flight Promise.
+ * Fetch a per-chapter Brotli shard. HTTP content decoding is handled by the
+ * browser; the compact JSON is expanded once before entering the LRU. The URL is templated against
+ * `tsConfig.shard_url_template` (`/api/ts/shard/...`). Concurrent calls dedupe
+ * via the in-flight Promise.
  */
 export async function loadChapterShard(
     reciter: string,
@@ -141,7 +143,7 @@ export async function loadChapterShard(
         const url = cfg.shard_url_template
             .replace('{reciter}', encodeURIComponent(reciter))
             .replace('{chapter}', String(chapter));
-        return _fetchGzipJson<TsShardResponse>(url);
+        return decodeTimestampShard(await fetchJson<unknown>(url));
     })();
     _lruTouch(key, promise);
     // If the fetch fails, drop the entry so the next call retries.

@@ -211,7 +211,7 @@ Entry view: public catalog browse/search/filter/play + admin controls.
 
 ### `tabs/timestamps/`
 
-Waveform + native analysis for published reciters (plus owner preview of generated-but-unreleased shards). Shards are native schema-v12 `.json.gz` documents served as byte pass-through; each maximal connected wasl chain is one reading and its `parts` retain every recorded occasion. `ts-source.ts` chooses the active part/reading from the playhead without deduplicating retakes or reconstructing cells.
+Waveform + native analysis for published reciters (plus owner preview of generated-but-unreleased shards). Shards are compact native schema-v12 `.json.br` documents served with HTTP Brotli content encoding; each maximal connected wasl chain is one reading and its `parts` retain every recorded occasion. `ts-source.ts` decodes the renderer-neutral compact payload and chooses the active part/reading from the playhead without deduplicating retakes or reconstructing cells.
 
 | Path | Role |
 |---|---|

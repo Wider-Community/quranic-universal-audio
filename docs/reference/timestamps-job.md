@@ -45,7 +45,7 @@ The input is the reviewed timestamp source plus chapter audio. Chapter audio use
 The output is:
 
 ```text
-reciters/<slug>/timestamps/<chapter>.json.gz
+reciters/<slug>/timestamps/<chapter>.json.br
 ```
 
 During migration and review, generation writes a versioned staging prefix. It does not change the active catalogue/manifest pointer. Production exposure is an atomic cutover after all chapters and reports pass their audits.

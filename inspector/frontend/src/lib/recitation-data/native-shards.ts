@@ -48,18 +48,16 @@ function selectedWords(members: ChapterOccasion[]): Map<TsShardReading, Set<numb
 }
 
 function lettersOf(reading: TsShardReading, wordId: number, offset: number): Letter[] {
-    const timing = new Map(reading.timing.units.map((row) => [row.source_unit_id, row]));
-    return reading.source.source.units
-        .filter((unit) => unit.word_id === wordId && unit.kind === 'letter')
+    return reading.letters
+        .filter((unit) => unit.word_id === wordId)
         .map((unit) => {
-            const span = timing.get(unit.id);
-            const start = span?.start_ms == null ? null : span.start_ms / 1000 - offset;
-            const end = span?.end_ms == null ? null : span.end_ms / 1000 - offset;
+            const start = unit.start_ms == null ? null : unit.start_ms / 1000 - offset;
+            const end = unit.end_ms == null ? null : unit.end_ms / 1000 - offset;
             return {
                 char: unit.text,
                 start,
                 end,
-                silent: unit.owned_sound_ids.length + unit.presented_sound_ids.length === 0,
+                silent: unit.silent,
             };
         });
 }
@@ -76,13 +74,13 @@ function buildTimedRows(
     for (const reading of readings) {
         const wordTiming = new Map(reading.timing.words.map((row) => [row.word_id, row]));
         const soundTiming = new Map(reading.timing.sounds.map((row) => [row.sound_id, row]));
-        for (const word of reading.analysis.result.words) {
+        for (const word of reading.wire.analysis.result.words) {
             if (!selected.get(reading)?.has(word.id)) continue;
             const timed = wordTiming.get(word.id);
             if (!timed) throw new Error(`${reading.id}: missing word timing ${word.id}`);
             const phonemeIndices: number[] = [];
             for (const soundId of word.sound_ids) {
-                const sound = reading.analysis.result.sounds.find((one) => one.id === soundId);
+                const sound = reading.wire.analysis.result.sounds.find((one) => one.id === soundId);
                 const span = soundTiming.get(soundId);
                 if (!sound || !span) throw new Error(`${reading.id}: missing sound ${soundId}`);
                 phonemeIndices.push(intervals.length);

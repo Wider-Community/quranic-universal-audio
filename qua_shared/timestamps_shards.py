@@ -1,8 +1,7 @@
-"""Timestamp shard builders and deterministic gzip serialization."""
+"""Timestamp shard builders and deterministic Brotli serialization."""
 
 from __future__ import annotations
 
-import gzip
 import hashlib
 
 MANIFEST_SCHEMA_VERSION = 1
@@ -25,17 +24,13 @@ def build_timestamp_shards(
     )
 
 
-def gzip_shard(shard_doc: dict) -> bytes:
-    """Serialize and gzip a shard document deterministically.
-
-    Uses orjson for speed/UTF-8 fidelity. `mtime=0` on the gzip header so
-    re-running the build with unchanged input produces byte-identical
-    output (load-bearing for the hash-diff cache).
-    """
+def brotli_shard(shard_doc: dict) -> bytes:
+    """Serialize and Brotli-compress a shard deterministically at quality 6."""
+    import brotli
     import orjson
 
     payload = orjson.dumps(shard_doc)
-    return gzip.compress(payload, compresslevel=6, mtime=0)
+    return brotli.compress(payload, quality=6, mode=brotli.MODE_TEXT)
 
 
 def sha256_hex(b: bytes) -> str:

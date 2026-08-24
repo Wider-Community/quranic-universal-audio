@@ -13,10 +13,11 @@ need no notion of ``wip`` vs ``published``.
 
 from __future__ import annotations
 
-import gzip
 import os
 import threading
 from collections.abc import Iterator
+
+import brotli
 
 from . import storage_paths
 from .hf_bucket import StorageNotFound, get_backend
@@ -182,16 +183,15 @@ def iter_peaks_history(slug: str) -> Iterator[dict]:
 # ---- timestamps (released reciters only — others have no TS yet) ----
 
 
-def read_timestamps_chapter_gz(slug: str, chapter: int) -> bytes | None:
-    """Return the raw gzipped timestamps-shard bytes for a chapter, or ``None``.
+def read_timestamps_chapter_br(slug: str, chapter: int) -> bytes | None:
+    """Return the raw Brotli timestamps-shard bytes for a chapter, or ``None``.
 
-    Reads ``timestamps/<chapter>.json.gz`` (the native v12 shard the job
-    writes) and returns it **uninflated** — the bucket gz body is exactly the
-    wire body the shard route serves, so the read path is a byte pass-through.
+    Reads ``timestamps/<chapter>.json.br`` and returns it uninflated for the
+    shard route's byte pass-through response.
     """
     backend = _ts_read_backend_or_default()
     try:
-        return backend.read_bytes(storage_paths.timestamps_path_gz(slug, chapter))
+        return backend.read_bytes(storage_paths.timestamps_path_br(slug, chapter))
     except StorageNotFound:
         return None
 
@@ -199,8 +199,8 @@ def read_timestamps_chapter_gz(slug: str, chapter: int) -> bytes | None:
 def read_timestamps_chapter(slug: str, chapter: int) -> bytes | None:
     """Return decompressed timestamps-shard JSON bytes for a chapter, or ``None``.
 
-    Reads the gzipped shard ``timestamps/<chapter>.json.gz`` and inflates it;
+    Reads the Brotli shard ``timestamps/<chapter>.json.br`` and inflates it;
     the caller receives raw JSON bytes.
     """
-    gz = read_timestamps_chapter_gz(slug, chapter)
-    return gzip.decompress(gz) if gz is not None else None
+    compressed = read_timestamps_chapter_br(slug, chapter)
+    return brotli.decompress(compressed) if compressed is not None else None

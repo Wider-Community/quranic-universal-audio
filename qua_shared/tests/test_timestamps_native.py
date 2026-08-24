@@ -1,39 +1,42 @@
 from __future__ import annotations
 
-import gzip
 import sys
 import types
 
+import brotli
 import orjson
 import pytest
 
 from qua_shared.timestamps_native import project_native_shard, select_complete_verses
-from qua_shared.timestamps_shards import build_timestamp_shards, gzip_shard
+from qua_shared.timestamps_shards import brotli_shard, build_timestamp_shards
 
 
 def _reading(reading_id: str, specs: list[tuple[str, tuple[int, int], list[int]]]) -> dict:
-    words, units, word_timing, unit_timing, parts = [], [], [], [], []
+    words, word_timing, letters, parts, boundaries = [], [], [], [], []
     for ref, span, indexes in specs:
-        ids = []
+        first = len(words)
         width = max(1, (span[1] - span[0]) // len(indexes))
         for offset, index in enumerate(indexes):
-            word_id = len(words) + 1
-            unit_id = 100 + word_id
+            word_id = len(words)
             start = span[0] + offset * width
             end = start + width
-            ids.append(word_id)
-            words.append({"id": word_id, "ref": f"{ref}:{index}"})
-            units.append({"id": unit_id, "word_id": word_id, "kind": "letter", "text": "x"})
-            word_timing.append({"word_id": word_id, "start_ms": start, "end_ms": end})
-            unit_timing.append({"source_unit_id": unit_id, "start_ms": start, "end_ms": end})
-        parts.append({"ref": ref, "t": list(span), "word_ids": ids})
+            words.append([f"{ref}:{index}", "x", [], [], [], [], []])
+            boundaries.append([1, [], [], [], None, None])
+            word_timing.append([start, end])
+            letters.append([100 + word_id, word_id, "x", start, end, 0])
+        parts.append([ref, span[0], span[1], first, len(indexes)])
     return {
         "id": reading_id,
         "parts": parts,
-        "analysis": {"schema_version": 2, "result": {"words": words}},
-        "source": {"schema_version": 2, "source": {"units": units}},
-        "cells": {"schema_version": 2, "cell_view": {}},
-        "timing": {"words": word_timing, "sounds": [], "units": unit_timing, "boundaries": []},
+        "render": {
+            "v": 1,
+            "m": ["test", "canon", "native"],
+            "p": [],
+            "r": [],
+            "w": words,
+            "b": boundaries,
+        },
+        "timing": {"w": word_timing, "s": [], "l": letters, "c": []},
     }
 
 
@@ -45,6 +48,13 @@ def _shard(readings: list[dict]) -> dict:
             "audio_category": "by_surah",
             "phonemizer_version": "2.14",
             "native_schema_version": 2,
+            "renderer_codec_version": 1,
+            "native_profile": {
+                "riwayah": "hafs",
+                "script": "uthmani",
+                "variant": {},
+                "extra_phonemes": [],
+            },
         },
         "readings": readings,
     }
@@ -96,8 +106,8 @@ def test_builder_delegates_to_staged_sdk(monkeypatch):
     assert calls == [({"raw": True}, {"audio_category": "by_surah", "src_meta": None})]
 
 
-def test_native_gzip_is_deterministic():
+def test_native_brotli_is_deterministic():
     shard = _shard([_reading("r1", [("1:1", (0, 100), [1])])])
-    first = gzip_shard(shard)
-    assert first == gzip_shard(shard)
-    assert orjson.loads(gzip.decompress(first)) == shard
+    first = brotli_shard(shard)
+    assert first == brotli_shard(shard)
+    assert orjson.loads(brotli.decompress(first)) == shard

@@ -5,7 +5,7 @@ Runs MFA forced-alignment inside the job (strategy A — stock conda base +
 MFA stack pulled from a mounted private bucket), reading the reciter's
 ``detailed.json`` from the mounted inspector bucket and writing native v12
 per-chapter readings plus timing sidecars to
-``<mount>/reciters/<slug>/timestamps/<chapter>.json.gz`` (the read-path
+``<mount>/reciters/<slug>/timestamps/<chapter>.json.br`` (the read-path
 layout). Blocks before alignment if one source occurrence carries a compound
 cross-verse ``matched_ref``; connected single-verse occurrences remain joined
 by their wasl relationship in one native reading.

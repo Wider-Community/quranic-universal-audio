@@ -29,12 +29,13 @@ keeps them source-relative. Neither re-derives the geometry.
 
 from __future__ import annotations
 
-import gzip
 import json
 import os
 from collections.abc import Callable
 from pathlib import Path
 from typing import TypedDict
+
+import brotli
 
 from qua_shared.letter_vocab import to_external_char
 
@@ -112,11 +113,11 @@ def load_canonical_verses(ts_dir: Path) -> dict[str, dict]:
         key=lambda p: int(p.name.split(".", 1)[0]) if p.name.split(".", 1)[0].isdigit() else 0,
     ):
         name = path.name
-        if not (name.endswith(".json") or name.endswith(".json.gz")):
+        if not (name.endswith(".json") or name.endswith(".json.br")):
             continue
         raw = path.read_bytes()
-        if name.endswith(".gz"):
-            raw = gzip.decompress(raw)
+        if name.endswith(".br"):
+            raw = brotli.decompress(raw)
         out.update(project_native_shard(json.loads(raw)))
     return out
 

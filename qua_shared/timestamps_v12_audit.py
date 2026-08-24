@@ -1,4 +1,4 @@
-"""Strict identity-closure audit for native timestamp shard v12."""
+"""Strict identity-closure audit for compact timestamp shard v12."""
 
 from __future__ import annotations
 
@@ -10,13 +10,6 @@ from qua_shared.schemas.bucket.ts_shard import TsShardDoc
 
 class V12AuditError(ValueError):
     pass
-
-
-def _ids(rows: Iterable[dict[str, Any]], key: str) -> set[int]:
-    values = [int(row[key]) for row in rows]
-    if len(values) != len(set(values)):
-        raise V12AuditError(f"duplicate {key}")
-    return set(values)
 
 
 def _exact(label: str, actual: Iterable[int], expected: set[int]) -> None:
@@ -31,83 +24,86 @@ def _subset(label: str, actual: Iterable[int], expected: set[int]) -> None:
         raise V12AuditError(f"{label} has unknown ids: {sorted(missing)[:10]}")
 
 
-def _audit_cells(reading: dict[str, Any], known: dict[str, set[int]]) -> None:
-    view = reading["cells"]["cell_view"]
-    owners = [*view.get("words", []), *view.get("boundaries", [])]
-    columns = [column for owner in owners for column in owner.get("columns", [])]
-    column_ids = _ids(columns, "id")
-    _subset("cell words", (row["word_id"] for row in view.get("words", [])), known["words"])
-    _subset(
-        "cell boundaries",
-        (row["boundary_id"] for row in view.get("boundaries", [])),
-        known["boundaries"],
-    )
-    for column in columns:
-        _subset("column source units", column.get("source_unit_ids", []), known["units"])
-        _subset(
-            "column sounds",
-            [*column.get("owned_sound_ids", []), *column.get("presented_sound_ids", [])],
-            known["sounds"],
-        )
-        attached = column.get("attached_to_column_id")
-        _subset("column attachment", [] if attached is None else [attached], column_ids)
-    for owner in owners:
-        for sound in owner.get("sounds", []):
-            _subset("cell sound", [sound["sound_id"]], known["sounds"])
-            _subset("cell sound columns", sound.get("column_ids", []), column_ids)
-        for group in owner.get("groups", []):
-            _subset("group columns", group.get("column_ids", []), column_ids)
-            _subset("group sounds", group.get("sound_ids", []), known["sounds"])
-        for bridge in owner.get("bridges", []):
-            _subset("bridge merger", [bridge["merger_id"]], known["mergers"])
+def _sound_refs(row: list) -> tuple[int, list[int], list[int]]:
+    return int(row[0]), list(map(int, row[1])), list(map(int, row[2]))
+
+
+def _columns(owners: list[list], *, word: bool) -> list[list]:
+    return [column for owner in owners for column in owner[2 if word else 1]]
+
+
+def _sounds(owners: list[list], *, word: bool) -> list[list]:
+    return [sound for owner in owners for sound in owner[3 if word else 2]]
+
+
+def _bridges(owners: list[list], *, word: bool) -> list[list]:
+    return [bridge for owner in owners for bridge in owner[6 if word else 3]]
 
 
 def _audit_reading(reading: dict[str, Any]) -> dict[str, int]:
-    result = reading["analysis"]["result"]
-    source = reading["source"]["source"]
-    known = {
-        "words": _ids(result.get("words", []), "id"),
-        "sounds": _ids(result.get("sounds", []), "id"),
-        "boundaries": _ids(result.get("boundaries", []), "id"),
-        "mergers": _ids(result.get("mergers", []), "id"),
-        "units": _ids(source.get("units", []), "id"),
-    }
-    for word in result.get("words", []):
-        _subset("word sounds", word.get("sound_ids", []), known["sounds"])
-        _subset(
-            "word boundaries",
-            [word["before_boundary_id"], word["after_boundary_id"]],
-            known["boundaries"],
-        )
-    _subset("sound words", (row["word_id"] for row in result.get("sounds", [])), known["words"])
-    for unit in source.get("units", []):
-        _subset("unit words", [unit["word_id"]], known["words"])
-        _subset(
-            "unit sounds",
-            [*unit.get("owned_sound_ids", []), *unit.get("presented_sound_ids", [])],
-            known["sounds"],
-        )
-    _audit_cells(reading, known)
+    render = reading["render"]
+    words, boundaries = render["w"], render["b"]
+    known_words = set(range(len(words)))
+    known_sounds = set(range(len(render["p"])))
+    known_occurrences = set(range(len(render["r"])))
+    columns = [*_columns(words, word=True), *_columns(boundaries, word=False)]
+    column_ids = [int(row[0]) for row in columns]
+    if len(column_ids) != len(set(column_ids)):
+        raise V12AuditError("duplicate compact column id")
+    known_columns = set(column_ids)
+
+    sounds = [*_sounds(words, word=True), *_sounds(boundaries, word=False)]
+    bridges = [*_bridges(words, word=True), *_bridges(boundaries, word=False)]
+    referenced_sounds: list[int] = []
+    for row in [*sounds, *(bridge[3] for bridge in bridges)]:
+        sound_id, attached, occurrences = _sound_refs(row)
+        referenced_sounds.append(sound_id)
+        _subset("cell sound columns", attached, known_columns)
+        _subset("cell sound occurrences", occurrences, known_occurrences)
+    _exact("cell sounds", referenced_sounds, known_sounds)
+
+    for column in columns:
+        _subset("column attachment", [] if column[6] is None else [column[6]], known_columns)
+        _subset("column sounds", [*column[10], *column[11]], known_sounds)
+        _subset("column occurrences", column[12], known_occurrences)
+        silence = column[13]
+        if isinstance(silence, int) and silence >= 0:
+            _subset("column silence", [silence], known_occurrences)
+    for word in words:
+        for group in word[4]:
+            _subset("group columns", group[2], known_columns)
+            _subset("group sounds", group[3], known_sounds)
+        for run in word[5]:
+            _subset("run columns", run[2], known_columns)
+    for bridge in bridges:
+        _subset("bridge before columns", bridge[1], known_columns)
+        _subset("bridge after columns", bridge[2], known_columns)
+
     timing = reading["timing"]
-    for row in timing["units"]:
-        if (row["start_ms"] is None) != (row["end_ms"] is None):
-            raise V12AuditError(f"source unit {row['source_unit_id']} has a half-null interval")
-    _exact("timed words", (row["word_id"] for row in timing["words"]), known["words"])
-    _exact("timed sounds", (row["sound_id"] for row in timing["sounds"]), known["sounds"])
-    _exact("timed units", (row["source_unit_id"] for row in timing["units"]), known["units"])
-    _exact(
-        "timed boundaries",
-        (row["boundary_id"] for row in timing["boundaries"]),
-        known["boundaries"],
-    )
-    _exact(
-        "part words", (one for part in reading["parts"] for one in part["word_ids"]), known["words"]
-    )
-    return {name: len(ids) for name, ids in known.items()}
+    if len(timing["w"]) != len(words) or len(timing["s"]) != len(render["p"]):
+        raise V12AuditError("positional timing count mismatch")
+    letter_ids = [int(row[0]) for row in timing["l"]]
+    if len(letter_ids) != len(set(letter_ids)):
+        raise V12AuditError("duplicate letter unit id")
+    _subset("letter words", (row[1] for row in timing["l"]), known_words)
+    _subset("column timing overrides", (row[0] for row in timing["c"]), known_columns)
+
+    part_words = [
+        word_id
+        for _, _, _, first, count in reading["parts"]
+        for word_id in range(int(first), int(first) + int(count))
+    ]
+    _exact("part words", part_words, known_words)
+    return {
+        "words": len(words),
+        "sounds": len(render["p"]),
+        "units": len(letter_ids),
+        "boundaries": len(boundaries) + (1 if words else 0),
+    }
 
 
 def audit_v12_document(document: dict[str, Any]) -> dict[str, int]:
-    """Validate schema plus every native/timing identity reference."""
+    """Validate schema plus every compact renderer/timing identity reference."""
     TsShardDoc.model_validate(document)
     totals = {key: 0 for key in ("readings", "parts", "words", "sounds", "units", "boundaries")}
     for reading in document["readings"]:

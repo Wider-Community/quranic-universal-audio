@@ -1,10 +1,13 @@
 # Timestamp shards
 
-Timestamp shards store phonemizer-native readings and audio timing sidecars. They do not contain an Inspector cell projection.
+Timestamp shards store a compact, renderer-neutral projection of native
+phonemizer readings plus audio timing. Full native documents are generation
+and audit inputs; they are not repeated in every reciter's runtime shards.
 
 ## Contract
 
-Each object at `reciters/<slug>/timestamps/<chapter>.json.gz` is a closed schema-v12 document:
+Each object at `reciters/<slug>/timestamps/<chapter>.json.br` is a closed
+schema-v12 JSON document compressed with deterministic Brotli quality 6:
 
 ```json
 {
@@ -13,168 +16,180 @@ Each object at `reciters/<slug>/timestamps/<chapter>.json.gz` is a closed schema
     "chapter": 1,
     "audio_category": "by_surah",
     "phonemizer_version": "2.14.0",
-    "native_schema_version": 2
-  },
-  "readings": [
-    {
-      "id": "r1",
-      "parts": [
-        {"ref": "1:3", "t": [1200, 5400], "word_ids": [0, 1]}
-      ],
-      "analysis": {"schema_version": 2, "result": {}},
-      "source": {"schema_version": 2, "view": {}},
-      "cells": {"schema_version": 2, "view": {}},
-      "timing": {
-        "words": [{"word_id": 0, "start_ms": 1200, "end_ms": 1800}],
-        "sounds": [{"sound_id": 0, "start_ms": 1200, "end_ms": 1300}],
-        "units": [{"source_unit_id": 0, "start_ms": 1200, "end_ms": 1300}],
-        "boundaries": [{"boundary_id": 0, "start_ms": 1200, "end_ms": 1200}]
-      }
+    "native_schema_version": 2,
+    "renderer_codec_version": 1,
+    "native_profile": {
+      "riwayah": "hafs",
+      "script": "uthmani",
+      "variant": {},
+      "extra_phonemes": ["emphatic_fatha", "emphatic_ikhfaa", "imala", "tashil"]
     }
-  ]
+  },
+  "readings": [{
+    "id": "r1",
+    "parts": [["1:3", 1200, 5400, 0, 2]],
+    "render": {
+      "v": 1,
+      "m": ["1:3", "canonical-digest", "native-documents-sha256"],
+      "p": [], "r": [], "w": [], "b": []
+    },
+    "timing": {"w": [], "s": [], "l": [], "c": []}
+  }]
 }
 ```
 
-`analysis`, `source`, and `cells` are untouched documents from quranic-phonemizer native schema 2. Consumers validate both the outer shard version and all three native document versions.
+There is no v11 reader. Historical v11 objects are accepted only by the
+one-time restamper, which emits this final v12 shape and validates it before
+upload.
 
-There is no v11 reader. Historical v11 objects are accepted only by the one-time local cutover command, which produces a new v12 object and then runs the same v12 validator as fresh generation.
+## Why the compact codec is native
 
-## Metadata
+The SDK builds the complete schema-v2 `analysis`, `source`, and `cells`
+documents first. Codec 1 then removes only fields unused by the renderer or
+audio surfaces and packs repeated records into fixed-position tuples. It does
+not regroup cells, rename rules, infer ownership, or match glyphs.
 
-Required `_meta` fields are:
+`@quranic-phonemizer/cells` owns `decodeCompact()` and `parseCompact()`. The
+decoded payload enters the same schema-v2 `parse()` path as live phonemizer
+documents. The Inspector therefore has no cell adapter. Python consumers use
+`qua_shared.timestamps_codec` for the same storage contract.
 
-| Field | Meaning |
+Before encoding, the SDK proves for the whole reading that word, sound, rule
+occurrence, source-unit, and analysis-boundary IDs equal their array positions;
+cell words are positional, post-word boundary IDs equal `word_id + 1`, and all
+timing rows follow native ID order. Column IDs are not positional and remain
+explicit. Any failed invariant blocks generation.
+
+## Reading tuples
+
+A reading spans the maximal connected chain in the recording. A segment whose
+`wasl` flag connects to the next segment stays in the same reading, including
+cross-verse wasl. The full chain is phonemized once.
+
+Each part is:
+
+```text
+[ref, start_ms, end_ms, first_word_id, word_count]
+```
+
+The word IDs are the contiguous range beginning at `first_word_id`. Retakes
+and loopbacks remain separate readings or parts. Cross-verse focus changes
+opacity and editability only; it never changes phonemes or geometry.
+
+## Renderer payload
+
+`render` has these keys:
+
+| Key | Meaning |
 | --- | --- |
-| `schema_version` | Always `12`. |
-| `chapter` | Chapter addressed by the object path. |
-| `audio_category` | Audio layout, normally `by_surah` or `by_ayah`. |
-| `phonemizer_version` | Producer version used for the native documents. Cutover requires 2.14. |
-| `native_schema_version` | Always `2`. |
+| `v` | Compact codec version, always `1`. |
+| `m` | `[reading_ref, canon_digest, native_documents_sha256]`. |
+| `p` | Phoneme tokens indexed by native sound ID. |
+| `r` | Producer rule IDs indexed by native rule-occurrence ID. |
+| `w` | Words indexed by native word ID. |
+| `b` | Post-word boundaries; item `i` has native boundary ID `i + 1`. |
 
-Generation provenance such as `padding`, `beam`, `method`, `aligner_model`, `shared_cmvn`, `audio_source`, and `created_at` may also be retained. Presentation policy never appears here.
+A word is:
 
-## Readings and parts
+```text
+[ref, text, columns, sounds, groups, runs, bridges]
+```
 
-A reading is the maximal connected chain in the recording. A segment whose `wasl` flag connects to the next segment remains in the same reading. The entire reading is phonemized once, so cross-verse wasl is preserved rather than rederived as verse-final waqf.
+A post-word boundary is:
 
-`parts[]` preserves the original recording occasions:
+```text
+[state_code, columns, sounds, bridges, verse_end, exclusive_group]
+```
 
-| Field | Meaning |
-| --- | --- |
-| `ref` | Original verse reference. |
-| `t` | Absolute audio start/end in milliseconds. |
-| `word_ids` | Native word identities belonging to this part, in recited order. |
+Columns use:
 
-Retakes and loopbacks therefore produce multiple readings or multiple parts. They are not deduplicated in storage. Release publishing chooses an earliest complete canonical occasion through `qua_shared.timestamps_native`; the Inspector keeps all occasions.
+```text
+[id, role_code, text, source_unit_ids, slot_ids, tier_code,
+ attached_column_id, status_code, anchor_unit_id, side_code,
+ owned_sound_ids, presented_sound_ids, rule_occurrence_ids, silence]
+```
 
-Cross-verse readings render as separate inline verse blocks. The native bridge and the two boundary words form an unbreakable junction. Changing the focused verse changes opacity and editability only; it cannot change the reading, phonemes, geometry, or timings.
+The enum tables are defined together in the SDK encoder and renderer decoder.
+`silence` is an occurrence ID, `null`, `-1` for `orthographic_silence`, or `-2`
+for `variant_silence`. Sounds, groups, runs, and bridges retain every native ID
+and ordered span. Source-character IDs and selected-variant annotations are
+omitted because no renderer or Inspector surface reads them; the resolved
+variant profile remains in `_meta` for reproducibility.
 
-## Native documents
+## Timing payload
 
-The three documents divide domain ownership as follows:
+`timing` uses positional arrays:
 
-| Document | Owns |
-| --- | --- |
-| `analysis` | Words, ordered sounds, semantic boundaries, rule occurrences, mergers, selected variants, extra-phoneme policy. |
-| `source` | Stable source-unit identities, source text, sound ownership/presentation, rule and merger placements. |
-| `cells` | Native columns, groups, bridges, boundary marks, transformed glyph/status/tier state. |
+| Key | Tuple | Meaning |
+| --- | --- | --- |
+| `w` | `[start_ms, end_ms]` | Word span indexed by word ID. |
+| `s` | `[start_ms, end_ms]` | Sound span indexed by sound ID. |
+| `l` | `[unit_id, word_id, text, start_ms, end_ms, silent]` | Native letter-unit timing; nullable spans are retained. |
+| `c` | `[column_id, start_ms, end_ms]` | Sparse exact column-span override; a null pair suppresses a derived span. |
 
-The Inspector does not synthesize cells, split or rename rules, assign sounds by position, create bridges, or infer groups by proximity. `@quranic-phonemizer/cells` parses and renders these documents.
+Non-letter source units are omitted. A column span is normally reconstructed
+from its timed letter units and native cell-sound spans. During encoding the
+SDK compares that result with the full source-unit calculation and stores an
+entry in `c` only when they differ. This preserves highlighting exactly without
+repeating every mark-unit interval.
 
-Display documents are generated with `emphatic_fatha`, `emphatic_ikhfaa`, `imala`, and `tashil`. MFA remains trained on the acoustic emphatic-fatha-only surface. The distinction is token substitution only: sound identity and timing order stay invariant.
-
-The v11 restamper additionally records the three historical choices used by the stamped v11 corpus: ṣād at `2:245:14` and `7:69:22`, and heavy rāʾ at `89:4:3`. Fresh v12 generation uses the explicit phonemizer 2.14 defaults.
-
-## Timing sidecar
-
-Every timing row points at a native identity in the same reading.
-
-### Words
-
-`timing.words[]` contains `word_id`, `start_ms`, and `end_ms`. Cutover copies existing intervals byte-for-byte.
-
-### Sounds
-
-`timing.sounds[]` contains `sound_id`, `start_ms`, and `end_ms`. The strict builder requires the stored token sequence to equal the chosen native token surface before it transfers any interval. A mismatch blocks the reading; there is no nearest-token fallback.
-
-### Source units
-
-`timing.units[]` contains `source_unit_id`, `start_ms`, and `end_ms`.
-
-Legacy written-letter intervals are recut against native letter units by exact normalized text coverage. A letter unit gets that exact interval. A mark unit gets the union of the native sounds it owns or presents. A truly untimed unit has both values `null`.
-
-### Boundaries
-
-`timing.boundaries[]` contains `boundary_id`, `start_ms`, and `end_ms`. These rows describe recorded audio gaps. They never modify the semantic boundary state in `analysis` or turn a join into a stop.
-
-The initial and final boundary use the reading edge. An internal gap runs from the preceding timed word end to the following timed word start and is clamped to an empty interval if the recording overlaps.
+Boundary timing is derived losslessly: the initial/final boundaries use the
+reading part edges, and each internal boundary runs from the preceding word end
+to the following word start, clamped to an empty interval on overlap. Boundary
+timing never changes the native semantic state.
 
 ## Renderer policy is not shard schema
 
-The shard excludes names, localized labels, legend groups, colors, duration labels, toggles, underline stacks, and renderer options. Those are host policy.
-
-The Inspector calls the shared parser with:
+The shard excludes names, localized labels, legend groups, colors, duration
+labels, toggles, underline stacks, and renderer options. The Inspector uses:
 
 ```ts
-parse(payload, defineInspectorRule, {
+parseCompact(reading.render, defineInspectorRule, {
   iqlabTanween: 'mini-meem',
   iqlabNoon: 'mini-meem',
   openTanween: true
 })
 ```
 
-The package owns native groups, compact mergers, sakt extraction, Digital Khatt boundary text, iqlab display synthesis, and open/closed tanween glyph selection. The Inspector owns audio timing, highlighting, seeking, looping, reports, translations, context opacity, locale, and its rule-display table.
+The shared package owns native groups, compact mergers, sakt extraction,
+Digital Khatt boundary text, iqlab display synthesis, and tanween glyph choice.
+The Inspector owns timing, highlighting, seeking, looping, reports,
+translations, context opacity, locale, and rule presentation. Stable
+`data-qc-*` hooks address words, columns, sounds, groups, boundaries, and
+bridges; group keys are ordered native column IDs.
 
-Sakt is static and pausal in the Inspector. It has no click callback. At a verse-final sakt, the verse marker wins and the sakt glyph is not duplicated.
-
-## Identity hooks
-
-The shared renderer exposes stable `data-qc-*` hooks for words, columns, sounds, groups, boundaries, and bridges. Timing and report code indexes these hooks by native identity.
-
-A group is addressed by the package's documented group key: the native group's ordered column IDs. It is never addressed by visual position. Report targets are described in [ts-reports.md](ts-reports.md).
-
-## Generation
-
-Fresh timestamp generation and one-time restamping converge on the SDK native builder:
+## Generation and serving
 
 ```text
 raw timing occurrences
   -> maximal connected readings
-  -> one native phonemizer request per reading
-  -> exact word/sound timing transfer
-  -> exact source-unit recut
-  -> native v12 chapter documents
-  -> deterministic gzip (mtime=0)
+  -> full native schema-v2 documents
+  -> exact timing transfer and source-unit recut
+  -> compact codec 1 + sparse timing overrides
+  -> deterministic Brotli quality 6
 ```
 
-The production entry points are:
+The main entry points are:
 
 | Purpose | Entry point |
 | --- | --- |
-| Native analysis and source/cell documents | `qua_sdk.integrations.native` |
-| Fresh v12 builder | `qua_sdk.integrations.shards.build_native_shards` |
-| Shared job wrapper | `qua_shared.timestamps_shards.build_timestamp_shards` |
-| One-time v11 restamp | `scripts/migrations/restamp_timestamps_v12.py` |
-| Structural/data audit | `qua_shared.timestamps_v12_audit` |
+| Native documents | `qua_sdk.integrations.native` |
+| Compact encoder | `qua_sdk.integrations.cells_codec` |
+| v12 builder | `qua_sdk.integrations.shards.build_native_shards` |
+| Compression | `qua_shared.timestamps_shards.brotli_shard` |
+| Structural audit | `qua_shared.timestamps_v12_audit` |
+| Python decoder | `qua_shared.timestamps_codec` |
 | Canonical release projection | `qua_shared.timestamps_native` |
 
-The one-time restamper is not imported by any server or frontend reader.
+The Flask shard route passes the stored bytes through as `application/json`
+with `Content-Encoding: br`; browsers perform HTTP decompression and parse
+normal JSON. Manifest and reference-resource compression remain independent.
 
 ## Validation and cutover gate
 
-For every reciter and every chapter, the audit requires:
-
-- 114 expected chapter objects;
-- outer schema 12 and all native documents schema 2;
-- exact word identity/order closure;
-- exact stored/native token sequence on the selected reading surface;
-- byte-for-byte preservation of every word and sound interval;
-- unique exact recutting of every old letter row;
-- every part, timing row, source unit, boundary, and native ID resolving;
-- deterministic gzip output;
-- the established connected cross-verse chains retaining their wasl phonemes, including `1:3→1:4`, `14:1→14:2`, and the connected chapter-79 chain;
-- zero heuristic fallbacks.
-
-A real sound-count or sound-order change blocks only that connected reading and is the sole reason to consider acoustic realignment. Token spelling alone does not authorize redistribution.
-
-Before cutover, v12 objects are written under a staging prefix. Reports are mapped and audited against the same objects. The v12-only application, catalogue pointer, and report database move together. Live v11 objects/readers are then removed; repository and bucket history remain the recovery path.
+For every reciter, the audit requires 114 objects, schema 12/native schema 2/
+codec 1, complete ID closure, byte-identical word and sound intervals, exact
+letter recutting, complete part coverage, valid sparse overrides,
+deterministic Brotli output, retained known cross-verse wasl chains, and zero
+heuristic fallbacks. A sound-count or sound-order mismatch blocks that reading
+and is the only reason to consider acoustic realignment.

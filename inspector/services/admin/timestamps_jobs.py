@@ -125,7 +125,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 # Bootstrap-mode only — the prebuilt image bakes this same set into /env.
 _INSTALL = (
     "mamba install -y -c conda-forge python=3.11 montreal-forced-aligner "
-    "&& /opt/conda/bin/pip install gradio soundfile tgt numpy PyYAML requests psutil "
+    "&& /opt/conda/bin/pip install gradio soundfile tgt numpy PyYAML requests psutil brotli "
     "'quranic-phonemizer==2.14.0' 'huggingface_hub>=1.8.0' "
     "&& mkdir -p /scratch"
 )
@@ -947,7 +947,7 @@ def _has_any_shard(slug: str) -> bool:
     cheap bucket listing of ``reciters/<slug>/timestamps/``."""
     try:
         names = get_backend().list_dir(f"reciters/{slug}/timestamps")
-        return any(str(n).endswith((".json", ".json.gz")) for n in names)
+        return any(str(n).endswith(".json.br") for n in names)
     except StorageNotFound:
         return False
     except Exception as exc:  # noqa: BLE001 — never let the check break release

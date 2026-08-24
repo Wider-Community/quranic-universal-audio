@@ -8,6 +8,7 @@ from collections.abc import Iterable
 from typing import Any
 
 from config import TS_REPORT_BOUNDARY_STALE_MS
+from qua_shared.timestamps_codec import decode_document
 from services.storage import data_dir
 
 logger = logging.getLogger(__name__)
@@ -20,9 +21,9 @@ def _load_shard(slug: str, chapter: int) -> dict[str, Any] | None:
     except Exception:  # noqa: BLE001 - storage lookup is best effort during recheck
         logger.warning("native report shard read failed %s ch%s", slug, chapter)
         return None
-    return (
-        doc if isinstance(doc, dict) and doc.get("_meta", {}).get("schema_version") == 12 else None
-    )
+    if not isinstance(doc, dict) or doc.get("_meta", {}).get("schema_version") != 12:
+        return None
+    return decode_document(doc)
 
 
 def _same_id(value: Any, target_id: str) -> bool:
@@ -99,12 +100,21 @@ def _union(spans: Iterable[tuple[int, int] | None]) -> tuple[int, int] | None:
 
 def _column_span(reading: dict[str, Any], column: dict[str, Any]) -> tuple[int, int] | None:
     timing = reading["timing"]
+    override = _row(timing.get("columns", []), "column_id", str(column["id"]))
+    if override is not None:
+        if override.get("start_ms") is None or override.get("end_ms") is None:
+            return None
+        return int(override["start_ms"]), int(override["end_ms"])
     unit_ids = {str(value) for value in column.get("source_unit_ids", [])}
     sound_ids = {
         str(value)
         for field in ("owned_sound_ids", "presented_sound_ids")
         for value in column.get(field, [])
     }
+    for owner, _ in _cell_owners(reading):
+        for sound in owner.get("sounds", []):
+            if column["id"] in sound.get("column_ids", []):
+                sound_ids.add(str(sound["sound_id"]))
     return _union(
         [
             *(_span(timing.get("units", []), "source_unit_id", unit_id) for unit_id in unit_ids),

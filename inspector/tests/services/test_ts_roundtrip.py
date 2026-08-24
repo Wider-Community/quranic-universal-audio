@@ -3,7 +3,7 @@ from __future__ import annotations
 import orjson
 
 from qua_shared.schemas import TsShardDoc
-from qua_shared.timestamps_shards import gzip_shard
+from qua_shared.timestamps_shards import brotli_shard
 from services import storage_paths
 from services.storage import data_dir
 from services.storage.hf_bucket import get_backend
@@ -19,6 +19,13 @@ def _document() -> dict:
             "audio_category": "by_surah",
             "phonemizer_version": "2.14",
             "native_schema_version": 2,
+            "renderer_codec_version": 1,
+            "native_profile": {
+                "riwayah": "hafs",
+                "script": "uthmani",
+                "variant": {},
+                "extra_phonemes": [],
+            },
         },
         "readings": [],
     }
@@ -26,9 +33,9 @@ def _document() -> dict:
 
 def test_native_v12_read_path_is_byte_passthrough(tmp_reciter_dir):
     document = _document()
-    body = gzip_shard(document)
-    get_backend().write_bytes_atomic(storage_paths.timestamps_path_gz(SLUG, 1), body)
-    assert data_dir.read_timestamps_chapter_gz(SLUG, 1) == body
+    body = brotli_shard(document)
+    get_backend().write_bytes_atomic(storage_paths.timestamps_path_br(SLUG, 1), body)
+    assert data_dir.read_timestamps_chapter_br(SLUG, 1) == body
     inflated = data_dir.read_timestamps_chapter(SLUG, 1)
     assert inflated is not None
     parsed = orjson.loads(inflated)
@@ -36,5 +43,5 @@ def test_native_v12_read_path_is_byte_passthrough(tmp_reciter_dir):
 
 
 def test_missing_chapter_returns_none(tmp_reciter_dir):
-    assert data_dir.read_timestamps_chapter_gz(SLUG, 99) is None
+    assert data_dir.read_timestamps_chapter_br(SLUG, 99) is None
     assert data_dir.read_timestamps_chapter(SLUG, 99) is None

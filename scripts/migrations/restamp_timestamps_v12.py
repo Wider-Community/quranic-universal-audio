@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from qua_shared.timestamps_shards import gzip_shard  # noqa: E402
+from qua_shared.timestamps_shards import brotli_shard  # noqa: E402
 from qua_shared.timestamps_v12_audit import audit_v12_document  # noqa: E402
 
 
@@ -48,10 +48,10 @@ def _restamp(path: Path) -> tuple[dict, bytes]:
     legacy = orjson.loads(gzip.decompress(path.read_bytes()))
     document = restamp_v11_shard(legacy)
     audit_v12_document(document)
-    first = gzip_shard(document)
-    second = gzip_shard(document)
+    first = brotli_shard(document)
+    second = brotli_shard(document)
     if first != second:
-        raise RuntimeError(f"non-deterministic gzip for {path.name}")
+        raise RuntimeError(f"non-deterministic Brotli for {path.name}")
     return document, first
 
 
@@ -59,9 +59,9 @@ def _add(summary: Counter, document: dict, size: int) -> None:
     counts = audit_v12_document(document)
     summary.update(counts)
     summary["chapters"] += 1
-    summary["gzip_bytes"] += size
+    summary["brotli_bytes"] += size
     for reading in document["readings"]:
-        verses = {part["ref"] for part in reading["parts"]}
+        verses = {part[0] for part in reading["parts"]}
         if len(verses) > 1:
             summary["cross_verse_readings"] += 1
 
@@ -79,7 +79,7 @@ def run(source: Path, output: Path, *, require_chapters: int) -> dict:
         if chapter != int(path.name.split(".", 1)[0]):
             raise RuntimeError(f"chapter/path mismatch in {path}")
         versions.add(str(document["_meta"]["phonemizer_version"]))
-        (output / f"{chapter}.json.gz").write_bytes(payload)
+        (output / f"{chapter}.json.br").write_bytes(payload)
         _add(summary, document, len(payload))
     if len(versions) != 1 or next(iter(versions)).removesuffix(".0") != "2.14":
         raise RuntimeError(f"expected phonemizer 2.14, got {sorted(versions)}")

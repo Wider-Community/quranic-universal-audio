@@ -86,7 +86,7 @@ quranic-inspector-bucket/
 │       ├── detailed.json        # segments breakdown
 │       ├── audio/<ch>.mp3       # Chapter audio 
 │       ├── peaks/<ch>.json.gz   # Waveform peaks
-│       ├── timestamps/<ch>.json.gz # Per-chapter native v12 readings + timing sidecars
+│       ├── timestamps/<ch>.json.br # Compact native v12 readings + timing sidecars
 │       └── ...       
 └──           
 ```

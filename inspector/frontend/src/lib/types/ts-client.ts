@@ -6,14 +6,8 @@
  * documents reuse the renderer package types.
  */
 
-import type { AnalysisDocument, CellDocument, WirePayload } from '@quranic-phonemizer/cells';
-import type {
-    TsBoundaryTiming,
-    TsShardMeta,
-    TsSoundTiming,
-    TsUnitTiming,
-    TsWordTiming,
-} from './generated/schemas';
+import type { WirePayload } from '@quranic-phonemizer/cells';
+import type { TsShardMeta } from './generated/schemas';
 import type { VerseRef } from './view-models';
 
 // ---------------------------------------------------------------------------
@@ -119,35 +113,49 @@ export interface TsShardPart {
     word_ids: number[];
 }
 
-export interface TsSourceUnit {
-    id: number;
+export interface TsLetterUnit {
+    source_unit_id: number;
     word_id: number;
     text: string;
-    kind: string;
-    owned_sound_ids: number[];
-    presented_sound_ids: number[];
+    start_ms: number | null;
+    end_ms: number | null;
+    silent: boolean;
 }
 
-export interface TsSourceDocument {
-    schema_version: 2;
-    source: {
-        text: string;
-        units: TsSourceUnit[];
-        [key: string]: unknown;
-    };
+export interface TsWordTiming {
+    word_id: number;
+    start_ms: number;
+    end_ms: number;
+}
+
+export interface TsSoundTiming {
+    sound_id: number;
+    start_ms: number;
+    end_ms: number;
+}
+
+export interface TsBoundaryTiming {
+    boundary_id: number;
+    start_ms: number;
+    end_ms: number;
+}
+
+export interface TsColumnTiming {
+    column_id: string | number;
+    start_ms: number | null;
+    end_ms: number | null;
 }
 
 export interface TsShardReading {
     id: string;
     parts: TsShardPart[];
-    analysis: AnalysisDocument;
-    source: TsSourceDocument;
-    cells: CellDocument;
+    wire: WirePayload;
+    letters: TsLetterUnit[];
     timing: {
         words: TsWordTiming[];
         sounds: TsSoundTiming[];
-        units: TsUnitTiming[];
         boundaries: TsBoundaryTiming[];
+        columns: TsColumnTiming[];
     };
 }
 
@@ -157,8 +165,8 @@ export interface TsShardResponse {
 }
 
 export const nativePayload = (reading: TsShardReading): WirePayload => ({
-    analysis: reading.analysis,
-    cells: reading.cells,
+    analysis: reading.wire.analysis,
+    cells: reading.wire.cells,
 });
 
 // ---------------------------------------------------------------------------

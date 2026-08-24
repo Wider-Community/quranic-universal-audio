@@ -40,7 +40,7 @@ const resolved = (ids: Array<string | number>, spans: Map<string, Span>): Span[]
     });
 
 function columnSpans(item: ParsedReading): Map<string, Span> {
-    const units = new Map(item.reading.timing.units
+    const units = new Map(item.reading.letters
         .filter((row) => row.start_ms != null && row.end_ms != null)
         .map((row) => [String(row.source_unit_id), [row.start_ms!, row.end_ms!] as Span]));
     const sounds = new Map(item.reading.timing.sounds
@@ -56,6 +56,11 @@ function columnSpans(item: ParsedReading): Map<string, Span> {
         }
         const range = union(spans);
         if (range) out.set(String(column.id), range);
+    }
+    for (const override of item.reading.timing.columns) {
+        const id = String(override.column_id);
+        if (override.start_ms == null || override.end_ms == null) out.delete(id);
+        else out.set(id, [override.start_ms, override.end_ms]);
     }
     return out;
 }
@@ -131,7 +136,7 @@ function bindHooks(options: BindOptions): void {
 }
 
 function readingSpans(item: ParsedReading, displayIndex: Map<string, number>) {
-    const wordIndexes = new Map(item.reading.analysis.result.words.map((word) => [
+    const wordIndexes = new Map(item.reading.wire.analysis.result.words.map((word) => [
         String(word.id), displayIndex.get(word.ref) ?? -1,
     ]));
     const words = new Map(item.reading.timing.words.map((row) => [

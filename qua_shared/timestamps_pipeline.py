@@ -27,7 +27,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
-from qua_shared.timestamps_shards import build_timestamp_shards, gzip_shard
+from qua_shared.timestamps_shards import brotli_shard, build_timestamp_shards
 
 if TYPE_CHECKING:
     import numpy as np
@@ -1140,7 +1140,7 @@ def _finalize_shards(
             v2_doc, audio_category=audio_category, src_meta=shard_provenance
         )
         for ch_num, shard_doc in shards.items():
-            (ts_dir / f"{ch_num}{suffix}.json.gz").write_bytes(gzip_shard(shard_doc))
+            (ts_dir / f"{ch_num}{suffix}.json.br").write_bytes(brotli_shard(shard_doc))
         fails = len((v2_doc.get("_meta") or {}).get("mfa_failures", []))
         return len(shards), fails
 
@@ -1198,7 +1198,7 @@ def process(
 
     Each value in ``beams`` runs as an independent alignment pass over
     the same audio. The widest beam (``max(beams)``) is the canonical
-    pass — it always drives the ``timestamps/<ch>.json.gz`` native v12
+    pass — it always drives the ``timestamps/<ch>.json.br`` compact native v12
     shards regardless of the order ``beams`` was supplied in. The remaining
     (narrower) beams are folded into a single verse-level
     ``ts_validation.json`` sidecar — verses that align under the canonical

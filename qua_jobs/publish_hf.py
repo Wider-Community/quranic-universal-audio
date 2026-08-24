@@ -2,7 +2,7 @@
 """HF Job entrypoint: publish one recitation to the HF dataset (v2 track).
 
 Reads the recitation's bucket artifacts (``detailed.json`` + per-chapter
-``timestamps/<n>.json.gz`` + Xing-master ``audio/<n>.mp3``) and pushes a
+``timestamps/<n>.json.br`` + Xing-master ``audio/<n>.mp3``) and pushes a
 parquet split to the public HF dataset under ``<riwayah>/<slug>``. Audio
 clips are produced by in-process MP3 frame-index slicing
 (``qua_shared/mp3_frames.py``) — each chapter is read + indexed once, then

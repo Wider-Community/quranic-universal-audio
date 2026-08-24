@@ -1,6 +1,6 @@
 """Canonical letter-tier tokenization for published timestamps.
 
-The internal per-letter ``char`` (in ``reciters/<slug>/timestamps/<ch>.json.gz``)
+The internal per-letter ``char`` (in ``reciters/<slug>/timestamps/<ch>.json.br``)
 is a grapheme token produced upstream by the aligner: the Uthmani word text with
 short vowels (haraka: fatha/damma/kasra/sukun/shadda/tanween/waqf marks) already
 stripped, but with *madd-class* marks retained. That internal alphabet is **57

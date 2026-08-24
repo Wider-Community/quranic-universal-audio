@@ -1889,10 +1889,17 @@ export interface SegValStats {
 export interface SegValProbeMeta {
   [k: string]: unknown;
 }
-export interface TsBoundaryTiming {
-  start_ms: number;
-  end_ms: number;
-  boundary_id: number;
+export interface TsCompactRender {
+  v: 1;
+  /**
+   * @minItems 3
+   * @maxItems 3
+   */
+  m: [unknown, unknown, unknown];
+  p: string[];
+  r: string[];
+  w: unknown[][];
+  b: unknown[][];
 }
 /**
  * ``GET /api/ts/config`` — display constants + read-path URLs.
@@ -1986,6 +1993,14 @@ export interface TsManifestReciter {
   audio_category: AudioCategory;
   ts_chapters?: number[];
   vbr_chapters?: number[];
+}
+export interface TsNativeProfile {
+  riwayah: string;
+  script: string;
+  variant: {
+    [k: string]: string;
+  };
+  extra_phonemes: string[];
 }
 /**
  * Every reported verse for a reciter (``GET .../reports``).
@@ -2127,51 +2142,21 @@ export interface TsShardMeta {
   audio_category: string;
   phonemizer_version: string;
   native_schema_version: 2;
+  renderer_codec_version: 1;
+  native_profile: TsNativeProfile;
   [k: string]: unknown;
 }
 export interface TsShardReading {
   id: string;
-  parts: TsShardPart[];
-  analysis: {
-    [k: string]: unknown;
-  };
-  source: {
-    [k: string]: unknown;
-  };
-  cells: {
-    [k: string]: unknown;
-  };
+  parts: [unknown, unknown, unknown, unknown, unknown][];
+  render: TsCompactRender;
   timing: TsShardTiming;
 }
-export interface TsShardPart {
-  ref: string;
-  /**
-   * @minItems 2
-   * @maxItems 2
-   */
-  t: [unknown, unknown];
-  word_ids: number[];
-}
 export interface TsShardTiming {
-  words: TsWordTiming[];
-  sounds: TsSoundTiming[];
-  units: TsUnitTiming[];
-  boundaries: TsBoundaryTiming[];
-}
-export interface TsWordTiming {
-  start_ms: number;
-  end_ms: number;
-  word_id: number;
-}
-export interface TsSoundTiming {
-  start_ms: number;
-  end_ms: number;
-  sound_id: number;
-}
-export interface TsUnitTiming {
-  source_unit_id: number;
-  start_ms: number | null;
-  end_ms: number | null;
+  w: [unknown, unknown][];
+  s: [unknown, unknown][];
+  l: [unknown, unknown, unknown, unknown, unknown, unknown][];
+  c: [unknown, unknown, unknown][];
 }
 /**
  * The ``ts_validation.json`` document — meta + verse-keyed flags.

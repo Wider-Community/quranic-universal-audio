@@ -10,6 +10,7 @@ import sqlite3
 import sys
 from pathlib import Path
 
+import brotli
 import orjson
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -18,6 +19,7 @@ for path in (ROOT, INSPECTOR):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
+from qua_shared.timestamps_codec import decode_document  # noqa: E402
 from services.db.migrate import run_migrations  # noqa: E402
 from services.ts_reports.ts_target_snapshot import resolve_target  # noqa: E402
 
@@ -40,7 +42,7 @@ def _args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("database", type=Path)
     parser.add_argument("legacy_root", type=Path, help="<root>/<slug>/<chapter>.json.gz")
-    parser.add_argument("v12_root", type=Path, help="<root>/<slug>/<chapter>.json.gz")
+    parser.add_argument("v12_root", type=Path, help="<root>/<slug>/<chapter>.json.br")
     parser.add_argument("mapping_out", type=Path)
     parser.add_argument("--slug", action="append", default=[])
     parser.add_argument(
@@ -49,11 +51,18 @@ def _args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _load(root: Path, slug: str, chapter: int) -> dict:
+def _load_legacy(root: Path, slug: str, chapter: int) -> dict:
     path = root / slug / f"{chapter}.json.gz"
     if not path.is_file():
         raise MappingError(f"missing shard: {path}")
     return orjson.loads(gzip.decompress(path.read_bytes()))
+
+
+def _load_v12(root: Path, slug: str, chapter: int) -> dict:
+    path = root / slug / f"{chapter}.json.br"
+    if not path.is_file():
+        raise MappingError(f"missing shard: {path}")
+    return decode_document(orjson.loads(brotli.decompress(path.read_bytes())))
 
 
 def _part_has(reading: dict, verse: str) -> bool:
@@ -286,7 +295,7 @@ def _map_rows(
         try:
             key = (row["slug"], int(row["chapter"]))
             if key not in cache:
-                cache[key] = (_load(legacy_root, *key), _load(v12_root, *key))
+                cache[key] = (_load_legacy(legacy_root, *key), _load_v12(v12_root, *key))
             out.append(_map_one(row, *cache[key]))
         except MappingError as error:
             errors.append({"report_id": row["id"], "error": str(error)})

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from collections import defaultdict
 
+from qua_shared.timestamps_codec import decode_document
+
 
 def _index(ref: str) -> int:
     return int(ref.rsplit(":", 1)[1])
@@ -128,7 +130,8 @@ def project_native_shard(shard: dict) -> dict[str, dict]:
     """Select one canonical timing occasion per verse from a v12 shard."""
     if (shard.get("_meta") or {}).get("schema_version") != 12:
         raise ValueError("timestamp shard must use schema version 12")
-    segments = [row for reading in shard["readings"] for row in _reading_segments(reading)]
+    decoded = decode_document(shard)
+    segments = [row for reading in decoded["readings"] for row in _reading_segments(reading)]
     segments.sort(key=lambda row: row["t"][0])
     by_ref: dict[str, list[dict]] = defaultdict(list)
     for segment in segments:
