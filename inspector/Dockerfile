@@ -17,10 +17,13 @@
 # --- Stage 1: build frontend ---
 FROM node:24-alpine AS frontend-build
 WORKDIR /app
+RUN apk add --no-cache git openssh-client
 # Copy the full frontend before `npm ci`: the root `postinstall` hook runs
 # `paraglide:compile`, which needs `project.inlang/` + the message sources.
 COPY inspector/frontend ./
-RUN npm ci
+RUN --mount=type=ssh mkdir -p -m 700 /root/.ssh && \
+    ssh-keyscan -H github.com >> /root/.ssh/known_hosts && \
+    npm ci
 RUN npm run build
 
 
