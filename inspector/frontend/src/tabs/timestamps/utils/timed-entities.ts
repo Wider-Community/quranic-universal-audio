@@ -53,12 +53,32 @@ export function columnSpans(item: ParsedReading): Map<string, Span> {
     const sounds = new Map(item.reading.timing.sounds
         .map((row) => [String(row.sound_id), [row.start_ms, row.end_ms] as Span]));
     const owners = [...item.view.words, ...item.view.boundaries];
+    const columns = new Map(owners.flatMap((owner) => owner.columns.map((column) => [
+        String(column.id), column,
+    ] as const)));
     const out = new Map<string, Span>();
-    for (const column of owners.flatMap((owner) => owner.columns)) {
-        if (column.silence) continue;
-        const soundIds = [...column.owned_sound_ids, ...column.presented_sound_ids];
-        const range = union(resolved(soundIds, sounds));
-        if (range) out.set(String(column.id), range);
+    const cellSounds = owners.flatMap((owner) => [
+        ...owner.sounds,
+        ...owner.bridges.map((bridge) => bridge.sound),
+    ]);
+    for (const sound of cellSounds) {
+        const span = sounds.get(String(sound.sound_id));
+        if (!span) continue;
+        for (const id of sound.column_ids.map(String)) {
+            if (columns.get(id)?.silence) continue;
+            const range = union([...(out.get(id) ? [out.get(id)!] : []), span]);
+            if (range) out.set(id, range);
+        }
+    }
+    for (const override of item.reading.timing.columns) {
+        const id = String(override.column_id);
+        if (columns.get(id)?.silence
+            || override.start_ms === null
+            || override.end_ms === null) {
+            out.delete(id);
+        } else {
+            out.set(id, [override.start_ms, override.end_ms]);
+        }
     }
     return out;
 }

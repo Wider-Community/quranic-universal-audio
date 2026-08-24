@@ -122,10 +122,16 @@
 }
 
 .timed-analysis .mega-letter.active,
-.timed-analysis .haraka-cell.active {
+.timed-analysis .haraka-cell.active,
+.timed-analysis .dia-track.active > .haraka-cell {
     color: var(--hl-letter-ink, var(--ink-on-color));
     background: var(--ts-letter-deep, var(--hl-letter-color));
     border-color: var(--ts-letter-color, var(--hl-letter-color));
+}
+
+.timed-analysis .haraka-cell.active .g,
+.timed-analysis .dia-track.active > .haraka-cell .g {
+    color: inherit;
 }
 
 .timed-analysis .mega-phoneme.active,
@@ -142,7 +148,8 @@
 }
 
 .timed-analysis.hl-track .mega-letter.active,
-.timed-analysis.hl-track .haraka-cell.active {
+.timed-analysis.hl-track .haraka-cell.active,
+.timed-analysis.hl-track .dia-track.active > .haraka-cell {
     background: linear-gradient(
         to left,
         var(--ts-letter-deep, var(--hl-letter-color)) calc(var(--fill, 0) * 100%),
@@ -199,12 +206,17 @@
     border-color: var(--anim-highlight-color);
 }
 
-.timed-analysis .boundary-tile.qc-verse-end > .pause-bridge,
-.timed-analysis .boundary-tile.qc-verse-end.active > .pause-bridge {
+.timed-analysis .boundary-tile.qc-verse-end > .pause-bridge {
     color: var(--qc-word-ink);
     background: transparent;
     border-color: transparent;
     opacity: 1;
+}
+
+.timed-analysis .boundary-tile.qc-verse-end.qc-recorded-pause.active > .pause-bridge {
+    color: var(--hl-word-ink, var(--ink-on-color));
+    background: var(--ts-word-deep, var(--anim-highlight-color));
+    border-color: var(--anim-highlight-color);
 }
 
 .timed-analysis.report-mode :is(

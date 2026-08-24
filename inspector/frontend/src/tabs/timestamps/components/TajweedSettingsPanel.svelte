@@ -230,7 +230,7 @@
                         <div class="tjs-status-keys">
                         <div class="tjs-key-row status-key">
                             <span class="tjs-key-cells">
-                                <span class="kcell big transformed">ا</span>
+                                <span class="kcell big transformed">أ</span>
                                 <span class="kdia">
                                     <span class="kharaka pin-top transformed">
                                         <span class="kg" style={harakaRenderStyle(FATHA)}>{FATHA}</span>

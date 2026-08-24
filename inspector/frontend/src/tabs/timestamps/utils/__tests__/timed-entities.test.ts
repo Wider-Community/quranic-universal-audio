@@ -26,7 +26,9 @@ describe('native timing ownership', () => {
         first.presented_sound_ids = [1];
         second.owned_sound_ids = [];
         second.presented_sound_ids = [1];
-        reading.wire.cells.cell_view.words[1]!.sounds[0]!.column_ids = [];
+        reading.wire.cells.cell_view.words[1]!.sounds[0]!.column_ids = [
+            Number(first.id), Number(second.id),
+        ];
 
         let spans = columnSpans(parsed(reading));
         expect(spans.get(String(first.id))).toEqual([100, 400]);
@@ -35,6 +37,18 @@ describe('native timing ownership', () => {
         second.silence = 'orthographic_silence';
         spans = columnSpans(parsed(reading));
         expect(spans.has(String(second.id))).toBe(false);
+
+        reading.timing.columns = [{
+            column_id: first.id, start_ms: 130, end_ms: 260,
+        }];
+        spans = columnSpans(parsed(reading));
+        expect(spans.get(String(first.id))).toEqual([130, 260]);
+
+        reading.timing.columns = [{
+            column_id: first.id, start_ms: null, end_ms: null,
+        }];
+        spans = columnSpans(parsed(reading));
+        expect(spans.has(String(first.id))).toBe(false);
     });
 
     it('derives a pause across reading boundaries and keeps verse markers static', () => {

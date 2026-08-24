@@ -126,7 +126,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 _INSTALL = (
     "mamba install -y -c conda-forge python=3.11 montreal-forced-aligner "
     "&& /opt/conda/bin/pip install gradio soundfile tgt numpy PyYAML requests psutil brotli "
-    "'quranic-phonemizer==2.15.0' 'huggingface_hub>=1.8.0' "
+    "'quranic-phonemizer==2.15.1' 'huggingface_hub>=1.8.0' "
     "&& mkdir -p /scratch"
 )
 _ENTRYPOINT = "python /aux/code/qua_jobs/generate_timestamps.py"

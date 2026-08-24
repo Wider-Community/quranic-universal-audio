@@ -13,6 +13,8 @@
  */
 import '../src/styles/tokens.css';
 import '../src/styles/base.css';
+import '@quranic-phonemizer/cells/cells.css';
+import '../src/styles/highlight-constants.css';
 import '../src/styles/timestamps.css';
 
 import { mount } from 'svelte';

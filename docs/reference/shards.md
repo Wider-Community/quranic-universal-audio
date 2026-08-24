@@ -15,7 +15,7 @@ schema-v12 JSON document compressed with deterministic Brotli quality 6:
     "schema_version": 12,
     "chapter": 1,
     "audio_category": "by_surah",
-    "phonemizer_version": "2.15.0",
+    "phonemizer_version": "2.15.1",
     "native_schema_version": 2,
     "renderer_codec_version": 1,
     "native_profile": {

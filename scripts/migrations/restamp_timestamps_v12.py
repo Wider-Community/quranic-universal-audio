@@ -81,8 +81,8 @@ def run(source: Path, output: Path, *, require_chapters: int) -> dict:
         versions.add(str(document["_meta"]["phonemizer_version"]))
         (output / f"{chapter}.json.br").write_bytes(payload)
         _add(summary, document, len(payload))
-    if versions != {"2.15"} and versions != {"2.15.0"}:
-        raise RuntimeError(f"expected phonemizer 2.15, got {sorted(versions)}")
+    if versions != {"2.15.1"}:
+        raise RuntimeError(f"expected phonemizer 2.15.1, got {sorted(versions)}")
     return {"status": "ok", "phonemizer_versions": sorted(versions), **dict(summary)}
 
 
