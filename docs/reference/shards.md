@@ -230,6 +230,13 @@ and 282,951,608 bytes. Source and backup filename/size maps matched exactly.
 Thirty-five reciters have 114 chapters; `islam_sobhi_mp3quran` has 106 and
 `ahmed_saud_mp3quran` has 30.
 
+The matching local v12 acceptance set contains 4,126 `.json.br` files and
+483,452,080 bytes. All 37 reciter summaries are `ok`; every document stamps
+schema/native/renderer-codec `12/2/1` and phonemizer `2.15.3`. Its SHA-256
+upload inventory is retained with the cutover working set as
+`v12-final-inventory.json` and must match the staged bucket prefix before the
+consumer switch.
+
 ### Coordinated cutover and rollback
 
 Do not delete or overwrite `.json.gz` during the first v12 release. Upload the
