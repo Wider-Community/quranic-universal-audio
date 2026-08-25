@@ -1,260 +1,164 @@
-"""ts_target_snapshot: target resolution + per-category staleness diff.
-
-Drives the pure resolver/diff with synthetic shard docs (no bucket I/O)."""
+"""Exact native v12 report target resolution and staleness."""
 
 from __future__ import annotations
 
 import copy
 
-from services.ts_reports import ts_target_snapshot as snap
+from services.ts_reports import ts_target_snapshot as snapshots
 
 
 def _doc() -> dict:
-    # One verse "2:45", one word "بَ": base ب (qalqala) + haraka fatha.
-    word = [
-        1,
-        0,
-        20,
-        [["ب", 0, 10], ["َ", 10, 20]],
-        [["b", 0, 10], ["a", 10, 20]],
-        [
-            ["ب", "base", "present", [0], 0, ["qalqala_sughra"], None],
-            ["َ", "haraka", "present", [1], 1, [], None],
+    return {
+        "_meta": {"schema_version": 12},
+        "readings": [
+            {
+                "id": "r1",
+                "parts": [{"ref": "2:45", "t": [100, 500], "word_ids": [1, 2]}],
+                "analysis": {
+                    "schema_version": 2,
+                    "result": {
+                        "words": [
+                            {"id": 1, "ref": "2:45:1", "text": "a", "sound_ids": [20]},
+                            {"id": 2, "ref": "2:45:2", "text": "b", "sound_ids": [21]},
+                        ],
+                        "sounds": [
+                            {"id": 20, "token": "a", "word_id": 1},
+                            {"id": 21, "token": "b", "word_id": 2},
+                        ],
+                        "boundaries": [{"id": 5, "before": 1, "after": 2, "state": "join"}],
+                    },
+                },
+                "source": {"schema_version": 2, "source": {}},
+                "cells": {
+                    "schema_version": 2,
+                    "cell_view": {
+                        "words": [
+                            {
+                                "word_id": 1,
+                                "columns": [
+                                    {
+                                        "id": 10,
+                                        "source_unit_ids": [100],
+                                        "owned_sound_ids": [20],
+                                        "presented_sound_ids": [],
+                                    },
+                                    {
+                                        "id": 11,
+                                        "source_unit_ids": [],
+                                        "owned_sound_ids": [],
+                                        "presented_sound_ids": [],
+                                    },
+                                ],
+                                "groups": [{"column_ids": [10, 11], "sound_ids": [20]}],
+                                "bridges": [{"merger_id": 30, "sound": {"sound_id": 20}}],
+                            },
+                            {"word_id": 2, "columns": [], "groups": [], "bridges": []},
+                        ],
+                        "boundaries": [
+                            {
+                                "boundary_id": 5,
+                                "columns": [],
+                                "groups": [],
+                                "bridges": [],
+                            }
+                        ],
+                    },
+                },
+                "timing": {
+                    "words": [
+                        {"word_id": 1, "start_ms": 100, "end_ms": 300},
+                        {"word_id": 2, "start_ms": 350, "end_ms": 500},
+                    ],
+                    "sounds": [
+                        {"sound_id": 20, "start_ms": 200, "end_ms": 300},
+                        {"sound_id": 21, "start_ms": 350, "end_ms": 500},
+                    ],
+                    "units": [{"source_unit_id": 100, "start_ms": 100, "end_ms": 180}],
+                    "boundaries": [{"boundary_id": 5, "start_ms": 300, "end_ms": 350}],
+                },
+            }
         ],
-    ]
-    return {
-        "_meta": {"schema_version": 11, "chapter": 2, "audio_category": "by_ayah_audio"},
-        "segments": [{"ref": "2:45", "t": [0, 20], "words": [word]}],
     }
 
 
-def _report(category: str, target: dict, doc: dict, *, onset=None, offset=None) -> dict:
-    return {
-        "category": category,
+def _target(kind: str, target_id: str) -> dict:
+    return {"reading_id": "r1", "kind": kind, "target_id": target_id}
+
+
+def test_resolves_every_native_target_kind_exactly():
+    doc = _doc()
+    expected = {
+        ("verse", "2:45"): (100, 500),
+        ("word", "1"): (100, 300),
+        ("sound", "20"): (200, 300),
+        ("column", "10"): (100, 300),
+        ("group", "10:11"): (200, 300),
+        ("bridge", "30"): (200, 300),
+        ("boundary", "5"): (300, 350),
+    }
+    for (kind, target_id), span in expected.items():
+        snapshot = snapshots.resolve_target(doc, "2:45", _target(kind, target_id))
+        assert snapshot is not None, (kind, target_id)
+        assert snapshot["timing"] == {"start_ms": span[0], "end_ms": span[1]}
+        assert snapshot["native_schema_version"] == 2
+        assert snapshot["shard_schema_version"] == 12
+
+
+def test_group_identity_is_ordered_native_column_ids():
+    doc = _doc()
+    assert snapshots.resolve_target(doc, "2:45", _target("group", "10:11"))
+    assert snapshots.resolve_target(doc, "2:45", _target("group", "11:10")) is None
+
+
+def test_reading_and_verse_ownership_are_strict():
+    doc = _doc()
+    assert snapshots.resolve_target(doc, "2:45", _target("word", "1"))
+    assert (
+        snapshots.resolve_target(
+            doc, "2:45", {"reading_id": "missing", "kind": "word", "target_id": "1"}
+        )
+        is None
+    )
+    assert snapshots.resolve_target(doc, "2:46", _target("word", "1")) is None
+    assert snapshots.resolve_target(doc, "2:45", _target("column", "999")) is None
+
+
+def test_non_timing_reports_stale_on_native_change():
+    doc = _doc()
+    target = _target("sound", "20")
+    old = snapshots.resolve_target(doc, "2:45", target)
+    changed = copy.deepcopy(doc)
+    changed["readings"][0]["analysis"]["result"]["sounds"][0]["token"] = "changed"
+    report = {
         "verse_key": "2:45",
+        "category": "phonemes",
         "target": target,
-        "onset": onset,
-        "offset": offset,
-        "snapshot": snap.resolve_target(doc, "2:45", target),
+        "snapshot": old,
     }
+    assert snapshots.is_stale_after_restamp(report, changed)
 
 
-def test_resolve_verse_and_word():
+def test_timing_reports_only_compare_the_selected_axes():
     doc = _doc()
-    vsnap = snap.resolve_target(doc, "2:45", {"kind": "verse"})
-    assert vsnap is not None and vsnap["verse_text"] == "بَ"
-    wsnap = snap.resolve_target(doc, "2:45", {"kind": "word", "word_index": 0})
-    assert wsnap is not None and wsnap["word_text"] == "بَ"
-
-
-def test_resolve_cell_and_phoneme():
-    doc = _doc()
-    cell = snap.resolve_target(doc, "2:45", {"kind": "cell", "word_index": 0, "cell_index": 0})
-    assert cell is not None and cell["chars"] == "ب" and cell["tag"] == "qalqala_sughra"
-    ph = snap.resolve_target(
-        doc, "2:45", {"kind": "phoneme", "word_index": 0, "phoneme_flat_index": 1}
-    )
-    assert ph is not None and ph["chars"] == "a"
-
-
-def test_missing_verse_returns_none():
-    assert snap.resolve_target(_doc(), "9:9", {"kind": "verse"}) is None
-
-
-def test_audio_never_stale():
-    doc = _doc()
-    report = _report("audio", {"kind": "verse"}, doc)
-    assert snap.is_stale_after_restamp(report, doc) is False
-
-
-def test_tajweed_stale_when_rule_changes():
-    doc = _doc()
-    target = {"kind": "cell", "word_index": 0, "cell_index": 0}
-    report = _report("tajweed", target, doc)
-    assert snap.is_stale_after_restamp(report, doc) is False
+    target = _target("word", "1")
+    old = snapshots.resolve_target(doc, "2:45", target)
     changed = copy.deepcopy(doc)
-    changed["segments"][0]["words"][0][5][0][5] = []  # drop the qalqala rule
-    assert snap.is_stale_after_restamp(report, changed) is True
-
-
-def test_timing_stale_on_identity_change_and_flagged_onset_shift():
-    doc = _doc()
-    target = {"kind": "cell", "word_index": 0, "cell_index": 0}
-    report = _report("timing", target, doc, onset="early")  # flags the START only
-
-    # the unflagged offset moving does NOT stale
-    off_shift = copy.deepcopy(doc)
-    off_shift["segments"][0]["words"][0][3][0][2] = 500  # letter end 10 -> 500
-    assert snap.is_stale_after_restamp(report, off_shift) is False
-
-    # a small onset shift (< 100ms threshold) does NOT stale
-    small = copy.deepcopy(doc)
-    small["segments"][0]["words"][0][3][0][1] = 50  # letter start 0 -> 50
-    assert snap.is_stale_after_restamp(report, small) is False
-
-    # a large onset shift (> threshold) stales
-    big = copy.deepcopy(doc)
-    big["segments"][0]["words"][0][3][0][1] = 300  # letter start 0 -> 300
-    assert snap.is_stale_after_restamp(report, big) is True
-
-    # identity change (cell removed) always stales
-    removed = copy.deepcopy(doc)
-    removed["segments"][0]["words"][0][5] = []
-    assert snap.is_stale_after_restamp(report, removed) is True
-
-
-def test_timing_offset_only_report_ignores_onset_shift():
-    doc = _doc()
-    target = {"kind": "cell", "word_index": 0, "cell_index": 0}
-    report = _report("timing", target, doc, offset="late")  # flags the END only
-
-    big_offset = copy.deepcopy(doc)
-    big_offset["segments"][0]["words"][0][3][0][2] = 300  # letter end 10 -> 300
-    assert snap.is_stale_after_restamp(report, big_offset) is True
-
-    onset_only = copy.deepcopy(doc)
-    onset_only["segments"][0]["words"][0][3][0][1] = 300  # letter start moves, end unchanged
-    assert snap.is_stale_after_restamp(report, onset_only) is False
-
-
-def test_phonemes_stale_when_phone_identity_changes():
-    doc = _doc()
-    target = {"kind": "phoneme", "word_index": 0, "phoneme_flat_index": 1}
-    report = _report("phonemes", target, doc)
-    assert snap.is_stale_after_restamp(report, doc) is False
-    changed = copy.deepcopy(doc)
-    changed["segments"][0]["words"][0][4][1][0] = "i"  # phone a -> i
-    assert snap.is_stale_after_restamp(report, changed) is True
-
-
-def _bridge_doc() -> dict:
-    # word 0 "نْ" whose tail phone merges (idgham) into word 1 — the merger phone
-    # carries a bridge rule (row slot 5) and renders before word 1 (k>0 → target=1).
-    w0 = [
-        0,
-        0,
-        10,
-        [["ن", 0, 5]],
-        [["n", 0, 5], ["m̃", 5, 10, False, False, "idgham_ghunnah"]],
-        [["ن", "base", "present", [0], 0, [], None]],
-    ]
-    w1 = [
-        1,
-        10,
-        20,
-        [["م", 10, 20]],
-        [["m", 10, 20]],
-        [["م", "base", "present", [0], 0, [], None]],
-    ]
-    return {
-        "_meta": {"schema_version": 11, "chapter": 2, "audio_category": "by_ayah_audio"},
-        "segments": [{"ref": "2:45", "t": [0, 20], "words": [w0, w1]}],
-    }
-
-
-def test_resolve_bridge_phoneme_targets_following_word():
-    doc = _bridge_doc()
-    target = {"kind": "phoneme", "word_index": 1, "phoneme_flat_index": -1}
-    s = snap.resolve_target(doc, "2:45", target)
-    assert s is not None and s["chars"] == "m̃" and s["tag"] == "idgham_ghunnah"
-
-
-def test_phonemes_bridge_stale_when_merger_rule_changes_or_vanishes():
-    doc = _bridge_doc()
-    target = {"kind": "phoneme", "word_index": 1, "phoneme_flat_index": -1}
-    report = _report("phonemes", target, doc)
-    assert snap.is_stale_after_restamp(report, doc) is False
-    rule_changed = copy.deepcopy(doc)
-    rule_changed["segments"][0]["words"][0][4][1][5] = "idgham_no_ghunnah"
-    assert snap.is_stale_after_restamp(report, rule_changed) is True
-    vanished = copy.deepcopy(doc)
-    vanished["segments"][0]["words"][0][4] = [["n", 0, 5]]  # merger phone gone
-    assert snap.is_stale_after_restamp(report, vanished) is True
-
-
-def test_other_stale_when_verse_text_changes():
-    doc = _doc()
-    report = _report("other", {"kind": "verse"}, doc)
-    changed = copy.deepcopy(doc)
-    changed["segments"][0]["words"][0][3][0][0] = "ت"  # letter changed
-    assert snap.is_stale_after_restamp(report, changed) is True
-
-
-# --- silence (gap) reports: resolution + auto-resolve decision matrix --------
-
-_GAP_TARGET = {"kind": "gap", "word_index": 0}
-
-
-def _two_word_doc(*, gap: bool) -> dict:
-    """Two words "بَ" / "تَ"; the second starts at 30 (a gap after word 0) or at 20
-    (contiguous, no gap)."""
-    w0 = [0, 0, 20, [["ب", 0, 20]], [["b", 0, 20]], [["ب", "base", "present", [0], 0, [], None]]]
-    s1 = 30 if gap else 20
-    w1 = [
-        1,
-        s1,
-        s1 + 20,
-        [["ت", s1, s1 + 20]],
-        [["t", s1, s1 + 20]],
-        [["ت", "base", "present", [0], 0, [], None]],
-    ]
-    return {
-        "_meta": {"schema_version": 11, "chapter": 2, "audio_category": "by_ayah_audio"},
-        "segments": [{"ref": "2:45", "t": [0, s1 + 20], "words": [w0, w1]}],
-    }
-
-
-def _silence_report(subtype: str, create_doc: dict, *, onset=None, offset=None) -> dict:
-    return {
-        "category": "silence",
+    timing = changed["readings"][0]["timing"]["words"][0]
+    timing["start_ms"] += 10_000
+    onset = {
         "verse_key": "2:45",
-        "subtype": subtype,
-        "target": _GAP_TARGET,
-        "onset": onset,
-        "offset": offset,
-        "snapshot": snap.resolve_target(create_doc, "2:45", _GAP_TARGET),
+        "category": "timing",
+        "target": target,
+        "snapshot": old,
+        "onset": "late",
+        "offset": None,
     }
+    offset = {**onset, "onset": None, "offset": "early"}
+    assert snapshots.is_stale_after_restamp(onset, changed)
+    assert not snapshots.is_stale_after_restamp(offset, changed)
 
 
-def test_resolve_gap_bounds_and_presence():
-    g = snap.resolve_target(_two_word_doc(gap=True), "2:45", _GAP_TARGET)
-    assert g is not None and g["onset_ms"] == 20 and g["offset_ms"] == 30
-    assert snap._gap_present(g) is True
-    contiguous = snap.resolve_target(_two_word_doc(gap=False), "2:45", _GAP_TARGET)
-    assert contiguous is not None and snap._gap_present(contiguous) is False
-
-
-def test_silence_missed_auto_resolves_when_gap_appears():
-    r = _silence_report("pause_missed", _two_word_doc(gap=False))
-    assert snap._silence_action(r, _two_word_doc(gap=True)) == (
-        "resolve",
-        "A pause now appears here on the latest timestamps.",
-    )
-    assert snap._silence_action(r, _two_word_doc(gap=False)) == ("none", None)
-
-
-def test_silence_wasl_auto_resolves_when_gap_removed():
-    r = _silence_report("pause_wasl", _two_word_doc(gap=True))
-    assert snap._silence_action(r, _two_word_doc(gap=False)) == (
-        "resolve",
-        "This pause is gone on the latest timestamps.",
-    )
-    assert snap._silence_action(r, _two_word_doc(gap=True)) == ("none", None)
-
-
-def test_silence_boundary_stales_on_flagged_shift_and_resolves_when_gap_gone():
-    create = _two_word_doc(gap=True)
-    r = _silence_report("pause_boundary", create, offset="late")  # flags the gap END
-    shifted = copy.deepcopy(create)
-    shifted["segments"][0]["words"][1][1] = 200  # word1 start 30 -> 200 (gap end moves > thr)
-    shifted["segments"][0]["words"][1][2] = 220
-    assert snap._silence_action(r, shifted) == ("stale", None)
-    # gap removed entirely → the boundary correction is moot → auto-resolve
-    assert snap._silence_action(r, _two_word_doc(gap=False))[0] == "resolve"
-
-
-def test_silence_stale_when_boundary_vanishes():
-    r = _silence_report("pause_missed", _two_word_doc(gap=False))
-    one_word = _two_word_doc(gap=False)
-    one_word["segments"][0]["words"] = one_word["segments"][0]["words"][:1]
-    assert snap._silence_action(r, one_word) == ("stale", None)
+def test_v11_documents_never_resolve():
+    doc = _doc()
+    doc["_meta"]["schema_version"] = 11
+    assert snapshots.resolve_target(doc, "2:45", _target("word", "1")) is None

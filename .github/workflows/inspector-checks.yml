@@ -5,6 +5,10 @@ name: Inspector checks (reusable)
 
 on:
   workflow_call:
+    secrets:
+      CELLS_DEPLOY_KEY:
+        description: Read-only SSH deploy key for the private renderer repository
+        required: true
 
 jobs:
   frontend-checks:
@@ -24,6 +28,15 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: inspector/frontend/package-lock.json
+
+      - name: Configure private renderer access
+        env:
+          CELLS_DEPLOY_KEY: ${{ secrets.CELLS_DEPLOY_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$CELLS_DEPLOY_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H github.com >> ~/.ssh/known_hosts
 
       - name: Install deps
         run: npm ci
@@ -124,6 +137,15 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: inspector/frontend/package-lock.json
+
+      - name: Configure private renderer access
+        env:
+          CELLS_DEPLOY_KEY: ${{ secrets.CELLS_DEPLOY_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$CELLS_DEPLOY_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H github.com >> ~/.ssh/known_hosts
 
       - name: Install codegen deps
         run: |

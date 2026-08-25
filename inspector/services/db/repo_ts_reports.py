@@ -36,35 +36,22 @@ def chapter_of(verse_key: str) -> int:
 
 
 def target_key(target: dict[str, Any], category: str = "", subtype: str | None = None) -> str:
-    """Canonical key for a target descriptor (NULLs as empty), for ON CONFLICT.
-
-    ``kind:word_index:source_letter_index:cell_index:phoneme_flat_index:share_group``,
-    with ``:subtype`` appended for ``tajweed`` only — a tajweed report is unique per
-    cell PER subtype (the same cell can carry both a ``wrong_rule`` and a
-    ``missing_rule`` report), whereas timing/audio/other stay one-per-target.
-    """
-
-    def _s(v: Any) -> str:
-        return "" if v is None else str(v)
-
+    """Canonical native identity used by the per-reporter uniqueness indexes."""
     parts = [
+        str(target.get("reading_id", "")),
         str(target.get("kind", "")),
-        _s(target.get("word_index")),
-        _s(target.get("source_letter_index")),
-        _s(target.get("cell_index")),
-        _s(target.get("phoneme_flat_index")),
-        _s(target.get("share_group")),
+        str(target.get("target_id", "")),
     ]
     if category == "tajweed":
-        parts.append(_s(subtype))
+        parts.append(subtype or "")
     return ":".join(parts)
 
 
-def word_group_key(slug: str, verse_key: str, word_index: int, category: str) -> str:
+def word_group_key(slug: str, verse_key: str, reading_id: str, word_id: str, category: str) -> str:
     """Stable identity for a word-group (``timing`` + ``phonemes``) — the
     notification ``source_key`` that coalesces every cell/phoneme flagged in one
     word into a single owner alert."""
-    return f"tsreport:{slug}:{verse_key}:{word_index}:{category}"
+    return f"tsreport:{slug}:{verse_key}:{reading_id}:{word_id}:{category}"
 
 
 #: Report categories that are NOT publicly visible — only the reporter and a
@@ -107,28 +94,11 @@ def _row_to_dict(row) -> dict[str, Any]:
         "onset": row["timing_onset"],
         "offset": row["timing_offset"],
         "target": {
+            "reading_id": row["reading_id"],
             "kind": row["target_kind"],
-            "word_index": row["word_index"],
-            "source_letter_index": row["source_letter_index"],
-            "cell_index": row["cell_index"],
-            "phoneme_flat_index": row["phoneme_flat_index"],
-            "share_group": row["share_group"],
+            "target_id": row["target_id"],
         },
-        "snapshot": {
-            "chars": row["snap_chars"],
-            "role": row["snap_role"],
-            "status": row["snap_status"],
-            "tag": row["snap_tag"],
-            "secondary_tags": _serde.json_loads(row["snap_secondary_tags"]) or [],
-            "phoneme_rule_tags": _serde.json_loads(row["snap_phoneme_rule_tags"]) or [],
-            "phones": _serde.json_loads(row["snap_phones"]) or [],
-            "share_group": row["snap_share_group"],
-            "word_text": row["snap_word_text"],
-            "verse_text": row["snap_verse_text"],
-            "schema_version": row["snap_schema_version"],
-            "onset_ms": row["snap_onset_ms"],
-            "offset_ms": row["snap_offset_ms"],
-        },
+        "snapshot": _serde.json_loads(row["snapshot_json"]),
         "comment": row["comment"],
         "selected_rule_tags": _serde.json_loads(row["selected_rule_tags"]) or [],
         "hf_user_id": row["hf_user_id"],
@@ -278,27 +248,17 @@ def create(
     get_conn().execute(
         "INSERT INTO ts_reports("
         " slug, verse_key, chapter, category, subtype, timing_onset, timing_offset,"
-        " target_kind, word_index, source_letter_index, cell_index, phoneme_flat_index,"
-        " share_group, target_key,"
-        " snap_chars, snap_role, snap_status, snap_tag, snap_secondary_tags,"
-        " snap_phoneme_rule_tags, snap_phones, snap_share_group, snap_word_text,"
-        " snap_verse_text, snap_schema_version, snap_onset_ms, snap_offset_ms,"
+        " target_kind, reading_id, target_id, target_key, snapshot_json,"
         " hf_user_id, anon_token, login_at_time, role_at_time, comment, selected_rule_tags,"
         " status, stale, created_at, updated_at)"
-        " VALUES (?,?,?,?,?,?,?, ?,?,?,?,?, ?,?, ?,?,?,?,?, ?,?,?,?, ?,?,?,?, ?,?,?,?,?,?, 'open',0,?,?)"
+        " VALUES (?,?,?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?,?, 'open',0,?,?)"
         f" ON CONFLICT(slug, verse_key, category, target_key, {conflict_col})"
         f" WHERE {conflict_col} IS NOT NULL DO UPDATE SET"
         "   subtype = excluded.subtype,"
         "   timing_onset = excluded.timing_onset, timing_offset = excluded.timing_offset,"
         "   selected_rule_tags = excluded.selected_rule_tags,"
-        "   snap_chars = excluded.snap_chars, snap_role = excluded.snap_role,"
-        "   snap_status = excluded.snap_status, snap_tag = excluded.snap_tag,"
-        "   snap_secondary_tags = excluded.snap_secondary_tags,"
-        "   snap_phoneme_rule_tags = excluded.snap_phoneme_rule_tags,"
-        "   snap_phones = excluded.snap_phones, snap_share_group = excluded.snap_share_group,"
-        "   snap_word_text = excluded.snap_word_text, snap_verse_text = excluded.snap_verse_text,"
-        "   snap_schema_version = excluded.snap_schema_version,"
-        "   snap_onset_ms = excluded.snap_onset_ms, snap_offset_ms = excluded.snap_offset_ms,"
+        "   reading_id = excluded.reading_id, target_id = excluded.target_id,"
+        "   snapshot_json = excluded.snapshot_json,"
         "   comment = excluded.comment, updated_at = excluded.updated_at,"
         "   hidden_at = NULL",
         (
@@ -310,25 +270,10 @@ def create(
             onset,
             offset,
             target.get("kind"),
-            target.get("word_index"),
-            target.get("source_letter_index"),
-            target.get("cell_index"),
-            target.get("phoneme_flat_index"),
-            target.get("share_group"),
+            target.get("reading_id"),
+            target.get("target_id"),
             tkey,
-            snap.get("chars"),
-            snap.get("role"),
-            snap.get("status"),
-            snap.get("tag"),
-            _serde.json_dumps(snap["secondary_tags"]) if snap.get("secondary_tags") else None,
-            _serde.json_dumps(snap["phoneme_rule_tags"]) if snap.get("phoneme_rule_tags") else None,
-            _serde.json_dumps(snap["phones"]) if snap.get("phones") else None,
-            snap.get("share_group"),
-            snap.get("word_text"),
-            snap.get("verse_text"),
-            snap.get("schema_version"),
-            snap.get("onset_ms"),
-            snap.get("offset_ms"),
+            _serde.json_dumps(snap) if snap else None,
             hf_user_id,
             anon_token,
             login_at_time,
@@ -417,7 +362,8 @@ def resolve_group(
     *,
     slug: str,
     verse_key: str,
-    word_index: int,
+    reading_id: str,
+    word_id: str,
     category: str,
     resolver_hf_user_id: str | None,
     resolver_login: str | None,
@@ -426,7 +372,7 @@ def resolve_group(
 ) -> list[dict[str, Any]]:
     """Resolve every open, visible row in a timing word-group as a unit.
 
-    Group = all rows on ``(slug, verse_key, word_index, category)`` across ALL
+    Group = all rows owned by the same native word across ALL
     identities — owner resolution closes the word's timing issue regardless of
     who filed which cell. Returns the updated rows (the route fans one
     notification per distinct reporter), or ``[]`` when nothing was open."""
@@ -436,9 +382,12 @@ def resolve_group(
     ids = [
         r["id"]
         for r in conn.execute(
-            "SELECT id FROM ts_reports WHERE slug = ? AND verse_key = ? AND word_index = ? "
+            "SELECT id FROM ts_reports WHERE slug = ? AND verse_key = ? "
+            "AND reading_id = ? "
+            "AND (target_kind = 'word' AND target_id = ? "
+            " OR CAST(json_extract(snapshot_json, '$.native.word_id') AS TEXT) = ?) "
             "AND category = ? AND status = 'open' AND hidden_at IS NULL",
-            (slug, verse_key, word_index, category),
+            (slug, verse_key, reading_id, word_id, word_id, category),
         ).fetchall()
     ]
     if not ids:

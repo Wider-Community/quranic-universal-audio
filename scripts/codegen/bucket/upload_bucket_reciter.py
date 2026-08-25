@@ -3,8 +3,8 @@
 Companion to ``download_bucket_reciter.py``. Designed for the post-
 download → migrate → audit → reupload workflow on legacy reciters.
 
-Uploads every top-level JSON/JSONL artefact present in the local folder
-plus every ``peaks/<ch>.json.gz`` and (optionally) every
+Uploads every top-level JSON/JSONL artefact present in the local folder,
+every ``peaks/<ch>.json.gz``, every ``timestamps/<ch>.json.br``, and (optionally) every
 ``audio/<ch>.mp3``. Deletes any ``peaks/<ch>.json`` orphans left on the
 bucket from a pre-Migration #5 layout (their slim ``.json.gz``
 replacements were created locally during the migration).
@@ -77,6 +77,15 @@ def upload(backend, slug: str, src: Path, *, include_audio: bool, apply: bool) -
     for p in peaks_local:
         to_upload.append((p, f"{base}/peaks/{p.name}"))
 
+    timestamps_dir = src / "timestamps"
+    timestamps = (
+        sorted(p for p in timestamps_dir.iterdir() if p.is_file() and p.name.endswith(".json.br"))
+        if timestamps_dir.is_dir()
+        else []
+    )
+    for p in timestamps:
+        to_upload.append((p, f"{base}/timestamps/{p.name}"))
+
     # 3. Plan: audio sentinel + (optionally) mp3s.
     sentinel = src / "audio" / "_done.json"
     if sentinel.is_file():
@@ -103,10 +112,11 @@ def upload(backend, slug: str, src: Path, *, include_audio: bool, apply: bool) -
             orphans.append(f"{base}/peaks/{name}")
 
     log.info(
-        "Plan: upload %d top-level + %d peaks .gz + %d audio (sentinel%s); "
+        "Plan: upload %d top-level + %d peaks .gz + %d timestamps .br + %d audio (sentinel%s); "
         "delete %d orphan plain peaks",
         sum(1 for _, dst in to_upload if "/peaks/" not in dst and "/audio/" not in dst),
         sum(1 for _, dst in to_upload if "/peaks/" in dst),
+        sum(1 for _, dst in to_upload if "/timestamps/" in dst),
         n_audio,
         " + audio mp3s" if include_audio else "",
         len(orphans),
@@ -148,7 +158,7 @@ def upload(backend, slug: str, src: Path, *, include_audio: bool, apply: bool) -
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap = argparse.ArgumentParser(description=(__doc__ or "").split("\n\n")[0])
     ap.add_argument("--slug", required=True)
     ap.add_argument("--bucket", choices=sorted(_BUCKETS), default="prod")
     ap.add_argument("--src", type=Path, required=True, help="Local slug folder.")

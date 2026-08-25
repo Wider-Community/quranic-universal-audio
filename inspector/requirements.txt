@@ -4,6 +4,8 @@ flask
 # bodies (Timestamps shards in routes/timestamps.py) are outside the allow-list
 # so they're skipped — no double-compression.
 flask-compress>=1.14
+# Native v12 timestamp shards are precompressed as deterministic Brotli.
+brotli>=1.1
 orjson
 # numpy backs services/audio/peaks_slim.py (slim peaks pack/unpack on hot path).
 numpy>=1.26

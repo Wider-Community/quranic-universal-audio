@@ -240,7 +240,7 @@ def test_complete_regen_refuses_when_no_shards(monkeypatch):
 
 def test_complete_regen_stales_report_whose_content_changed(monkeypatch):
     """A regen on a released reciter flags an open report stale when the new
-    shard changed its targeted content (here: a dropped tajweed rule)."""
+    shard changed its exact native column."""
     from services import db
     from services.db import repo_ts_reports
     from services.ts_reports import ts_target_snapshot
@@ -254,39 +254,56 @@ def test_complete_regen_stales_report_whose_content_changed(monkeypatch):
             verse_key="2:45",
             category="tajweed",
             subtype="wrong_rule",
-            target={"kind": "cell", "word_index": 0, "cell_index": 0},
+            target={"reading_id": "r1", "kind": "column", "target_id": "10"},
             snapshot={
-                "chars": "ب",
-                "role": "base",
-                "status": "present",
-                "tag": "qalqala_sughra",
-                "secondary_tags": [],
-                "phoneme_rule_tags": [],
+                "native_schema_version": 2,
+                "shard_schema_version": 12,
+                "native": {"id": 10, "text": "ب", "word_id": 1, "word_ref": "2:45:1"},
+                "timing": None,
             },
-            comment=None,
+            comment="wrong rule",
             hf_user_id=None,
             anon_token="anon-1",
             login_at_time=None,
             role_at_time=None,
         )
 
-    # The regenerated shard drops the qalqala rule on that cell.
+    # The regenerated shard changes the exact native column fingerprint.
     changed = {
-        "_meta": {"schema_version": 9, "chapter": 2, "audio_category": "by_ayah_audio"},
-        "segments": [
+        "_meta": {"schema_version": 12},
+        "readings": [
             {
-                "ref": "2:45",
-                "t": [0, 20],
-                "words": [
-                    [
-                        1,
-                        0,
-                        20,
-                        [["ب", 0, 10]],
-                        [["b", 0, 10]],
-                        [["ب", "base", "present", [0], 0, None, None]],
-                    ]
-                ],
+                "id": "r1",
+                "parts": [{"ref": "2:45", "t": [0, 20], "word_ids": [1]}],
+                "analysis": {
+                    "result": {
+                        "words": [{"id": 1, "ref": "2:45:1"}],
+                        "sounds": [],
+                        "boundaries": [],
+                    }
+                },
+                "cells": {
+                    "cell_view": {
+                        "words": [
+                            {
+                                "word_id": 1,
+                                "columns": [
+                                    {
+                                        "id": 10,
+                                        "text": "changed",
+                                        "source_unit_ids": [],
+                                        "owned_sound_ids": [],
+                                        "presented_sound_ids": [],
+                                    }
+                                ],
+                                "groups": [],
+                                "bridges": [],
+                            }
+                        ],
+                        "boundaries": [],
+                    }
+                },
+                "timing": {"words": [], "sounds": [], "units": [], "boundaries": []},
             }
         ],
     }

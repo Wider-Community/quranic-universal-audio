@@ -10,6 +10,7 @@
 // can never override base.css.
 import './styles/tokens.css';
 import './styles/base.css';
+import '@quranic-phonemizer/cells/cells.css';
 import './styles/components.css';
 import './styles/editing-guide.css';
 import './styles/filters.css';

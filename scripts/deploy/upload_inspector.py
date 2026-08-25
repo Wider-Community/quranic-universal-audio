@@ -11,8 +11,9 @@ Build steps:
 
 1. Stage the Space build context: every git-tracked file, HARDLINKED into a
    temp tree (metadata-only — no byte copy; falls back to a copy only across
-   volumes), plus two Space-specific overlays (root ``Dockerfile`` + frontmatter
-   ``README.md``). The image's contents are defined solely by
+   volumes), plus three Space-specific overlays (root ``Dockerfile``, frontmatter
+   ``README.md``, and a version-verified local copy of the private renderer
+   package). The image's contents are defined solely by
    ``inspector/Dockerfile`` + ``.dockerignore`` (both tracked, both consumed
    identically here and by ``docker-publish.yml``'s repo-root build), so there
    is no hand-maintained file allowlist to drift from the Dockerfile's ``COPY``
@@ -21,9 +22,10 @@ Build steps:
 2. ``upload_folder`` to the Space repo (Hugging Face git+xet under the hood),
    with ``delete_patterns="*"`` so the Space tree mirrors the staged tree.
 
-Because the staged tree is the whole tracked repo, the Space build context
-equals the ``context: .`` context that ``docker-publish.yml`` builds on every
-push — a green CI image build is a faithful guarantee the Space will compile.
+The renderer overlay rewrites only the staged npm manifest and lockfile to a
+``file:vendor/quran-cells`` dependency. Source manifests retain the documented
+git-tag dependency, while the unauthenticated Space builder receives the exact
+installed tag without a GitHub credential or a second renderer implementation.
 
 Auth: reads ``HF_TOKEN`` (or ``INSPECTOR_HF_TOKEN``) from ``$REPO/.env`` via
 ``qua_shared._env.load_repo_env``.
@@ -35,6 +37,7 @@ content hash). Safe to run from a fresh checkout.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
 import subprocess
@@ -49,6 +52,8 @@ from pathlib import Path
 # what the image and the HF Jobs consume; the uncompressed copy stays in the
 # repo for local-dev tools that read it directly.
 _SKIP_FROM_STAGE = ("data/qpc_hafs.json",)
+_CELLS_PACKAGE = "@quranic-phonemizer/cells"
+_CELLS_VENDOR_PATH = "vendor/quran-cells"
 
 # Git-LFS pointer files start with this magic line. If an asset got auto-LFS'd
 # (by extension or size) it ships as a ~133-byte pointer instead of real bytes,
@@ -149,20 +154,71 @@ def _link_or_copy(src: Path, dst: Path) -> None:
         shutil.copy2(src, dst)
 
 
+def _stage_cells_package(repo: Path, stage_root: Path) -> None:
+    """Materialize the private tagged renderer package in the Space context.
+
+    Source checkouts retain the documented git-tag dependency. Space builders
+    cannot authenticate to that private GitHub repository, so the deploy
+    artifact uses the exact locally installed package as a temporary ``file:``
+    dependency. The installed version must match the tag in ``package.json``.
+    """
+    frontend = repo / "inspector" / "frontend"
+    source = frontend / "node_modules" / "@quranic-phonemizer" / "cells"
+    source_manifest = source / "package.json"
+    if not source_manifest.is_file():
+        raise RuntimeError(
+            f"{_CELLS_PACKAGE} is not installed; run npm ci in {frontend} before deploying"
+        )
+    package_meta = json.loads(source_manifest.read_text(encoding="utf-8"))
+    version = str(package_meta.get("version", ""))
+
+    staged_frontend = stage_root / "inspector" / "frontend"
+    manifest_path = staged_frontend / "package.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    declared = str(manifest.get("dependencies", {}).get(_CELLS_PACKAGE, ""))
+    if not version or f"cells-v{version}" not in declared:
+        raise RuntimeError(
+            f"installed {_CELLS_PACKAGE} {version or '<unknown>'} does not match {declared!r}"
+        )
+
+    vendor = staged_frontend / _CELLS_VENDOR_PATH
+    shutil.copytree(source, vendor)
+    manifest["dependencies"][_CELLS_PACKAGE] = f"file:{_CELLS_VENDOR_PATH}"
+    manifest_path.unlink()
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+    lock_path = staged_frontend / "package-lock.json"
+    lock = json.loads(lock_path.read_text(encoding="utf-8"))
+    packages = lock["packages"]
+    packages[""]["dependencies"][_CELLS_PACKAGE] = f"file:{_CELLS_VENDOR_PATH}"
+    packages[f"node_modules/{_CELLS_PACKAGE}"] = {
+        "resolved": _CELLS_VENDOR_PATH,
+        "link": True,
+    }
+    packages[_CELLS_VENDOR_PATH] = {
+        key: package_meta[key]
+        for key in ("name", "version", "peerDependencies")
+        if key in package_meta
+    }
+    lock_path.unlink()
+    lock_path.write_text(json.dumps(lock, indent=2) + "\n", encoding="utf-8")
+
+
 def _stage(repo: Path, stage_root: Path, env: str, branch: str) -> None:
     """Stage the Space build context: every git-tracked file, hardlinked.
 
     The image's contents are defined solely by ``inspector/Dockerfile`` +
-    ``.dockerignore`` (both tracked, both consumed identically here and by
-    ``docker-publish.yml``'s ``context: .`` build), so there is no hand-curated
-    allowlist to drift from the Dockerfile's ``COPY`` set — ``.dockerignore``
-    prunes at build time. Two Space-specific overlays are written on top of the
+    ``.dockerignore``, so there is no hand-curated allowlist to drift from the
+    Dockerfile's ``COPY`` set — ``.dockerignore`` prunes at build time. Three
+    Space-specific overlays are written on top of the
     tracked tree:
 
     * ``Dockerfile`` at the root — the Hub docker SDK reads it there, but ours
       lives under ``inspector/``.
     * ``README.md`` — the Space frontmatter, written last so it wins over the
       repo's tracked root ``README.md``.
+    * ``inspector/frontend/vendor/quran-cells`` plus staged npm manifests — the
+      exact installed private renderer tag, available without build credentials.
 
     The frontend ``dist/`` is built inside the image (Dockerfile stage 1), so
     nothing is pre-built here.
@@ -178,10 +234,14 @@ def _stage(repo: Path, stage_root: Path, env: str, branch: str) -> None:
         dst.parent.mkdir(parents=True, exist_ok=True)
         _link_or_copy(src, dst)
 
+    _stage_cells_package(repo, stage_root)
+
     _link_or_copy(repo / "inspector" / "Dockerfile", stage_root / "Dockerfile")
 
     suffix = " (dev)" if env == "dev" else ""
-    (stage_root / "README.md").write_text(
+    readme_path = stage_root / "README.md"
+    readme_path.unlink(missing_ok=True)
+    readme_path.write_text(
         SPACE_README.format(suffix=suffix, branch=branch),
         encoding="utf-8",
     )
@@ -213,7 +273,9 @@ def _retry_on_429(label: str, fn, *args, **kwargs):
             time.sleep(wait)
 
 
-def _upload(stage_root: Path, repo_id: str, token: str, commit_msg: str) -> str:
+def _upload(
+    stage_root: Path, repo_id: str, token: str, commit_msg: str, cells_deploy_key: str
+) -> str:
     api = HfApi(token=token)
     # The prod/dev Spaces are permanent — skip the create_repo call (it 409s on
     # every deploy and still spends a request) unless the Space is actually
@@ -228,6 +290,13 @@ def _upload(stage_root: Path, repo_id: str, token: str, commit_msg: str) -> str:
             private=True,
             exist_ok=True,
         )
+    _retry_on_429(
+        "add_space_secret",
+        api.add_space_secret,
+        repo_id=repo_id,
+        key="CELLS_DEPLOY_KEY",
+        value=cells_deploy_key,
+    )
     _retry_on_429(
         "upload_folder",
         api.upload_folder,
@@ -287,6 +356,10 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
+    cells_deploy_key = os.environ.get("CELLS_DEPLOY_KEY")
+    if not cells_deploy_key and not args.dry_run:
+        print("ERROR: CELLS_DEPLOY_KEY missing in env.", file=sys.stderr)
+        return 2
 
     repo = repo_root()
     repo_id = SPACE_REPOS[args.env]
@@ -321,7 +394,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         print(f"==> Uploading to {repo_id}")
-        url = _upload(stage_root, repo_id, token, commit_msg)
+        url = _upload(stage_root, repo_id, token, commit_msg, cells_deploy_key or "")
         print(f"==> Done. Space: {url}")
 
     return 0

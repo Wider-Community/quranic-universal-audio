@@ -53,58 +53,6 @@ export type SegValAnyItem =
   | SegValQalqalaItem
   | SegValBasmalaAminItem;
 export type AudioCategory = "by_surah" | "by_ayah";
-export type CellRole = "base" | "haraka" | "tanween" | "madd";
-export type CellStatus = "present" | "replaced" | "inserted" | "dropped";
-export type TajweedRule =
-  | "ghunnah"
-  | "ikhfaa"
-  | "ikhfaa_shafawi"
-  | "iqlab"
-  | "izhar"
-  | "izhar_shafawi"
-  | "idgham_bi_ghunnah"
-  | "idgham_bila_ghunnah"
-  | "idgham_shafawi"
-  | "idgham_mutamathilayn"
-  | "idgham_mutaqaribayn"
-  | "idgham_mutajanisayn_kamil"
-  | "idgham_mutajanisayn_naqis"
-  | "madd_tabii"
-  | "madd_wajib_muttasil"
-  | "madd_jaiz_munfasil"
-  | "madd_lazim"
-  | "madd_arid_lil_sukun"
-  | "madd_leen"
-  | "madd_iwad"
-  | "tafkheem"
-  | "qalqala_sughra"
-  | "qalqala_kubra"
-  | "hamza_wasl_fatha"
-  | "hamza_wasl_kasra"
-  | "hamza_wasl_damma"
-  | "hamza_wasl_elision"
-  | "ibdal_hamza"
-  | "tashil"
-  | "imala"
-  | "ishmam"
-  | "lam_shamsiyyah"
-  | "iltiqaa"
-  | "iltiqaa_kasra"
-  | "iltiqaa_fatha"
-  | "pausal_sukun"
-  | "taa_marbuta_pausal"
-  | "orthographic_silence";
-/**
- * One encoded word inside a segment — a flat positional tuple.
- *
- * Slots: ``[word_idx, start_ms, end_ms, letters, phones(, cells)]``. Modelled as
- * a ``RootModel`` over a 5- **or** 6-tuple (the 6th ``cells`` slot is schema v5)
- * so the FE codegen emits a positional TS tuple (mirrors ``TsShardWord`` in
- * ``ts-client.ts``) rather than an object, and v3/v4 shards still validate.
- */
-export type TsShardWord =
-  | [unknown, unknown, unknown, unknown, unknown]
-  | [unknown, unknown, unknown, unknown, unknown, unknown];
 
 export interface AdminActiveClaim {
   slug: string;
@@ -1941,6 +1889,18 @@ export interface SegValStats {
 export interface SegValProbeMeta {
   [k: string]: unknown;
 }
+export interface TsCompactRender {
+  v: 1;
+  /**
+   * @minItems 3
+   * @maxItems 3
+   */
+  m: [unknown, unknown, unknown];
+  p: string[];
+  r: string[];
+  w: unknown[][];
+  b: unknown[][];
+}
 /**
  * ``GET /api/ts/config`` — display constants + read-path URLs.
  *
@@ -2034,6 +1994,14 @@ export interface TsManifestReciter {
   ts_chapters?: number[];
   vbr_chapters?: number[];
 }
+export interface TsNativeProfile {
+  riwayah: string;
+  script: string;
+  variant: {
+    [k: string]: string;
+  };
+  extra_phonemes: string[];
+}
 /**
  * Every reported verse for a reciter (``GET .../reports``).
  */
@@ -2072,43 +2040,30 @@ export interface TsReport {
   author?: TsReportAuthor | null;
 }
 /**
- * What a report points at within a verse.
- *
- * Indices are word-scoped (``word_index`` 0-based in the verse;
- * ``source_letter_index`` the anchoring letter; ``cell_index`` into the word's
- * ``cells[]``; ``phoneme_flat_index`` a word-local indexable-phone index;
- * ``share_group`` a co-timed cell-group id). A ``gap`` target (silence reports)
- * addresses the word-boundary between ``word_index`` and ``word_index + 1`` and
- * needs only ``word_index``. Required fields per ``kind`` are enforced below — a
- * ``verse`` target leaves them all unset.
+ * Stable native entity identity within a v12 connected reading.
  */
 export interface TsReportTarget {
-  kind: "verse" | "word" | "cell" | "phoneme" | "cell_group" | "gap";
-  word_index?: number | null;
-  source_letter_index?: number | null;
-  cell_index?: number | null;
-  phoneme_flat_index?: number | null;
-  share_group?: number | null;
+  reading_id: string;
+  kind: "verse" | "word" | "column" | "sound" | "group" | "boundary" | "bridge";
+  target_id: string;
 }
 /**
- * Denormalized snapshot of the targeted shard content at create time.
- *
- * Informational + the drift fingerprint used to detect staleness on a
- * re-stamp. ``rule_tags`` collapses the cell ``tag`` + ``secondary_tags``;
- * ``phoneme_rule_tags`` parallels the cell's phoneme indices; ``phones`` is the
- * mapped phone list.
+ * Native entity plus timing fingerprint captured at report creation.
  */
 export interface TsReportSnapshot {
-  chars?: string | null;
-  role?: string | null;
-  status?: string | null;
-  rule_tags?: string[];
-  phoneme_rule_tags?: (string | null)[];
-  phones?: string[];
-  share_group?: number | null;
-  word_text?: string | null;
-  verse_text?: string | null;
-  schema_version?: number | null;
+  native_schema_version?: 2;
+  shard_schema_version?: 12;
+  native?: {
+    [k: string]: unknown;
+  };
+  timing?: TsReportTimingSnapshot | null;
+}
+/**
+ * Absolute audio interval of the native target when the report was filed.
+ */
+export interface TsReportTimingSnapshot {
+  start_ms?: number | null;
+  end_ms?: number | null;
 }
 /**
  * Report author identity — only disclosed to identity-capable callers.
@@ -2172,82 +2127,36 @@ export interface TsReportCreateRequest {
 }
 /**
  * Resolve a report (``POST .../reports/<id>/resolve``, or a timing
- * word-group via ``.../word/<word_index>/<category>/resolve``). Owner-gated.
+ * word-group via its reading and native word id). Owner-gated.
  */
 export interface TsReportResolveRequest {
   comment?: string | null;
 }
-/**
- * Named (object) view of a positional ``CellTiming`` row.
- *
- * The shard stores cells positionally (``CellTiming``) and they are read via
- * ``ts_shard_cells.parse_cell`` — this model is the codegen vehicle that emits
- * ``CellRole`` / ``CellStatus`` / ``TajweedRule`` as TS string unions for the FE
- * (json2ts drops enums referenced only inside a positional tuple), and documents
- * the row's fields by name. It is never validated against real shard data (the
- * positional ``CellTiming`` is), so typing ``rules`` as ``TajweedRule`` is a
- * codegen convenience that does not constrain the byte-pass-through read.
- */
-export interface TsShardCell {
-  chars: string;
-  role: CellRole;
-  status: CellStatus;
-  phoneme_indices: number[];
-  source_letter_index: number;
-  rules?: TajweedRule[];
-  share_group?: number | null;
-  phoneme_rules?: TajweedRule[][] | null;
-}
-/**
- * The decompressed body of one chapter shard: ``_meta`` + ``segments[]``.
- *
- * The on-disk JSON key is ``_meta`` (leading underscore); pydantic disallows
- * leading-underscore field names, so it is exposed as ``meta`` Python-side
- * with ``alias="_meta"``. Serialise with ``model_dump(by_alias=True)``.
- */
 export interface TsShardDoc {
   _meta: TsShardMeta;
-  segments?: TsShardSegment[];
+  readings: TsShardReading[];
 }
-/**
- * Slim per-shard ``_meta`` block.
- *
- * Aligner provenance (``padding``, ``beam``, ``method``, ``aligner_model``,
- * ``shared_cmvn``, ``audio_source``, ``created_at``) passes through when the
- * source ``_meta`` carried it, and ``phonemizer_version`` names the producer
- * that read the cells. Audio routing (reciter / url_template /
- * audio_urls) is deliberately NOT here — the audio-manifest sidecar is the
- * source of truth. ``extra="allow"`` so the optional provenance fields the
- * writer copies through stay typed-open for the FE.
- */
 export interface TsShardMeta {
-  schema_version: number;
+  schema_version: 12;
   chapter: number;
   audio_category: string;
+  phonemizer_version: string;
+  native_schema_version: 2;
+  renderer_codec_version: 1;
+  native_profile: TsNativeProfile;
   [k: string]: unknown;
 }
-/**
- * One recited segment in a chapter's temporal ``segments[]`` array.
- *
- * ``ref`` is always a single verse ``"surah:ayah"``; ``t`` is the segment's
- * ``[start_ms, end_ms]`` span. A verse may recur across several entries
- * (loopbacks / re-dos) — every accepted occurrence is one entry, emitted in
- * recitation order.
- *
- * ``wasl`` (v10, optional) marks an occurrence that continued into the *next*
- * occurrence without a stop: its junction word carries waṣl (not waqf)
- * phonemes, and the FE walks consecutive flagged occurrences to reconstruct a
- * waṣl group. Absent (= False) on a stop/waqf occurrence.
- */
-export interface TsShardSegment {
-  ref: string;
-  /**
-   * @minItems 2
-   * @maxItems 2
-   */
-  t: [unknown, unknown];
-  words?: TsShardWord[];
-  wasl?: boolean;
+export interface TsShardReading {
+  id: string;
+  parts: [unknown, unknown, unknown, unknown, unknown][];
+  render: TsCompactRender;
+  timing: TsShardTiming;
+}
+export interface TsShardTiming {
+  w: [unknown, unknown][];
+  s: [unknown, unknown][];
+  l: [unknown, unknown, unknown, unknown, unknown, unknown][];
+  c: [unknown, unknown, unknown][];
 }
 /**
  * The ``ts_validation.json`` document — meta + verse-keyed flags.

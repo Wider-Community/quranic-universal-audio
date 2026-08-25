@@ -2,7 +2,7 @@
 """HF Job entrypoint: publish one recitation to the HF dataset (v2 track).
 
 Reads the recitation's bucket artifacts (``detailed.json`` + per-chapter
-``timestamps/<n>.json.gz`` + Xing-master ``audio/<n>.mp3``) and pushes a
+``timestamps/<n>.json.br`` + Xing-master ``audio/<n>.mp3``) and pushes a
 parquet split to the public HF dataset under ``<riwayah>/<slug>``. Audio
 clips are produced by in-process MP3 frame-index slicing
 (``qua_shared/mp3_frames.py``) — each chapter is read + indexed once, then
@@ -923,7 +923,7 @@ def publish_slug(
     # recited) is dropped — no row, no audio slice. Coverage falls by that count.
     # The editor/TS tab still shows these (only the published artifacts gate).
     from qua_shared.surah_words import word_counts_from_surah_info
-    from qua_shared.timestamps_dedup import select_complete_verses
+    from qua_shared.timestamps_native import select_complete_verses
 
     timestamps, dropped_incomplete = select_complete_verses(
         timestamps, word_counts_from_surah_info(surah_info)

@@ -21,6 +21,7 @@
     let {
         slug,
         verseKey,
+        readingId,
         category,
         verseReports,
         onchanged,
@@ -29,6 +30,7 @@
     }: {
         slug: string;
         verseKey: string;
+        readingId: string;
         category: ReportCategoryDef;
         verseReports: TsReport[];
         onchanged: () => void;
@@ -75,7 +77,7 @@
         return $currentUser.hf_user_id === null ? getAnonToken() : null;
     }
 
-    const canSubmit = $derived(draft.trim().length > 0 && !busy);
+    const canSubmit = $derived(draft.trim().length > 0 && readingId !== '' && !busy);
 
     async function submit(): Promise<void> {
         if (!canSubmit) return;
@@ -85,7 +87,7 @@
                 verse_key: verseKey,
                 category: category.id,
                 subtype: null,
-                target: { kind: 'verse' },
+                target: { reading_id: readingId, kind: 'verse', target_id: verseKey },
                 comment: draft.trim(),
                 anon_token: anonTokenIfNeeded(),
             });

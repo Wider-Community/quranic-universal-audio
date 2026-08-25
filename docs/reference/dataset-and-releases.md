@@ -24,11 +24,10 @@ running + historical, in one place: the **Jobs** tab — [admin-dashboard.md](ad
 | **GH release** | `gh:releases/v{X.Y.Z}` → `<slug>.zip` assets | Mobile apps, offline kiosks, archives | One version-pinned, fully-offline snapshot of all reciters |
 | **HF dataset** | `hetchyy/quranic-universal-ayahs` | ML researchers, training, analysis | Parquet-native, queryable, embedded audio |
 
-Every adapter starts from the same bucket inputs. The bucket per-chapter shard stores every
-recited segment **raw** (temporal segment-array shape — see [shards.md](shards.md) for the schema,
-[timestamps-job.md](timestamps-job.md) for the write/read path);
-the single canonical take per verse is a pure projection
-([`project_segment_shard`](../../qua_shared/timestamps_dedup.py), completion-based occasion dedup).
+Every adapter starts from the same bucket inputs. A native v12 chapter stores every recorded
+occasion as connected readings and ordered `parts` (see [shards.md](shards.md) and
+[timestamps-job.md](timestamps-job.md)); the single canonical take per verse is a pure timing
+projection (`qua_shared.timestamps_native.select_complete_verses`).
 Both release adapters call that one projection, so the TS-tab read path and the release/dataset
 adapters cannot drift at the dedup layer.
 
@@ -102,8 +101,8 @@ The same predicate drives the Releases-tab buckets and the cut job's member disc
 [qua_jobs/cut_release.py](../../qua_jobs/cut_release.py). The job:
 
 1. Reads the bucket DB read-only → eligible reciters + the prior release's membership.
-2. Per reciter: reads every segment-array `timestamps/<ch>.json.gz` shard and projects the canonical
-   verse map (`_load_canonical_verses` → `project_segment_shard`, the earliest completing occasion),
+2. Per reciter: reads every compact native v12 `timestamps/<ch>.json.br` shard and projects the canonical
+   verse map (`_load_canonical_verses` → `select_complete_verses`, the earliest completing occasion),
    then drops incomplete verses via `select_complete_verses` (missing a reference word index)
    → builds the three
    tier files (verse/word/letter, top-down), `catalog.json`, a per-recitation `manifest.json`; packs
@@ -174,7 +173,7 @@ Each tier self-contains the level below; all times are relative to the matching 
 startup speed, and network transfer cheap: download verse, word, or letter detail independently.
 Use `shard.py` when an app prefers local per-surah files. There is no per-reciter `README.md`.
 
-**Letter-tier `char` alphabet.** Internal shards (`reciters/<slug>/timestamps/<ch>.json.gz`,
+**Letter-tier `char` alphabet.** Internal shards (`reciters/<slug>/timestamps/<ch>.json.br`,
 [shards.md](shards.md)) carry a 57-token grapheme alphabet (haraka stripped upstream, but the maddah
 mark and madd composites retained). At publish time **both** `cut_release` and `publish_hf` map each `char`
 through `qua_shared/letter_vocab.to_external_char`, which drops the maddah mark (`U+0653`) to
@@ -383,10 +382,8 @@ kept runs stitched gaplessly (the no-match audio excised) — see
 
 ## Dedup semantics — what projection loses / preserves
 
-Bucket stores every recited segment raw (temporal segment array, faithful). `project_segment_shard`
-(completion-based occasion dedup — full detail in [timestamps-job.md §1a](timestamps-job.md)) reduces
-each verse to its single canonical take; the same projection feeds the TS-tab per-verse clip and the
-release/dataset adapters.
+Bucket v12 stores every recorded occasion in native readings and parts. The native publishing
+projection reduces each verse to its single canonical take; the Inspector itself keeps all parts.
 
 | Lost in projection | Preserved |
 |---|---|
@@ -402,8 +399,8 @@ trimmed. Consumers wanting alternate takes read the raw bucket shards (every seg
 
 ### Failed-alignment, no-match & deletes at publish
 
-Three reviewer/pipeline actions converge to "never reached the bucket shard" — the segment-array
-shard carries only aligned, accepted, **ref-bearing** segments:
+Three reviewer/pipeline actions converge to "never reached the bucket shard" — native readings
+contain only aligned, accepted, **ref-bearing** occurrences:
 
 - **No-match** = the reviewer enters an empty `matched_ref`. `build_mfa_ref` returns `None`, so the
   segment is skipped before MFA (it leaves **no** `_meta.mfa_failures` entry) — it stays in

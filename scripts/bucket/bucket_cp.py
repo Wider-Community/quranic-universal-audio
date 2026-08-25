@@ -49,13 +49,9 @@ def main() -> int:
     bs.resolve(a)  # token load + utf-8 stdout; we use the lower-level API below
     from huggingface_hub import copy_files
 
-    src_id = bs.BUCKETS[src_b]
-    dst_id = bs.BUCKETS[dst_b]
-    copy_files(
-        repo_id=dst_id,
-        repo_type="bucket",
-        operations=[{"src": a.src, "dst": a.dst, "src_repo_id": src_id, "src_repo_type": "bucket"}],
-    )
+    src = f"hf://buckets/{bs.BUCKETS[src_b]}/{a.src.rstrip('/')}"
+    dst = f"hf://buckets/{bs.BUCKETS[dst_b]}/{a.dst.rstrip('/')}"
+    copy_files(src, dst)
     print(f"copied {src_b}:{a.src} → {dst_b}:{a.dst}")
     return 0
 

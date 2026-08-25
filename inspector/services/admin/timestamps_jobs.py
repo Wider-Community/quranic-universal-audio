@@ -44,7 +44,7 @@ from pathlib import Path
 from typing import Any
 
 from qua_shared.schemas import StaleReason, TsJobRecord, TsJobSettings
-from qua_shared.timestamps_shards import SEGMENT_SCHEMA_VERSION
+from qua_shared.timestamps_shards import TIMESTAMP_SHARD_SCHEMA_VERSION
 from services.state import state as state_service
 from services.storage.hf_bucket import StorageNotFound, get_backend, resolve_bucket_repo
 
@@ -125,8 +125,8 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 # Bootstrap-mode only — the prebuilt image bakes this same set into /env.
 _INSTALL = (
     "mamba install -y -c conda-forge python=3.11 montreal-forced-aligner "
-    "&& /opt/conda/bin/pip install gradio soundfile tgt numpy PyYAML requests psutil "
-    "'quranic-phonemizer>=2.13,<3' 'huggingface_hub>=1.8.0' "  # >=2.13: the v11 cell rows read this producer's rule attributions
+    "&& /opt/conda/bin/pip install gradio soundfile tgt numpy PyYAML requests psutil brotli "
+    "'quranic-phonemizer==2.15.3' 'huggingface_hub>=1.8.0' "
     "&& mkdir -p /scratch"
 )
 _ENTRYPOINT = "python /aux/code/qua_jobs/generate_timestamps.py"
@@ -152,7 +152,7 @@ def _resolve_qua_sdk_src() -> Path | None:
     """Locate a qua_sdk source tree to stage alongside qua_shared.
 
     Resolution chain: ``QUA_SDK_SRC`` env (the qua_sdk package dir, or its
-    ``src/`` parent) → repo-root sibling ``../qua-sdk/src/qua_sdk`` → the
+    ``src/`` parent) → repo-root sibling ``../qua/packages/sdk/src/qua_sdk`` → the
     installed package via ``find_spec``. None when nothing resolves (the
     deployed Space has no checkout — the durable bucket copy is reused)."""
     env = os.environ.get("QUA_SDK_SRC", "").strip()
@@ -161,7 +161,7 @@ def _resolve_qua_sdk_src() -> Path | None:
             if (cand / "__init__.py").is_file():
                 return cand
         log.warning("QUA_SDK_SRC=%s does not contain a qua_sdk package; ignoring", env)
-    sibling = _REPO_ROOT.parent / "qua-sdk" / "src" / "qua_sdk"
+    sibling = _REPO_ROOT.parent / "qua" / "packages" / "sdk" / "src" / "qua_sdk"
     if (sibling / "__init__.py").is_file():
         return sibling
     try:
@@ -388,10 +388,10 @@ def launch(slug: str, *, settings: TsJobSettings, webhook_base: str | None = Non
         raise ValueError(f"unknown slug {slug}")
 
     _stage_job_code()
-    # The job builds cell rows with the STAGED producer and stamps them with the
-    # version this repo carries. Launching on a mismatch writes a shard whose
-    # rows and whose version disagree, which no reader recovers from.
-    stage_sdk.assert_staged_sdk(SEGMENT_SCHEMA_VERSION)
+    # The job builds native documents with the STAGED producer and stamps the
+    # shard version this repo carries. A mismatch would create an unreadable
+    # contract split between the inner documents and their outer envelope.
+    stage_sdk.assert_staged_sdk(TIMESTAMP_SHARD_SCHEMA_VERSION)
     bucket = resolve_bucket_repo()
 
     env = {
@@ -947,7 +947,7 @@ def _has_any_shard(slug: str) -> bool:
     cheap bucket listing of ``reciters/<slug>/timestamps/``."""
     try:
         names = get_backend().list_dir(f"reciters/{slug}/timestamps")
-        return any(str(n).endswith((".json", ".json.gz")) for n in names)
+        return any(str(n).endswith(".json.br") for n in names)
     except StorageNotFound:
         return False
     except Exception as exc:  # noqa: BLE001 — never let the check break release

@@ -24,17 +24,19 @@
     let {
         slug,
         verseKey,
+        readingId,
         verseReports,
         onchanged,
         onenterMode,
     }: {
         slug: string;
         verseKey: string;
+        readingId: string;
         verseReports: TsReport[];
         onchanged: () => void;
         onenterMode: (
-            mode: 'timing' | 'tajweed' | 'phonemes' | 'silence',
-            subtype?: TajweedSubtype | SilenceSubtype,
+            _mode: 'timing' | 'tajweed' | 'phonemes' | 'silence',
+            _subtype?: TajweedSubtype | SilenceSubtype,
         ) => void;
     } = $props();
 
@@ -111,6 +113,7 @@
                                 inline
                                 {slug}
                                 {verseKey}
+                                {readingId}
                                 category={cat}
                                 {verseReports}
                                 {onchanged}

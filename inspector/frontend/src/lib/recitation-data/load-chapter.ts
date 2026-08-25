@@ -83,7 +83,7 @@ export async function loadChapterRecitation(
         occasions.push({
             verseRef: occ.ref,
             data: assembleOccasion(reciter, occ, qpc, dk, reciterAudio, ''),
-            bridgesOutTo: occ.bridgesOutTo,
+            waslOutTo: occ.waslOutTo,
         });
     }
     if (!occasions.length) return null;

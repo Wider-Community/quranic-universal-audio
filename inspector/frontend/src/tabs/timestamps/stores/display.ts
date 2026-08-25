@@ -61,7 +61,7 @@ export const translationLanguage = writable<string>('en');
 
 /** location ("surah:ayah:word") → gloss for the loaded verse's ayah(s).
  *  `{}` when translations are off or none loaded. Populated lazily by
- *  TimestampsTab; rendered statically by UnifiedDisplay (never per-frame, so
+ *  TimestampsTab; rendered statically by TimedAnalysisRow (never per-frame, so
  *  it stays out of the playback-highlight hot path). */
 export const verseTranslations = writable<Record<string, string>>({});
 
@@ -72,7 +72,7 @@ export const tsConfig = writable<TsConfigResponse | null>(null);
 // Cross-component hover (blocks panel ↔ waveform)
 // ---------------------------------------------------------------------------
 
-/** The element currently hovered in UnifiedDisplay (Analysis view). The waveform
+/** The element currently hovered in TimedAnalysisRow (Analysis view). The waveform
  *  subscribes to paint a matching-color band at the [startSec, endSec] range. */
 export interface TsHoveredElement {
     kind: 'word' | 'letter' | 'phoneme';
@@ -84,6 +84,6 @@ export interface TsHoveredElement {
 export const tsHoveredElement = writable<TsHoveredElement | null>(null);
 
 /** Slice-relative seconds when the pointer is on the waveform. null when off.
- *  Published by TimestampsWaveform; consumed by UnifiedDisplay to drive block
+ *  Published by TimestampsWaveform; consumed by TimedAnalysisRow to drive entity
  *  highlights while audio is paused (so hover-scrubbing previews the position). */
 export const tsWaveformHoverTime = writable<number | null>(null);

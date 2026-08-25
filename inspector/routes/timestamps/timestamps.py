@@ -60,15 +60,19 @@ def ts_config():
     )
 
 
-# Bodies are pre-gzipped (`mtime=0`, deterministic). Sent without a
-# `Content-Encoding: gzip` header — the frontend decompresses with
-# `DecompressionStream('gzip')` so the same code path handles bucket + local.
-# A shard mutates in place at a stable URL (re-stamp / edit) and the FE already
+# Shards are precompressed with deterministic Brotli and served with the HTTP
+# content encoding so the browser decodes before JSON parsing. A shard mutates
+# in place at a stable URL (re-stamp / edit) and the FE already
 # holds the active chapter in an in-memory LRU (`ts-source._shards`), so verse
 # changes never refetch — the browser HTTP cache only adds staleness with no
 # benefit for a body this small. `no-store`: never cached, always fresh on a
 # real fetch (chapter switch / reload).
-_GZIP_HEADERS = {"Cache-Control": "no-store"}
+_NO_STORE_HEADERS = {"Cache-Control": "no-store"}
+_SHARD_HEADERS = {
+    "Cache-Control": "no-store",
+    "Content-Encoding": "br",
+    "Vary": "Accept-Encoding",
+}
 
 # The manifest changes whenever a reciter is published/unpublished. The server
 # rebuilds it on the next request after any lifecycle transition (state.py
@@ -90,14 +94,14 @@ def ts_manifest():
 
 @ts_bp.route("/shard/<reciter>/<int:chapter>")
 def ts_shard(reciter, chapter):
-    """Serve a per-chapter gzipped segment-array shard (byte pass-through)."""
+    """Serve a per-chapter Brotli compact v12 shard (byte pass-through)."""
     # Owner preview: holders of ``timestamps.view_unreleased`` may read shards
     # for generated-but-unreleased reciters; everyone else stays released-only.
     allow_unreleased = _capabilities.can(auth_service.current_user(), "timestamps.view_unreleased")
     body = ts_serve.shard_bytes(reciter, chapter, allow_unreleased=allow_unreleased)
     if body is None:
         return jsonify(ErrorEnvelope(error="Shard not found").model_dump(exclude_none=True)), 404
-    return Response(body, mimetype="application/octet-stream", headers=_GZIP_HEADERS)
+    return Response(body, mimetype="application/json", headers=_SHARD_HEADERS)
 
 
 @ts_bp.route("/validation/<reciter>")
@@ -128,7 +132,7 @@ def ts_resource(name):
     body = ts_serve.resource_bytes(name)
     if body is None:
         return jsonify(ErrorEnvelope(error="Resource not found").model_dump(exclude_none=True)), 404
-    return Response(body, mimetype="application/octet-stream", headers=_GZIP_HEADERS)
+    return Response(body, mimetype="application/octet-stream", headers=_NO_STORE_HEADERS)
 
 
 @ts_bp.route("/vbr/<reciter>")

@@ -35,8 +35,35 @@ _LFS_POINTER = b"version https://git-lfs.github.com/spec/v1\noid sha256:deadbeef
 _ZERO_PADS: PadParams = {"pad_start": 0, "pad_end": 0, "min_gap": 0}
 
 
+def _native_projection(verses: dict) -> dict:
+    """Express compact test rows as the native canonical projection shape."""
+    out = {}
+    for ref, body in verses.items():
+        words = []
+        for row in body["words"]:
+            letters = [
+                {"text": text, "start_ms": start, "end_ms": end}
+                for text, start, end in (row[3] if len(row) > 3 else [])
+            ]
+            words.append(
+                {
+                    "index": row[0],
+                    "start_ms": row[1],
+                    "end_ms": row[2],
+                    "letters": letters,
+                }
+            )
+        out[ref] = {
+            "words": words,
+            "verse_start_ms": body.get("verse_start_ms", min(row[1] for row in body["words"])),
+            "verse_end_ms": body.get("verse_end_ms", max(row[2] for row in body["words"])),
+            "segments": [],
+        }
+    return out
+
+
 def _layouts(verses: dict) -> dict:
-    return build_verse_layouts(reshape_canonical(verses), **_ZERO_PADS)
+    return build_verse_layouts(reshape_canonical(_native_projection(verses)), **_ZERO_PADS)
 
 
 def _tiers(verses: dict) -> dict:
@@ -61,15 +88,6 @@ def test_verse_start_zero_with_leading_word_gap():
     assert out["verse_end_ms"] == 24095
     assert out["duration_ms"] == 24095
     assert check_duration_arithmetic("5:1", out) == []  # no phantom violation
-
-
-def test_bounds_fall_back_to_words_when_absent():
-    verses = {"1:1": {"words": [[1, 100, 500], [2, 500, 900]]}}  # no verse_start/end keys
-    out = _verse_for_validate(_layouts(verses)["1:1"])
-    assert out["verse_start_ms"] == 100
-    assert out["verse_end_ms"] == 900
-    assert out["duration_ms"] == 800
-    assert check_duration_arithmetic("1:1", out) == []
 
 
 def test_nonzero_start_duration_consistent():
@@ -144,7 +162,10 @@ def test_release_verse_bound_is_padded_clip_window():
         "1:2": {"words": [[1, 5000, 6000]], "verse_start_ms": 5000, "verse_end_ms": 6000},
     }
     layouts = build_verse_layouts(
-        reshape_canonical(verses), pad_start=100, pad_end=300, min_gap=100
+        reshape_canonical(_native_projection(verses)),
+        pad_start=100,
+        pad_end=300,
+        min_gap=100,
     )
     files = cut_release._build_tier_files(
         "example_reciter", layouts, delivery_meta={"audio_category": "by_surah"}

@@ -5,14 +5,14 @@ The SDK is not vendored in this repo and is not installable in the deployed
 Space (it is a private workspace member), so it can only be staged from a
 machine holding a checkout. Every other launch reuses the durable bucket copy.
 That is fine while the copy is current and silently wrong once it is not: the
-job then builds cell rows with one producer and stamps them with another
-version's number, and writes a shard neither side can read.
+job then builds native documents with one contract and stamps another shard
+version.
 
 Two things close that gap. Staging MIRRORS the source tree — a file the SDK
 dropped is deleted from the bucket, so the staged tree is the checkout rather
-than the union of every checkout ever staged. And it records the cell-row
+than the union of every checkout ever staged. And it records the native shard
 version the staged producer emits, which :func:`assert_staged_sdk` pairs
-against the schema version the shard writer stamps.
+against the writer's version.
 """
 
 from __future__ import annotations
@@ -29,19 +29,19 @@ MARKER_PATH = "code/qua_sdk_stage.json"
 
 _SDK_PREFIX = "code/qua_sdk/"
 
-#: The constant the SDK's cell-row producer declares. Read from source rather
+#: The constant the SDK's native shard producer declares. Read from source rather
 #: than imported: the staging host has the tree on disk but need not have it
 #: importable.
-_VERSION_RE = re.compile(r"^CELL_ROW_VERSION\s*=\s*(\d+)\s*$", re.MULTILINE)
+_VERSION_RE = re.compile(r"^SHARD_SCHEMA_VERSION\s*=\s*(\d+)\s*$", re.MULTILINE)
 
 
-def source_cell_row_version(sdk_src: Path) -> int:
-    """The cell-row version the SDK tree at ``sdk_src`` emits."""
-    path = sdk_src / "integrations" / "cellrows.py"
+def source_shard_version(sdk_src: Path) -> int:
+    """The native shard version the SDK tree at ``sdk_src`` emits."""
+    path = sdk_src / "integrations" / "shards.py"
     match = _VERSION_RE.search(path.read_text(encoding="utf-8")) if path.is_file() else None
     if match is None:
         raise JobStagingError(
-            f"{path} declares no CELL_ROW_VERSION — the SDK checkout predates the "
+            f"{path} declares no SHARD_SCHEMA_VERSION - the SDK checkout predates the "
             "staged-producer gate and cannot be staged"
         )
     return int(match.group(1))
@@ -89,7 +89,7 @@ def stale_targets(keep: set[str]) -> list[str]:
 
 def marker_bytes(sdk_src: Path, n_files: int) -> bytes:
     return json.dumps(
-        {"cell_row_version": source_cell_row_version(sdk_src), "files": n_files},
+        {"shard_schema_version": source_shard_version(sdk_src), "files": n_files},
         indent=2,
     ).encode("utf-8")
 
@@ -117,17 +117,17 @@ def read_marker() -> dict | None:
 
 
 def assert_staged_sdk(expected: int) -> None:
-    """Refuse the launch unless the staged producer emits ``expected`` rows.
+    """Refuse the launch unless the staged producer emits ``expected`` shards.
 
     ``expected`` is the shard schema version this repo stamps. A launcher that
     could not stage the SDK still runs this, which is the whole point: it is
     the only signal such a process has that the bucket copy went stale.
     """
     marker = read_marker()
-    if marker is None or marker.get("cell_row_version") != expected:
-        found = "none" if marker is None else marker.get("cell_row_version")
+    if marker is None or marker.get("shard_schema_version") != expected:
+        found = "none" if marker is None else marker.get("shard_schema_version")
         raise JobStagingError(
-            f"the staged qua_sdk emits cell-row version {found}, but this repo stamps "
+            f"the staged qua_sdk emits shard version {found}, but this repo stamps "
             f"schema {expected}. The deployed Space cannot stage the SDK (private "
             f"package, no checkout), so re-stage it from a machine that has one:\n"
             f"  QUA_SDK_SRC=<path>/packages/sdk/src/qua_sdk python -c "

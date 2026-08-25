@@ -25,7 +25,7 @@ class TsRefreshedRequest(BaseModel):
 
     ``slug`` is the reciter whose shards were just re-uploaded. ``chapters`` is
     the optional list of surahs touched (omitted/empty = whole reciter).
-    ``reason`` is a short free-text provenance tag (e.g. ``"backfill_cells"``,
+    ``reason`` is a short free-text provenance tag (e.g. ``"v12_cutover"``,
     ``"local_regen"``) recorded on the audit event. ``produced_at`` is an
     optional ISO-8601 UTC override for the new TS-release ``produced_at``
     watermark; absent = the server stamps ``now`` (the common case — the

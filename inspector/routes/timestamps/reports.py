@@ -72,32 +72,10 @@ _WORD_GROUPED = frozenset({"timing", "phonemes"})
 
 
 def _snapshot_view(snap: dict) -> TsReportSnapshot | None:
-    """Map the stored snapshot dict to the wire model, or ``None`` when empty.
-
-    Collapses the cell ``tag`` + ``secondary_tags`` into ``rule_tags``."""
+    """Map the stored native fingerprint to its wire model."""
     if not snap:
         return None
-    has_content = any(
-        snap.get(k) for k in ("chars", "role", "status", "tag", "word_text", "verse_text")
-    ) or any(snap.get(k) for k in ("secondary_tags", "phoneme_rule_tags", "phones"))
-    if not has_content:
-        return None
-    rule_tags: list[str] = []
-    if snap.get("tag"):
-        rule_tags.append(snap["tag"])
-    rule_tags.extend(snap.get("secondary_tags") or [])
-    return TsReportSnapshot(
-        chars=snap.get("chars"),
-        role=snap.get("role"),
-        status=snap.get("status"),
-        rule_tags=rule_tags,
-        phoneme_rule_tags=snap.get("phoneme_rule_tags") or [],
-        phones=snap.get("phones") or [],
-        share_group=snap.get("share_group"),
-        word_text=snap.get("word_text"),
-        verse_text=snap.get("verse_text"),
-        schema_version=snap.get("schema_version"),
-    )
+    return TsReportSnapshot.model_validate(snap)
 
 
 def _report_view(row: dict, *, mine: bool, show_author: bool) -> TsReport:
@@ -222,6 +200,8 @@ def create_report(slug: str):
 
     target = req.target.model_dump()
     snapshot = ts_target_snapshot.build_snapshot(slug, req.verse_key, target)
+    if snapshot is None:
+        return jsonify({"error": "native report target does not resolve"}), 409
 
     try:
         with _sync.durable_transaction():
@@ -275,7 +255,7 @@ def _fan_batch_notifications(
     (timing / phonemes), one per NEW tajweed cell. Re-submitted (``created=False``)
     rows never notify; multiple cells/phonemes in one word coalesce on the
     word-group key."""
-    seen_word_groups: set[tuple[str, int]] = set()
+    seen_word_groups: set[tuple[str, str, str]] = set()
     for row, created in results:
         if not created:
             continue
@@ -284,8 +264,26 @@ def _fan_batch_notifications(
             continue
         category = row["category"]
         if category in _WORD_GROUPED:
-            wi = row["target"]["word_index"]
-            group = (category, wi)
+            native = (row.get("snapshot") or {}).get("native") or {}
+            word_id = (
+                row["target"]["target_id"]
+                if row["target"]["kind"] == "word"
+                else native.get("word_id")
+            )
+            if word_id is None:
+                _notify.notify_owners_ts_report(
+                    slug=slug,
+                    verse_key=verse_key,
+                    category=category,
+                    author_id=author_id,
+                    author_login=author_login,
+                    report_id=row["id"],
+                    at_utc=at_utc,
+                )
+                continue
+            word_id = str(word_id)
+            reading_id = row["target"]["reading_id"]
+            group = (category, reading_id, word_id)
             if group in seen_word_groups:
                 continue
             seen_word_groups.add(group)
@@ -297,7 +295,9 @@ def _fan_batch_notifications(
                 author_login=author_login,
                 report_id=row["id"],
                 at_utc=at_utc,
-                source_key=repo_ts_reports.word_group_key(slug, verse_key, wi, category),
+                source_key=repo_ts_reports.word_group_key(
+                    slug, verse_key, reading_id, word_id, category
+                ),
             )
         else:
             _notify.notify_owners_ts_report(
@@ -340,6 +340,11 @@ def create_reports_batch(slug: str):
     items: list[dict] = []
     for it in req.items:
         target = it.target.model_dump()
+        snapshot = ts_target_snapshot.build_snapshot(slug, req.verse_key, target)
+        if snapshot is None:
+            return jsonify(
+                {"error": "native report target does not resolve", "target": target}
+            ), 409
         items.append(
             {
                 "category": it.category,
@@ -349,7 +354,7 @@ def create_reports_batch(slug: str):
                 "target": target,
                 "comment": it.comment,
                 "selected_rule_tags": it.selected_rule_tags,
-                "snapshot": ts_target_snapshot.build_snapshot(slug, req.verse_key, target),
+                "snapshot": snapshot,
             }
         )
 
@@ -427,10 +432,11 @@ def resolve_report(slug: str, report_id: int):
 
 
 @ts_reports_bp.route(
-    "/<slug>/reports/<verse_key>/word/<int:word_index>/<category>/resolve", methods=["POST"]
+    "/<slug>/reports/<verse_key>/reading/<reading_id>/word/<word_id>/<category>/resolve",
+    methods=["POST"],
 )
 @require_same_origin
-def resolve_word_group(slug: str, verse_key: str, word_index: int, category: str):
+def resolve_word_group(slug: str, verse_key: str, reading_id: str, word_id: str, category: str):
     """Resolve a timing/phoneme word-group as a unit (owner-gated). Notifies each
     distinct signed-in reporter in the group once."""
     user = auth_service.current_user()
@@ -448,7 +454,8 @@ def resolve_word_group(slug: str, verse_key: str, word_index: int, category: str
             rows = repo_ts_reports.resolve_group(
                 slug=slug,
                 verse_key=verse_key,
-                word_index=word_index,
+                reading_id=reading_id,
+                word_id=word_id,
                 category=category,
                 resolver_hf_user_id=user.hf_user_id if user is not None else None,
                 resolver_login=user.login if user is not None else None,
@@ -456,7 +463,7 @@ def resolve_word_group(slug: str, verse_key: str, word_index: int, category: str
             )
     except Exception:  # noqa: BLE001
         logger.exception(
-            "ts_reports.resolve_word_group failed for %s %s w%s", slug, verse_key, word_index
+            "ts_reports.resolve_word_group failed for %s %s word %s", slug, verse_key, word_id
         )
         return jsonify({"error": "failed to resolve group"}), 500
 

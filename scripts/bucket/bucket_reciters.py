@@ -18,6 +18,7 @@ import json as _json
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import cast
 
 sys.path.insert(0, str(Path(__file__).parent))
 import _bootstrap as bs  # noqa: E402
@@ -32,7 +33,7 @@ def _summary(fs, bucket: str, slug: str) -> dict:
     ts_shards = [
         k
         for k, _ in files
-        if "/timestamps/" in k and (k.endswith(".json") or k.endswith(".json.gz"))
+        if "/timestamps/" in k and (k.endswith(".json") or k.endswith(".json.br"))
     ]
     return {
         "slug": slug,
@@ -60,7 +61,7 @@ def main() -> int:
 
     fs, bucket = bs.resolve(a)
 
-    dirs = fs.ls(bs.abs_path(bucket, "reciters"), detail=False)
+    dirs = cast(list[str], fs.ls(bs.abs_path(bucket, "reciters"), detail=False))
     slugs = sorted(d.rsplit("/", 1)[-1] for d in dirs)
     if a.slug:
         slugs = [s for s in slugs if a.slug.lower() in s.lower()]

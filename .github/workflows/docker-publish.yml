@@ -63,6 +63,7 @@ env:
 jobs:
   checks:
     uses: ./.github/workflows/inspector-checks.yml
+    secrets: inherit
 
   build:
     needs: [checks]
@@ -88,6 +89,15 @@ jobs:
           fi
 
       - uses: docker/setup-buildx-action@v3
+
+      - name: Start renderer SSH agent
+        env:
+          CELLS_DEPLOY_KEY: ${{ secrets.CELLS_DEPLOY_KEY }}
+        run: |
+          eval "$(ssh-agent -s)"
+          ssh-add - <<< "$CELLS_DEPLOY_KEY"
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+          echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> "$GITHUB_ENV"
 
       - name: Log in to GHCR
         if: steps.decide.outputs.push == 'true'
@@ -121,6 +131,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
+          ssh: default
 
       - name: Summary
         run: |

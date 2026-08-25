@@ -147,7 +147,7 @@ def batch_write(bucket_id: str, files: dict[str, bytes]) -> None:
     """Upload many bucket files in ONE Xet batch — the fast bulk-write path.
 
     ``files`` maps a bucket-RELATIVE destination path (e.g.
-    ``reciters/<slug>/timestamps/3.json.gz``) to its bytes. Each blob is staged to
+    ``reciters/<slug>/timestamps/3.json.br``) to its bytes. Each blob is staged to
     a temp FILE and passed to ``batch_bucket_files`` by PATH: passing raw bytes
     that OVERWRITE existing paths hits a ~25x slower server path, and a per-file
     ``fs.open()`` write is one commit per file. Retries on HF 429; no-op when
