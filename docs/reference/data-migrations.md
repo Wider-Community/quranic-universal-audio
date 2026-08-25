@@ -98,8 +98,11 @@ all positional report coordinates with native targets. It does not rerun MFA.
 6. Upload to a versioned staging prefix only after both audits pass.
 7. Atomically switch the v12-only Inspector, active catalogue pointer, and report database.
 
-There is no runtime compatibility reader and no nearest-entity fallback. Historical live objects are
-removed only after cutover; repository and bucket history remain the recovery path.
+There is no runtime compatibility reader and no nearest-entity fallback. If a deployed database is
+still v27 after v12 shards become active, boot's `legacy_target_migration` preparer reconstructs the
+guarded map from retained canonical positions and verifies every legacy snapshot before migration 28.
+Hugging Face buckets have no object-version history, so retained staging artefacts and database
+backups—not the live bucket—are the recovery path.
 
 ## Source of truth for byte shapes
 
