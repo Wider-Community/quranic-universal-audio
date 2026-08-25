@@ -160,6 +160,7 @@ def _insert_legacy(conn: sqlite3.Connection, **over) -> int:
     cursor = conn.execute(
         f"INSERT INTO ts_reports ({columns}) VALUES ({placeholders})", tuple(values.values())
     )
+    assert cursor.lastrowid is not None
     return int(cursor.lastrowid)
 
 
