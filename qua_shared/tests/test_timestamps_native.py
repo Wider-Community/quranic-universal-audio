@@ -8,6 +8,7 @@ import orjson
 import pytest
 from pydantic import ValidationError
 
+from qua_shared.timestamps_codec import decode_document
 from qua_shared.timestamps_native import project_native_shard, select_complete_verses
 from qua_shared.timestamps_shards import (
     brotli_shard,
@@ -80,6 +81,53 @@ def test_native_projection_keeps_loopback_and_earliest_complete_occasion():
     assert [word["index"] for word in projected["1:1"]["words"]] == [1, 2, 2, 3]
     assert projected["1:1"]["verse_start_ms"] == 0
     assert projected["1:1"]["verse_end_ms"] == 900
+
+
+@pytest.mark.parametrize("following_ref", ["1:1", "1:2"])
+def test_decoder_preserves_inter_reading_word_gap(
+    following_ref: str,
+):
+    left = _reading("r1", [("1:1", (100, 200), [1])])
+    right = _reading("r2", [(following_ref, (220, 300), [2])])
+    left["timing"]["w"][0] = [100, 250]
+    right["timing"]["w"][0] = [270, 300]
+
+    decoded = decode_document(_shard([left, right]))
+
+    boundary = decoded["readings"][0]["timing"]["boundaries"][-1]
+    assert boundary == {
+        "boundary_id": 1,
+        "start_ms": 250,
+        "end_ms": 270,
+        "state": "join",
+    }
+
+
+def test_decoder_derives_internal_and_chapter_edge_boundaries():
+    reading = _reading("r1", [("1:1", (100, 400), [1, 2])])
+    reading["timing"]["w"] = [[120, 200], [230, 350]]
+
+    decoded = decode_document(_shard([reading]))
+
+    assert decoded["readings"][0]["timing"]["boundaries"] == [
+        {"boundary_id": 0, "start_ms": 100, "end_ms": 120},
+        {"boundary_id": 1, "start_ms": 200, "end_ms": 230, "state": "join"},
+        {"boundary_id": 2, "start_ms": 350, "end_ms": 400, "state": "join"},
+    ]
+
+
+def test_decoder_uses_word_timings_across_verse_parts_in_one_reading():
+    reading = _reading(
+        "r1",
+        [("1:1", (100, 200), [1]), ("1:2", (220, 400), [1])],
+    )
+    reading["timing"]["w"] = [[120, 180], [250, 350]]
+
+    decoded = decode_document(_shard([reading]))
+
+    boundary = decoded["readings"][0]["timing"]["boundaries"][1]
+    assert boundary["start_ms"] == 180
+    assert boundary["end_ms"] == 250
 
 
 def test_native_projection_rejects_every_old_schema():
