@@ -6,9 +6,17 @@ import types
 import brotli
 import orjson
 import pytest
+from pydantic import ValidationError
 
 from qua_shared.timestamps_native import project_native_shard, select_complete_verses
-from qua_shared.timestamps_shards import brotli_shard, build_timestamp_shards
+from qua_shared.timestamps_shards import (
+    brotli_shard,
+    build_timestamp_shards,
+    validated_brotli_shard,
+    write_validated_shard,
+)
+from qua_shared.timestamps_v12_audit import V12AuditError
+from qua_shared.verse_layout import load_canonical_verses
 
 
 def _reading(reading_id: str, specs: list[tuple[str, tuple[int, int], list[int]]]) -> dict:
@@ -111,3 +119,34 @@ def test_native_brotli_is_deterministic():
     first = brotli_shard(shard)
     assert first == brotli_shard(shard)
     assert orjson.loads(brotli.decompress(first)) == shard
+
+
+def test_validated_writer_rejects_invalid_shard_without_replacing_target(tmp_path):
+    target = tmp_path / "1.json.br"
+    target.write_bytes(b"previous")
+    invalid = _shard([_reading("r1", [("1:1", (0, 100), [1])])])
+    invalid["_meta"]["schema_version"] = 11
+
+    with pytest.raises(ValidationError):
+        write_validated_shard(target, invalid)
+
+    assert target.read_bytes() == b"previous"
+
+
+def test_validated_writer_emits_the_canonical_brotli_bytes(tmp_path):
+    shard = _shard([_reading("r1", [("1:1", (0, 100), [1])])])
+    target = tmp_path / "1.json.br"
+
+    payload = write_validated_shard(target, shard)
+
+    assert payload == validated_brotli_shard(shard)
+    assert target.read_bytes() == payload
+
+
+def test_release_projection_rejects_a_v12_identity_closure_gap(tmp_path):
+    shard = _shard([_reading("r1", [("1:1", (0, 100), [1])])])
+    shard["readings"][0]["timing"]["l"][0][1] = 9
+    (tmp_path / "1.json.br").write_bytes(brotli_shard(shard))
+
+    with pytest.raises(V12AuditError, match="letter words"):
+        load_canonical_verses(tmp_path)

@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from qua_shared.timestamps_shards import brotli_shard  # noqa: E402
+from qua_shared.timestamps_shards import validated_brotli_shard  # noqa: E402
 from qua_shared.timestamps_v12_audit import audit_v12_document  # noqa: E402
 
 
@@ -54,18 +54,14 @@ def _restamp(path: Path) -> tuple[dict, bytes]:
     legacy = orjson.loads(gzip.decompress(path.read_bytes()))
     document = restamp_v11_shard(legacy)
     audit_v12_document(document)
-    first = brotli_shard(document)
-    second = brotli_shard(document)
-    if first != second:
-        raise RuntimeError(f"non-deterministic Brotli for {path.name}")
-    return document, first
+    return document, validated_brotli_shard(document)
 
 
 def _existing(path: Path) -> tuple[dict, bytes]:
     payload = path.read_bytes()
     document = orjson.loads(brotli.decompress(payload))
     audit_v12_document(document)
-    if brotli_shard(document) != payload:
+    if validated_brotli_shard(document) != payload:
         raise RuntimeError(f"existing output is not deterministic: {path}")
     return document, payload
 

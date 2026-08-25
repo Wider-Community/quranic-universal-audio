@@ -54,10 +54,23 @@ def test_staging_carries_the_code_and_the_data_and_nothing_else(tmp_path):
     }
 
 
-def test_the_marker_records_what_the_staged_producer_emits(tmp_path):
+def test_the_marker_records_what_the_staged_producer_emits(tmp_path, monkeypatch):
     src = _sdk_tree(tmp_path / "qua_sdk")
-    marker = json.loads(stage_sdk.marker_bytes(src, 3))
-    assert marker == {"shard_schema_version": 12, "files": 3}
+    revision = "a" * 40
+    monkeypatch.setattr(stage_sdk, "source_revision", lambda _src: revision)
+    marker = json.loads(stage_sdk.marker_bytes(src, 3, revision))
+    assert marker == {
+        "shard_schema_version": 12,
+        "source_revision": revision,
+        "files": 3,
+    }
+
+
+def test_a_wrong_checkout_is_rejected_before_its_marker_is_built(tmp_path, monkeypatch):
+    src = _sdk_tree(tmp_path / "qua_sdk")
+    monkeypatch.setattr(stage_sdk, "source_revision", lambda _src: "b" * 40)
+    with pytest.raises(JobStagingError, match="pinned checkout"):
+        stage_sdk.marker_bytes(src, 3, "a" * 40)
 
 
 def test_a_bucket_the_source_dropped_a_path_from_loses_it(monkeypatch):
@@ -90,13 +103,23 @@ def test_a_bucket_the_source_dropped_a_path_from_loses_it(monkeypatch):
 def test_the_launch_is_refused_unless_the_staged_producer_agrees(monkeypatch, marker):
     monkeypatch.setattr(stage_sdk, "read_marker", lambda: marker)
     with pytest.raises(JobStagingError, match="re-stage"):
-        stage_sdk.assert_staged_sdk(12)
+        stage_sdk.assert_staged_sdk(12, "a" * 40)
 
 
 def test_a_staged_producer_that_agrees_lets_the_launch_through(monkeypatch):
     monkeypatch.setattr(
         stage_sdk,
         "read_marker",
-        lambda: {"shard_schema_version": 12, "files": 139},
+        lambda: {"shard_schema_version": 12, "source_revision": "a" * 40, "files": 139},
     )
-    stage_sdk.assert_staged_sdk(12)
+    stage_sdk.assert_staged_sdk(12, "a" * 40)
+
+
+def test_a_different_schema_compatible_revision_is_refused(monkeypatch):
+    monkeypatch.setattr(
+        stage_sdk,
+        "read_marker",
+        lambda: {"shard_schema_version": 12, "source_revision": "b" * 40, "files": 139},
+    )
+    with pytest.raises(JobStagingError, match="pinned checkout"):
+        stage_sdk.assert_staged_sdk(12, "a" * 40)

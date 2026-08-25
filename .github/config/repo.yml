@@ -1,3 +1,4 @@
 repo_owner: "Wider-Community"
 repo_name: "quranic-universal-audio"
 hf_dataset: "hetchyy/quranic-universal-ayahs"
+qua_sdk_revision: "cdaff2ea37398cd67044375e9c9575d5c1d62b4b"

@@ -27,7 +27,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
-from qua_shared.timestamps_shards import brotli_shard, build_timestamp_shards
+from qua_shared.timestamps_shards import build_timestamp_shards, write_validated_shard
 
 if TYPE_CHECKING:
     import numpy as np
@@ -1140,7 +1140,7 @@ def _finalize_shards(
             v2_doc, audio_category=audio_category, src_meta=shard_provenance
         )
         for ch_num, shard_doc in shards.items():
-            (ts_dir / f"{ch_num}{suffix}.json.br").write_bytes(brotli_shard(shard_doc))
+            write_validated_shard(ts_dir / f"{ch_num}{suffix}.json.br", shard_doc)
         fails = len((v2_doc.get("_meta") or {}).get("mfa_failures", []))
         return len(shards), fails
 
