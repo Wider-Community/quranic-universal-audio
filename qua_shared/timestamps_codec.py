@@ -275,7 +275,13 @@ def decode_document(document: dict[str, Any]) -> dict[str, Any]:
     ordered = sorted(readings, key=lambda row: row["parts"][0]["t"][0])
     for current, following in zip(ordered, ordered[1:], strict=False):
         boundary = current["timing"]["boundaries"][-1]
-        boundary["end_ms"] = max(boundary["end_ms"], following["parts"][0]["t"][0])
+        following_words = following["timing"]["words"]
+        following_start = (
+            following_words[0]["start_ms"]
+            if following_words
+            else following["parts"][0]["t"][0]
+        )
+        boundary["end_ms"] = max(boundary["end_ms"], following_start)
     return {**document, "readings": readings}
 
 

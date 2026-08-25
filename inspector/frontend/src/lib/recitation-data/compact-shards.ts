@@ -97,7 +97,8 @@ function stitchInterReadingPauses(readings: TsShardReading[]): void {
     );
     ordered.slice(0, -1).forEach((reading, index) => {
         const boundary = reading.timing.boundaries.at(-1);
-        const nextStart = ordered[index + 1]?.parts[0]?.t[0];
+        const next = ordered[index + 1];
+        const nextStart = next?.timing.words[0]?.start_ms ?? next?.parts[0]?.t[0];
         if (boundary && nextStart !== undefined) {
             boundary.end_ms = Math.max(boundary.end_ms, nextStart);
         }

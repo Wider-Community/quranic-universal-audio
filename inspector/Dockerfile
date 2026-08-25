@@ -138,6 +138,10 @@ COPY inspector/adapters/ ./inspector/adapters/
 COPY inspector/domain/ ./inspector/domain/
 COPY inspector/routes/ ./inspector/routes/
 COPY inspector/services/ ./inspector/services/
+# Native report code and its guarded migration must ship atomically. The
+# runtime schema assertion also catches a stale image, while this build check
+# catches an incomplete Docker context before deployment.
+RUN test -f ./inspector/services/db/migrations/0028_ts_reports_native_targets.sql
 COPY inspector/utils/ ./inspector/utils/
 # qua_shared/ is shared with the CI build pipeline. Inspector imports
 # ``qua_shared.timestamps_shards`` for ``SCHEMA_VERSION`` + ``derive_url_template``

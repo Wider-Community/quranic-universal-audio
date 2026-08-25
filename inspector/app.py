@@ -395,7 +395,17 @@ def _boot_substrate() -> None:
     deployed = bool(os.environ.get("INSPECTOR_BUCKET_MOUNT"))
     try:
         _sync.pull()  # bucket DB → local path (fresh init if the bucket has none)
+        # Migration 28 is a guarded data cutover, not just DDL. Reconstruct its
+        # exact native-target map from the active v12 shards before the SQL
+        # runner checks that every legacy report is covered.
+        from services.ts_reports.legacy_target_migration import (
+            assert_native_report_schema,
+            prepare_native_report_map,
+        )
+
+        prepare_native_report_map(_db.get_writer())
         ver = _db.init_db()  # open writer + run migrations (fail-fast)
+        assert_native_report_schema(_db.get_writer())
         logger.info("db substrate: ready at schema v%s", ver)
     except Exception:  # noqa: BLE001
         logger.exception("db substrate init failed; /healthz will report db_open:false")

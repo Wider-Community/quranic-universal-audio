@@ -266,6 +266,11 @@
         const time = currentTime();
         const wipe = get(highlightWipe);
         for (const entity of entities) {
+            if (!entity.timed) {
+                entity.element.classList.remove('active');
+                entity.element.style.removeProperty('--fill');
+                continue;
+            }
             const active = time >= entity.start && time < entity.end;
             entity.element.classList.toggle('active', active);
             const tracks = entity.kind === 'column' || entity.kind === 'sound';

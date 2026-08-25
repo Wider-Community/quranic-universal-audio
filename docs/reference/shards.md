@@ -136,9 +136,14 @@ cell while preserving exact timing for genuinely soundless columns.
 
 Boundary timing is derived losslessly: each internal boundary runs from the
 preceding word end to the following word start. A reading's final boundary runs
-through the next reading's start when the recording leaves an inter-reading
-gap; the chapter-final boundary ends at its final part edge. Overlaps clamp to
-an empty interval. Boundary timing never changes the native semantic state.
+through the next reading's **first word start** when the recording leaves an
+inter-reading gap; using the next part start is incorrect because aligned words
+may extend outside or overlap source segment bounds. This rule is independent
+of verse identity, so same-verse retakes and cross-verse transitions behave the
+same. The chapter-leading boundary spans its first part start to its first word
+start, and the chapter-final boundary spans its last word end to its final part
+edge. Overlaps clamp to an empty interval. Boundary timing never changes the
+native semantic state.
 
 ## Renderer policy is not shard schema
 

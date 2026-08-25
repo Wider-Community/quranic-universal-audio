@@ -79,6 +79,8 @@ It contains no cell index, source-letter index, flat phoneme index, or synthetic
 
 Migration 28 refuses to replace the report table while any row is absent from that map. Ambiguous or unresolved rows block cutover. There is no fallback mapping.
 
+Boot also calls `services.ts_reports.legacy_target_migration.prepare_native_report_map` before the SQL runner. This recovers a deployed v27 database after v12 shards are already active: it resolves each retained canonical verse/word position against the current v12 document and verifies the stored text, role, status, and timing fingerprints before writing the same guarded map. Any missing, drifted, or ambiguous target aborts boot without a partial map. After migrations, a schema assertion prevents native report code from running over a legacy table.
+
 The database, v12 Inspector, and active shard manifest move in the same cutover. Afterward only native targets are accepted by request validation and persistence.
 
 ## Routes

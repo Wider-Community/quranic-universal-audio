@@ -157,6 +157,49 @@ describe('TimedAnalysisRow native renderer integration', () => {
         );
     });
 
+    it('does not highlight an untimed silent column during its owner word', async () => {
+        const reading = nativeReading('r1', [
+            { ref: '1:1', start: 100, end: 300, text: 'a' },
+        ]);
+        const word = reading.wire.cells.cell_view.words[0]!;
+        const silent = word.columns[0]!;
+        const sounding = {
+            ...silent,
+            id: Number(silent.id) + 1,
+            text: 'b',
+            owned_sound_ids: [0],
+            rule_occurrence_ids: [],
+            silence: null,
+        };
+        silent.owned_sound_ids = [];
+        silent.presented_sound_ids = [];
+        silent.silence = 7;
+        word.columns = [silent, sounding];
+        word.sounds[0]!.column_ids = [Number(sounding.id)];
+        word.groups = [
+            { key: silent.id, kind: 'base', column_ids: [silent.id], sound_ids: [] },
+            { key: sounding.id, kind: 'base', column_ids: [sounding.id], sound_ids: [0] },
+        ];
+        reading.wire.analysis.result.rule_occurrences = [{
+            id: 7,
+            rule_id: 'lam_shamsiyyah',
+        }];
+        const data = assembleWaslGroup(
+            'r', chapterOccasions([reading]), '1:1', {}, {}, { audio_category: 'by_surah' }, '',
+        );
+        loadedVerse.set({ data, tsSegOffset: 0.1, tsSegEnd: 0.3 });
+        vi.spyOn(dashPort, 'currentTimeMs').mockReturnValue(200);
+
+        const { component, container } = render(TimedAnalysisRow);
+        const silentSelector = `[data-qc-column-id="${String(silent.id)}"]`;
+        const soundingSelector = `[data-qc-column-id="${String(sounding.id)}"]`;
+        await waitFor(() => expect(container.querySelector(silentSelector)).not.toBeNull());
+        (component as unknown as { updateHighlights: () => void }).updateHighlights();
+
+        expect(container.querySelector(soundingSelector)?.classList).toContain('active');
+        expect(container.querySelector(silentSelector)?.classList).not.toContain('active');
+    });
+
     it('stages an untimed native column for a tajweed report', async () => {
         const reading = nativeReading('r1', [
             { ref: '1:1', start: 100, end: 300, text: 'a' },
