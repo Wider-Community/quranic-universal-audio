@@ -1,11 +1,19 @@
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/svelte';
+import { get } from 'svelte/store';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { dashPort } from '../../../../lib/playback/dash-port';
 import { chapterOccasions } from '../../../../lib/recitation-data/occasions';
 import { nativeReading } from '../../../../lib/recitation-data/test-native-fixture';
 import { assembleWaslGroup } from '../../../../lib/recitation-data/ts-source';
+import {
+    enterTajweed,
+    enterTiming,
+    exitReportMode,
+    staged,
+} from '../../stores/report-mode';
 import { focusWaslGroup, loadedVerse } from '../../stores/verse';
+import { loopTarget } from '../../stores/playback';
 import TimedAnalysisRow from '../TimedAnalysisRow.svelte';
 
 describe('TimedAnalysisRow native renderer integration', () => {
@@ -17,6 +25,7 @@ describe('TimedAnalysisRow native renderer integration', () => {
     afterEach(() => {
         vi.restoreAllMocks();
         cleanup();
+        exitReportMode();
         loadedVerse.set(null);
         focusWaslGroup.set(null);
     });
@@ -146,5 +155,73 @@ describe('TimedAnalysisRow native renderer integration', () => {
             () => expect(container.querySelector('.cell-tip')?.textContent).toContain(label),
             { timeout: 1_000 },
         );
+    });
+
+    it('stages an untimed native column for a tajweed report', async () => {
+        const reading = nativeReading('r1', [
+            { ref: '1:1', start: 100, end: 300, text: 'a' },
+        ]);
+        const word = reading.wire.cells.cell_view.words[0]!;
+        const column = word.columns[0]!;
+        const columnId = String(column.id);
+        column.owned_sound_ids = [];
+        column.presented_sound_ids = [];
+        column.rule_occurrence_ids = [7];
+        word.sounds = [];
+        word.groups = [{
+            key: column.id,
+            kind: 'base',
+            column_ids: [column.id],
+            sound_ids: [],
+        }];
+        reading.wire.analysis.result.words[0]!.sound_ids = [];
+        reading.wire.analysis.result.rule_occurrences = [{
+            id: 7,
+            rule_id: 'lam_shamsiyyah',
+        }];
+        const data = assembleWaslGroup(
+            'r', chapterOccasions([reading]), '1:1', {}, {}, { audio_category: 'by_surah' }, '',
+        );
+        loadedVerse.set({ data, tsSegOffset: 0.1, tsSegEnd: 0.3 });
+        enterTajweed('r', '1:1', 'wrong_rule');
+
+        const { container } = render(TimedAnalysisRow);
+        const selector = `[data-qc-column-id="${columnId}"]`;
+        await waitFor(() => expect(container.querySelector(selector)).not.toBeNull());
+        await fireEvent.click(container.querySelector(`${selector} .cell-ink`)!);
+
+        await waitFor(() => {
+            const key = `r1:column:${columnId}`;
+            expect(get(staged).has(key)).toBe(true);
+        });
+    });
+
+    it('stages a timed native column for a timing report', async () => {
+        const reading = nativeReading('r1', [
+            { ref: '1:1', start: 100, end: 400, text: 'a' },
+        ]);
+        reading.letters = [{
+            source_unit_id: 0, word_id: 0, text: 'a', start_ms: 120, end_ms: 280, silent: false,
+        }];
+        reading.timing.sounds = [{ sound_id: 0, start_ms: 150, end_ms: 350 }];
+        reading.timing.words = [{ word_id: 0, start_ms: 100, end_ms: 400 }];
+        const columnId = String(reading.wire.cells.cell_view.words[0]!.columns[0]!.id);
+        const data = assembleWaslGroup(
+            'r', chapterOccasions([reading]), '1:1', {}, {}, { audio_category: 'by_surah' }, '',
+        );
+        loadedVerse.set({ data, tsSegOffset: 0.1, tsSegEnd: 0.4 });
+        enterTiming('r', '1:1');
+
+        const { container } = render(TimedAnalysisRow);
+        const selector = `[data-qc-column-id="${columnId}"]`;
+        await waitFor(() => expect(container.querySelector(selector)).not.toBeNull());
+        await fireEvent.click(container.querySelector(`${selector} .cell-ink`)!);
+
+        await waitFor(() => {
+            const key = `r1:column:${columnId}`;
+            expect(get(staged).has(key)).toBe(true);
+            expect(get(loopTarget)?.startSec).toBeCloseTo(0.02, 5);
+            expect(get(loopTarget)?.endSec).toBeCloseTo(0.25, 5);
+        });
     });
 });
