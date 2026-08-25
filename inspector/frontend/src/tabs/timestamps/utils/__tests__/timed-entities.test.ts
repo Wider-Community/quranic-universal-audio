@@ -5,6 +5,8 @@ import { nativeReading } from '../../../../lib/recitation-data/test-native-fixtu
 import { defineInspectorRule } from '../tajweed-rules';
 import {
     buildBoundaryPolicies,
+    buildTimedEntityCache,
+    columnReportSpans,
     columnSpans,
     type ParsedReading,
 } from '../timed-entities';
@@ -15,6 +17,21 @@ function parsed(reading: ReturnType<typeof nativeReading>): ParsedReading {
 }
 
 describe('native timing ownership', () => {
+    it('keeps source-unit timing for reports separate from sound playback timing', () => {
+        const reading = nativeReading('r1', [{ ref: '1:1', start: 100, end: 400, text: 'a' }]);
+        reading.letters = [{
+            source_unit_id: 0, word_id: 0, text: 'a', start_ms: 120, end_ms: 280, silent: false,
+        }];
+        reading.timing.sounds = [{ sound_id: 0, start_ms: 150, end_ms: 350 }];
+        const item = parsed(reading);
+        const playback = columnSpans(item);
+        const reports = columnReportSpans(item, playback);
+        const columnId = String(reading.wire.cells.cell_view.words[0]!.columns[0]!.id);
+
+        expect(playback.get(columnId)).toEqual([150, 350]);
+        expect(reports.get(columnId)).toEqual([120, 350]);
+    });
+
     it('times merger presenters but never a silent presenter', () => {
         const reading = nativeReading('r1', [
             { ref: '1:1', start: 100, end: 200, text: 'a' },
@@ -70,5 +87,54 @@ describe('native timing ownership', () => {
         expect(policies.get('r2')?.get('1')).toMatchObject({
             recordedPause: false, showMarker: true, verseEnd: true,
         });
+    });
+
+    it('indexes an untimed native rule target for report mode', () => {
+        const reading = nativeReading('r1', [
+            { ref: '1:1', start: 100, end: 200, text: 'a' },
+        ]);
+        const word = reading.wire.cells.cell_view.words[0]!;
+        const column = word.columns[0]!;
+        const columnId = String(column.id);
+        column.owned_sound_ids = [];
+        column.presented_sound_ids = [];
+        column.rule_occurrence_ids = [7];
+        reading.wire.analysis.result.words[0]!.sound_ids = [];
+        reading.wire.analysis.result.rule_occurrences = [{
+            id: 7,
+            rule_id: 'lam_shamsiyyah',
+        }];
+        word.sounds = [];
+        word.groups = [{
+            key: column.id,
+            kind: 'base',
+            column_ids: [column.id],
+            sound_ids: [],
+        }];
+
+        const root = document.createElement('div');
+        root.innerHTML = `
+            <div data-reading-index="0">
+                <div data-qc-word-id="0">
+                    <div data-qc-group-key="${columnId}">
+                        <span data-qc-column-id="${columnId}"></span>
+                    </div>
+                </div>
+            </div>
+        `;
+        const item = parsed(reading);
+        const cache = buildTimedEntityCache(root, [item], [{
+            location: '1:1:1',
+            text: 'a',
+            display_text: 'a',
+            start: 0.1,
+            end: 0.2,
+            phoneme_indices: [],
+            letters: [],
+        }], 0);
+
+        expect(cache.entities.map((entity) => `${entity.kind}:${entity.id}`)).toEqual(
+            expect.arrayContaining([`column:${columnId}`, `group:${columnId}`]),
+        );
     });
 });

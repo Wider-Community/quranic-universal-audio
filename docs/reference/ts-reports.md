@@ -58,7 +58,7 @@ Timing directions are `early` or `late`. `pause_boundary` also uses onset/offset
 
 ## Frontend capture
 
-`TimedAnalysisRow` wraps `@quranic-phonemizer/cells` and indexes its public `data-qc-*` hooks once. Report mode turns a clicked native hook into the discriminated target above and asks the backend to capture the authoritative snapshot.
+`TimedAnalysisRow` wraps `@quranic-phonemizer/cells` and indexes its public `data-qc-*` hooks once. Playback keeps sound-derived intervals, while a timed column report uses the native report interval: its sparse exact override, or the union of its source-unit letter timing and sound timing. This keeps a sounding letter's report loop aligned with the backend snapshot. Native columns, groups, and bridges that have no report interval remain in the identity cache as report-only entities: their owning word/boundary span is used for interaction context, but they do not participate in playback highlighting or looping. Report mode turns a clicked native hook into the discriminated target above and asks the backend to capture the authoritative snapshot.
 
 The shared renderer owns the identity hooks and documented native group key. The Inspector owns report selection, dimming, comments, rule selection, tooltips, and audio intervals.
 

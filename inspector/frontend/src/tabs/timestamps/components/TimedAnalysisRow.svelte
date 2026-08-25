@@ -200,6 +200,10 @@
     function updateLoopClasses(): void {
         const target = $loopTarget;
         for (const entity of entities) {
+            if (!entity.timed) {
+                entity.element.classList.remove('loop');
+                continue;
+            }
             const kindMatches = target?.kind === 'word'
                 ? entity.kind === 'word'
                 : target?.kind === 'phoneme'
@@ -296,12 +300,12 @@
         updateHighlights();
     }
 
-    function loopFor(entity: TimedEntity) {
+    function loopFor(entity: TimedEntity, report = false) {
         return {
             kind: entity.kind === 'sound' || entity.kind === 'bridge' ? 'phoneme' as const
                 : entity.kind === 'word' ? 'word' as const : 'letter' as const,
-            startSec: entity.start,
-            endSec: entity.end,
+            startSec: report ? entity.reportStart : entity.start,
+            endSec: report ? entity.reportEnd : entity.end,
             wordIndex: entity.wordIndex,
             childIndex: entity.childIndex,
         };
@@ -330,12 +334,13 @@
             return true;
         }
         if (mode.kind === 'timing') {
+            if (!entity.reportTimed) return true;
             if (!['word', 'column', 'group', 'sound', 'bridge'].includes(target.kind)) return true;
             upsertStaged({
                 kind: 'timing', cellKey, target, wordIndex: entity.wordIndex,
                 onset: null, offset: null, comment: '',
             });
-            loopTarget.set(loopFor(entity));
+            loopTarget.set(loopFor(entity, true));
         } else if (mode.kind === 'tajweed') {
             if (!['column', 'group', 'bridge'].includes(target.kind)) return true;
             const rules = ruleIdsFromEl(targetElement);
@@ -366,6 +371,7 @@
     function onClick(event: MouseEvent): void {
         const entity = entityOf(event.target);
         if (!entity) return;
+        if (!entity.timed && get(reportMode).kind === 'inactive') return;
         if (event.target instanceof Element && stageReport(event.target, entity)) return;
         if (entity.kind === 'boundary') return;
         if (clickTimer) clearTimeout(clickTimer);
@@ -377,7 +383,7 @@
 
     function onDoubleClick(event: MouseEvent): void {
         const entity = entityOf(event.target);
-        if (!entity || entity.kind === 'boundary') return;
+        if (!entity || !entity.timed || entity.kind === 'boundary') return;
         if (clickTimer) clearTimeout(clickTimer);
         if (sameLoop(entity)) loopTarget.set(null);
         else {
@@ -390,6 +396,7 @@
         if (event.key !== 'Enter' && event.key !== ' ') return;
         const entity = entityOf(event.target);
         if (!entity) return;
+        if (!entity.timed && get(reportMode).kind === 'inactive') return;
         event.preventDefault();
         if (event.target instanceof Element && stageReport(event.target, entity)) return;
         if (entity.kind === 'boundary') return;
@@ -402,7 +409,7 @@
 
     function onPointerOver(event: PointerEvent): void {
         const entity = entityOf(event.target);
-        if (entity) {
+        if (entity?.timed) {
             tsHoveredElement.set({
                 kind: entity.kind === 'sound' || entity.kind === 'bridge' ? 'phoneme' :
                     entity.kind === 'word' ? 'word' : 'letter',
@@ -422,7 +429,7 @@
         hideTip(false);
         tipElement = target;
         const rules = (target.dataset.qcRuleIds ?? '').split(' ').filter(Boolean);
-        const ownsTiming = entity && (
+        const ownsTiming = entity?.timed && (
             target === entity.element || target.contains(entity.element)
         );
         const duration = ownsTiming

@@ -11,6 +11,16 @@ export interface TimedEntity {
     element: HTMLElement;
     start: number;
     end: number;
+    /** Native report interval. Columns may include source-unit letter timing
+     * in addition to their playback sound span. */
+    reportStart: number;
+    reportEnd: number;
+    /** False for native columns/groups/bridges that have no audio span. They
+     * remain in the identity cache for report mode, but are not playback
+     * entities. */
+    timed: boolean;
+    /** Whether the native report target has a real timing interval. */
+    reportTimed: boolean;
     wordIndex: number;
     childIndex?: number;
 }
@@ -80,6 +90,41 @@ export function columnSpans(item: ParsedReading): Map<string, Span> {
             out.set(id, [override.start_ms, override.end_ms]);
         }
     }
+    return out;
+}
+
+/**
+ * Report snapshots use the native column interval: an exact sparse override,
+ * otherwise the union of source-unit and sound timing. Keep this separate from
+ * `columnSpans`, whose sound-only intervals drive ordinary playback/highlights.
+ */
+export function columnReportSpans(
+    item: ParsedReading,
+    playbackColumns: Map<string, Span> = columnSpans(item),
+): Map<string, Span> {
+    const units = new Map(item.reading.letters.flatMap((letter) => {
+        if (letter.start_ms === null || letter.end_ms === null) return [];
+        return [[String(letter.source_unit_id), [letter.start_ms, letter.end_ms] as Span] as const];
+    }));
+    const overrides = new Map(item.reading.timing.columns.map((row) => [
+        String(row.column_id), row.start_ms === null || row.end_ms === null
+            ? null : [row.start_ms, row.end_ms] as Span,
+    ] as const));
+    const owners = [...item.view.words, ...item.view.boundaries];
+    const out = new Map<string, Span>();
+    owners.flatMap((owner) => owner.columns).forEach((column) => {
+        const id = String(column.id);
+        const override = overrides.get(id);
+        if (override !== undefined) {
+            if (override) out.set(id, override);
+            return;
+        }
+        const span = union([
+            ...resolved(column.source_unit_ids, units),
+            ...(playbackColumns.get(id) ? [playbackColumns.get(id)!] : []),
+        ]);
+        if (span) out.set(id, span);
+    });
     return out;
 }
 
@@ -175,6 +220,8 @@ interface BindOptions {
     selector: string;
     kind: EntityKind;
     spans: Map<string, Span>;
+    fallbackSpans?: Map<string, Span>;
+    reportSpans?: Map<string, Span>;
     wordIndexes: Map<string, number>;
     targetIndexes?: Map<string, number>;
     rules?: Map<string, string[]>;
@@ -192,8 +239,12 @@ function bindHooks(options: BindOptions): void {
         const wordId = word?.dataset.qcWordId ?? '';
         const rules = options.rules?.get(id) ?? [];
         if (rules.length) element.dataset.qcRuleIds = rules.join(' ');
-        const span = options.spans.get(id);
+        const timedSpan = options.spans.get(id);
+        const span = timedSpan ?? options.fallbackSpans?.get(id);
         if (!span) return;
+        const reportSpan = options.reportSpans
+            ? options.reportSpans.get(id)
+            : timedSpan;
         const entity: TimedEntity = {
             kind: options.kind,
             id,
@@ -201,6 +252,10 @@ function bindHooks(options: BindOptions): void {
             element,
             start: span[0] / 1000 - options.offset,
             end: span[1] / 1000 - options.offset,
+            reportStart: (reportSpan ?? span)[0] / 1000 - options.offset,
+            reportEnd: (reportSpan ?? span)[1] / 1000 - options.offset,
+            timed: timedSpan !== undefined,
+            reportTimed: reportSpan !== undefined,
             wordIndex: options.targetIndexes?.get(id) ?? options.wordIndexes.get(wordId) ?? -1,
             childIndex: options.cache.entities.length,
         };
@@ -241,11 +296,28 @@ function bindReading(
     if (!container) return;
     const base = readingSpans(item, wordIndexes, policies);
     const columns = columnSpans(item);
+    const reportColumns = columnReportSpans(item, columns);
     const rules = entityRules(item);
     const groups = new Map<string, Span>();
     item.view.words.flatMap((word) => word.groups).forEach((group) => {
         const span = union(resolved(group.column_ids, columns));
         if (span) groups.set(groupKey(group), span);
+    });
+    const fallbackColumns = new Map<string, Span>();
+    const fallbackGroups = new Map<string, Span>();
+    const fallbackBridges = new Map<string, Span>();
+    item.view.words.forEach((word) => {
+        const span = base.words.get(String(word.word_id));
+        if (!span) return;
+        word.columns.forEach((column) => fallbackColumns.set(String(column.id), span));
+        word.groups.forEach((group) => fallbackGroups.set(groupKey(group), span));
+        word.bridges.forEach((bridge) => fallbackBridges.set(String(bridge.merger_id), span));
+    });
+    item.view.boundaries.forEach((boundary) => {
+        const span = base.boundaries.get(String(boundary.boundary_id));
+        if (!span) return;
+        boundary.columns.forEach((column) => fallbackColumns.set(String(column.id), span));
+        boundary.bridges.forEach((bridge) => fallbackBridges.set(String(bridge.merger_id), span));
     });
     const bridges = new Map<string, Span>();
     [...item.view.words, ...item.view.boundaries].flatMap((owner) => owner.bridges)
@@ -256,12 +328,15 @@ function bindReading(
     const common = { container, wordIndexes: base.wordIndexes, readingId: item.reading.id,
         offset, cache };
     bindHooks({ ...common, selector: '[data-qc-word-id]', kind: 'word', spans: base.words });
-    bindHooks({ ...common, selector: '[data-qc-column-id]', kind: 'column', spans: columns, rules: rules.columns });
+    bindHooks({ ...common, selector: '[data-qc-column-id]', kind: 'column', spans: columns,
+        fallbackSpans: fallbackColumns, reportSpans: reportColumns, rules: rules.columns });
     bindHooks({ ...common, selector: '[data-qc-sound-id]', kind: 'sound', spans: base.sounds, rules: rules.sounds });
-    bindHooks({ ...common, selector: '[data-qc-group-key]', kind: 'group', spans: groups, rules: rules.groups });
+    bindHooks({ ...common, selector: '[data-qc-group-key]', kind: 'group', spans: groups,
+        fallbackSpans: fallbackGroups, rules: rules.groups });
     bindHooks({ ...common, selector: '[data-qc-boundary-id]', kind: 'boundary', spans: base.boundaries,
         targetIndexes: base.boundaryIndexes });
-    bindHooks({ ...common, selector: '[data-qc-bridge-id]', kind: 'bridge', spans: bridges, rules: rules.bridges });
+    bindHooks({ ...common, selector: '[data-qc-bridge-id]', kind: 'bridge', spans: bridges,
+        fallbackSpans: fallbackBridges, rules: rules.bridges });
 }
 
 export function buildTimedEntityCache(
