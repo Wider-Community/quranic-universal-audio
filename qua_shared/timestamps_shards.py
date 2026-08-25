@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import os
+import tempfile
+from pathlib import Path
 
 MANIFEST_SCHEMA_VERSION = 1
 TIMESTAMP_SHARD_SCHEMA_VERSION = 12
@@ -31,6 +34,34 @@ def brotli_shard(shard_doc: dict) -> bytes:
 
     payload = orjson.dumps(shard_doc)
     return brotli.compress(payload, quality=6, mode=brotli.MODE_TEXT)
+
+
+def validated_brotli_shard(shard_doc: dict) -> bytes:
+    """Audit a v12 document and prove deterministic serialization."""
+    from qua_shared.timestamps_v12_audit import audit_v12_document
+
+    audit_v12_document(shard_doc)
+    payload = brotli_shard(shard_doc)
+    if brotli_shard(shard_doc) != payload:
+        raise RuntimeError("non-deterministic timestamp shard serialization")
+    return payload
+
+
+def write_validated_shard(path: Path, shard_doc: dict) -> bytes:
+    """Atomically replace ``path`` with an audited deterministic v12 shard."""
+    payload = validated_brotli_shard(shard_doc)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        Path(temporary).replace(path)
+    except BaseException:
+        Path(temporary).unlink(missing_ok=True)
+        raise
+    return payload
 
 
 def sha256_hex(b: bytes) -> str:

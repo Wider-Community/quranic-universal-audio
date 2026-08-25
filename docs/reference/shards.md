@@ -178,7 +178,7 @@ The main entry points are:
 | Native documents | `qua_sdk.integrations.native` |
 | Compact encoder | `qua_sdk.integrations.cells_codec` |
 | v12 builder | `qua_sdk.integrations.shards.build_native_shards` |
-| Compression | `qua_shared.timestamps_shards.brotli_shard` |
+| Validated atomic writer | `qua_shared.timestamps_shards.write_validated_shard` |
 | Structural audit | `qua_shared.timestamps_v12_audit` |
 | Python decoder | `qua_shared.timestamps_codec` |
 | Canonical release projection | `qua_shared.timestamps_native` |
@@ -186,6 +186,11 @@ The main entry points are:
 The Flask shard route passes the stored bytes through as `application/json`
 with `Content-Encoding: br`; browsers perform HTTP decompression and parse
 normal JSON. Manifest and reference-resource compression remain independent.
+
+Fresh MFA generation and the one-time restamper share the same structural
+audit and deterministic serializer. The active chapter is replaced atomically
+only after both checks pass. Generation also pins the staged SDK by clean Git
+revision in `.github/config/repo.yml`; matching schema 12 alone is not enough.
 
 ## Production restamp runbook
 
@@ -223,6 +228,11 @@ from live paths while files can still change.
    audit success, deterministic Brotli, and byte-identical timing intervals.
    Complete reciters require all 114 chapters. Pre-existing partial reciters
    remain explicitly partial; missing chapters are never fabricated.
+
+Normal timestamp jobs enforce the same producer pin through the staged
+`run_generate_timestamps.py` entrypoint. It repairs a stale prebuilt image
+before importing the generator; SDK staging rejects the wrong Git revision
+before uploading any part of that checkout.
 
 The 2026-08-24 production freeze is
 `backups/timestamps-v11-pre-v12-20260824T133756Z`: 37 reciters, 4,126 files,

@@ -129,7 +129,7 @@ _INSTALL = (
     "'quranic-phonemizer==2.15.3' 'huggingface_hub>=1.8.0' "
     "&& mkdir -p /scratch"
 )
-_ENTRYPOINT = "python /aux/code/qua_jobs/generate_timestamps.py"
+_ENTRYPOINT = "python /aux/code/qua_jobs/run_generate_timestamps.py"
 
 
 def _job_command() -> list[str]:
@@ -208,9 +208,13 @@ def _stage_job_code() -> None:
             "existing bucket copy"
         )
     else:
+        from qua_shared.config_loader import repo_config
+
+        expected_revision = repo_config()["qua_sdk_revision"]
         sdk_adds = stage_sdk.stage_adds(sdk_src)
+        marker = stage_sdk.marker_bytes(sdk_src, len(sdk_adds), expected_revision)
         adds.extend(sdk_adds)
-        adds.append((stage_sdk.marker_bytes(sdk_src, len(sdk_adds)), stage_sdk.MARKER_PATH))
+        adds.append((marker, stage_sdk.MARKER_PATH))
         deletes = stage_sdk.stale_targets({target for _, target in sdk_adds})
     if adds or deletes:
         batch_bucket_files(ALIGNER_BUCKET, add=adds or None, delete=deletes or None)
@@ -391,7 +395,12 @@ def launch(slug: str, *, settings: TsJobSettings, webhook_base: str | None = Non
     # The job builds native documents with the STAGED producer and stamps the
     # shard version this repo carries. A mismatch would create an unreadable
     # contract split between the inner documents and their outer envelope.
-    stage_sdk.assert_staged_sdk(TIMESTAMP_SHARD_SCHEMA_VERSION)
+    from qua_shared.config_loader import repo_config
+
+    stage_sdk.assert_staged_sdk(
+        TIMESTAMP_SHARD_SCHEMA_VERSION,
+        str(repo_config()["qua_sdk_revision"]),
+    )
     bucket = resolve_bucket_repo()
 
     env = {

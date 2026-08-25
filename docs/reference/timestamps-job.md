@@ -11,7 +11,7 @@ The job owns acoustic work only:
 - run MFA with the pinned acoustic model and emphatic-fatha-only token inventory;
 - recover word, sound, and written-letter intervals;
 - pass timing occurrences to the SDK v12 builder;
-- validate and deterministically gzip each chapter;
+- validate and deterministically Brotli-compress each chapter;
 - stage result objects and validation metadata.
 
 It does not construct frontend cells, rename tajweed rules, synthesize bridges, add silent flags, or assign renderer ownership.
@@ -28,13 +28,31 @@ For each chapter the builder:
 4. Builds native schema-2 analysis, source, and transformed-cell documents using `emphatic_fatha`, `emphatic_ikhfaa`, `imala`, and `tashil` for display.
 5. Checks the recovered acoustic sound sequence against the acoustic native surface.
 6. Transfers word and sound intervals to native IDs and recuts written-letter intervals to source-unit IDs.
-7. Writes shard schema 12 with deterministic Brotli quality 6.
+7. Runs the schema and identity-closure audit, proves deterministic Brotli
+   quality-6 bytes, and atomically replaces the chapter object.
 
 Cross-verse wasl is never split or rephonemized as pausal. Known chains such as `1:3→1:4`, `14:1→14:2`, and the connected chapter-79 chain are release gates.
 
 ## Version pinning
 
-The staged SDK marker records the timestamp-shard schema version. The generation environment pins quranic-phonemizer `2.15.3`; a mismatched package or staged SDK marker blocks the job before alignment output is published.
+The staged SDK marker records both the timestamp-shard schema version and the
+clean Git revision of the staged SDK tree. `.github/config/repo.yml` pins that
+revision. The generation environment pins quranic-phonemizer `2.15.3`; a
+mismatched package, schema, SDK revision, dirty SDK source tree, or missing
+marker blocks the job before alignment output is published.
+
+`qua_jobs/run_generate_timestamps.py` is the container entrypoint. It is
+stdlib-only and checks the installed distribution before importing the real
+generator. If the cached public job image carries an older producer, the
+wrapper installs exactly `quranic-phonemizer==2.15.3` into that image's active
+environment and then replaces itself with `generate_timestamps.py`. The
+prebuilt image therefore affects startup time only; it cannot weaken the pin.
+Bootstrap-mode jobs use the same wrapper after installing the pinned stack.
+
+When a local SDK checkout is available, its clean revision is checked against
+the configured pin before any SDK files or marker are uploaded. A wrong local
+branch cannot poison the durable staged copy and then merely fail the later
+launch gate.
 
 MFA remains acoustic emphatic-fatha-only. The additional display phonemes are same-cardinality notation choices and never enter the acoustic model or redistribute intervals.
 
@@ -48,7 +66,10 @@ The output is:
 reciters/<slug>/timestamps/<chapter>.json.br
 ```
 
-During migration and review, generation writes a versioned staging prefix. It does not change the active catalogue/manifest pointer. Production exposure is an atomic cutover after all chapters and reports pass their audits.
+The normal job writes each selected chapter to the active reciter prefix only
+after its complete replacement bytes pass validation. A chapter failure leaves
+the prior object intact. Affected-chapter regeneration does not rewrite other
+chapters.
 
 ## Failure policy
 
@@ -89,6 +110,6 @@ Before a reciter can move to the v12 prefix:
 - all connected-wasl tests pass;
 - canonical release projection closes over every verse;
 - every existing report maps exactly to a native target;
-- two serializations of every chapter produce identical gzip bytes.
+- two serializations of every chapter produce identical Brotli bytes.
 
 The cutover process and report migration are documented in [data-migrations.md](data-migrations.md) and [ts-reports.md](ts-reports.md).

@@ -8,17 +8,18 @@ That is fine while the copy is current and silently wrong once it is not: the
 job then builds native documents with one contract and stamps another shard
 version.
 
-Two things close that gap. Staging MIRRORS the source tree — a file the SDK
+Three things close that gap. Staging MIRRORS the source tree — a file the SDK
 dropped is deleted from the bucket, so the staged tree is the checkout rather
-than the union of every checkout ever staged. And it records the native shard
-version the staged producer emits, which :func:`assert_staged_sdk` pairs
-against the writer's version.
+than the union of every checkout ever staged. It records the native shard
+version and clean Git revision, which :func:`assert_staged_sdk` pairs against
+the writer's pinned producer.
 """
 
 from __future__ import annotations
 
 import json
 import re
+import subprocess
 from pathlib import Path
 
 from .base import ALIGNER_BUCKET, JobStagingError
@@ -45,6 +46,28 @@ def source_shard_version(sdk_src: Path) -> int:
             "staged-producer gate and cannot be staged"
         )
     return int(match.group(1))
+
+
+def source_revision(sdk_src: Path) -> str:
+    """Return the clean Git revision containing ``sdk_src``."""
+    try:
+        root = Path(
+            subprocess.check_output(
+                ["git", "-C", str(sdk_src), "rev-parse", "--show-toplevel"], text=True
+            ).strip()
+        )
+        revision = subprocess.check_output(
+            ["git", "-C", str(root), "rev-parse", "HEAD"], text=True
+        ).strip()
+        relative = sdk_src.resolve().relative_to(root.resolve())
+        dirty = subprocess.check_output(
+            ["git", "-C", str(root), "status", "--porcelain", "--", str(relative)], text=True
+        ).strip()
+    except (OSError, subprocess.CalledProcessError, ValueError) as exc:
+        raise JobStagingError(f"{sdk_src} is not inside a readable Git checkout") from exc
+    if dirty:
+        raise JobStagingError(f"qua_sdk source has uncommitted changes: {dirty.splitlines()[0]}")
+    return revision
 
 
 def stage_adds(sdk_src: Path) -> list[tuple[str, str]]:
@@ -87,9 +110,19 @@ def stale_targets(keep: set[str]) -> list[str]:
     return sorted(staged - keep)
 
 
-def marker_bytes(sdk_src: Path, n_files: int) -> bytes:
+def marker_bytes(sdk_src: Path, n_files: int, expected_revision: str) -> bytes:
+    revision = source_revision(sdk_src)
+    if revision != expected_revision:
+        raise JobStagingError(
+            f"qua_sdk source revision is {revision}, expected {expected_revision}; "
+            "stage the pinned checkout"
+        )
     return json.dumps(
-        {"shard_schema_version": source_shard_version(sdk_src), "files": n_files},
+        {
+            "shard_schema_version": source_shard_version(sdk_src),
+            "source_revision": revision,
+            "files": n_files,
+        },
         indent=2,
     ).encode("utf-8")
 
@@ -116,8 +149,8 @@ def read_marker() -> dict | None:
     return marker if isinstance(marker, dict) else None
 
 
-def assert_staged_sdk(expected: int) -> None:
-    """Refuse the launch unless the staged producer emits ``expected`` shards.
+def assert_staged_sdk(expected: int, expected_revision: str) -> None:
+    """Refuse a launch unless the staged producer matches the pinned contract.
 
     ``expected`` is the shard schema version this repo stamps. A launcher that
     could not stage the SDK still runs this, which is the whole point: it is
@@ -132,4 +165,10 @@ def assert_staged_sdk(expected: int) -> None:
             f"package, no checkout), so re-stage it from a machine that has one:\n"
             f"  QUA_SDK_SRC=<path>/packages/sdk/src/qua_sdk python -c "
             f"'from services.admin.timestamps_jobs import _stage_job_code; _stage_job_code()'"
+        )
+    if marker.get("source_revision") != expected_revision:
+        found = marker.get("source_revision") or "none"
+        raise JobStagingError(
+            f"the staged qua_sdk revision is {found}, expected {expected_revision}; "
+            "stage the pinned checkout before launching timestamps"
         )

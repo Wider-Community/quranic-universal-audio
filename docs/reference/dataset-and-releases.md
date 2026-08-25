@@ -29,7 +29,11 @@ occasion as connected readings and ordered `parts` (see [shards.md](shards.md) a
 [timestamps-job.md](timestamps-job.md)); the single canonical take per verse is a pure timing
 projection (`qua_shared.timestamps_native.select_complete_verses`).
 Both release adapters call that one projection, so the TS-tab read path and the release/dataset
-adapters cannot drift at the dedup layer.
+adapters cannot drift at the dedup layer. The shared loader runs the strict v12
+identity-closure audit before projection; malformed bucket shards block both
+adapters. Shard schema 12 does not change either frozen publication contract:
+GitHub continues to emit release tier schema 1, while the HF dataset keeps its
+documented per-verse columns.
 
 ## Release ledger (SQLite — migration `0014_releases.sql`)
 
