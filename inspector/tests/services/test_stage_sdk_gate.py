@@ -4,7 +4,7 @@ The timestamps job imports the SDK from a copy staged on the aligner bucket,
 and the deployed Space cannot refresh that copy — the SDK is a private
 workspace member with no wheel. So the copy is allowed to be older than the
 launcher, and the only thing standing between "older" and "writes a shard
-whose rows and whose stamped version disagree" is the marker this module reads
+whose native documents and stamped version disagree" is the marker this module reads
 at launch. These pin that the gate opens on a match and shuts on everything
 else, including a bucket that carries no marker at all.
 """
@@ -19,11 +19,11 @@ from services.admin.jobs import stage_sdk
 from services.admin.jobs.base import JobStagingError
 
 
-def _sdk_tree(root, version: str = "CELL_ROW_VERSION = 11"):
+def _sdk_tree(root, version: str = "SHARD_SCHEMA_VERSION = 12"):
     """A minimal qua_sdk source tree: the producer, a data file, a py.typed,
     and two things staging must skip."""
     (root / "integrations").mkdir(parents=True)
-    (root / "integrations" / "cellrows.py").write_text(f"{version}\n", encoding="utf-8")
+    (root / "integrations" / "shards.py").write_text(f"{version}\n", encoding="utf-8")
     (root / "integrations" / "vocabulary.json").write_text("{}", encoding="utf-8")
     (root / "py.typed").write_text("", encoding="utf-8")
     (root / "notes.md").write_text("skipped", encoding="utf-8")
@@ -34,30 +34,43 @@ def _sdk_tree(root, version: str = "CELL_ROW_VERSION = 11"):
 
 
 def test_the_version_comes_from_the_source_the_host_holds(tmp_path):
-    src = _sdk_tree(tmp_path / "qua_sdk", "CELL_ROW_VERSION = 42")
-    assert stage_sdk.source_cell_row_version(src) == 42
+    src = _sdk_tree(tmp_path / "qua_sdk", "SHARD_SCHEMA_VERSION = 42")
+    assert stage_sdk.source_shard_version(src) == 42
 
 
 def test_a_producer_that_declares_nothing_cannot_be_staged(tmp_path):
     src = _sdk_tree(tmp_path / "qua_sdk", "# no constant here")
-    with pytest.raises(JobStagingError, match="CELL_ROW_VERSION"):
-        stage_sdk.source_cell_row_version(src)
+    with pytest.raises(JobStagingError, match="SHARD_SCHEMA_VERSION"):
+        stage_sdk.source_shard_version(src)
 
 
 def test_staging_carries_the_code_and_the_data_and_nothing_else(tmp_path):
     src = _sdk_tree(tmp_path / "qua_sdk")
     targets = {target for _, target in stage_sdk.stage_adds(src)}
     assert targets == {
-        "code/qua_sdk/integrations/cellrows.py",
+        "code/qua_sdk/integrations/shards.py",
         "code/qua_sdk/integrations/vocabulary.json",
         "code/qua_sdk/py.typed",
     }
 
 
-def test_the_marker_records_what_the_staged_producer_emits(tmp_path):
+def test_the_marker_records_what_the_staged_producer_emits(tmp_path, monkeypatch):
     src = _sdk_tree(tmp_path / "qua_sdk")
-    marker = json.loads(stage_sdk.marker_bytes(src, 3))
-    assert marker == {"cell_row_version": 11, "files": 3}
+    revision = "a" * 40
+    monkeypatch.setattr(stage_sdk, "source_revision", lambda _src: revision)
+    marker = json.loads(stage_sdk.marker_bytes(src, 3, revision))
+    assert marker == {
+        "shard_schema_version": 12,
+        "source_revision": revision,
+        "files": 3,
+    }
+
+
+def test_a_wrong_checkout_is_rejected_before_its_marker_is_built(tmp_path, monkeypatch):
+    src = _sdk_tree(tmp_path / "qua_sdk")
+    monkeypatch.setattr(stage_sdk, "source_revision", lambda _src: "b" * 40)
+    with pytest.raises(JobStagingError, match="pinned checkout"):
+        stage_sdk.marker_bytes(src, 3, "a" * 40)
 
 
 def test_a_bucket_the_source_dropped_a_path_from_loses_it(monkeypatch):
@@ -84,15 +97,29 @@ def test_a_bucket_the_source_dropped_a_path_from_loses_it(monkeypatch):
 
 @pytest.mark.parametrize(
     "marker",
-    [None, {"cell_row_version": 10}, {"files": 139}],
+    [None, {"shard_schema_version": 11}, {"files": 139}],
     ids=["never staged", "older producer", "marker without a version"],
 )
 def test_the_launch_is_refused_unless_the_staged_producer_agrees(monkeypatch, marker):
     monkeypatch.setattr(stage_sdk, "read_marker", lambda: marker)
     with pytest.raises(JobStagingError, match="re-stage"):
-        stage_sdk.assert_staged_sdk(11)
+        stage_sdk.assert_staged_sdk(12, "a" * 40)
 
 
 def test_a_staged_producer_that_agrees_lets_the_launch_through(monkeypatch):
-    monkeypatch.setattr(stage_sdk, "read_marker", lambda: {"cell_row_version": 11, "files": 139})
-    stage_sdk.assert_staged_sdk(11)
+    monkeypatch.setattr(
+        stage_sdk,
+        "read_marker",
+        lambda: {"shard_schema_version": 12, "source_revision": "a" * 40, "files": 139},
+    )
+    stage_sdk.assert_staged_sdk(12, "a" * 40)
+
+
+def test_a_different_schema_compatible_revision_is_refused(monkeypatch):
+    monkeypatch.setattr(
+        stage_sdk,
+        "read_marker",
+        lambda: {"shard_schema_version": 12, "source_revision": "b" * 40, "files": 139},
+    )
+    with pytest.raises(JobStagingError, match="pinned checkout"):
+        stage_sdk.assert_staged_sdk(12, "a" * 40)

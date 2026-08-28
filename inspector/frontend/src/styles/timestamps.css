@@ -1,1166 +1,286 @@
-/* Waveform + Words side-by-side row */
+/* Inspector timing and audio overlays on the shared native cell renderer. */
+
 .waveform-words-row {
     display: flex;
     flex-direction: column;
     gap: 20px;
 }
 
-.waveform-words-row .unified-display {
-    max-height: var(--unified-display-max-height);
-    overflow-y: auto;
-}
-
-/* Visualization canvas */
 .visualization {
     position: relative;
+    overflow: hidden;
     background: var(--hl-cell-rest);
     border-radius: 10px;
-    overflow: hidden;
 }
 
 #waveform-canvas {
+    display: block;
     width: 100%;
     height: 200px;
-    display: block;
     cursor: crosshair;
 }
 
-/* Middle-mouse pan: added by TimestampsWaveform while a pan session is
- * active, removed on release. Overrides the default crosshair cursor on
- * the child canvas via `*` so the grabbing feedback reads as intended. */
 .visualization.ts-pan-grabbing,
 .visualization.ts-pan-grabbing * {
     cursor: grabbing !important;
 }
 
-
-/* Unified display — centered word rows sharing ONE uniform, capped column gap.
-   Each `.word-unit` is an inline-flex atom (a single word, or a bridge/pause-paired
-   word pair/chain with the connector tile between). `--mega-row-gap` is sized by
-   `recomputeRowGap` in UnifiedDisplay to flush the densest wrapped row, clamped to
-   [16px, 40px]: dense rows fill the width, sparser rows still center but with a
-   smaller edge, and the gap can never blow out. Vertical row-gap stays fixed. */
-.unified-display {
+.timed-analysis {
+    --qc-arabic: 'SilenceMark', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
+    --qc-connected: 'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
+    --qc-cell-rest: var(--hl-cell-rest);
+    --qc-cell-hover: color-mix(in srgb, var(--anim-highlight-color) 15%, transparent);
+    --qc-idle-fg: var(--text-secondary);
+    --qc-silent-fg: var(--ts-silent-fg);
+    --qc-accent: var(--anim-highlight-color);
+    --qc-accent-line: var(--anim-highlight-color);
+    --qc-accent-wash: var(--hl-cell-wash);
+    --qc-word-ink: var(--hl-word-idle, var(--anim-highlight-color));
+    --qc-word-rule: var(--anim-highlight-color);
+    --qc-inserted-border: var(--border-strong);
+    --qc-tip-surface: var(--popover-bg);
+    --qc-tip-ink: var(--text-primary);
+    --qc-tip-line: var(--border-strong);
+    --qc-run-gap: var(--mega-row-gap, 16px);
+    --qc-dur: var(--hl-release-dur, 100ms);
+    --qc-ease: var(--hl-release-ease, ease);
+    max-height: var(--unified-display-max-height, 800px);
     display: flex;
     flex-wrap: wrap;
-    justify-content: center;
     align-items: flex-end;
-    column-gap: var(--mega-row-gap, 16px);
+    justify-content: center;
+    direction: rtl;
+    column-gap: var(--inspector-row-gap, 16px);
     row-gap: var(--mega-line-gap, 16px);
     padding: 20px;
+    overflow-y: auto;
     background: var(--hl-frame-bg, var(--panel));
     border-radius: 10px;
 }
 
-.unified-display.hidden {
-    display: none;
+.timed-reading,
+.timed-reading > .analysis-row {
+    display: contents;
 }
 
-/* A layout atom: word(s) + optional bridge/pause connector laid out as ONE
-   inline-flex row that never wraps internally — so a bridged pair and a
-   word+pause+word triple stay glued on one row. Bottom-aligned; the internal gap
-   sets word↔connector spacing (a pause tile nestles tighter via its own margin). */
-.word-unit {
-    display: inline-flex;
-    align-items: flex-end;
-    gap: var(--mega-line-gap, 16px);
+/* A recorded pause can end one native reading while the following word starts
+   the next. The outer row distributes spare space between those two runs; the
+   word-to-pause side does not. Cancel only that distributed excess so the
+   boundary tile remains exactly symmetric between its two words. */
+.timed-analysis .word-run:has(> .word-pair:last-child > .qc-recorded-pause) {
+    margin-inline-end: calc(16px - var(--inspector-row-gap, 16px));
 }
 
-/* Mega blocks */
-.mega-block {
-    display: flex;
-    flex-direction: column;
-    gap: var(--word-phoneme-gap);
-    cursor: pointer;
-    transition: transform 0.15s, opacity 0.15s;
-    /* Double-click engages loop — don't let the browser's default word-select
-       kick in and smear text highlight across the token. */
+.timed-analysis .mega-block {
     user-select: none;
-    -webkit-user-select: none;
+    cursor: pointer;
+    transition: opacity var(--t-fast, 140ms) ease;
 }
 
-/* Per-tier hovers — element-scoped so word/letter/phoneme hovers are
- * independent. Alpha values match the waveform hover fills for visual
- * consistency across panels. */
-.mega-word:hover {
-    background: color-mix(in srgb, var(--anim-highlight-color, var(--cta-bg)) 15%, transparent);
+.timed-analysis .mega-block.qc-context {
+    opacity: 0.5;
 }
 
-.mega-letter:not(.null-ts):hover {
-    background: color-mix(in srgb, var(--ts-letter-color, var(--hl-letter-color)) 22%, transparent);
+.timed-analysis .mega-block.qc-context:hover {
+    opacity: 0.72;
 }
 
-.mega-phoneme:hover {
-    background: color-mix(in srgb, var(--ts-phoneme-color, var(--hl-phoneme-color)) 25%, transparent);
+.timed-analysis.in-pause .mega-block:not(.active) {
+    opacity: 0.7;
 }
 
-/* Waveform-hover preview while audio is playing. Keep the playing token louder
-   than the hovered token by using a lighter 30%-strength preview treatment. */
-.mega-block.hover-preview .mega-word {
-    background: color-mix(in srgb, var(--anim-highlight-color) 30%, var(--hl-cell-rest));
-    color: color-mix(in srgb, var(--anim-highlight-color) 70%, var(--text-primary));
-    border-color: color-mix(in srgb, var(--anim-highlight-color) 40%, transparent);
-}
-
-.mega-letter.hover-preview {
-    background: color-mix(in srgb, var(--ts-letter-color, var(--hl-letter-color)) 30%, transparent);
-    color: var(--ink-on-color);
-    border-color: color-mix(in srgb, var(--ts-letter-color, var(--hl-letter-color)) 35%, transparent);
-}
-
-.mega-phoneme.hover-preview {
-    background: color-mix(in srgb, var(--ts-phoneme-color, var(--hl-phoneme-color)) 30%, transparent);
-    color: var(--ink-on-color);
-    border-color: color-mix(in srgb, var(--ts-phoneme-color, var(--hl-phoneme-color)) 35%, transparent);
-}
-
-/* Word-by-word translation tier — sits first in the .mega-block column, above
-   .mega-word. Shares the tile vocabulary of the letter/phoneme tiers but reads
-   quieter and warmer (it carries meaning, not phonetics). `dir="auto"` on the
-   element keeps RTL glosses (Urdu, Persian, Arabic) correct while English
-   stays LTR.
-
-   `width: 0; min-width: 100%` is deliberate: it makes the tier take exactly the
-   width the word + letter/phoneme tiers already establish for the block,
-   without its own (often long) text widening the block. So a short gloss sits
-   on one line and a long one wraps to that available width — new lines only
-   when genuinely needed. Static render, never touched by the 60fps highlight
-   path. */
 .word-translation {
+    box-sizing: border-box;
     align-self: stretch;
     width: 0;
     min-width: 100%;
-    box-sizing: border-box;
+    min-height: 1.2em;
     padding: 3px 6px;
-    border-radius: 3px;
-    /* Part of the tile family, kept a touch quieter than the word so the
-       Arabic stays the hero (see PRODUCT.md: the reciter's word outranks any
-       companion info). Distinction comes from the warm text, not a louder box. */
-    background: var(--ts-translation-bg);
+    overflow-wrap: anywhere;
+    color: var(--ts-translation-fg);
     font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
-    /* Scale with the analysis zoom (like the word/letter tiers) but stay
-       proportionally secondary, so the gloss tracks the user's chosen size. */
     font-size: calc(var(--analysis-letter-font-size, 1.05rem) * 0.72);
     line-height: 1.25;
-    letter-spacing: 0.005em;
-    /* Warm-neutral so the meaning tier reads as human language, distinct from
-       the cool #aaa of the phonetic letter/phoneme tiers, without using gold
-       (reserved for the active word and banned as religious-site ornament). */
-    color: var(--ts-translation-fg);
     text-align: center;
     text-wrap: balance;
-    overflow-wrap: anywhere;
-    min-height: 1.2em;
+    background: var(--ts-translation-bg);
+    border-radius: 3px;
 }
 
-/* Missing gloss (word-count mismatch vs API): keep the row's height so words
-   stay vertically aligned, but drop the chrome so it doesn't read as a tile. */
 .word-translation.is-empty {
     background: transparent;
 }
 
-.mega-word {
-    padding: 6px 8px;
-    background: var(--hl-cell-rest);
-    border-radius: 5px 5px 0 0;
-    font-family: 'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
-    font-size: var(--analysis-word-font-size, 1.3rem);
-    color: var(--hl-word-idle, var(--anim-highlight-color));
-    text-align: center;
-    line-height: 1.4;
-    border: 1px solid transparent;
-    border-bottom: 2px solid var(--anim-highlight-color);
-}
-
-/* The analysis layout: each cell-group is a self-contained 2-row mini-grid —
-   row 1 its graphemes (a base letter / carrier / implicit madd plus their small
-   diacritics), row 2 the phonemes placed under their OWN grapheme column. So a
-   phoneme sits directly beneath the letter or mark that sounds it: a silent
-   grapheme leaves an empty slot, a vowel sits under its diacritic (not centred
-   over the carrier). Groups sit in one RTL row, top-aligned so the letter band
-   and phoneme band read continuously across the word. */
-.mega-grid {
-    display: flex;
-    direction: rtl;
-    flex-wrap: nowrap;
-    align-items: flex-start;
-    gap: var(--haraka-group-gap, 7px);
-}
-
-/* A GROUP mini-grid: `--gcols` grapheme columns (set inline), two rows. Each
-   column is `max-content` → it sizes to the WIDER of its grapheme cell (row 1) or
-   its phoneme cluster (row 2), so a multi-sound mark (tanwīn) reserves its full
-   width and never overlaps the neighbour — in every display mode, including
-   letters-hidden (columns then size to the clusters alone). */
-.cell-group {
-    display: grid;
-    grid-template-columns: repeat(var(--gcols, 1), max-content);
-    grid-template-rows: auto auto;
-    row-gap: var(--word-phoneme-gap, 4px);
-    column-gap: 0; /* graphemes within a group sit flush */
-    direction: rtl;
-    justify-items: center;
-    align-items: stretch;
-}
-.cell-group > .mega-letter,
-.cell-group > .dia-track {
-    grid-row: 1;
-}
-/* share-group cells co-light via shared timing — no border/outline around the
-   combined group (the synchronized highlight is the only affordance). */
-
-/* Row-1 cells anchor toward the group's internal seam (`justify-self` set inline
-   per column via `colJustify`) so the base and its diacritic stay flush even when
-   a wide sound grows the column: the narrow mark is pinned to the base edge and
-   the extra column width opens on the OUTER side, under the sound. Phoneme
-   clusters (row 2) centre in their column — when a cluster is the widest item it
-   fills the column, so its edge sound lands directly under the seam-pinned mark;
-   when narrower it centres under the (centred) glyph. A grapheme with no sound
-   (silent letter, merged-away consonant) gets no cluster — its reserved empty slot
-   keeps the columns aligned. */
-.cell-group > .phoneme-cluster {
-    grid-row: 2;
-    /* Fill the column (or span) so the cluster shares its grapheme's edges; the
-       phonemes inside centre. A lone phoneme under a single grapheme grows to fill
-       (.fill) so the two boxes are the same size; a multi-sound or spanned cluster
-       keeps natural-width phonemes and centres them across the unit. The cluster
-       holds ONE cell's phonemes (e.g. an ikhfaa tanwīn's [vowel, nasal]) — they're
-       one unit, packed tight; cell-to-cell spacing is the grid, not this gap. */
-    justify-self: stretch;
-    display: flex;
-    direction: rtl;
-    align-items: center;
-    justify-content: center;
-    gap: 0;
-}
-.cell-group > .phoneme-cluster.fill > .mega-phoneme {
-    flex: 1 1 auto;
-}
-
-/* Group-hover spotlight: hovering any cell softly tints its whole column (the
-   cell-group + its phoneme cluster) so the relationship reads on hover. Quiet by
-   design — the resting cue is proximity + alignment alone. */
-.cell-group.group-hover .mega-letter:not(.silent):not(.null-ts):not(.active),
-.cell-group.group-hover .haraka-cell:not(.dia-dropped):not(.active),
-.phoneme-cluster.group-hover .mega-phoneme:not(.active) {
-    background: color-mix(in srgb, var(--ts-letter-color, var(--hl-letter-color)) 12%, var(--hl-cell-rest));
-}
-
-.mega-letter,
-.letter-metrics {
-    /* Fills its grid column (justify-self:stretch) so the letter and the phoneme
-       beneath it share edges; min-width keeps it from collapsing under the glyph.
-       .letter-metrics shares this box only to be measured (see its rule below). */
-    min-width: fit-content;
-    padding: 4px 7px;
-    background: var(--hl-cell-rest);
-    border-radius: 3px;
-    /* 'SilenceMark' first overrides ONLY U+06DF/U+06E0 (the silence zeros) with a
-       crisp DigitalKhatt subset; every letter still falls through to 'Traditional
-       Arabic' unchanged. See the SilenceMark @font-face in base.css. */
-    font-family: 'SilenceMark', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
-    font-size: var(--analysis-letter-font-size, 1.05rem);
-    color: var(--hl-letter-idle, var(--ts-idle-fg));
-    text-align: center;
-    line-height: 1.3;
-    transition: background var(--hl-release-dur) var(--hl-release-ease),
-        color var(--hl-release-dur) var(--hl-release-ease),
-        border-color var(--hl-release-dur) var(--hl-release-ease);
-    border: 1px solid transparent;
-    cursor: pointer;
-    /* Centre the glyph so a full cell aligns with the pinned small cells in its
-       group (the small cells are absolutely positioned in a fixed-height track). */
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.mega-letter.null-ts {
-    color: var(--text-faint);
-    cursor: default;
-}
-
-/* Off-flow natural-width reference cell. Read by `_measureLetterCell` to size the
-   small diacritic cells against a real letter box (live cells stretch, so they
-   can't be measured). Hidden, out of flow, not a .mega-letter so it never matches
-   cell queries. */
-.letter-metrics {
-    position: absolute;
-    visibility: hidden;
-    pointer-events: none;
-}
-
-.mega-letter.active {
-    background: var(--ts-letter-deep, var(--hl-letter-color));
-    color: var(--hl-letter-ink, var(--ink-on-color));
-    border-color: var(--ts-letter-color, var(--hl-letter-color));
-}
-
-/* Every grapheme is its own cell. A silent grapheme (hamza wasl, lam shamsiyah,
-   the otiose alef, the dropped silah, …) is greyed, non-interactive, and never
-   highlighted — the highlight/hover/click all land on the pronounced letter that
-   shares its timing. */
-.mega-letter.silent {
-    color: var(--ts-silent-fg);
-    opacity: var(--ts-mute-opacity);
-    pointer-events: none;
-    cursor: default;
-}
-
-/* A silent cell that still names a tajweed rule on hover (lām shamsiyyah,
-   hamzat-waṣl, the otiose alef, the iqlab silent noon, a merge source) stays
-   inert to clicks but accepts hover so its tooltip can surface — the blanket
-   pointer-events:none above would otherwise swallow the mouseenter. */
-.mega-letter.silent[data-tj-rules] {
-    pointer-events: auto;
-    cursor: help;
-}
-
-/* --- Diacritic (haraka / tanween) small-cell tier ------------------------ */
-/* Ported from the diacritic-cell sizing playground. A small cell is NOT a
-   flex-flow column: it sits inside a vertical pin-track (`.dia-track`) sized as
-   a factor of a real letter cell, so it can pin to the top or bottom edge of
-   the group's letter row. Height + width are the only knobs (no nudge); the
-   bare combining mark inside (`.g`) is scaled + translated per-glyph via the
-   `--haraka-*` vars projected by `harakaRenderStyle` (mirrors waqf-render). */
-
-/* Small-cell box, as factors of a FULL letter cell (measured at runtime into
-   --letter-cell-w / --letter-cell-h). */
-:root {
-    --haraka-dia-w: 0.55; /* small-cell width  / letter cell width  */
-    --haraka-dia-h: 0.35; /* small-cell height / letter cell height */
-    --haraka-group-gap: 7px; /* gap BETWEEN groups */
-    --letter-cell-w: 30px; /* measured at runtime from a real letter cell */
-    --letter-cell-h: 34px;
-}
-
-/* The grapheme columns (and thus diacritic-before-carrier vs base-then-diacritic
-   order) are placed by `grid-column` from `_buildColumns`; the dia-track just
-   sizes to a fraction of a letter cell and spans the row height for its pinned
-   mark. */
-.dia-track {
-    position: relative;
-    /* Always fill the column (floored at the tuned small size) so the cell and its
-       sound share one width — an emphatic/long vowel widens the cell while it stays
-       flush to its base. The mark stays centred: the tuned `--haraka-*` offsets are
-       em-based (glyph-relative), so they hold at any width. */
-    min-width: calc(var(--letter-cell-w) * var(--haraka-dia-w));
-    width: auto;
-    align-self: stretch; /* span the full row-1 height (the letter band) */
-    justify-self: stretch;
-}
-
-.haraka-cell {
-    position: absolute;
-    left: 0;
-    right: 0;
-    height: calc(var(--letter-cell-h) * var(--haraka-dia-h));
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--hl-cell-rest);
-    border-radius: 3px;
-    border: 1px solid transparent;
-    overflow: hidden;
-    transition: background var(--hl-release-dur) var(--hl-release-ease),
-        color var(--hl-release-dur) var(--hl-release-ease),
-        border-color var(--hl-release-dur) var(--hl-release-ease);
-}
-.haraka-cell.pin-top {
-    top: 0;
-}
-.haraka-cell.pin-bottom {
-    bottom: 0;
-}
-/* the bare combining mark, scaled + nudged per-glyph so it centres. The mark
-   reads in the SAME neutral ink as a letter cell — a diacritic is not a
-   different-coloured token, just a smaller cell. (iqlab composes a mini-meem
-   onto the haraka in this one glyph; DK stacks them.) */
-.haraka-cell .g {
-    font-family: 'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
-    line-height: 1;
-    color: var(--hl-letter-idle, var(--ts-idle-fg));
-    display: inline-block;
-    /* per-glyph scale relative to the analysis letter font. */
-    font-size: calc(var(--analysis-letter-font-size, 1.05rem) * var(--haraka-scale, 1.4));
-    transform: translate(var(--haraka-shift, 0em), var(--haraka-raise, 0em));
-}
-/* Active highlight uses the SAME hue as a letter cell — one highlight colour
-   across the whole letter row, never a separate diacritic colour. */
-.haraka-cell.active {
-    background: var(--ts-letter-deep, var(--hl-letter-color));
-    border-color: var(--ts-letter-color, var(--hl-letter-color));
-}
-.haraka-cell.active .g {
-    color: var(--hl-letter-ink, var(--ink-on-color));
-}
-.haraka-cell.hover-preview {
-    background: color-mix(in srgb, var(--ts-letter-color, var(--hl-letter-color)) 30%, transparent);
-}
-/* dropped (e.g. tanwīn silenced at waqf) — greyed, never lights */
-.haraka-cell.dia-dropped {
-    opacity: var(--ts-mute-opacity);
-}
-.haraka-cell.dia-dropped .g {
-    color: var(--ts-silent-fg);
-}
-/* Small diacritic cells render as plain marks — a `present` one gets no
-   affordance at all, and `dia-dropped` (greyed) marks a silenced one. The two
-   the reading altered carry a muted dashed border so they read as "not what
-   the rasm wrote": `dia-inserted` for a vowel not in it at all (hamzat-waṣl /
-   iltiqaa connecting kasra), `dia-replaced` for one written and shown as
-   another mark (the ʿiwaḍ fatḥa a stop makes of a fatḥatan). The shard tells
-   the two apart; here they look alike. */
-.haraka-cell.dia-inserted,
-.haraka-cell.dia-replaced {
-    border-style: dashed;
-    border-color: var(--ts-inserted-border);
-}
-
-/* --- Altered FULL cell affordance ---------------------------------------- */
-/* An inserted madd (Allah's alef, the one a stop supplies for a tanwīn fatḥ)
-   is a full letter-sized cell the letter row has no slot for. */
-.mega-letter.implicit {
-    border-style: dashed;
-    border-color: var(--ts-inserted-border);
-    color: var(--hl-letter-idle, var(--ts-idle-fg));
-}
-/* A full cell the rasm DID write, shown as the letter the reading gives it —
-   the started-on ٱ read أ/إ, the ئ read as its madd letter, the ة read as a
-   haa. Same muted dashed border, but it keeps its own ink + interactivity
-   (it is a real, sounding letter of the word). */
-.mega-letter.dia-inserted,
-.mega-letter.dia-replaced {
-    border-style: dashed;
-    border-color: var(--ts-inserted-border);
-}
-.mega-letter.implicit.dia-dropped {
-    opacity: var(--ts-mute-opacity);
-}
-.mega-letter.implicit.active {
-    background: var(--ts-letter-deep, var(--hl-letter-color));
-    color: var(--hl-letter-ink, var(--ink-on-color));
-}
-
-/* --- Seekable diacritic / implicit-madd cells --------------------------- */
-/* A timed diacritic cell is click-to-seek: pointer affordance + a hover wash in
-   the shared letter hue (the row's single highlight colour). Untimed/dropped
-   cells (no .dia-seekable) stay inert. */
-.haraka-cell.dia-seekable,
-.mega-letter.implicit.dia-seekable {
-    cursor: pointer;
-}
-.haraka-cell.dia-seekable:hover {
-    background: color-mix(in srgb, var(--ts-letter-color, var(--hl-letter-color)) 30%, transparent);
-    border-color: color-mix(in srgb, var(--ts-letter-color, var(--hl-letter-color)) 35%, transparent);
-}
-.mega-letter.implicit.dia-seekable:hover {
-    background: color-mix(in srgb, var(--ts-letter-color, var(--hl-letter-color)) 24%, transparent);
-}
-
-/* The degenerate fallback (a word with no cell-groups) renders phonemes as a
-   plain flex row — there's no grid to align to. */
-.mega-phonemes.flat {
-    display: flex;
-    gap: var(--phoneme-box-gap);
-    direction: rtl;
-}
-
-.mega-phoneme {
-    flex: none;
-    padding: 3px 5px;
-    background: var(--hl-cell-rest);
-    border-radius: 3px;
-    font-family: 'Consolas', 'Monaco', monospace;
-    font-size: 0.85rem;
-    color: var(--hl-phoneme-idle, var(--ts-idle-fg));
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    /* Phoneme strings are IPA/Latin — isolate from the outer RTL row so
-       length marks and emphatic modifiers always render after the base char. */
-    direction: ltr;
-    unicode-bidi: isolate;
-    /* Include border-color so the border eases in WITH the background fill — else
-       the border snaps to the active colour instantly while the fill transitions,
-       reading as the border lighting just before the cell (letters already do this). */
-    transition: background var(--hl-release-dur) var(--hl-release-ease),
-        color var(--hl-release-dur) var(--hl-release-ease),
-        border-color var(--hl-release-dur) var(--hl-release-ease);
-    border: 1px solid transparent;
-    position: relative;
-}
-
-.mega-phoneme.silence {
-    color: var(--text-faint);
-    font-style: italic;
-}
-
-.mega-phoneme.geminate {
-    /* Underline removed - geminate phonemes still highlight via .active class */
-}
-
-/* IPA modifier superscript (length ː, emphatic ˤ, ghunnah tilde) */
-.ph-mod {
-    font-size: 0.65em;
-    line-height: 1;
-    vertical-align: super;
-    margin-left: 1px;
-    opacity: 0.75;
-}
-
-/* Standalone phoneme (silence between words) */
-.mega-phoneme.standalone {
-    align-self: flex-end;
-}
-
-/* Crossword bridge */
-.crossword-bridge {
-    display: flex;
-    flex-direction: column;
-    gap: var(--phoneme-box-gap);
-    align-self: flex-end;
-    justify-content: flex-end;
-    /* A sibling of .mega-block (it sits BETWEEN two word columns), so it doesn't
-       inherit the block's interaction affordance — restore it here so the merger
-       tiles read as clickable instead of selectable text. */
-    cursor: pointer;
-    user-select: none;
-    -webkit-user-select: none;
-}
-
-.crossword-bridge .mega-phoneme {
-    flex: none;
-}
-
-.crossword-bridge.hidden {
+.timed-analysis.no-letters .mega-letter,
+.timed-analysis.no-letters .dia-track,
+.timed-analysis.no-phonemes .phoneme-cluster {
     display: none;
 }
 
-/* iltiqaa connecting-kasra bridge: a two-tier (letter + phoneme) cell between two
-   words, like the merger bridge but BORDERLESS (a connecting vowel, not a merged
-   consonant). The --word-phoneme-gap between tiers matches the .mega-block column
-   gap so the letter/phoneme cells line up with their rows on either side. */
-.crossword-bridge.borderless {
-    gap: var(--word-phoneme-gap);
-    align-items: center;
-}
-.crossword-bridge.borderless .mega-phoneme {
-    border-color: transparent;
-}
-/* Honour the phonemes toggle directly (mirrors `.mega-phonemes.hidden` — there
-   is no global `.hidden` rule, only `[hidden]`). Without this the iltiqaa
-   bridge's phoneme tile stays in the flex column and keeps the connecting kasra
-   pinned at its phonemes-shown height while the neighbouring words' letter rows
-   collapse, so the kasra reads as floating up instead of bottom-aligned. */
-.crossword-bridge.borderless .mega-phoneme.hidden {
-    display: none;
+.timed-analysis.no-letters .cell-group,
+.timed-analysis.no-phonemes .cell-group {
+    row-gap: 0;
 }
 
-/* The connecting kasra reads as a normal kasra small-cell, NOT a full letter:
-   the bridge-letter is a full letter-band-height transparent track that
-   bottom-pins a small box (matching `.haraka-cell` sizing) so it lines up with
-   the kasra small-cells on either side. The visible box lives on `.g`'s wrapper
-   `.bg`. The box carries the muted dashed inserted border (an added vowel, not
-   in the rasm). */
-.bridge-letter {
-    flex: none;
-    height: var(--letter-cell-h);
-    min-width: calc(var(--letter-cell-w) * var(--haraka-dia-w));
-    display: flex;
-    align-items: flex-end;
-    justify-content: center;
-    cursor: pointer;
-}
-.bridge-letter.hidden {
-    display: none;
-}
-.bridge-letter .bg {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    height: calc(var(--letter-cell-h) * var(--haraka-dia-h));
-    background: var(--hl-cell-rest);
-    border-radius: 3px;
-    border: 1px dashed var(--ts-inserted-border);
-    transition: background var(--hl-release-dur) var(--hl-release-ease),
-        color var(--hl-release-dur) var(--hl-release-ease),
-        border-color var(--hl-release-dur) var(--hl-release-ease);
-}
-.bridge-letter .g {
-    font-family: 'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
-    line-height: 1;
-    color: var(--hl-letter-idle, var(--ts-idle-fg));
-    display: inline-block;
-    font-size: calc(var(--analysis-letter-font-size, 1.05rem) * var(--haraka-scale, 1.4));
-    transform: translate(var(--haraka-shift, 0em), var(--haraka-raise, 0em));
-}
-.bridge-letter.active .bg {
-    background: var(--ts-letter-deep, var(--hl-letter-color));
-}
-.bridge-letter.active .g {
-    color: var(--hl-letter-ink, var(--ink-on-color));
-}
-.bridge-letter:hover .bg {
-    background: color-mix(in srgb, var(--ts-letter-color, var(--hl-letter-color)) 30%, transparent);
-    border-color: color-mix(in srgb, var(--ts-letter-color, var(--hl-letter-color)) 35%, transparent);
-}
-
-/* ============ Pause bridge ============ */
-/* A detected inter-word silence, surfaced as a slim tile in the letter/phoneme
-   family — sitting at the top between the two word columns. The CELL is the unit:
-   muted at rest, it fills with the word-highlight hue while its silence plays (or
-   on waveform-hover), exactly like an active letter/phoneme tile. It carries the
-   lifted-out waqf (stop) sign, or the neutral two-bar pause icon. */
-.pause-bridge {
-    align-self: flex-start;
-    box-sizing: border-box;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    /* Global cell box (sized in the waqf sizing playground): compact, anchored at
-       the word top via align-self so its height grows DOWN from the line top.
-       Negative inline margin keeps the inter-word gap minimal — the tile nestles
-       between the words rather than padding them apart. */
-    width: calc(var(--analysis-word-font-size, 1.3rem) * 0.81);
-    height: calc(var(--analysis-word-font-size, 1.3rem) * 0.7);
-    margin-inline: -3px;
-    background: var(--hl-cell-rest);
-    border: 1px solid transparent;
-    border-radius: 3px;
-    color: var(--text-secondary);
-    overflow: hidden;
-    /* tooltip-only (its duration), not a seek target → "help" cursor. */
-    cursor: help;
-    transition: background var(--hl-release-dur) var(--hl-release-ease),
-        color var(--hl-release-dur) var(--hl-release-ease),
-        border-color var(--hl-release-dur) var(--hl-release-ease);
-}
-.pause-bridge:hover {
-    background: color-mix(in srgb, var(--anim-highlight-color) 18%, var(--hl-cell-rest));
-    border-color: color-mix(in srgb, var(--anim-highlight-color) 30%, transparent);
-}
-/* The CELL lights (background fill), mirroring .mega-word/.mega-phoneme active —
-   the glyph just rides the contrast, it is never recolored on its own. */
-.pause-bridge.active {
+.timed-analysis .mega-block.active .mega-word {
+    color: var(--hl-word-ink, var(--ink-on-color));
+    font-weight: 700;
     background: var(--ts-word-deep, var(--anim-highlight-color));
     border-color: var(--anim-highlight-color);
-    color: var(--hl-word-ink, var(--ink-on-color));
 }
-.pause-bridge.hover-preview {
-    background: color-mix(in srgb, var(--anim-highlight-color) 30%, var(--hl-cell-rest));
-    border-color: color-mix(in srgb, var(--anim-highlight-color) 40%, transparent);
-    color: color-mix(in srgb, var(--anim-highlight-color) 75%, var(--text-primary));
+
+.timed-analysis .mega-letter.active,
+.timed-analysis .haraka-cell.active,
+.timed-analysis .dia-track.active > .haraka-cell {
+    color: var(--hl-letter-ink, var(--ink-on-color));
+    background: var(--ts-letter-deep, var(--hl-letter-color));
+    border-color: var(--ts-letter-color, var(--hl-letter-color));
 }
-/* A lone waqf mark is a zero-width combining glyph whose ink size + position vary
-   per mark; the calibration lives in `tabs/timestamps/utils/waqf-render.ts` and is
-   projected onto the `--waqf-*` vars per mark by UnifiedDisplay. This rule just
-   consumes them. */
-.pause-waqf {
-    font-family: 'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
-    line-height: 1;
-    display: inline-block;
-    font-size: calc(var(--analysis-word-font-size, 1.3rem) * var(--waqf-scale, 1));
-    transform: translate(var(--waqf-shift, 0), var(--waqf-raise, 0));
+
+.timed-analysis .haraka-cell.active .g,
+.timed-analysis .dia-track.active > .haraka-cell .g {
+    color: inherit;
 }
-/* Standard two-bar pause icon, drawn from currentColor so it inverts with the
-   cell fill on active. */
-.pause-icon {
+
+.timed-analysis .mega-phoneme.active,
+.timed-analysis .extended-crossword-bridge.active,
+.timed-analysis .crossword-bridge.active {
+    color: var(--hl-phoneme-ink, var(--ink-on-color));
+    background: var(--ts-phoneme-deep, var(--hl-phoneme-color));
+    border-color: var(--ts-phoneme-color, var(--hl-phoneme-color));
+}
+
+.timed-analysis .mega-letter.silent.active {
+    opacity: 1;
+    color: var(--hl-letter-ink, var(--ink-on-color));
+}
+
+.timed-analysis.hl-track .mega-letter.active,
+.timed-analysis.hl-track .haraka-cell.active,
+.timed-analysis.hl-track .dia-track.active > .haraka-cell {
+    background: linear-gradient(
+        to left,
+        var(--ts-letter-deep, var(--hl-letter-color)) calc(var(--fill, 0) * 100%),
+        var(--hl-letter-track, var(--hl-cell-rest)) 0
+    );
+    transition: none;
+}
+
+.timed-analysis.hl-track .mega-phoneme.active {
+    background: linear-gradient(
+        to left,
+        var(--ts-phoneme-deep, var(--hl-phoneme-color)) calc(var(--fill, 0) * 100%),
+        var(--hl-phoneme-track, var(--hl-cell-rest)) 0
+    );
+    transition: none;
+}
+
+.timed-analysis .loop {
     position: relative;
-    width: 6px;
-    height: 9px;
-}
-.pause-icon::before,
-.pause-icon::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 1.5px;
-    border-radius: 1px;
-    background: currentColor;
-}
-.pause-icon::before {
-    left: 0;
-}
-.pause-icon::after {
-    right: 0;
-}
-/* During a live pause, the rest of the row recedes so the bridge reads as the
-   moment's focus. */
-.unified-display.in-pause .mega-block {
-    opacity: 0.7;
+    z-index: 1;
+    outline: 2px solid var(--anim-highlight-color);
+    outline-offset: 2px;
 }
 
-/* ---- Missing-pause slot (silence reports) -------------------------------- */
-/* A between-words tile at a contiguous boundary where a pause could be missing.
-   Hidden at rest; revealed + spotlit (clickable) in the missed-pause report mode,
-   or shown with a red ring + native title when publicly flagged. Mirrors the
-   pause-bridge box so an inserted slot reads as the same family. */
-.missed-slot {
-    box-sizing: border-box;
+.timed-analysis .boundary-tile.qc-boundary-empty {
     display: none;
-    align-self: flex-start;
-    align-items: center;
-    justify-content: center;
-    width: calc(var(--analysis-word-font-size, 1.3rem) * 0.81);
-    height: calc(var(--analysis-word-font-size, 1.3rem) * 0.7);
-    border: 1px dashed var(--border-strong);
-    border-radius: 3px;
-    color: var(--text-faint);
-    overflow: hidden;
 }
-.report-missed .missed-slot {
+
+.timed-analysis .boundary-tile.qc-boundary-hidden > .pause-bridge {
+    display: none;
+}
+
+.timed-analysis.report-missed .boundary-tile.qc-boundary-empty {
     display: flex;
+}
+
+.timed-analysis.report-missed .boundary-tile.qc-boundary-hidden > .pause-bridge {
+    display: flex;
+}
+
+.timed-analysis.report-existing .boundary-tile.qc-boundary-hidden {
+    display: none;
+}
+
+.timed-analysis .boundary-tile.qc-recorded-pause > .pause-bridge {
+    color: var(--qc-idle-fg);
+    background: var(--qc-cell-rest);
+    border-color: transparent;
+}
+
+.timed-analysis .boundary-tile.qc-recorded-pause.active > .pause-bridge:not(.verse-mark) {
+    color: var(--hl-word-ink, var(--ink-on-color));
+    background: var(--ts-word-deep, var(--anim-highlight-color));
+    border-color: var(--anim-highlight-color);
+}
+
+.timed-analysis .boundary-tile.qc-verse-end > .pause-bridge {
+    color: var(--qc-word-ink);
+    background: transparent;
+    border-color: transparent;
+    opacity: 1;
+}
+
+.timed-analysis .boundary-tile.qc-verse-end.qc-recorded-pause.active > .pause-bridge {
+    color: var(--hl-word-ink, var(--ink-on-color));
+    background: var(--ts-word-deep, var(--anim-highlight-color));
+    border-color: var(--anim-highlight-color);
+}
+
+.timed-analysis.report-mode :is(
+    [data-qc-word-id],
+    [data-qc-column-id],
+    [data-qc-sound-id],
+    [data-qc-group-key],
+    [data-qc-boundary-id],
+    [data-qc-bridge-id]
+) {
     cursor: pointer;
-    color: var(--accent);
-    border-color: var(--accent);
-    transition: background var(--t-fast), color var(--t-fast);
-}
-.report-missed .missed-slot:hover {
-    background: color-mix(in srgb, var(--accent) 18%, transparent);
-}
-/* A publicly-flagged missed pause shows to ALL viewers (outside report mode too). */
-.missed-slot.report-flag-public,
-.missed-slot.report-flag-staged {
-    display: flex;
-    color: var(--state-missing-fg);
 }
 
-/* Cross-verse waṣl context: a neighbouring verse's words shown as read-only
-   context around the focused verse (junction tajweed renders across the
-   boundary). Dimmed + non-loopable; click still seeks (focus follows). */
-.unified-display .mega-block.context {
-    opacity: 0.5;
-}
-.unified-display .mega-block.context:hover {
-    opacity: 0.72;
+.timed-analysis .report-flag-public,
+.timed-analysis .report-flag-staged {
+    outline: 2px solid var(--state-missing-fg);
+    outline-offset: -2px;
+    border-radius: 2px;
 }
 
-/* --- Per-cell duration tooltip ------------------------------------------ */
-/* Fixed-position chip showing a cell's recited duration (ms). Raised on hover
-   with a warmup/cooldown delay by UnifiedDisplay; never eats the pointer. */
+.timed-analysis .report-focused {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+}
+
+.timed-analysis :is(.mega-block, .pause-bridge).report-flag-public,
+.timed-analysis :is(.mega-block, .pause-bridge).report-flag-staged,
+.timed-analysis :is(.mega-block, .pause-bridge).report-focused {
+    outline-offset: 2px;
+}
+
 .cell-tip {
     position: fixed;
     z-index: 60;
-    transform: translate(-50%, calc(-100% - 8px));
+    padding: 3px 8px;
+    color: var(--text-primary);
+    font-size: 0.72rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.35;
+    text-align: center;
+    white-space: nowrap;
     pointer-events: none;
     background: var(--popover-bg);
-    color: var(--text-primary);
     border: 1px solid var(--border-strong);
     border-radius: 4px;
-    padding: 3px 8px;
-    font-size: 0.72rem;
-    line-height: 1.35;
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-    text-align: center;
     box-shadow: var(--shadow-pop);
+    transform: translate(-50%, calc(-100% - 8px));
 }
-/* The tajweed rule name(s) under the ms duration — quieter than the figure. */
+
 .cell-tip .tip-rule {
     color: var(--text-secondary);
     font-size: 0.68rem;
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .pause-bridge {
+    .timed-analysis .mega-block {
         transition: none;
     }
 }
-
-/* Tajweed-rule underline — composed per cell as a stack of inset bottom box-shadows
-   in `UnifiedDisplay` (`tjShadowFor` → `style:box-shadow`), filtered by the live
-   enable toggles. The inset-box-shadow channel survives the `.active` fill (which
-   owns background + border-color); the same treatment applies to letter cells,
-   diacritic cells, and phoneme boxes (incl. the cross-word bridge tile). Colours are
-   the `--tj-*` custom props (overridable per-rule by the settings store). */
-
-/* Qalqala kubrā — its bottom bar is IDENTICAL to ṣughrā (the inset box-shadow drawn
-   by tjShadow, hugging the cell's rounded corners). The only difference is this
-   ::after, which curls that bar a short way UP the left/right inner edges — two thin
-   side segments (no bottom border, so the box-shadow bottom shows through), with the
-   bottom corners rounded to the cell's 3px so the sides blend into the bottom bar.
-   Fully contained within the cell. */
-.tj-kubra {
-    position: relative;
-}
-.tj-kubra::after {
-    content: '';
-    position: absolute;
-    box-sizing: border-box;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: 7px;
-    border-left: 2px solid var(--tj-kubra);
-    border-right: 2px solid var(--tj-kubra);
-    border-bottom-left-radius: 3px;
-    border-bottom-right-radius: 3px;
-    pointer-events: none;
-}
-
-/* Asymmetric attack/release: the base rules above carry the RELEASE transition
-   (cell fading out); an active cell overrides it with the ATTACK transition (cell
-   lighting up), so on/off can have different durations + easings. Both default to
-   the shipped 0.1s/ease when the motion-lab vars are unset. */
-.mega-letter.active,
-.haraka-cell.active,
-.mega-phoneme.active,
-.bridge-letter.active .bg,
-.pause-bridge.active {
-    transition: background var(--hl-attack-dur) var(--hl-attack-ease),
-        color var(--hl-attack-dur) var(--hl-attack-ease),
-        border-color var(--hl-attack-dur) var(--hl-attack-ease);
-}
-
-/* Continuous karaoke wipe. `--fill` (0..1) is set per frame on the active cell
-   by `UnifiedDisplay.updateHighlights`; the fill tracks the voice across the cell
-   instead of a discrete cross-fade. Letters + harakas wipe right→left with the
-   recitation flow; phonemes (LTR) wipe L→R.
-
-   The sweep fills the tier's `--ts-*-deep` (a dark, saturated accent) in from a
-   darker accent-tinted base, so the cell reads as a dark accent block colouring
-   in — its end-state matches the discrete deep fill exactly, and the white glyph
-   stays legible across the whole sweep (both ends are dark). */
-.hl-track .mega-letter.active,
-.hl-track .haraka-cell.active,
-.hl-track .mega-block.active .mega-letter.active,
-.hl-track .mega-block.active .haraka-cell.active {
-    background: linear-gradient(
-        to left,
-        var(--ts-letter-deep, var(--hl-letter-color)) calc(var(--fill, 0) * 100%),
-        var(--hl-letter-track, color-mix(in srgb, var(--ts-letter-deep, var(--hl-letter-color)) 30%, var(--hl-cell-rest))) 0
-    );
-    color: var(--hl-letter-ink, var(--ink-on-color));
-    transition: none;
-}
-.hl-track .haraka-cell.active .g {
-    color: var(--hl-letter-ink, var(--ink-on-color));
-}
-.hl-track .mega-phoneme.active,
-.hl-track .mega-block.active .mega-phoneme.active {
-    background: linear-gradient(
-        to left,
-        var(--ts-phoneme-deep, var(--hl-phoneme-color)) calc(var(--fill, 0) * 100%),
-        var(--hl-phoneme-track, color-mix(in srgb, var(--ts-phoneme-deep, var(--hl-phoneme-color)) 30%, var(--hl-cell-rest))) 0
-    );
-    color: var(--hl-phoneme-ink, var(--ink-on-color));
-    transition: none;
-}
-
-/* Active states */
-.mega-phoneme.active {
-    background: var(--ts-phoneme-deep, var(--hl-phoneme-color));
-    color: var(--hl-phoneme-ink, var(--ink-on-color));
-    border-color: var(--ts-phoneme-color, var(--hl-phoneme-color));
-}
-
-.mega-block.active .mega-word {
-    background: var(--ts-word-deep, var(--anim-highlight-color));
-    color: var(--hl-word-ink, var(--ink-on-color));
-    font-weight: bold;
-    border-color: var(--anim-highlight-color);
-}
-
-/* Active-word "wash" — the dim mini-active fill on every resting cell under the
-   playing word. Off by default; opt in by adding `hl-word-wash` to an ancestor.
-   The cell actually sounding (`.active`) + silent / dropped / null variants keep
-   their own rules below, so only the resting siblings are washed. */
-.hl-word-wash .mega-block.active .mega-phoneme {
-    background: var(--hl-cell-wash);
-    color: var(--text-secondary);
-    border-color: color-mix(in srgb, var(--ts-phoneme-color, var(--hl-phoneme-color)) var(--hl-wash-border), transparent);
-}
-
-.mega-block.active .mega-phoneme.active {
-    background: var(--ts-phoneme-deep, var(--hl-phoneme-color));
-    color: var(--hl-phoneme-ink, var(--ink-on-color));
-    border-color: var(--ts-phoneme-color, var(--hl-phoneme-color));
-}
-
-.hl-word-wash .mega-block.active .mega-letter:not(.implicit) {
-    background: var(--hl-cell-wash);
-    color: var(--text-secondary);
-    border-color: color-mix(in srgb, var(--ts-letter-color, var(--hl-letter-color)) var(--hl-wash-border), transparent);
-}
-
-/* An implicit-madd full cell (dagger-alef / madd-ʿiwaḍ) takes the same active-word
-   resting fill as its siblings; it keeps its dashed "not in the rasm" border + muted
-   ink, and still lights in the letter colour when it's the cell currently sounding. */
-.hl-word-wash .mega-block.active .mega-letter.implicit:not(.active) {
-    background: var(--hl-cell-wash);
-}
-
-.mega-block.active .mega-letter.active {
-    background: var(--ts-letter-deep, var(--hl-letter-color));
-    color: var(--hl-letter-ink, var(--ink-on-color));
-    border-color: var(--ts-letter-color, var(--hl-letter-color));
-}
-
-/* Silent cells read identically whether or not their word is active — the
-   active-block letter treatment above must not brighten or recolour them. */
-.mega-block.active .mega-letter.silent {
-    color: var(--ts-silent-fg);
-    background: var(--hl-cell-rest);
-    border-color: transparent;
-}
-
-/* …with ONE exception: a silent consonant that fully merges into the next word
-   (idgham noon ن→ , idgham shafawi م→) is greyed at rest but CO-LIGHTS through
-   the merger — it shares the merged sound, so `active` must win over `silent`.
-   Only a merged consonant is ever silent AND share-grouped; ordinary silent
-   graphemes (hamza waṣl, lam shamsiyah, the otiose alef …) carry no group and
-   never light. */
-.mega-letter.silent.active,
-.mega-block.active .mega-letter.silent.active {
-    color: var(--hl-letter-ink, var(--ink-on-color));
-    opacity: 1;
-    background: var(--ts-letter-deep, var(--hl-letter-color));
-    border-color: var(--ts-letter-color, var(--hl-letter-color));
-}
-
-.mega-block.active .mega-letter.null-ts {
-    color: var(--text-faint);
-    background: var(--hl-cell-rest);
-    border-color: transparent;
-}
-
-/* Diacritic cells follow the active-word treatment too: dim to the block bg at
-   rest, and the one that's currently sounding lights in the letter colour (same
-   hue as the active letter). Without this they stayed flat black in an active
-   word. Dropped (greyed) diacritics opt out. */
-.hl-word-wash .mega-block.active .haraka-cell {
-    background: var(--hl-cell-wash);
-}
-.mega-block.active .haraka-cell.dia-dropped {
-    background: var(--hl-cell-rest);
-}
-.mega-block.active .haraka-cell.active {
-    background: var(--ts-letter-deep, var(--hl-letter-color));
-    border-color: var(--ts-letter-color, var(--hl-letter-color));
-}
-
-/* Show/hide a whole band via the toggle classes on the grid (row 1 = graphemes,
-   row 2 = phoneme clusters). */
-.mega-grid.no-letters .mega-letter,
-.mega-grid.no-letters .dia-track {
-    display: none;
-}
-.mega-grid.no-phonemes .phoneme-cluster {
-    display: none;
-}
-/* With a whole band hidden the empty row track would still claim the row-gap —
-   collapse it so the remaining band sits flush under the word. */
-.mega-grid.no-letters .cell-group,
-.mega-grid.no-phonemes .cell-group {
-    row-gap: 0;
-}
-/* The cell-less fallback row honours the phonemes toggle directly. */
-.mega-phonemes.hidden {
-    display: none;
-}
-
-/* Past (already-recited) tokens render identically to upcoming ones — no
-   legacy brown/grey recolor, no dimming. The active token is the only
-   emphasized state. */
-
-/* ============ Loop perma-highlight ============ */
-/* Outline — not background — so `.active`/`.past` styles remain readable
-   when the looped element is also the currently-playing one. Only the word
-   (block) tier carries the outline; looped letter/phoneme/diacritic cells stay
-   borderless (the thick offset ring crowded the small cells). */
-/* position:relative + z-index lifts the looped element above its flex
-   siblings so the offset outline isn't clipped by the next box's background
-   (painting order otherwise covers the outline on the leading/trailing edge). */
-.mega-block.loop {
-    outline: 2px solid var(--anim-highlight-color, var(--cta-bg));
-    outline-offset: 2px;
-    position: relative;
-    z-index: 1;
-}
-#animation-display .anim-word.loop {
-    outline: 2px solid var(--anim-highlight-color, var(--cta-bg));
-    outline-offset: 2px;
-    opacity: 1 !important;
-}
-
-/* ============ View toggle controls ============ */
-.ts-view-controls { display: flex; gap: 12px; align-items: center; margin: 8px 0; justify-content: center; }
-.ts-view-mode-group {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 2px;
-    background: var(--hl-cell-rest);
-    border-radius: 6px;
-    padding: 2px;
-}
-/* display:contents lifts the inner toggles' children directly into the outer
-   grid so all four buttons share one background + gap, eliminating the seam
-   between rows. */
-.ts-view-toggle, .ts-mode-toggle { display: contents; }
-.ts-view-btn, .ts-mode-btn {
-    padding: 4px 12px;
-    border: none;
-    background: transparent;
-    color: var(--text-muted);
-    cursor: pointer;
-    border-radius: 4px;
-    font-size: 0.85rem;
-    text-align: center;
-}
-.ts-view-btn.active, .ts-mode-btn.active { background: var(--anim-highlight-color); color: var(--cta-fg); font-weight: bold; }
-/* Translations toggle + language picker span the full group width (its own
-   row under the Analysis/Animation + Letters/Phonemes rows). */
-.ts-translations-toggle {
-    grid-column: 1 / -1;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-}
-.ts-translations-toggle .ts-mode-btn { flex: 1 1 auto; }
-.ts-auto-toggles {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 2px;
-    background: var(--hl-cell-rest);
-    border-radius: 6px;
-    padding: 2px;
-}
-.ts-auto-row { display: contents; }
-.ts-auto-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: none;
-    background: transparent;
-    cursor: pointer;
-    border-radius: 4px;
-    padding: 0 12px;
-    height: 23px;
-}
-.ts-auto-btn.active { background: var(--anim-highlight-color); }
-.ts-auto-icon {
-    width: 14px;
-    height: 14px;
-    display: block;
-    pointer-events: none;
-    /* White SVGs render dim on the idle dark background... */
-    filter: brightness(0.6);
-    transition: filter 0.1s ease;
-}
-.ts-auto-btn:hover .ts-auto-icon { filter: brightness(1); }
-/* ...and flip to near-black on the gold active background for contrast. */
-.ts-auto-btn.active .ts-auto-icon { filter: brightness(0.08); }
-
-/* ============ Animation display ============ */
-#animation-display {
-    direction: rtl;
-    text-align: justify;
-    font-family: 'DigitalKhatt', 'Traditional Arabic', serif;
-    font-size: var(--anim-font-size, 28px);
-    line-height: var(--anim-line-height, 2.0);
-    word-spacing: var(--anim-word-spacing, 0.15em);
-    color: var(--text-secondary);
-    padding: 20px;
-    background: var(--panel);
-    border-radius: 8px;
-    max-height: var(--unified-display-max-height, 400px);
-    overflow-y: auto;
-}
-
-/* Window opacity: words hidden by default, JS sets inline opacity */
-#animation-display.anim-window .anim-word { opacity: 0; transition: var(--anim-word-transition); }
-#animation-display.anim-window .anim-word.active { opacity: 1 !important; color: var(--anim-highlight-color); }
-#animation-display.anim-window .anim-word.reached { opacity: 1 !important; }
-
-/* Character-level mode */
-#animation-display.anim-window.anim-chars .anim-word { opacity: 1 !important; }
-#animation-display.anim-window.anim-chars .anim-char { opacity: 0; transition: var(--anim-char-transition); }
-#animation-display.anim-window.anim-chars .anim-char.active { opacity: 1 !important; color: var(--anim-highlight-color); }
-#animation-display.anim-window.anim-chars .anim-char.reached { opacity: 1 !important; }
-
-/* Word spacing for inline flow */
-#animation-display .anim-word {
-    display: inline;
-    cursor: pointer;
-    padding: 2px 0;
-}
-#animation-display .anim-char {
-    display: inline;
-}
-
-/* ---- Report mode: in-grid cell flagging ----------------------------------
- * Classes toggled imperatively by UnifiedDisplay (disjoint from the 60fps
- * highlight classes). The flag ring uses `outline` so it never collides with
- * the inline tajweed-underline box-shadow and never reflows layout. */
-.report-mode .mega-letter,
-.report-mode .haraka-cell,
-.report-mode .mega-letter.implicit {
-    cursor: pointer;
-}
-/* Tajweed wrong-rule spotlight: dim the cells with no rule. */
-.report-dim {
-    opacity: 0.3;
-    transition: opacity var(--t-fast, 140ms) ease;
-}
-/* …and make those rule-less cells inert — kills both click and hover tooltip in
-   one go, so only rule-bearing cells stay interactive in wrong_rule. */
-.report-inert {
-    pointer-events: none;
-}
-/* A silent cell that carries a tajweed rule (hamza-waṣl, lām shamsiyyah, …) is a
-   valid wrong_rule target: un-grey it and make it selectable so it stands with
-   the other spotlighted cells. TAJWEED-ONLY — in a timing session a silent letter
-   keeps its native greyed style (it's never a timing target). */
-.report-tajweed .mega-letter.silent[data-has-tj='1'] {
-    color: inherit;
-    opacity: 1;
-    pointer-events: auto;
-    cursor: pointer;
-}
-/* A flagged cell (own staged or anyone's persisted) — red ring + tooltip. The
-   ring is INSET (negative offset) so it stays within the cell box and never
-   bleeds into a connected neighbour (a letter + its diacritic). */
-.report-flag-public,
-.report-flag-staged {
-    outline: 2px solid var(--state-missing-fg);
-    outline-offset: -2px;
-    border-radius: 2px;
-}
-/* Words + gap tiles are spaced apart, so their ring can sit outset. The flag
-   ring lives on .mega-word (not .mega-block), so the outset exception targets
-   .mega-word — small outline-offset gives diacritics/letters room to breathe. */
-.mega-word.report-flag-public,
-.mega-word.report-flag-staged,
-.pause-bridge.report-flag-public,
-.pause-bridge.report-flag-staged,
-.missed-slot.report-flag-public,
-.missed-slot.report-flag-staged {
-    outline-offset: 2px;
-}
-/* The cell currently being annotated in the strip — accent ring on top. Inset for
-   cells (kept outset for spaced word + gap tiles). */
-.report-focused {
-    outline: 2px solid var(--accent);
-    outline-offset: -2px;
-}
-.mega-word.report-focused,
-.pause-bridge.report-focused,
-.missed-slot.report-focused {
-    outline-offset: 2px;
-}
-/* Silence: existing-pause modes spotlight the pause bridges as the click surface. */
-.report-existing .pause-bridge {
-    cursor: pointer;
-    border-color: var(--accent);
-}
-.report-existing .pause-bridge:hover {
-    background: color-mix(in srgb, var(--accent) 18%, var(--hl-cell-rest));
-}
-@media (prefers-reduced-motion: reduce) {
-    .report-dim { transition: none; }
-}
-

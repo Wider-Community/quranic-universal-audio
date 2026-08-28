@@ -147,16 +147,9 @@ def pipeline_meta_path(slug: str) -> str:
     return reciter_file(slug, "pipeline_meta.json")
 
 
-def timestamps_path(slug: str, chapter: str | int) -> str:
-    """Uncompressed per-chapter timestamps shard path. Retained as a path
-    helper; the read path serves the gzipped shard (``timestamps_path_gz``)."""
-    return reciter_file(slug, f"timestamps/{chapter}.json")
-
-
-def timestamps_path_gz(slug: str, chapter: str | int) -> str:
-    """Gzipped per-chapter segment-array shard. The job writes these; the
-    read path serves the gz body verbatim as a byte pass-through."""
-    return reciter_file(slug, f"timestamps/{chapter}.json.gz")
+def timestamps_path_br(slug: str, chapter: str | int) -> str:
+    """Brotli-compressed compact v12 shard served as a byte pass-through."""
+    return reciter_file(slug, f"timestamps/{chapter}.json.br")
 
 
 def prefetched_audio_path(slug: str, chapter: str | int) -> str:

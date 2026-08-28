@@ -27,7 +27,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
-from qua_shared.timestamps_shards import build_segment_shards, gzip_shard
+from qua_shared.timestamps_shards import build_timestamp_shards, write_validated_shard
 
 if TYPE_CHECKING:
     import numpy as np
@@ -447,7 +447,7 @@ def is_compound_cross_verse(matched_ref: str) -> bool:
     """True if ``matched_ref`` spans two distinct verses (``s:a:w-s:b:w``, a≠b).
 
     Single source for the cross-verse test shared by the Auto-Split precompute
-    and the timestamps job's segment-array guard. Within-verse word ranges
+    and the timestamp job's one-verse-per-occurrence guard. Within-verse word ranges
     (``2:1:1-2:1:4``) and non-dash refs are not compound.
     """
     parts = matched_ref.split("-")
@@ -718,8 +718,8 @@ def _normalize_from_results(chapters, results_by_ch, audio_category):
     """Convert raw MFA results to per-chapter ordered occurrences + failures.
 
     The conversion + per-verse word routing core; ``build_raw_v2`` (in
-    ``timestamps_dedup``) consumes its output to build the raw v2 document the
-    segment-array writer emits.
+    ``timestamps_source``) consumes its output to build the raw timing document the
+    native v12 builder consumes.
 
     Returns ``(norm, failures)`` where ``norm[ch_idx]`` is a list of
     occurrences in result order::
@@ -1106,11 +1106,11 @@ def _finalize_shards(
     existing_data: dict,
     tmp_dir: Path,
 ) -> Path | None:
-    """Write per-chapter segment-array shards + the ts_validation sidecar from
+    """Write per-chapter native v12 shards + the ts_validation sidecar from
     ``results_by_beam`` — shared by the per-segment and whole-verse paths.
 
     ``canonical_results`` carries every aligned segment, so build_raw_v2 keeps
-    all occurrences and build_segment_shards emits each one RAW (no dedup at
+    all occurrences and the native shard builder emits each one without dedup at
     write); the narrower beams feed the verse-level ts_validation sidecar.
     """
     canonical_results = results_by_beam[canonical_beam]
@@ -1119,12 +1119,7 @@ def _finalize_shards(
         _cleanup([], tmp_dir)
         return None
 
-    from qua_sdk.components.timing.lib.cells import (
-        annotate_v2_doc,  # lazy: keep phonemizer off the inspector import path
-    )
-    from qua_sdk.integrations.phonemizer import producer_version
-
-    from qua_shared.timestamps_dedup import build_raw_v2  # lazy: avoid import cycle
+    from qua_shared.timestamps_source import build_raw_v2  # lazy: avoid import cycle
 
     ts_dir = output_dir / "timestamps"
     ts_dir.mkdir(parents=True, exist_ok=True)
@@ -1137,31 +1132,23 @@ def _finalize_shards(
         "beam": canonical_beam,
         "shared_cmvn": shared_cmvn,
         "padding": padding,
-        "phonemizer_version": producer_version(),
     }
 
-    def _emit_segment_shards(results_by_ch, suffix=""):
+    def _emit_native_shards(results_by_ch, suffix=""):
         v2_doc = build_raw_v2(chapters, results_by_ch, audio_category)
-        # Tag cross-word tajweed bridges AND stamp per-letter silent flags + folded
-        # silence marks + per-character cells (annotate_v2_doc → annotate_segment_words
-        # → _stamp_silent_flags / _stamp_cells) — the same SDK path the backfills run;
-        # build_segment_shards then stamps schema v9. Shared by the per-segment and
-        # whole-verse paths, so whole-verse occurrences land v9 cells identically.
-        n_bridges = annotate_v2_doc(v2_doc)
-        log.info("Tagged %d cross-word bridge phone(s)", n_bridges)
-        shards = build_segment_shards(
+        shards = build_timestamp_shards(
             v2_doc, audio_category=audio_category, src_meta=shard_provenance
         )
         for ch_num, shard_doc in shards.items():
-            (ts_dir / f"{ch_num}{suffix}.json.gz").write_bytes(gzip_shard(shard_doc))
+            write_validated_shard(ts_dir / f"{ch_num}{suffix}.json.br", shard_doc)
         fails = len((v2_doc.get("_meta") or {}).get("mfa_failures", []))
         return len(shards), fails
 
-    n_shards, n_fail = _emit_segment_shards(canonical_results)
+    n_shards, n_fail = _emit_native_shards(canonical_results)
     if n_fail:
         log.warning("Canonical beam %d: %d MFA failures", canonical_beam, n_fail)
     log.info(
-        "Wrote %d segment-array timestamps shard(s) (beam=%d) -> %s",
+        "Wrote %d native v12 timestamp shard(s) (beam=%d) -> %s",
         n_shards,
         canonical_beam,
         ts_dir,
@@ -1211,7 +1198,7 @@ def process(
 
     Each value in ``beams`` runs as an independent alignment pass over
     the same audio. The widest beam (``max(beams)``) is the canonical
-    pass — it always drives the ``timestamps/<ch>.json.gz`` segment-array
+    pass — it always drives the ``timestamps/<ch>.json.br`` compact native v12
     shards regardless of the order ``beams`` was supplied in. The remaining
     (narrower) beams are folded into a single verse-level
     ``ts_validation.json`` sidecar — verses that align under the canonical
@@ -1371,9 +1358,7 @@ def process(
         ]
 
     if not chapters_to_process:
-        # Nothing new to align — the segment-array shards from the prior run
-        # already stand. No legacy timestamps_full.json / timestamps.json is
-        # written (single canonical format).
+        # Nothing new to align — native v12 shards from the prior run stand.
         log.info("No segments to process (all complete or skipped)")
         return output_dir
 

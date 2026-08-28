@@ -26,24 +26,18 @@
 import { ApiError, fetchArrayBuffer, fetchJson } from '../api';
 import type { TsConfigResponse, TsManifestResponse, TsValidationDoc } from '../types/generated/schemas';
 import type {
-    Letter,
-    PhonemeInterval,
-    SegmentEntry,
-    TsCell,
     TsShardResponse,
     TsVbrResponse,
     TsVerseData,
     TsWord,
 } from '../types/ts-client';
-import { parseShardCell } from '../types/ts-client';
-
-// Render-only phone markers — NOT letter-derived, so excluded from the indexable
-// phone sequence the cell `phoneme_indices` count against. Mirrors the
-// phonemizer's `is_render_only` (the qalqala echo `Q`); the phonemizer test pins
-// the value, keep the two in lockstep.
-const RENDER_ONLY_PHONES = new Set(['Q']);
-
-import { type ChapterOccasion, chapterOccasions } from './occasions';
+import type { ChapterOccasion } from './occasions';
+import { decodeTimestampShard } from './compact-shards';
+import {
+    assembleNative,
+    chapterVerseRefs,
+    shardOccasions,
+} from './native-shards';
 
 // ---------------------------------------------------------------------------
 // Singleton caches
@@ -128,9 +122,10 @@ export async function loadManifest(): Promise<TsManifestResponse> {
 }
 
 /**
- * Fetch a per-chapter shard. The shard URL is templated against
- * `tsConfig.shard_url_template` (full URL in HF mode; `/api/ts/shard/...`
- * locally). Concurrent calls dedupe via the in-flight Promise.
+ * Fetch a per-chapter Brotli shard. HTTP content decoding is handled by the
+ * browser; the compact JSON is expanded once before entering the LRU. The URL is templated against
+ * `tsConfig.shard_url_template` (`/api/ts/shard/...`). Concurrent calls dedupe
+ * via the in-flight Promise.
  */
 export async function loadChapterShard(
     reciter: string,
@@ -148,7 +143,7 @@ export async function loadChapterShard(
         const url = cfg.shard_url_template
             .replace('{reciter}', encodeURIComponent(reciter))
             .replace('{chapter}', String(chapter));
-        return _fetchGzipJson<TsShardResponse>(url);
+        return decodeTimestampShard(await fetchJson<unknown>(url));
     })();
     _lruTouch(key, promise);
     // If the fetch fails, drop the entry so the next call retries.
@@ -425,41 +420,11 @@ export async function loadTsValidation(reciter: string): Promise<TsValidationDoc
 }
 
 // ---------------------------------------------------------------------------
-// Segment-array assembly
+// Native reading assembly
 // ---------------------------------------------------------------------------
 
-/** Per-shard memo of `chapterOccasions`. The split is O(segments) per chapter;
- *  callers iterate every occasion of a chapter, so it's cached on the
- *  (LRU-stable) shard object. */
-const _occasionsByShard = new WeakMap<TsShardResponse, ChapterOccasion[]>();
+export { chapterVerseRefs, shardOccasions };
 
-export function shardOccasions(shard: TsShardResponse): ChapterOccasion[] {
-    let list = _occasionsByShard.get(shard);
-    if (!list) {
-        list = chapterOccasions(shard.segments ?? []);
-        _occasionsByShard.set(shard, list);
-    }
-    return list;
-}
-
-/**
- * Build the `TsVerseData` for one OCCASION — a contiguous recitation of a verse
- * (`occasions.ts`). Thin wrapper over {@link assembleMembers} with a single
- * member. Every recited word across the occasion's segments is kept, in audio
- * order: no dedup, so leading/trailing repeats and mid-verse lookbacks all render
- * and stay seekable. Words carry QPC / DK text; `by_surah_audio` words are
- * 0-anchored by subtracting the occasion's start so the audio element starts at
- * zero. The clip span (`[time_start_ms, time_end_ms]`) covers every segment /
- * word / letter time — the segmenter's natural lead-in + trailing silence
- * included (audio plays through it with nothing highlighted).
- *
- * Identity flows top-down: the caller knows which slug it fetched `shard` for, so
- * `reciter` is a param and rides back on the result. `audio_category` (offset
- * logic) comes from `reciterAudio` — the manifest's reciter block. `chapterAudioUrl`
- * is the canonical per-chapter link the caller resolved from `/api/audio/surahs`
- * (never recomputed from a template, so non-templatable sources like per-chapter
- * YouTube IDs resolve). For by_surah every occasion in the chapter shares it.
- */
 export function assembleOccasion(
     reciter: string,
     occasion: ChapterOccasion,
@@ -468,19 +433,17 @@ export function assembleOccasion(
     reciterAudio: TsReciterAudio,
     chapterAudioUrl: string,
 ): TsVerseData {
-    return assembleMembers(reciter, [occasion], occasion.ref, qpc, dk, reciterAudio, chapterAudioUrl);
+    return assembleNative({
+        reciter,
+        members: [occasion],
+        verseRef: occasion.ref,
+        qpc,
+        dk,
+        audioCategory: reciterAudio.audio_category,
+        audioUrl: chapterAudioUrl,
+    });
 }
 
-/**
- * Build one `TsVerseData` for a cross-verse waṣl GROUP — a chain of occasions
- * recited into each other without a stop (`wasl.ts::waslGroupOf`). Display-only
- * context merge: every member verse's words/cells are concatenated in recitation
- * order so the analysis view shows the whole continuous span and junction tajweed
- * renders across each boundary; each word keeps its true `surah:ayah:word`
- * location so consumers can still scope editing/loop/validation to the focus
- * verse. `verseRef` labels the result (the focused verse). by_surah only — the
- * group span lives in one chapter file (the caller gates by_ayah out).
- */
 export function assembleWaslGroup(
     reciter: string,
     members: ChapterOccasion[],
@@ -490,283 +453,15 @@ export function assembleWaslGroup(
     reciterAudio: TsReciterAudio,
     chapterAudioUrl: string,
 ): TsVerseData {
-    return assembleMembers(reciter, members, verseRef, qpc, dk, reciterAudio, chapterAudioUrl);
-}
-
-/**
- * Reconstruct the per-letter `Letter[]` from a word's cell row when the shard
- * omits the raw `letters` slot. Re-stamped shards consolidate per-letter facts
- * into cells + phonemes (the analysis letter row renders straight from those),
- * leaving the legacy `letters` slot empty — but the teleprompter / filmstrip
- * still drive their reveal off `Letter[]`. Groups cells by `sourceLetterIndex`
- * (one orthographic letter per group), takes the group's base glyph, and spans
- * its phoneme intervals; a group with no audible phoneme is `silent` with null
- * timing (the char-time stamper inherits a neighbour). `phonemeIndices` are
- * already verse-flat, so they index `intervals` directly.
- *
- * A long vowel's phoneme is referenced by BOTH the consonant's `haraka` cell and
- * the following `madd` carrier cell (one `shareGroup`) — e.g. `قَا`'s `aˤ:` rides
- * the fatha on `ق` and the alef on `ا`. Letting both claim it stretches the
- * consonant's span across the whole vowel, so it co-highlights with the carrier
- * (and any later same-time letter). Each phoneme is therefore assigned to exactly
- * ONE letter — the carrier (`madd`) wins over the consonant's `haraka` — so spans
- * stay disjoint and ordered, matching the original slot-3 timings.
- */
-function lettersFromCells(cells: TsCell[], intervals: PhonemeInterval[]): Letter[] {
-    // One letter per sourceLetterIndex, in cell (reading) order; remember each
-    // letter's ordinal so phoneme ownership can pick a single winner.
-    const out: Letter[] = [];
-    const ordOf = new Map<number, number>();
-    let curLi = -1;
-    let cur: Letter | null = null;
-    for (const c of cells) {
-        const li = c.sourceLetterIndex;
-        if (li < 0) continue; // implicit cell — carries no orthographic letter
-        if (li !== curLi || !cur) {
-            cur = { char: c.chars, start: null, end: null, silent: true };
-            ordOf.set(li, out.length);
-            out.push(cur);
-            curLi = li;
-        } else if (!cur.char && c.chars) {
-            cur.char = c.chars;
-        }
-    }
-
-    // Assign each phoneme to a single owning letter. A `madd` carrier owns the
-    // long vowel it shares with the preceding consonant's `haraka`; otherwise the
-    // first claimant wins (no real contention).
-    const ownerOrd = new Map<number, number>();
-    const ownerIsMadd = new Map<number, boolean>();
-    for (const c of cells) {
-        const li = c.sourceLetterIndex;
-        if (li < 0) continue;
-        const ord = ordOf.get(li);
-        if (ord === undefined) continue;
-        const isMadd = c.role === 'madd';
-        for (const pi of c.phonemeIndices) {
-            if (!ownerOrd.has(pi) || (isMadd && !ownerIsMadd.get(pi))) {
-                ownerOrd.set(pi, ord);
-                ownerIsMadd.set(pi, isMadd);
-            }
-        }
-    }
-
-    for (const [pi, ord] of ownerOrd) {
-        const iv = intervals[pi];
-        const lt = out[ord];
-        if (!iv || !lt) continue;
-        lt.silent = false;
-        if (lt.start === null || iv.start < lt.start) lt.start = iv.start;
-        if (lt.end === null || iv.end > lt.end) lt.end = iv.end;
-    }
-    return out;
-}
-
-/**
- * Core assembler shared by {@link assembleOccasion} (one member) and
- * {@link assembleWaslGroup} (a chain). Flattens every word across all member
- * occasions' segments in audio order; each word's `location` uses ITS OWN
- * member's ref, and the `share_group` base runs across the WHOLE list so co-light
- * ids stay unique across segments and verses. `verseRef` labels the result
- * (`verse_ref` + chapter); the by_surah 0-anchor + clip span cover all members,
- * so the merged times are relative to the group start (consumers in group mode
- * key off the group offset, not the focus verse's).
- */
-function assembleMembers(
-    reciter: string,
-    members: ChapterOccasion[],
-    verseRef: string,
-    qpc: Record<string, { text?: string }>,
-    dk: Record<string, { text?: string }>,
-    reciterAudio: TsReciterAudio,
-    chapterAudioUrl: string,
-): TsVerseData {
-    const chapter = parseInt(verseRef.split(':')[0] ?? '0', 10);
-
-    // Every recited word across all members' segments, in audio order (no dedup
-    // — repeats/lookbacks stay seekable). `cells[].share_group` ids are numbered
-    // per source SEGMENT (each restarts at 0), so offset each segment's ids by a
-    // running base to keep them unique across every segment AND member verse —
-    // else a consumer keying co-light by id would merge unrelated groups.
-    // `wordRefs[i]` is the owning verse ref of word `wordsRaw[i]` (its location).
-    const wordsRaw: SegmentEntry['words'] = [];
-    const wordRefs: string[] = [];
-    const sgOffsets: number[] = [];
-    let sgBase = 0;
-    for (const member of members) {
-        for (const seg of member.segments) {
-            let maxSg = -1;
-            for (const w of seg.words) {
-                wordsRaw.push(w);
-                wordRefs.push(member.ref);
-                sgOffsets.push(sgBase);
-                for (const c of w[5] ?? []) {
-                    const sg = c[6];
-                    if (sg != null && sg > maxSg) maxSg = sg;
-                }
-            }
-            sgBase += maxSg + 1;
-        }
-    }
-
-    const intervals: PhonemeInterval[] = [];
-    const wordsOut: TsWord[] = [];
-
-    for (let wi = 0; wi < wordsRaw.length; wi++) {
-        const w = wordsRaw[wi]!;
-        // Per-segment base so cross-segment share_group ids don't collide.
-        const sgOffset = sgOffsets[wi] ?? 0;
-        const memberRef = wordRefs[wi] ?? verseRef;
-        const wordIdx = w[0];
-        const wStart = w[1] / 1000;
-        const wEnd = w[2] / 1000;
-        const lettersRaw = (w[3] ?? []) as Array<[string, number | null, number | null, boolean?]>;
-        const phonesRaw = (w[4] ?? []) as Array<(string | number | boolean)[]>;
-
-        const location = `${memberRef}:${wordIdx}`;
-        const text = qpc[location]?.text ?? '';
-        const displayText = dk[location]?.text ?? text;
-
-        const rawLetters: Letter[] = lettersRaw.map((lt) => ({
-            char: lt[0],
-            start: lt[1] === null ? null : lt[1] / 1000,
-            end: lt[2] === null ? null : lt[2] / 1000,
-            silent: lt[3] === true,
-        }));
-
-        const phoneStartIdx = intervals.length;
-        for (const ph of phonesRaw) {
-            const interval: PhonemeInterval = {
-                phone: ph[0] as string,
-                start: (ph[1] as number) / 1000,
-                end: (ph[2] as number) / 1000,
-            };
-            if (ph[3] === true) interval.geminate_start = true;
-            if (ph[4] === true) interval.geminate_end = true;
-            if (ph[5]) interval.bridge = ph[5] as string;
-            intervals.push(interval);
-        }
-        const phonemeIndices = Array.from(
-            { length: intervals.length - phoneStartIdx },
-            (_, i) => phoneStartIdx + i,
-        );
-
-        // Verse-flat indices of this word's INDEXABLE phones (render-only markers
-        // excluded) — maps a cell's word-local indexable index to the flat list.
-        const indexableFlat: number[] = [];
-        for (let i = 0; i < phonesRaw.length; i++) {
-            const p = phonesRaw[i]?.[0] as string | undefined;
-            if (p && !RENDER_ONLY_PHONES.has(p)) indexableFlat.push(phoneStartIdx + i);
-        }
-        // All cells flow through unchanged — including `base` cells (the ordered
-        // anchors the letter row groups on). Read each row by name (parseShardCell)
-        // then map its word-local indexable indices to the verse-flat list; the
-        // share_group carries the per-segment offset so cross-segment ids don't collide.
-        const cells: TsCell[] = (w[5] ?? []).map((row) => {
-            const c = parseShardCell(row);
-            const mapped: number[] = [];
-            for (const k of c.phonemeIndices) {
-                const flat = indexableFlat[k];
-                if (flat !== undefined) mapped.push(flat);
-            }
-            return {
-                ...c,
-                phonemeIndices: mapped,
-                shareGroup: c.shareGroup == null ? null : c.shareGroup + sgOffset,
-            };
-        });
-
-        // Prefer the shard's raw `letters`; fall back to cell-derived timing when
-        // a re-stamped shard left the slot empty (cells own the per-letter facts).
-        const letters = rawLetters.length > 0 || cells.length === 0
-            ? rawLetters
-            : lettersFromCells(cells, intervals);
-
-        wordsOut.push({
-            location, text, display_text: displayText,
-            start: wStart, end: wEnd, phoneme_indices: phonemeIndices, letters, cells,
-        });
-    }
-
-    // Audio URL — canonical per-chapter link resolved by the caller from
-    // `/api/audio/surahs` (the audio-manifest sidecar), never a template.
-    const audioUrl = chapterAudioUrl;
-
-    // The TsVerseData type expects the long form ("by_*_audio") — the manifest
-    // carries the short form. Map here.
-    const audioCategory: 'by_ayah_audio' | 'by_surah_audio' =
-        reciterAudio.audio_category === 'by_surah' ? 'by_surah_audio' : 'by_ayah_audio';
-
-    // Span: the contiguous `[start, end]` covering every member's segments,
-    // words and letters (a word/letter can bleed a few ms past its segment `t`).
-    const firstSeg = members[0]?.segments[0];
-    let spanStart = firstSeg?.t[0] ?? 0;
-    let spanEnd = firstSeg?.t[1] ?? 0;
-    for (const member of members) {
-        for (const seg of member.segments) {
-            if (seg.t[0] < spanStart) spanStart = seg.t[0];
-            if (seg.t[1] > spanEnd) spanEnd = seg.t[1];
-            for (const w of seg.words) {
-                if (w[1] < spanStart) spanStart = w[1];
-                if (w[2] > spanEnd) spanEnd = w[2];
-                for (const lt of w[3] ?? []) {
-                    if (lt[1] != null && lt[1] < spanStart) spanStart = lt[1];
-                    if (lt[2] != null && lt[2] > spanEnd) spanEnd = lt[2];
-                }
-            }
-        }
-    }
-
-    let timeStartMs = 0;
-    let timeEndMs = 0;
-
-    if (audioCategory === 'by_surah_audio') {
-        timeStartMs = spanStart;
-        timeEndMs = spanEnd;
-        const offsetSec = timeStartMs / 1000;
-        for (const wo of wordsOut) {
-            wo.start -= offsetSec;
-            wo.end -= offsetSec;
-            for (const lt of wo.letters) {
-                if (lt.start !== null) lt.start -= offsetSec;
-                if (lt.end !== null) lt.end -= offsetSec;
-            }
-        }
-        for (const iv of intervals) {
-            iv.start -= offsetSec;
-            iv.end -= offsetSec;
-        }
-    } else {
-        // by_ayah: per-verse file, words already 0-anchored; the clip end is the
-        // occasion span end (may include trailing silence past the last word).
-        timeEndMs = spanEnd;
-    }
-
-    return {
+    return assembleNative({
         reciter,
-        chapter,
-        verse_ref: verseRef,
-        audio_url: audioUrl,
-        audio_category: audioCategory,
-        time_start_ms: timeStartMs,
-        time_end_ms: timeEndMs,
-        intervals,
-        words: wordsOut,
-    };
-}
-
-/** Distinct verse refs in a chapter, in recitation order (a verse appears once
- *  even when it recurs across multiple occasions). */
-export function chapterVerseRefs(shard: TsShardResponse): string[] {
-    const seen = new Set<string>();
-    const refs: string[] = [];
-    for (const o of shardOccasions(shard)) {
-        if (!seen.has(o.ref)) {
-            seen.add(o.ref);
-            refs.push(o.ref);
-        }
-    }
-    return refs;
+        members,
+        verseRef,
+        qpc,
+        dk,
+        audioCategory: reciterAudio.audio_category,
+        audioUrl: chapterAudioUrl,
+    });
 }
 
 // ---------------------------------------------------------------------------

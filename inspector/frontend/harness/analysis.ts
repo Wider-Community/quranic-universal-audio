@@ -1,6 +1,6 @@
 /**
  * Analysis-view render harness (dev / screenshot tool). Mounts the REAL
- * `UnifiedDisplay` for one reciter:verse straight from shards via the REAL
+ * `TimedAnalysisRow` for one reciter:verse straight from shards via the real
  * `ts-source` assembly — no SPA, no audio, no waveform, no progress-bar math.
  *
  * Driven by URL params: `?reciter=<slug>&ref=45:32[&words=1-3]`. `/api` is
@@ -13,6 +13,8 @@
  */
 import '../src/styles/tokens.css';
 import '../src/styles/base.css';
+import '@quranic-phonemizer/cells/cells.css';
+import '../src/styles/highlight-constants.css';
 import '../src/styles/timestamps.css';
 
 import { mount } from 'svelte';
@@ -28,10 +30,11 @@ import {
     shardOccasions,
 } from '../src/lib/recitation-data/ts-source';
 import { waslGroupOf } from '../src/lib/recitation-data/wasl';
-import UnifiedDisplay from '../src/tabs/timestamps/components/UnifiedDisplay.svelte';
+import TimedAnalysisRow from '../src/tabs/timestamps/components/TimedAnalysisRow.svelte';
 import { showLetters, showPhonemes } from '../src/tabs/timestamps/stores/display';
 import { setRuleEnabled } from '../src/tabs/timestamps/stores/tajweed-settings';
-import { loadedVerse } from '../src/tabs/timestamps/stores/verse';
+import { focusWaslGroup, loadedVerse } from '../src/tabs/timestamps/stores/verse';
+import type { TsFocusWaslGroup } from '../src/tabs/timestamps/stores/verse';
 import { LEGEND_KEYS } from '../src/tabs/timestamps/utils/tajweed-rules';
 
 async function render(): Promise<void> {
@@ -53,25 +56,20 @@ async function render(): Promise<void> {
 
     // Find the occasion for `ref` (first occurrence). `&wasl=1` renders the
     // cross-verse waṣl GROUP it belongs to (context-merge) instead of the lone
-    // verse — the exact merged data `assembleWaslGroup` feeds `UnifiedDisplay`,
+    // verse — the exact merged data `assembleWaslGroup` feeds `TimedAnalysisRow`,
     // so the junction-idgham synthesis is screenshotted on real shard data.
     const occasions = shardOccasions(shard);
     const focusIdx = occasions.findIndex((o) => o.ref === ref);
     if (focusIdx < 0) throw new Error(`no verse ${ref} in ${reciter} chapter ${chapter}`);
     let data;
+    let group: TsFocusWaslGroup | null = null;
     if (p.get('wasl') === '1') {
         const g = waslGroupOf(occasions, focusIdx);
         const members = occasions.slice(g.fromIdx, g.toIdx + 1);
         data = assembleWaslGroup(reciter, members, ref, qpc, dk, reciterAudio, '');
+        group = { data, span: [g.startMs, g.endMs] as [number, number], refs: g.refs, focusRef: ref };
     } else {
         data = assembleOccasion(reciter, occasions[focusIdx]!, qpc, dk, reciterAudio, '');
-    }
-
-    // Optional narrow word range (1-based, inclusive): `&words=1-3` or `&words=2`.
-    const range = p.get('words');
-    if (range) {
-        const [a, b] = range.split('-').map((n) => parseInt(n, 10));
-        data.words = data.words.slice(a - 1, (Number.isNaN(b) ? a : b));
     }
 
     // Both tiers ON by default (the phoneme row defaults OFF in the app) — the
@@ -85,7 +83,8 @@ async function render(): Promise<void> {
     if (p.get('alltj') === '1') for (const k of LEGEND_KEYS) setRuleEnabled(k, true);
 
     loadedVerse.set({ data, tsSegOffset: 0, tsSegEnd: Number.MAX_SAFE_INTEGER });
-    mount(UnifiedDisplay, { target: document.getElementById('app')! });
+    focusWaslGroup.set(group);
+    mount(TimedAnalysisRow, { target: document.getElementById('app')! });
 
     // Let web fonts + recomputeRowGap (ResizeObserver) settle before flagging ready.
     await (document as unknown as { fonts?: { ready: Promise<unknown> } }).fonts?.ready;

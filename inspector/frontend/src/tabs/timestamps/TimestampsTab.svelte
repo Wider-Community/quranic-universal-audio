@@ -56,7 +56,7 @@
     import { exitReportMode, reportContext, reportModeActive } from './stores/report-mode';
     import { loadVerseReports } from './stores/ts-reports';
     import TsValidationPanel from './components/TsValidationPanel.svelte';
-    import UnifiedDisplay from './components/UnifiedDisplay.svelte';
+    import TimedAnalysisRow from './components/TimedAnalysisRow.svelte';
     import {
         assembleOccasion,
         assembleWaslGroup,
@@ -111,7 +111,7 @@
     const SHUFFLE_END_GUARD_MS = 40;
 
     // ---- Component refs ----
-    let unifiedEl: UnifiedDisplay;
+    let unifiedEl: TimedAnalysisRow;
     let waveformTabEl: TimestampsWaveform;
 
     // ---- Chapter focus data ----
@@ -122,7 +122,7 @@
         startMs: number;
         endMs: number;
         lv: TsLoadedVerse;
-        /** The raw occasion (carries `bridgesOutTo` + segments) for waṣl grouping. */
+        /** The raw occasion carries native connected-reading adjacency. */
         occ: ChapterOccasion;
         /** The cross-verse waṣl group this occasion belongs to (by_surah only),
          *  precomputed at chapter load; null/undefined when standalone. */
@@ -444,7 +444,7 @@
      *  `TsVerseData` is built once per group and shared across its members (only
      *  the focus ref differs); a standalone occasion gets no `waslGroup`. Group
      *  members stay adjacent after the start-ms sort (a waṣl is gapless), so the
-     *  walk over the sorted raw occasions matches `bridgesOutTo` adjacency. */
+     *  walk over the sorted raw occasions matches native waṣl adjacency. */
     function attachWaslGroups(
         occasions: ChapOccasion[],
         reciter: string,
@@ -565,7 +565,7 @@
         if (loop && loopAnchor) {
             // The loop target's start/end are relative to the DISPLAY base — the
             // waṣl group start when the anchor is a group member, else its own
-            // occasion start (matches UnifiedDisplay's `displayOffsetSec`).
+            // occasion start (matches TimedAnalysisRow's display offset).
             const offsetSec = (loopAnchor.waslGroup ? loopAnchor.waslGroup.span[0] : loopAnchor.startMs) / 1000;
             const startAbs = (loop.startSec + offsetSec) * 1000;
             const endAbs = (loop.endSec + offsetSec) * 1000;
@@ -1138,7 +1138,7 @@
             {:else}
                 <TimestampsWaveform bind:this={waveformTabEl} />
             {/if}
-            <UnifiedDisplay bind:this={unifiedEl} />
+            <TimedAnalysisRow bind:this={unifiedEl} />
         </div>
     </main>
 </div>

@@ -70,7 +70,7 @@ def bench_reads(b: BucketBackend, n_warm: int = 5) -> None:
         (f"reciters/{SLUG}/segments.json", "read_json", "reciter-md"),
         (f"reciters/{SLUG}/detailed.json", "read_bytes", "reciter-big"),
         (f"reciters/{SLUG}/edit_history.jsonl", "iter_jsonl", "history"),
-        (f"reciters/{SLUG}/timestamps/1.json", "read_bytes", "ts-chapter"),
+        (f"reciters/{SLUG}/timestamps/1.json.br", "read_bytes", "ts-chapter"),
     ]
 
     for path, op, tag in targets:

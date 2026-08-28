@@ -8,6 +8,10 @@ comes from the audio manifest's chapter map).
 
 from __future__ import annotations
 
+import sys
+import types
+
+from qua_jobs import publish_hf
 from qua_jobs.publish_hf import (
     _detailed_by_ref,
     _rebase_row_multi,
@@ -19,6 +23,49 @@ from qua_jobs.publish_hf import (
 from qua_shared.dataset_validation import fatal_violations, validate_dataset
 
 _SURAH_INFO = {"1": {"verses": [{"verse": 1, "num_words": 4}, {"verse": 2, "num_words": 3}]}}
+
+
+def test_hf_push_preserves_slug_config_and_train_split(monkeypatch):
+    pushed = {}
+
+    class FakeDataset:
+        @classmethod
+        def from_dict(cls, data, features):
+            return cls()
+
+        def push_to_hub(self, repo_id, **kwargs):
+            pushed.update(repo_id=repo_id, **kwargs)
+
+    datasets = types.SimpleNamespace(
+        Audio=lambda: object(),
+        Dataset=FakeDataset,
+        Features=lambda value: value,
+        Sequence=lambda value: value,
+        Value=lambda value: value,
+    )
+    api = types.SimpleNamespace(
+        create_repo=lambda **kwargs: None,
+        repo_info=lambda **kwargs: types.SimpleNamespace(sha="revision"),
+    )
+    hub = types.SimpleNamespace(HfApi=lambda token=None: api)
+    monkeypatch.setitem(sys.modules, "datasets", datasets)
+    monkeypatch.setitem(sys.modules, "huggingface_hub", hub)
+    monkeypatch.setattr(publish_hf, "_resolve_dataset_repo_id", lambda: "owner/dataset")
+    row = {
+        "surah": 1,
+        "ayah": 1,
+        "duration_ms": 10,
+        "text_uthmani": "x",
+        "segments": [],
+        "word_timestamps": [],
+        "letter_timestamps": [],
+        "source_url": "https://example.test/1.mp3",
+        "clip_start": 0,
+    }
+
+    assert publish_hf._push_to_hf("reciter_slug", "hafs_an_asim", [row], [b"mp3"]) == "revision"
+    assert pushed["config_name"] == "reciter_slug"
+    assert pushed["split"] == "train"
 
 
 def test_seg_word_range_single_ayah():

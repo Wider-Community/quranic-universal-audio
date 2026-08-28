@@ -3,11 +3,12 @@
 
 Runs MFA forced-alignment inside the job (strategy A — stock conda base +
 MFA stack pulled from a mounted private bucket), reading the reciter's
-``detailed.json`` from the mounted inspector bucket and writing temporal
-segment-array per-chapter shards to
-``<mount>/reciters/<slug>/timestamps/<chapter>.json.gz`` (the read-path
-layout). Blocks before alignment if any segment carries a compound
-cross-verse ``matched_ref`` (segment shards require single-verse refs).
+``detailed.json`` from the mounted inspector bucket and writing native v12
+per-chapter readings plus timing sidecars to
+``<mount>/reciters/<slug>/timestamps/<chapter>.json.br`` (the read-path
+layout). Blocks before alignment if one source occurrence carries a compound
+cross-verse ``matched_ref``; connected single-verse occurrences remain joined
+by their wasl relationship in one native reading.
 
 Alignment-only: the job never persists audio nor bakes peaks. Chapter audio
 and waveform peaks are populated offline (katana extraction → bucket); a
@@ -69,6 +70,7 @@ from qua_shared.timestamps_pipeline import (  # noqa: E402
 )
 
 log = logging.getLogger("generate_timestamps")
+EXPECTED_PHONEMIZER_VERSION = "2.15.3"
 
 
 def _beams(raw: str) -> list[int]:
@@ -83,10 +85,8 @@ def _now_iso() -> str:
 def _find_cross_verse_segments(doc: dict) -> list[tuple[str, str]]:
     """Return ``(chapter_ref, matched_ref)`` for every compound cross-verse seg.
 
-    The segment-array shard contract requires single-verse refs; cross-verse
-    segments cannot be reshaped losslessly. Editing strips cross-verse, so a
-    clean reciter yields none — but the job blocks rather than write a shard
-    the read path can't serve.
+    One raw timing occurrence must address one verse. Cross-verse wasl is
+    represented by adjacent occurrences, not one compound occurrence.
     """
     offenders: list[tuple[str, str]] = []
     for entry in doc.get("entries", []):
@@ -233,12 +233,20 @@ def main() -> int:
 
     import qua_sdk
 
+    phonemizer_version = importlib.metadata.version("quranic-phonemizer")
+    if phonemizer_version != EXPECTED_PHONEMIZER_VERSION:
+        log.error(
+            "quranic-phonemizer %s required; found %s",
+            EXPECTED_PHONEMIZER_VERSION,
+            phonemizer_version,
+        )
+        return 3
     log.info(
         "mfa runtime: model=%s dictionary=%s qua_sdk=%s quranic-phonemizer=%s",
         model_path,
         dictionary_path,
         qua_sdk.__version__,
-        importlib.metadata.version("quranic-phonemizer"),
+        phonemizer_version,
     )
 
     beams = _beams(os.environ.get("BEAMS", "50"))
@@ -289,9 +297,9 @@ def main() -> int:
     # still goes to the real reciter dir in the bucket.
     doc = json.loads(detailed.read_text(encoding="utf-8"))
 
-    # Block before any alignment work: the segment-array shards require
-    # single-verse refs, so a compound cross-verse matched_ref can't be
-    # reshaped losslessly. Record the failure + notify so the offending segs
+    # Block before alignment: one timing occurrence must address one verse;
+    # cross-verse wasl is a relationship between adjacent occurrences. Record
+    # the failure + notify so the offending segs
     # surface in the Reviews tab.
     offenders = _find_cross_verse_segments(doc)
     if offenders:
@@ -345,7 +353,7 @@ def main() -> int:
     # even in pool mode: its eager KalpyEngine warm-up imports kalpy/MFA and
     # extracts the model pre-fork, which the forked pool workers inherit —
     # without it all workers deadlock importing kalpy inside fork children
-    # while parent download threads are live. process() writes segment-array
+    # while parent download threads are live. process() writes native v12
     # shards into reciter_dir/timestamps/.
     try:
         backend = LocalMfaBackend(model_path, dictionary_path)

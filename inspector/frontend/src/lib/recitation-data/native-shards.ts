@@ -1,0 +1,135 @@
+/** Native v12 shard indexing and timing-view assembly. */
+
+import type {
+    Letter,
+    PhonemeInterval,
+    TsShardReading,
+    TsShardResponse,
+    TsVerseData,
+    TsWord,
+} from '../types/ts-client';
+import { type ChapterOccasion, chapterOccasions } from './occasions';
+
+const occasionsByShard = new WeakMap<TsShardResponse, ChapterOccasion[]>();
+
+export function shardOccasions(shard: TsShardResponse): ChapterOccasion[] {
+    let occasions = occasionsByShard.get(shard);
+    if (!occasions) {
+        occasions = chapterOccasions(shard.readings);
+        occasionsByShard.set(shard, occasions);
+    }
+    return occasions;
+}
+
+interface AssembleOptions {
+    reciter: string;
+    members: ChapterOccasion[];
+    verseRef: string;
+    qpc: Record<string, { text?: string }>;
+    dk: Record<string, { text?: string }>;
+    audioCategory: 'by_surah' | 'by_ayah';
+    audioUrl: string;
+}
+
+const uniqueReadings = (members: ChapterOccasion[]): TsShardReading[] => [
+    ...new Set(members.flatMap((member) => member.readings.map((one) => one.reading))),
+];
+
+function selectedWords(members: ChapterOccasion[]): Map<TsShardReading, Set<number>> {
+    const selected = new Map<TsShardReading, Set<number>>();
+    for (const member of members) {
+        for (const entry of member.readings) {
+            const ids = selected.get(entry.reading) ?? new Set<number>();
+            entry.parts.flatMap((part) => part.word_ids).forEach((id) => ids.add(id));
+            selected.set(entry.reading, ids);
+        }
+    }
+    return selected;
+}
+
+function lettersOf(reading: TsShardReading, wordId: number, offset: number): Letter[] {
+    return reading.letters
+        .filter((unit) => unit.word_id === wordId)
+        .map((unit) => {
+            const start = unit.start_ms == null ? null : unit.start_ms / 1000 - offset;
+            const end = unit.end_ms == null ? null : unit.end_ms / 1000 - offset;
+            return {
+                char: unit.text,
+                start,
+                end,
+                silent: unit.silent,
+            };
+        });
+}
+
+function buildTimedRows(
+    readings: TsShardReading[],
+    selected: Map<TsShardReading, Set<number>>,
+    qpc: AssembleOptions['qpc'],
+    dk: AssembleOptions['dk'],
+    offset: number,
+): { intervals: PhonemeInterval[]; words: TsWord[] } {
+    const intervals: PhonemeInterval[] = [];
+    const words: TsWord[] = [];
+    for (const reading of readings) {
+        const wordTiming = new Map(reading.timing.words.map((row) => [row.word_id, row]));
+        const soundTiming = new Map(reading.timing.sounds.map((row) => [row.sound_id, row]));
+        for (const word of reading.wire.analysis.result.words) {
+            if (!selected.get(reading)?.has(word.id)) continue;
+            const timed = wordTiming.get(word.id);
+            if (!timed) throw new Error(`${reading.id}: missing word timing ${word.id}`);
+            const phonemeIndices: number[] = [];
+            for (const soundId of word.sound_ids) {
+                const sound = reading.wire.analysis.result.sounds.find((one) => one.id === soundId);
+                const span = soundTiming.get(soundId);
+                if (!sound || !span) throw new Error(`${reading.id}: missing sound ${soundId}`);
+                phonemeIndices.push(intervals.length);
+                intervals.push({
+                    phone: sound.token,
+                    start: span.start_ms / 1000 - offset,
+                    end: span.end_ms / 1000 - offset,
+                });
+            }
+            words.push({
+                location: word.ref,
+                text: qpc[word.ref]?.text ?? word.text,
+                display_text: dk[word.ref]?.text ?? qpc[word.ref]?.text ?? word.text,
+                start: timed.start_ms / 1000 - offset,
+                end: timed.end_ms / 1000 - offset,
+                phoneme_indices: phonemeIndices,
+                letters: lettersOf(reading, word.id, offset),
+            });
+        }
+    }
+    return { intervals, words };
+}
+
+export function assembleNative(options: AssembleOptions): TsVerseData {
+    const readings = uniqueReadings(options.members);
+    const parts = options.members.flatMap((member) => member.parts);
+    const startMs = Math.min(...parts.map((part) => part.t[0]));
+    const endMs = Math.max(...parts.map((part) => part.t[1]));
+    const offset = options.audioCategory === 'by_surah' ? startMs / 1000 : 0;
+    const timed = buildTimedRows(
+        readings,
+        selectedWords(options.members),
+        options.qpc,
+        options.dk,
+        offset,
+    );
+    return {
+        reciter: options.reciter,
+        chapter: Number(options.verseRef.split(':')[0]),
+        verse_ref: options.verseRef,
+        audio_url: options.audioUrl,
+        audio_category: options.audioCategory === 'by_surah' ? 'by_surah_audio' : 'by_ayah_audio',
+        time_start_ms: options.audioCategory === 'by_surah' ? startMs : 0,
+        time_end_ms: endMs,
+        ...timed,
+        native: readings,
+    };
+}
+
+export function chapterVerseRefs(shard: TsShardResponse): string[] {
+    return [...new Set(shardOccasions(shard).map((occasion) => occasion.ref))];
+}

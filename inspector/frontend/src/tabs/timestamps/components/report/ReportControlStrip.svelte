@@ -43,12 +43,13 @@
     }
 
     function cellLabel(a: StagedAnnotation): string {
-        const w = (a.target.word_index ?? 0) + 1;
-        if (a.target.kind === 'gap') return m.ts_report_strip_gap_pause_label({ w });
+        const wordIndex = 'wordIndex' in a ? a.wordIndex : a.gapWordIndex;
+        const w = Math.max(0, wordIndex) + 1;
+        if (a.target.kind === 'boundary') return m.ts_report_strip_gap_pause_label({ w });
         if (a.target.kind === 'word') return m.ts_report_strip_word_label({ w });
         return m.ts_report_strip_cell_label({
             w,
-            cell: a.target.cell_index ?? a.target.source_letter_index ?? '?',
+            cell: a.target.target_id,
         });
     }
 
@@ -68,7 +69,7 @@
     });
     function chipLabel(a: StagedPhoneme): string {
         if (a.glyph) return a.glyph;
-        return (a.target.phoneme_flat_index ?? -1) < 0 ? 'merger' : '•';
+        return a.target.kind === 'bridge' ? 'merger' : '•';
     }
     // Attribute/text labels gated on i18n.locale so they re-render on a locale switch.
     const groupAriaLabel = $derived((i18n.locale, m.ts_report_strip_group_aria_label()));

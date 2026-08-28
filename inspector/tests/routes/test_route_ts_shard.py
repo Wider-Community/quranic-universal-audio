@@ -10,7 +10,7 @@ def test_ts_shard_passes_bytes_through_with_no_store(flask_client, monkeypatch):
     (the long max-age this replaced silently pinned pre-re-stamp cells)."""
     from routes.timestamps import timestamps as ts_routes
 
-    body = b"\x1f\x8b\x08gzipped-shard-bytes"
+    body = b"brotli-shard-bytes"
     monkeypatch.setattr(ts_routes.ts_serve, "shard_bytes", lambda *a, **k: body)
 
     res = flask_client.get("/api/ts/shard/reciter_a/2")
@@ -18,6 +18,8 @@ def test_ts_shard_passes_bytes_through_with_no_store(flask_client, monkeypatch):
     assert res.status_code == 200
     assert res.data == body
     assert res.headers["Cache-Control"] == "no-store"
+    assert res.headers["Content-Encoding"] == "br"
+    assert res.mimetype == "application/json"
 
 
 def test_ts_shard_missing_is_404(flask_client, monkeypatch):

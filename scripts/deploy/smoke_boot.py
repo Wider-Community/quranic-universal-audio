@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -137,7 +138,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"ERROR: no Dockerfile at {dockerfile}", file=sys.stderr)
             return 2
         print(f"==> Building {args.tag} from {context}")
-        _run(["docker", "build", "-f", str(dockerfile), "-t", args.tag, str(context)])
+        build = ["docker", "build"]
+        if os.environ.get("CELLS_DEPLOY_KEY"):
+            build.extend(["--secret", "id=CELLS_DEPLOY_KEY,env=CELLS_DEPLOY_KEY"])
+        _run([*build, "-f", str(dockerfile), "-t", args.tag, str(context)])
 
     print("==> Preparing offline fixtures")
     fixtures = _writable_fixtures()

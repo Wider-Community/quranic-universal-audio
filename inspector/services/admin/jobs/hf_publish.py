@@ -1,7 +1,7 @@
 """HF dataset publish kind — per-recitation push.
 
 Launches an HF Job that runs ``qua_jobs/publish_hf.py``. The job reads
-the recitation's bucket artifacts (detailed.json, timestamps/*.json.gz,
+the recitation's bucket artifacts (detailed.json, timestamps/*.json.br,
 audio/*.mp3 via Xing-master stream-copy slicing) and pushes a parquet split
 to the public HF dataset.
 

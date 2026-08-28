@@ -2,23 +2,14 @@ import { render } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-    assembleOccasion,
-    shardOccasions,
-    type TsReciterAudio,
-} from '../../recitation-data/ts-source';
-import shard102 from '../../recitation-data/__tests__/fixtures/nasser_al_qatami_mp3quran_102.shard.json';
-import type { TsShardResponse } from '../../types/ts-client';
 import AyahFilmstrip from '../AyahFilmstrip.svelte';
-import { buildChapterRecitation, type AssembledVerse } from '../chapter-words';
 import { DEFAULT_RECITATION_CONFIG } from '../config';
 import { buildFilmstripModel } from '../filmstrip-model';
 import type { AnimUnit, TimeSpan } from '../types';
 
 /**
  * Per-frame smoothness guard for the ayah-filmstrip motion fixes, driven against
- * the REAL nasser_al_qatami chapter-102 units (with multi-verse re-takes), a
- * synthetic uneven multi-verse loopback, and a synthetic floored-cell fixture:
+ * synthetic multi-verse re-takes, an uneven loopback, and a floored-cell fixture:
  *
  *   1. FILL FROM CURSOR — the lit fill bar's leading edge sits under the center
  *      needle every non-silent frame (|fillEdge − cursorOffset| ≤ EPS_PX), incl.
@@ -32,10 +23,6 @@ import type { AnimUnit, TimeSpan } from '../types';
  *   4. SNAP MODE — unchanged: no continuous-fill divergence, active cell centers
  *      on ayah change.
  */
-
-const RECITER = 'nasser_al_qatami_mp3quran';
-const RECITER_AUDIO: TsReciterAudio = { audio_category: 'by_surah' };
-const EMPTY: Record<string, { text?: string }> = {};
 
 const PX_PER_SEC = DEFAULT_RECITATION_CONFIG.filmstripPxPerSec; // 12
 const MIN_PX = DEFAULT_RECITATION_CONFIG.filmstripMinCellPx; // 18
@@ -55,13 +42,17 @@ function unit(loc: string, ivs: Array<[number, number]>): AnimUnit {
     };
 }
 
-function buildNasserUnits(): AnimUnit[] {
-    const shard = shard102 as unknown as TsShardResponse;
-    const occasions: AssembledVerse[] = shardOccasions(shard).map((occ) => ({
-        verseRef: occ.ref,
-        data: assembleOccasion(RECITER, occ, EMPTY, EMPTY, RECITER_AUDIO, ''),
-    }));
-    return buildChapterRecitation(RECITER, 102, occasions).units;
+function complexUnits(): AnimUnit[] {
+    return [
+        unit('1:1:1', [[0, 2], [10, 11]]),
+        unit('1:2:1', [[2, 4], [11.5, 12.5]]),
+        unit('1:3:1', [[4, 6], [13, 14]]),
+        unit('1:4:1', [[6, 7], [7.5, 8], [14.5, 15.5]]),
+        unit('1:5:1', [[15.5, 16.5]]),
+        unit('1:6:1', [[16.5, 18], [21.5, 22.5]]),
+        unit('1:7:1', [[18, 20], [23, 24], [25.5, 26]]),
+        unit('1:8:1', [[20, 21], [24, 25]]),
+    ];
 }
 
 // Re-derive the same cell geometry the component derives (matches `cells` in
@@ -195,7 +186,7 @@ describe('AyahFilmstrip smoothness (per-frame)', () => {
     }
 
     it('keeps the fill bar leading edge under the cursor every non-silent frame', async () => {
-        const { frames, cells } = await traceChapter(buildNasserUnits(), 'hybrid');
+        const { frames, cells } = await traceChapter(complexUnits(), 'hybrid');
         const byAyah = new Map(cells.map((c) => [c.ayah, c]));
         let worst = 0;
         let worstT = -1;
@@ -244,7 +235,7 @@ describe('AyahFilmstrip smoothness (per-frame)', () => {
     });
 
     it('keeps each looped-back verse cursor inside its OWN cell (conforms per verse)', async () => {
-        const { frames, cells } = await traceChapter(buildNasserUnits(), 'hybrid');
+        const { frames, cells } = await traceChapter(complexUnits(), 'hybrid');
         const byAyah = new Map(cells.map((c) => [c.ayah, c]));
         // Group non-silent frames into runs (one contiguous stretch on one active
         // cell). A run is a REPLAY when that ayah was already active in an earlier
@@ -320,7 +311,7 @@ describe('AyahFilmstrip smoothness (per-frame)', () => {
     });
 
     it('scrolls a greyed needle through every inter-take silence, holds within-verse', async () => {
-        const { frames } = await traceChapter(buildNasserUnits(), 'hybrid');
+        const { frames } = await traceChapter(complexUnits(), 'hybrid');
         // Group consecutive silent frames into runs (ignore single-frame blips).
         let i = 0;
         let between = 0;
@@ -382,7 +373,7 @@ describe('AyahFilmstrip smoothness (per-frame)', () => {
     });
 
     it('snap mode centers the active cell on ayah change with no continuous-fill divergence', async () => {
-        const { frames, cells } = await traceChapter(buildNasserUnits(), 'snap');
+        const { frames, cells } = await traceChapter(complexUnits(), 'snap');
         const byAyah = new Map(cells.map((c) => [c.ayah, c]));
         // Snap has no needle, so there is no cursor-vs-fill alignment to hold — the
         // fill follows the recited word fraction. The guard here is that the active
