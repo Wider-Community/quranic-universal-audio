@@ -106,6 +106,18 @@ Deferred decision. Scope of the audit:
      with the specific widx range when partially recited (the gate drops the verse either way;
      the shard distinguishes). Source of truth = the same `select_complete_verses` +
      `missing_coverage` pass the cut already runs — no new detection.
+- **Reconciliation / no double counting.** The same verse commonly earns the same finding from
+  several sources at once (publish-gate auto-promotion + a manual TS-tab or seg-flag report).
+  Issues therefore have a **canonical identity key independent of source**:
+  `(recitation, type, ayah)` (+ merged word detail for `missing_word_audio`). All promotion
+  paths **upsert on that key**: an existing open issue absorbs the new source — `source`
+  becomes a list, comments append, word ranges union — never a second row. The stable issue
+  `id` survives merges, so the webhook delivers an *update* of the same id and QUL's upsert
+  can't double count either. Re-runs of the publish gate are no-ops against an existing open
+  issue; a *resolved* issue whose condition is found again **reopens the same id** (it was
+  never actually fixed) rather than minting a new one. Distinct types on one verse (e.g.
+  `missing_word_audio` + `mispronunciation`) stay distinct issues — semantically different
+  findings, not duplicates.
 - **Resolution**:
   - Detectable: after a resegment request's re-ingest + re-align completes, re-run the
     detection over the affected scope; close issues whose condition cleared, keep the rest open.
