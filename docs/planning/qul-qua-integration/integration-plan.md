@@ -26,12 +26,14 @@ Status: decisions locked in the 2026-08-28 review session; no implementation sta
 
 The projection layer, not the shards: bucket shards already store every occurrence raw.
 
-- **Projection**: `qua_shared/timestamps_dedup.py` — today `project_segment_shard` returns the
-  canonical take only. Add an all-occurrences projection that emits every occasion (merged
-  contiguous runs, same grouping as today) with the canonical one flagged, reusing the existing
-  earliest-completing selection for the flag. Leading/trailing partials that the current
-  projection trims become their own occurrence rows (they are occasions/segments already —
-  emission, not new detection).
+- **Projection**: post-v12 this is `qua_shared/timestamps_native.py::project_native_shard`
+  (v12 `.json.br` native shards; the pre-v12 `timestamps_dedup.project_segment_shard` path is
+  gone). Add an all-occurrences projection that emits every occasion (readings/parts are
+  already the occurrence grain in v12) with the canonical one flagged, reusing the existing
+  earliest-completing selection (`_canonical`). Leading/trailing partials that the current
+  projection trims become their own occurrence rows — emission, not new detection.
+  **Note:** this plan's branch (`qul-qua`) is based on pre-v12 main — rebase before any code
+  work; file references in this doc are checked against post-v12 main.
 - **Tier builders**: `qua_jobs/cut_release.py` — verse/word tiers become flat arrays
   `[ref, start, end, canonical, silence_after (verse only), words (word tier)]` in recitation
   order. `silence_after` computed at build from the next timeline row (0 when contiguous;
@@ -54,19 +56,35 @@ The projection layer, not the shards: bucket shards already store every occurren
 
 ## Workstream B — letter tokenization audit (blocks the letter tier)
 
-Deferred decision. Scope of the audit:
+Deferred decision. **Token inventory measured 2026-08-28** over the full Mishary v12 corpus
+(114 `.json.br` shards, 348,387 letter-timing rows; saved at
+`.local/qul_compare/v12_token_inventory.json`):
 
-- Cell-like tokenization vs original-script letter rows — what granularity does the public
-  letter tier promise? (Internal shards: letter row = rasm graphemes, haraka stripped, dagger
-  alif its own row, seat+dagger co-timed rows; cells = mark-level with roles/status.)
-- 42-token external vs 57-token internal alphabet (`qua_shared/letter_vocab.py` — maddah +
-  silent-zero drop). Verified session facts: `عَلَىٰ` / `صَلَوٰة` → seat letter + dagger as two
-  co-timed rows; standalone sounding dagger (`ٱلرَّحْمَٰنِ`) owns its span.
-- Whether the published tier gains the shard v4 `silent` flag (`[widx, char, start, end, silent]`)
-  — today's release layout drops it, which leaves co-timed seat/dagger rows ambiguous for
-  highlighters. Leaning yes; decide inside the audit.
-- Phonemizer tokenization review + the shard v12 question (whether a shard-format change is
-  wanted at the same time), source-script revisions.
+- v12 letter units (`timing.l = [unit_id, word_id, text, start_ms, end_ms, silent]`) carry a
+  **100-token** inventory — v11's letter row had 57. Changes vs v11: **shadda is composed into
+  the token** (28 `Xّ` composites; v11 stripped it); **a dagger alif fuses onto its seat**
+  (`ىٰ` 1,910 / `وٰ` 186 / `ىٰٓ` 409 / `وٰٓ` 2 — v11 emitted seat + dagger as two co-timed
+  rows) while the standalone dagger token remains (6,879); **annotation marks are now units**
+  (saktah `ۜ`, low-seen `ۣ`, imala `ر۪`, ishmam `ا۬`, tatweel-carried `ـٔ`/`ـۧ`/`ـۨ` — v11
+  excluded them). Maddah + silent-zero fusion unchanged.
+- **Null spans are effectively gone in v12**: 1 / 348,387 (the lone `ۣ` row). The historical
+  "missing letter time entries" reports do not reproduce in v11 or v12 prod data.
+- Silent flags: wasla 98% silent, otiose `ا۟ و۟ ي۟` 100%, alef/maksura/waw context-dependent.
+- Three tokenization surfaces confirmed, by purpose: letter units (written-letter grain →
+  letters row + release letter tier), columns/cells (mark-level, 146 texts, renderer/animation
+  only — never public), sounds (phones).
+- **LATENT RELEASE BREAK (fix before any v12 cut/publish):**
+  `verse_layout._external_letter` (strip `{tatweel, shadda, ۜ ۣ ۪ ۫ ۬}` → 42-token
+  `to_external_char`, fail-loud) **crashes on 6 v12 tokens** — the seat+dagger fusions
+  `ىٰ ىٰٓ وٰ وٰٓ` (2,507 rows in Mishary alone; first `عَلَىٰ` kills the job) and the bare
+  marks `ۜ`/`ۣ` (strip to empty string). `verse_layout` also raises on the one null-timed
+  letter. The v12 "harden release adapters" commit did not cover these. Resolution belongs to
+  this workstream's decision: extend the external vocab with the fused forms, or re-split
+  seat+dagger at publish; drop (not fail) bare-mark rows.
+- Open decisions: published-tier granularity (letter units as-is vs re-split), external
+  alphabet contents, whether the public tier gains the `silent` flag (leaning yes — v12 has it
+  per row already), and the **silent cohighlight vs no-highlight** animation policy (mergers
+  always cohighlight) — pending visual review.
 - Output: a versioned public addendum (the §10 promise in the revised proposal) + the letter
   tier joins B′ in a subsequent release.
 
