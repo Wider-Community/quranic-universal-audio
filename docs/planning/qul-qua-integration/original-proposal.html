@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QUA ↔ QUL Audio Segmentation Integration — Proposal</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1d212b; --ink:#e7ebf0; --muted:#9aa4b2;
+    --line:#2a2f3a; --accent:#7c9cff; --qua:#7c9cff; --qul:#4fd1a1; --warn:#ffb454;
+    --code-bg:#0b0d12; --key:#7c9cff; --str:#89d185; --num:#d19a66; --com:#6a7382; --punc:#8b94a3;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  .wrap{max-width:960px; margin:0 auto; padding:0 24px 120px}
+  header.hero{
+    padding:64px 0 40px; border-bottom:1px solid var(--line); margin-bottom:8px;
+  }
+  .kicker{color:var(--accent); font-weight:600; letter-spacing:.14em; text-transform:uppercase; font-size:12px}
+  h1{font-size:40px; line-height:1.1; margin:14px 0 12px; font-weight:800; letter-spacing:-.02em}
+  .sub{color:var(--muted); font-size:18px; max-width:70ch}
+  .meta{display:flex; gap:10px; flex-wrap:wrap; margin-top:22px}
+  .tag{background:var(--panel2); border:1px solid var(--line); color:var(--muted); padding:5px 11px; border-radius:999px; font-size:12.5px}
+  .tag b{color:var(--ink); font-weight:600}
+  nav.toc{
+    background:var(--panel); border:1px solid var(--line); border-radius:14px;
+    padding:18px 22px; margin:34px 0; columns:2; column-gap:32px;
+  }
+  nav.toc a{display:block; color:var(--muted); text-decoration:none; padding:4px 0; font-size:14.5px; break-inside:avoid}
+  nav.toc a:hover{color:var(--accent)}
+  nav.toc .n{color:var(--line); display:inline-block; width:22px}
+  nav.toc a:hover .n{color:var(--accent)}
+  h2{font-size:26px; margin:56px 0 6px; letter-spacing:-.01em; scroll-margin-top:20px}
+  h2 .hn{color:var(--accent); font-weight:700; margin-right:10px; font-size:20px}
+  h3{font-size:18px; margin:30px 0 6px; color:var(--ink)}
+  .lead{color:var(--muted); margin:6px 0 18px; max-width:74ch}
+  p{max-width:74ch}
+  hr{border:0; border-top:1px solid var(--line); margin:48px 0}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:.86em; background:var(--panel2); border:1px solid var(--line); padding:1px 6px; border-radius:6px; color:#cdd6e4}
+  pre{background:var(--code-bg); border:1px solid var(--line); border-radius:12px; padding:18px 20px; overflow-x:auto; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:13.5px; line-height:1.6}
+  pre code{background:none; border:0; padding:0; color:#cdd6e4; font-size:inherit}
+  .tok-key{color:var(--key)} .tok-str{color:var(--str)} .tok-num{color:var(--num)} .tok-com{color:var(--com)} .tok-punc{color:var(--punc)} .tok-bool{color:#d19a66}
+  table{width:100%; border-collapse:collapse; margin:18px 0; font-size:14px; display:block; overflow-x:auto}
+  th,td{text-align:left; padding:10px 14px; border-bottom:1px solid var(--line); vertical-align:top}
+  th{color:var(--muted); font-weight:600; font-size:12.5px; text-transform:uppercase; letter-spacing:.05em; white-space:nowrap}
+  td code{white-space:nowrap}
+  tbody tr:hover{background:var(--panel)}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:22px 24px; margin:20px 0}
+  .callout{border-left:3px solid var(--accent); background:var(--panel); border-radius:0 12px 12px 0; padding:14px 20px; margin:20px 0; color:var(--muted)}
+  .callout.warn{border-left-color:var(--warn)}
+  .callout.open{border-left-color:var(--warn)}
+  .callout b{color:var(--ink)}
+  .flow{background:var(--code-bg); border:1px solid var(--line); border-radius:12px; padding:24px; overflow-x:auto}
+  .flow pre{background:none; border:0; padding:0; color:#b9c2d0; font-size:13px; line-height:1.7}
+  .pill{display:inline-block; font-size:11px; font-weight:700; padding:2px 9px; border-radius:6px; vertical-align:middle; letter-spacing:.03em}
+  .pill.get{background:rgba(79,209,161,.14); color:#4fd1a1; border:1px solid rgba(79,209,161,.35)}
+  .pill.post{background:rgba(124,156,255,.14); color:#7c9cff; border:1px solid rgba(124,156,255,.35)}
+  .pill.qua{background:rgba(124,156,255,.14); color:#9db4ff; border:1px solid rgba(124,156,255,.3)}
+  .pill.qul{background:rgba(79,209,161,.14); color:#4fd1a1; border:1px solid rgba(79,209,161,.3)}
+  .ep{display:flex; align-items:center; gap:10px; margin:26px 0 4px; flex-wrap:wrap}
+  .ep .path{font-family:"SF Mono",ui-monospace,Menlo,monospace; font-size:15px; color:var(--ink); font-weight:600}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:16px}
+  @media(max-width:720px){ .grid2{grid-template-columns:1fr} nav.toc{columns:1} h1{font-size:32px} }
+  .step{display:flex; gap:14px; margin:14px 0; align-items:flex-start}
+  .step .num{flex:0 0 30px; height:30px; border-radius:50%; background:var(--panel2); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; color:var(--accent)}
+  .step .body{flex:1}
+  .step .body b{color:var(--ink)}
+  .muted{color:var(--muted)}
+  .footnote{color:var(--muted); font-size:13px}
+  .legend{display:flex; gap:20px; flex-wrap:wrap; margin:8px 0 0; font-size:13px; color:var(--muted)}
+  .legend span::before{content:"■"; margin-right:6px}
+  .lg-qua::before{color:#9db4ff}
+  .lg-qul::before{color:#4fd1a1}
+  ul.clean{list-style:none; padding-left:0}
+  ul.clean li{padding:6px 0 6px 26px; position:relative; color:var(--muted); max-width:74ch}
+  ul.clean li::before{content:"→"; position:absolute; left:0; color:var(--accent)}
+  ul.clean li b{color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="kicker">Engineering Proposal · Draft v1.0</div>
+  <h1>QUA ↔ QUL Audio Segmentation Integration</h1>
+  <p class="sub">Webhook-driven, asynchronous generation of ayah / word / letter timing segments in Quranic Universal Audio (QUA), delivered to and imported by the Quranic Universal Library (QUL) — over one shared segment schema.</p>
+  <div class="meta">
+    <span class="tag"><b>Status:</b> Agreed in principle, pending schema sign-off</span>
+    <span class="tag"><b>Owners:</b> QUL &amp; QUA teams</span>
+    <span class="tag"><b>Units:</b> milliseconds</span>
+    <span class="tag"><b>Date:</b> 2026-08-27</span>
+  </div>
+</header>
+
+<nav class="toc">
+  <a href="#overview"><span class="n">1</span>Overview &amp; goals</a>
+  <a href="#architecture"><span class="n">2</span>Integration architecture</a>
+  <a href="#flow"><span class="n">3</span>End-to-end flow</a>
+  <a href="#api-qua"><span class="n">4</span>QUA API (segmentation + issues)</a>
+  <a href="#api-qul"><span class="n">5</span>QUL API (callback)</a>
+  <a href="#schema"><span class="n">6</span>Segment schema</a>
+  <a href="#fields"><span class="n">7</span>Field reference</a>
+  <a href="#repeats"><span class="n">8</span>Repetitions</a>
+  <a href="#silence"><span class="n">9</span>Silence</a>
+  <a href="#letters"><span class="n">10</span>Letters &amp; tashkeel</a>
+  <a href="#security"><span class="n">11</span>Security &amp; reliability</a>
+  <a href="#mapping"><span class="n">12</span>Mapping to QUL storage</a>
+  <a href="#open"><span class="n">13</span>Open questions</a>
+</nav>
+
+<h2 id="overview"><span class="hn">1</span>Overview &amp; goals</h2>
+<p class="lead">QUL owns the canonical audio files and their metadata (reciters, surahs, mushaf/word references). QUA is the segmentation engine that turns an audio file into precise timing data. This integration lets QUL request segmentation on demand and receive results asynchronously, without either side blocking on long-running alignment jobs.</p>
+<ul class="clean">
+  <li><b>On demand.</b> Whenever QUL needs to generate or re-generate segments for an audio file, it calls QUA.</li>
+  <li><b>Asynchronous.</b> Segmentation can take minutes; QUA acknowledges immediately and does the work in the background.</li>
+  <li><b>Webhook callback.</b> When segments are ready, QUA notifies QUL; QUL then pulls the results and imports them.</li>
+  <li><b>One schema.</b> Both systems speak the same segment JSON — ayah, word, and letter timing, with first-class support for repetitions and silence.</li>
+</ul>
+
+<div class="callout"><b>Why pull-after-notify (not push-in-callback)?</b> The callback stays small and cheap to retry, QUL controls when it ingests, and a large segment payload never has to survive webhook retry/size limits. This follows the well-established store-raw / respond-200 / process-async webhook pattern.</div>
+
+<h3>Shared identifiers</h3>
+<p class="lead">QUA and QUL must refer to the same entities by the same identifiers. Three ids are canonical across both systems and are round-tripped unchanged through every request, callback, and payload:</p>
+<table>
+  <thead><tr><th>Identifier</th><th>Type</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>audio_file_id</code></td><td>int</td><td>The specific audio file being segmented. Same value in QUA and QUL.</td></tr>
+    <tr><td><code>reciter_id</code></td><td>int</td><td>The reciter. Both systems share one reciter registry / id space.</td></tr>
+    <tr><td><code>surah</code></td><td>int</td><td>Surah number 1–114 (universal — no mapping needed).</td></tr>
+  </tbody>
+</table>
+<div class="callout"><b>Contract:</b> neither side invents or re-maps these ids. If QUA ever needs an id QUL does not yet share (e.g. a new reciter), that reciter must be registered in the shared id space <i>before</i> a job references it. Ayahs and words are identified positionally (<code>"surah:ayah"</code> and 1-based <code>number</code>), which are universal.</div>
+
+<h2 id="architecture"><span class="hn">2</span>Integration architecture</h2>
+<p class="lead">Three legs: a <b>request</b> (QUL→QUA), a <b>notification</b> (QUA→QUL), and a <b>fetch</b> (QUL→QUA). A <code>request_id</code> generated by QUL threads through all three for correlation and idempotency.</p>
+
+<div class="flow">
+<pre>
+  ┌──────────────────────┐                               ┌──────────────────────┐
+  │         QUL          │                               │         QUA          │
+  │  (audio library)     │                               │ (segmentation engine)│
+  └──────────┬───────────┘                               └───────────┬──────────┘
+             │                                                        │
+   (1) POST /segmentation/jobs   ─────────────────────────────────▶  │  create job
+       { audio_file, options, callback_url, request_id }             │
+             │  ◀───────────────  202 { job_id, status:"queued" }    │
+             │                                                        │
+             │                                        ┌───────────────▼───────────────┐
+             │                                        │  async worker generates        │
+             │                                        │  segments (align → words →     │
+             │                                        │  letters → silence → repeats)  │
+             │                                        └───────────────┬───────────────┘
+             │                                                        │
+   (3) POST /segmentation/callbacks  ◀──────────────────────────────  │  job done
+       { job_id, request_id, status:"completed", segments_url }       │
+       ──────────────────────────  200 OK (enqueue import)  ────────▶ │
+             │                                                        │
+   (4) GET /segmentation/jobs/:job_id/segments  ──────────────────▶   │
+             │  ◀───────────  200 { schema_version, segments:[…] }    │
+             │                                                        │
+   (5) import into Audio::Segment                                     │
+             ▼                                                        │
+</pre>
+</div>
+<div class="legend"><span class="lg-qul">QUL — request &amp; import</span><span class="lg-qua">QUA — generate &amp; serve</span></div>
+
+<h2 id="flow"><span class="hn">3</span>End-to-end flow</h2>
+<div class="card">
+  <div class="step"><div class="num">1</div><div class="body"><b>QUL requests segmentation.</b> On a user action or automated trigger (new audio file, corrected boundaries, re-segment), QUL <span class="pill post">POST</span>s a job to QUA with the audio file location, generation options, a <code>callback_url</code>, and a QUL-generated <code>request_id</code>.</div></div>
+  <div class="step"><div class="num">2</div><div class="body"><b>QUA acknowledges.</b> QUA validates, persists the job, and returns <code>202 Accepted</code> with a <code>job_id</code> and <code>status:"queued"</code>. No segmentation happens on this request.</div></div>
+  <div class="step"><div class="num">3</div><div class="body"><b>QUA generates asynchronously.</b> A background worker performs forced alignment and produces word, letter, silence and repeat data. Status moves <code>queued → processing → completed | failed</code>.</div></div>
+  <div class="step"><div class="num">4</div><div class="body"><b>QUA notifies QUL.</b> On completion (or failure) QUA <span class="pill post">POST</span>s a small callback to QUL's <code>callback_url</code>. QUL stores the raw payload, responds <code>200</code> immediately, and enqueues a fetch+import job.</div></div>
+  <div class="step"><div class="num">5</div><div class="body"><b>QUL fetches &amp; imports.</b> QUL <span class="pill get">GET</span>s the full segment payload from QUA and imports it into <code>Audio::Segment</code> (word &amp; letter timing, repetition flags, silence).</div></div>
+</div>
+<p class="footnote">The <span class="pill get">GET</span> status endpoint (<code>/segmentation/jobs/:job_id</code>) is a fallback: if the webhook is missed, QUL can poll to reconcile. The webhook is the primary signal.</p>
+
+<h2 id="api-qua"><span class="hn">4</span>QUA API — segmentation &amp; issues</h2>
+
+<div class="ep"><span class="pill post">POST</span><span class="path">/api/v1/segmentation/jobs</span><span class="pill qul">called by QUL</span></div>
+<p class="lead">Create a segmentation job. Idempotent on <code>request_id</code> — repeating the same <code>request_id</code> returns the existing job rather than creating a duplicate. The <code>qiraah</code> field is required so QUA aligns against the correct reading (e.g. Ḥafṣ vs Warsh differ in word forms and letter counts).</p>
+<pre><code><span class="tok-com">// Request body</span>
+<span class="tok-punc">{</span>
+  <span class="tok-key">"request_id"</span><span class="tok-punc">:</span> <span class="tok-str">"qul-9f3c2a17"</span><span class="tok-punc">,</span>        <span class="tok-com">// QUL-generated, unique per logical request</span>
+  <span class="tok-key">"callback_url"</span><span class="tok-punc">:</span> <span class="tok-str">"https://qul.example.org/api/v1/segmentation/callbacks"</span><span class="tok-punc">,</span>
+  <span class="tok-key">"audio_file"</span><span class="tok-punc">:</span> <span class="tok-punc">{</span>
+    <span class="tok-key">"id"</span><span class="tok-punc">:</span> <span class="tok-num">12345</span><span class="tok-punc">,</span>               <span class="tok-com">// QUL audio file id (echoed back)</span>
+    <span class="tok-key">"url"</span><span class="tok-punc">:</span> <span class="tok-str">"https://cdn.qul.example.org/audio/7/002.mp3"</span><span class="tok-punc">,</span>
+    <span class="tok-key">"format"</span><span class="tok-punc">:</span> <span class="tok-str">"mp3"</span><span class="tok-punc">,</span>
+    <span class="tok-key">"duration_ms"</span><span class="tok-punc">:</span> <span class="tok-num">742000</span>
+  <span class="tok-punc">}</span><span class="tok-punc">,</span>
+  <span class="tok-key">"reciter_id"</span><span class="tok-punc">:</span> <span class="tok-num">7</span><span class="tok-punc">,</span>
+  <span class="tok-key">"surah"</span><span class="tok-punc">:</span> <span class="tok-num">2</span><span class="tok-punc">,</span>
+  <span class="tok-key">"qiraah"</span><span class="tok-punc">:</span> <span class="tok-str">"hafs"</span><span class="tok-punc">,</span>          <span class="tok-com">// narration/reading: hafs | warsh | qalun | duri | ... (required)</span>
+  <span class="tok-key">"ayah_range"</span><span class="tok-punc">:</span> <span class="tok-punc">{</span> <span class="tok-key">"from"</span><span class="tok-punc">:</span> <span class="tok-num">1</span><span class="tok-punc">,</span> <span class="tok-key">"to"</span><span class="tok-punc">:</span> <span class="tok-num">286</span> <span class="tok-punc">}</span><span class="tok-punc">,</span>  <span class="tok-com">// optional; whole surah if omitted</span>
+  <span class="tok-key">"mushaf_id"</span><span class="tok-punc">:</span> <span class="tok-num">1</span><span class="tok-punc">,</span>              <span class="tok-com">// which word segmentation / script QUL expects</span>
+  <span class="tok-key">"options"</span><span class="tok-punc">:</span> <span class="tok-punc">{</span>
+    <span class="tok-key">"letters"</span><span class="tok-punc">:</span> <span class="tok-bool">true</span><span class="tok-punc">,</span>            <span class="tok-com">// emit letter-level segments</span>
+    <span class="tok-key">"silence"</span><span class="tok-punc">:</span> <span class="tok-bool">true</span><span class="tok-punc">,</span>            <span class="tok-com">// emit silence metadata</span>
+    <span class="tok-key">"detect_repeats"</span><span class="tok-punc">:</span> <span class="tok-bool">true</span>
+  <span class="tok-punc">}</span>
+<span class="tok-punc">}</span></code></pre>
+<pre><code><span class="tok-com">// 202 Accepted</span>
+<span class="tok-punc">{</span>
+  <span class="tok-key">"job_id"</span><span class="tok-punc">:</span> <span class="tok-str">"qua-job-5521"</span><span class="tok-punc">,</span>
+  <span class="tok-key">"request_id"</span><span class="tok-punc">:</span> <span class="tok-str">"qul-9f3c2a17"</span><span class="tok-punc">,</span>
+  <span class="tok-key">"status"</span><span class="tok-punc">:</span> <span class="tok-str">"queued"</span><span class="tok-punc">,</span>
+  <span class="tok-key">"created_at"</span><span class="tok-punc">:</span> <span class="tok-str">"2026-08-27T10:00:00Z"</span>
+<span class="tok-punc">}</span></code></pre>
+
+<div class="ep"><span class="pill get">GET</span><span class="path">/api/v1/segmentation/jobs/:job_id</span><span class="pill qul">called by QUL</span></div>
+<p class="lead">Poll job status. Fallback path when the callback is missed.</p>
+<pre><code><span class="tok-punc">{</span>
+  <span class="tok-key">"job_id"</span><span class="tok-punc">:</span> <span class="tok-str">"qua-job-5521"</span><span class="tok-punc">,</span>
+  <span class="tok-key">"request_id"</span><span class="tok-punc">:</span> <span class="tok-str">"qul-9f3c2a17"</span><span class="tok-punc">,</span>
+  <span class="tok-key">"status"</span><span class="tok-punc">:</span> <span class="tok-str">"processing"</span><span class="tok-punc">,</span>   <span class="tok-com">// queued | processing | completed | failed</span>
+  <span class="tok-key">"progress"</span><span class="tok-punc">:</span> <span class="tok-num">0.62</span><span class="tok-punc">,</span>          <span class="tok-com">// 0..1, optional</span>
+  <span class="tok-key">"error"</span><span class="tok-punc">:</span> <span class="tok-bool">null</span>
+<span class="tok-punc">}</span></code></pre>
+
+<div class="ep"><span class="pill get">GET</span><span class="path">/api/v1/segmentation/jobs/:job_id/segments</span><span class="pill qul">called by QUL</span></div>
+<p class="lead">Fetch the finished segments. Returns <code>200</code> with the <a href="#schema">segment schema</a> when <code>completed</code>, or <code>409</code> if the job is not yet done. This is the URL QUA also passes as <code>segments_url</code> in the callback.</p>
+
+<div class="ep"><span class="pill get">GET</span><span class="path">/api/v1/audio_files/:audio_file_id/issues</span><span class="pill qul">called by QUL</span></div>
+<p class="lead">QUA maintains a list of quality issues it detects for each audio file — missing audio for some words, corrupted or truncated regions, alignment problems, abnormal silence, and so on. QUL fetches these to flag files for review or re-recording. Supports filtering by <code>status</code>, <code>severity</code>, <code>type</code>, and <code>surah</code>.</p>
+<pre><code><span class="tok-com">// 200 OK — GET /api/v1/audio_files/12345/issues?status=open</span>
+<span class="tok-punc">{</span>
+  <span class="tok-key">"audio_file_id"</span><span class="tok-punc">:</span> <span class="tok-num">12345</span><span class="tok-punc">,</span>
+  <span class="tok-key">"reciter_id"</span><span class="tok-punc">:</span> <span class="tok-num">7</span><span class="tok-punc">,</span>
+  <span class="tok-key">"surah"</span><span class="tok-punc">:</span> <span class="tok-num">2</span><span class="tok-punc">,</span>
+  <span class="tok-key">"issues"</span><span class="tok-punc">:</span> <span class="tok-punc">[</span>
+    <span class="tok-punc">{</span>
+      <span class="tok-key">"id"</span><span class="tok-punc">:</span> <span class="tok-str">"qua-issue-8801"</span><span class="tok-punc">,</span>
+      <span class="tok-key">"type"</span><span class="tok-punc">:</span> <span class="tok-str">"missing_word_audio"</span><span class="tok-punc">,</span>   <span class="tok-com">// see catalogue below</span>
+      <span class="tok-key">"severity"</span><span class="tok-punc">:</span> <span class="tok-str">"error"</span><span class="tok-punc">,</span>          <span class="tok-com">// info | warning | error</span>
+      <span class="tok-key">"status"</span><span class="tok-punc">:</span> <span class="tok-str">"open"</span><span class="tok-punc">,</span>             <span class="tok-com">// open | resolved | dismissed</span>
+      <span class="tok-key">"ayah"</span><span class="tok-punc">:</span> <span class="tok-str">"2:6"</span><span class="tok-punc">,</span>              <span class="tok-com">// null if the issue is file-wide</span>
+      <span class="tok-key">"word_number"</span><span class="tok-punc">:</span> <span class="tok-num">4</span><span class="tok-punc">,</span>           <span class="tok-com">// null if not word-specific</span>
+      <span class="tok-key">"start"</span><span class="tok-punc">:</span> <span class="tok-num">14200</span><span class="tok-punc">,</span>            <span class="tok-com">// affected span (ms), optional</span>
+      <span class="tok-key">"ends"</span><span class="tok-punc">:</span> <span class="tok-num">14800</span><span class="tok-punc">,</span>
+      <span class="tok-key">"message"</span><span class="tok-punc">:</span> <span class="tok-str">"No audio detected for word 4 of ayah 2:6"</span><span class="tok-punc">,</span>
+      <span class="tok-key">"detected_at"</span><span class="tok-punc">:</span> <span class="tok-str">"2026-08-27T10:04:11Z"</span>
+    <span class="tok-punc">}</span><span class="tok-punc">,</span>
+    <span class="tok-punc">{</span>
+      <span class="tok-key">"id"</span><span class="tok-punc">:</span> <span class="tok-str">"qua-issue-8802"</span><span class="tok-punc">,</span>
+      <span class="tok-key">"type"</span><span class="tok-punc">:</span> <span class="tok-str">"corrupted_audio"</span><span class="tok-punc">,</span>
+      <span class="tok-key">"severity"</span><span class="tok-punc">:</span> <span class="tok-str">"error"</span><span class="tok-punc">,</span>
+      <span class="tok-key">"status"</span><span class="tok-punc">:</span> <span class="tok-str">"open"</span><span class="tok-punc">,</span>
+      <span class="tok-key">"ayah"</span><span class="tok-punc">:</span> <span class="tok-bool">null</span><span class="tok-punc">,</span>
+      <span class="tok-key">"word_number"</span><span class="tok-punc">:</span> <span class="tok-bool">null</span><span class="tok-punc">,</span>
+      <span class="tok-key">"start"</span><span class="tok-punc">:</span> <span class="tok-num">301500</span><span class="tok-punc">,</span>
+      <span class="tok-key">"ends"</span><span class="tok-punc">:</span> <span class="tok-num">303000</span><span class="tok-punc">,</span>
+      <span class="tok-key">"message"</span><span class="tok-punc">:</span> <span class="tok-str">"Corrupted / unreadable audio region"</span><span class="tok-punc">,</span>
+      <span class="tok-key">"detected_at"</span><span class="tok-punc">:</span> <span class="tok-str">"2026-08-27T10:04:11Z"</span>
+    <span class="tok-punc">}</span>
+  <span class="tok-punc">]</span>
+<span class="tok-punc">}</span></code></pre>
+
+<h3>Issue fields</h3>
+<table>
+  <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>id</code></td><td>string</td><td>Stable QUA issue id. QUL de-dupes/upserts on this.</td></tr>
+    <tr><td><code>type</code></td><td>string</td><td>Machine-readable issue category (catalogue below).</td></tr>
+    <tr><td><code>severity</code></td><td>string</td><td><code>info</code> | <code>warning</code> | <code>error</code>.</td></tr>
+    <tr><td><code>status</code></td><td>string</td><td><code>open</code> | <code>resolved</code> | <code>dismissed</code>.</td></tr>
+    <tr><td><code>ayah</code></td><td>string?</td><td><code>"surah:ayah"</code> the issue relates to; <code>null</code> for file-wide issues.</td></tr>
+    <tr><td><code>word_number</code></td><td>int?</td><td>Affected word; <code>null</code> if not word-specific.</td></tr>
+    <tr><td><code>start</code> / <code>ends</code></td><td>int? (ms)</td><td>Affected audio span, when known.</td></tr>
+    <tr><td><code>message</code></td><td>string</td><td>Human-readable description.</td></tr>
+    <tr><td><code>detected_at</code></td><td>string</td><td>ISO-8601 timestamp.</td></tr>
+  </tbody>
+</table>
+
+<h3>Issue type catalogue</h3>
+<table>
+  <thead><tr><th>type</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>missing_word_audio</code></td><td>One or more words have no corresponding audio (skipped / dropped).</td></tr>
+    <tr><td><code>missing_ayah_audio</code></td><td>An entire ayah is absent from the recitation.</td></tr>
+    <tr><td><code>corrupted_audio</code></td><td>Region is corrupted / unreadable / decodes to garbage.</td></tr>
+    <tr><td><code>truncated_audio</code></td><td>File ends before the recitation completes.</td></tr>
+    <tr><td><code>alignment_low_confidence</code></td><td>Forced alignment produced low-confidence timings for a span.</td></tr>
+    <tr><td><code>abnormal_silence</code></td><td>Unexpectedly long silence where speech was expected.</td></tr>
+    <tr><td><code>extra_audio</code></td><td>Audio present that does not map to expected words (noise, speech, duplicate).</td></tr>
+  </tbody>
+</table>
+<p class="footnote">The catalogue is extensible; QUL should treat unknown <code>type</code> values as generic issues (fall back to <code>severity</code> + <code>message</code>) rather than rejecting them.</p>
+
+<h2 id="api-qul"><span class="hn">5</span>QUL API — callback receiver</h2>
+
+<div class="ep"><span class="pill post">POST</span><span class="path">/api/v1/segmentation/callbacks</span><span class="pill qua">called by QUA</span></div>
+<p class="lead">QUA notifies QUL that a job finished. QUL persists the raw payload, responds <code>200</code> within the timeout, and processes the import out of band. The callback carries no segment data — only enough to fetch it.</p>
+<pre><code><span class="tok-com">// Success callback</span>
+<span class="tok-punc">{</span>
+  <span class="tok-key">"job_id"</span><span class="tok-punc">:</span> <span class="tok-str">"qua-job-5521"</span><span class="tok-punc">,</span>
+  <span class="tok-key">"request_id"</span><span class="tok-punc">:</span> <span class="tok-str">"qul-9f3c2a17"</span><span class="tok-punc">,</span>
+  <span class="tok-key">"audio_file_id"</span><span class="tok-punc">:</span> <span class="tok-num">12345</span><span class="tok-punc">,</span>
+  <span class="tok-key">"status"</span><span class="tok-punc">:</span> <span class="tok-str">"completed"</span><span class="tok-punc">,</span>
+  <span class="tok-key">"segments_url"</span><span class="tok-punc">:</span> <span class="tok-str">"https://qua.example.org/api/v1/segmentation/jobs/qua-job-5521/segments"</span><span class="tok-punc">,</span>
+  <span class="tok-key">"summary"</span><span class="tok-punc">:</span> <span class="tok-punc">{</span> <span class="tok-key">"segments_count"</span><span class="tok-punc">:</span> <span class="tok-num">291</span><span class="tok-punc">,</span> <span class="tok-key">"has_repetition"</span><span class="tok-punc">:</span> <span class="tok-bool">true</span><span class="tok-punc">,</span> <span class="tok-key">"issues_count"</span><span class="tok-punc">:</span> <span class="tok-num">2</span> <span class="tok-punc">}</span>  <span class="tok-com">// fetch details from the issues endpoint</span>
+<span class="tok-punc">}</span></code></pre>
+<pre><code><span class="tok-com">// Failure callback</span>
+<span class="tok-punc">{</span>
+  <span class="tok-key">"job_id"</span><span class="tok-punc">:</span> <span class="tok-str">"qua-job-5521"</span><span class="tok-punc">,</span>
+  <span class="tok-key">"request_id"</span><span class="tok-punc">:</span> <span class="tok-str">"qul-9f3c2a17"</span><span class="tok-punc">,</span>
+  <span class="tok-key">"status"</span><span class="tok-punc">:</span> <span class="tok-str">"failed"</span><span class="tok-punc">,</span>
+  <span class="tok-key">"error"</span><span class="tok-punc">:</span> <span class="tok-punc">{</span> <span class="tok-key">"code"</span><span class="tok-punc">:</span> <span class="tok-str">"ALIGNMENT_FAILED"</span><span class="tok-punc">,</span> <span class="tok-key">"message"</span><span class="tok-punc">:</span> <span class="tok-str">"audio too noisy at 03:12"</span> <span class="tok-punc">}</span>
+<span class="tok-punc">}</span></code></pre>
+<pre><code><span class="tok-com">// QUL responds immediately</span>
+<span class="tok-num">200</span> <span class="tok-punc">{</span> <span class="tok-key">"received"</span><span class="tok-punc">:</span> <span class="tok-bool">true</span> <span class="tok-punc">}</span></code></pre>
+
+<h2 id="schema"><span class="hn">6</span>Segment schema — the shared contract</h2>
+<p class="lead">A response envelope plus an ordered <b>timeline</b> array. <code>ayah</code> is a field, not a key — so the same ayah can appear multiple times, in the exact order it is recited. Every time value is an absolute offset from the start of the audio file, in milliseconds.</p>
+<pre><code><span class="tok-punc">{</span>
+  <span class="tok-key">"schema_version"</span><span class="tok-punc">:</span> <span class="tok-str">"1.0"</span><span class="tok-punc">,</span>
+  <span class="tok-key">"audio_file_id"</span><span class="tok-punc">:</span> <span class="tok-num">12345</span><span class="tok-punc">,</span>
+  <span class="tok-key">"reciter_id"</span><span class="tok-punc">:</span> <span class="tok-num">7</span><span class="tok-punc">,</span>
+  <span class="tok-key">"surah"</span><span class="tok-punc">:</span> <span class="tok-num">2</span><span class="tok-punc">,</span>
+  <span class="tok-key">"qiraah"</span><span class="tok-punc">:</span> <span class="tok-str">"hafs"</span><span class="tok-punc">,</span>          <span class="tok-com">// echoed from the request</span>
+  <span class="tok-key">"units"</span><span class="tok-punc">:</span> <span class="tok-str">"ms"</span><span class="tok-punc">,</span>
+  <span class="tok-key">"ends_includes_silence"</span><span class="tok-punc">:</span> <span class="tok-bool">true</span><span class="tok-punc">,</span>   <span class="tok-com">// convention: trailing silence is inside [start, ends]</span>
+  <span class="tok-key">"segments"</span><span class="tok-punc">:</span> <span class="tok-punc">[</span>
+    <span class="tok-punc">{</span>
+      <span class="tok-key">"ayah"</span><span class="tok-punc">:</span> <span class="tok-str">"2:1"</span><span class="tok-punc">,</span>            <span class="tok-com">// "surah:ayah"</span>
+      <span class="tok-key">"start"</span><span class="tok-punc">:</span> <span class="tok-num">1000</span><span class="tok-punc">,</span>
+      <span class="tok-key">"ends"</span><span class="tok-punc">:</span> <span class="tok-num">6000</span><span class="tok-punc">,</span>
+      <span class="tok-key">"silence"</span><span class="tok-punc">:</span> <span class="tok-num">200</span><span class="tok-punc">,</span>         <span class="tok-com">// trailing silence in ms (0 if none)</span>
+      <span class="tok-com">// "repeat" is present only when this entry is a repetition</span>
+      <span class="tok-key">"words"</span><span class="tok-punc">:</span> <span class="tok-punc">[</span>
+        <span class="tok-punc">{</span>
+          <span class="tok-key">"number"</span><span class="tok-punc">:</span> <span class="tok-num">1</span><span class="tok-punc">,</span>       <span class="tok-com">// 1-based word position within the ayah</span>
+          <span class="tok-key">"start"</span><span class="tok-punc">:</span> <span class="tok-num">1000</span><span class="tok-punc">,</span>
+          <span class="tok-key">"ends"</span><span class="tok-punc">:</span> <span class="tok-num">1500</span><span class="tok-punc">,</span>
+          <span class="tok-key">"silence"</span><span class="tok-punc">:</span> <span class="tok-num">0</span><span class="tok-punc">,</span>
+          <span class="tok-key">"letters"</span><span class="tok-punc">:</span> <span class="tok-punc">[</span>      <span class="tok-com">// omitted when options.letters = false</span>
+            <span class="tok-punc">{</span> <span class="tok-key">"number"</span><span class="tok-punc">:</span> <span class="tok-num">1</span><span class="tok-punc">,</span> <span class="tok-key">"text"</span><span class="tok-punc">:</span> <span class="tok-str">"ا"</span><span class="tok-punc">,</span>  <span class="tok-key">"start"</span><span class="tok-punc">:</span> <span class="tok-num">1000</span><span class="tok-punc">,</span> <span class="tok-key">"ends"</span><span class="tok-punc">:</span> <span class="tok-num">1120</span> <span class="tok-punc">}</span><span class="tok-punc">,</span>
+            <span class="tok-punc">{</span> <span class="tok-key">"number"</span><span class="tok-punc">:</span> <span class="tok-num">2</span><span class="tok-punc">,</span> <span class="tok-key">"text"</span><span class="tok-punc">:</span> <span class="tok-str">"ل"</span><span class="tok-punc">,</span>  <span class="tok-key">"start"</span><span class="tok-punc">:</span> <span class="tok-num">1120</span><span class="tok-punc">,</span> <span class="tok-key">"ends"</span><span class="tok-punc">:</span> <span class="tok-num">1200</span> <span class="tok-punc">}</span><span class="tok-punc">,</span>
+            <span class="tok-punc">{</span> <span class="tok-key">"number"</span><span class="tok-punc">:</span> <span class="tok-num">3</span><span class="tok-punc">,</span> <span class="tok-key">"text"</span><span class="tok-punc">:</span> <span class="tok-str">"لّٰ"</span><span class="tok-punc">,</span> <span class="tok-key">"start"</span><span class="tok-punc">:</span> <span class="tok-num">1200</span><span class="tok-punc">,</span> <span class="tok-key">"ends"</span><span class="tok-punc">:</span> <span class="tok-num">1380</span> <span class="tok-punc">}</span><span class="tok-punc">,</span>
+            <span class="tok-punc">{</span> <span class="tok-key">"number"</span><span class="tok-punc">:</span> <span class="tok-num">4</span><span class="tok-punc">,</span> <span class="tok-key">"text"</span><span class="tok-punc">:</span> <span class="tok-str">"هِ"</span><span class="tok-punc">,</span>  <span class="tok-key">"start"</span><span class="tok-punc">:</span> <span class="tok-num">1380</span><span class="tok-punc">,</span> <span class="tok-key">"ends"</span><span class="tok-punc">:</span> <span class="tok-num">1500</span> <span class="tok-punc">}</span>
+          <span class="tok-punc">]</span>
+        <span class="tok-punc">}</span>
+      <span class="tok-punc">]</span>
+    <span class="tok-punc">}</span>
+  <span class="tok-punc">]</span>
+<span class="tok-punc">}</span></code></pre>
+
+<h2 id="fields"><span class="hn">7</span>Field reference</h2>
+
+<h3>Envelope</h3>
+<table>
+  <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>schema_version</code></td><td>string</td><td>Semantic version of this contract. Consumers must reject unknown major versions.</td></tr>
+    <tr><td><code>audio_file_id</code></td><td>int</td><td>QUL audio file id, echoed from the job request.</td></tr>
+    <tr><td><code>reciter_id</code></td><td>int</td><td>QUL reciter id.</td></tr>
+    <tr><td><code>surah</code></td><td>int</td><td>Surah number (1–114).</td></tr>
+    <tr><td><code>qiraah</code></td><td>string</td><td>Narration/reading the audio follows (<code>hafs</code>, <code>warsh</code>, …), echoed from the request. Determines expected word/letter forms.</td></tr>
+    <tr><td><code>units</code></td><td>string</td><td>Always <code>"ms"</code>. Present for self-description.</td></tr>
+    <tr><td><code>ends_includes_silence</code></td><td>bool</td><td>Whether trailing <code>silence</code> is counted inside each <code>[start, ends]</code> span. See §9.</td></tr>
+    <tr><td><code>segments</code></td><td>array</td><td>Ordered playback timeline. See below.</td></tr>
+  </tbody>
+</table>
+
+<h3>Segment (ayah entry)</h3>
+<table>
+  <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>ayah</code></td><td>string</td><td><code>"surah:ayah"</code>, e.g. <code>"2:255"</code>. May repeat across entries.</td></tr>
+    <tr><td><code>start</code></td><td>int (ms)</td><td>Absolute offset where this ayah occurrence begins.</td></tr>
+    <tr><td><code>ends</code></td><td>int (ms)</td><td>Absolute offset where this occurrence ends.</td></tr>
+    <tr><td><code>silence</code></td><td>int (ms)</td><td>Trailing silence after the ayah; <code>0</code> if none. See §9.</td></tr>
+    <tr><td><code>repeat</code></td><td>bool</td><td><b>Present and <code>true</code> only</b> when this entry is a repetition of an already-recited ayah (or part of one). Absent otherwise. See §8.</td></tr>
+    <tr><td><code>words</code></td><td>array</td><td>Words in this occurrence. For a partial repeat, only the repeated words are present.</td></tr>
+  </tbody>
+</table>
+
+<h3>Word</h3>
+<table>
+  <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>number</code></td><td>int</td><td>1-based word position within the ayah (matches QUL's word numbering).</td></tr>
+    <tr><td><code>start</code></td><td>int (ms)</td><td>Absolute offset where the word begins.</td></tr>
+    <tr><td><code>ends</code></td><td>int (ms)</td><td>Absolute offset where the word ends.</td></tr>
+    <tr><td><code>silence</code></td><td>int (ms)</td><td>Trailing silence after this word; <code>0</code> if none.</td></tr>
+    <tr><td><code>letters</code></td><td>array?</td><td>Letter segments; omitted entirely when <code>options.letters = false</code>.</td></tr>
+  </tbody>
+</table>
+
+<h3>Letter</h3>
+<table>
+  <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>number</code></td><td>int</td><td>1-based letter index within the word.</td></tr>
+    <tr><td><code>text</code></td><td>string</td><td>The letter <b>including its tashkeel</b> (one displayed grapheme). See §10.</td></tr>
+    <tr><td><code>start</code></td><td>int (ms)</td><td>Absolute offset where the letter begins.</td></tr>
+    <tr><td><code>ends</code></td><td>int (ms)</td><td>Absolute offset where the letter ends.</td></tr>
+  </tbody>
+</table>
+
+<h2 id="repeats"><span class="hn">8</span>Repetitions</h2>
+<p class="lead">Repetition is intrinsic to recitation: a reciter may repeat part of an ayah, repeat a whole ayah several times, or go back two or three ayahs and recite them again. Because the timeline is an ordered array keyed by nothing, <b>every repetition is simply another entry</b> in playback order. The <code>repeat: true</code> marker flags entries that are not the first pass; which pass it is (2nd, 3rd…) is derivable by counting prior entries with the same <code>ayah</code>.</p>
+
+<div class="grid2">
+  <div class="card">
+    <h3>Whole-ayah repeat (×3)</h3>
+    <pre><code><span class="tok-punc">[</span>
+  <span class="tok-punc">{</span> <span class="tok-key">"ayah"</span><span class="tok-punc">:</span><span class="tok-str">"112:1"</span><span class="tok-punc">,</span> <span class="tok-key">"start"</span><span class="tok-punc">:</span><span class="tok-num">0</span><span class="tok-punc">,</span>    <span class="tok-key">"ends"</span><span class="tok-punc">:</span><span class="tok-num">3000</span> <span class="tok-punc">}</span><span class="tok-punc">,</span>
+  <span class="tok-punc">{</span> <span class="tok-key">"ayah"</span><span class="tok-punc">:</span><span class="tok-str">"112:1"</span><span class="tok-punc">,</span> <span class="tok-key">"start"</span><span class="tok-punc">:</span><span class="tok-num">3000</span><span class="tok-punc">,</span> <span class="tok-key">"ends"</span><span class="tok-punc">:</span><span class="tok-num">6000</span><span class="tok-punc">,</span> <span class="tok-key">"repeat"</span><span class="tok-punc">:</span><span class="tok-bool">true</span> <span class="tok-punc">}</span><span class="tok-punc">,</span>
+  <span class="tok-punc">{</span> <span class="tok-key">"ayah"</span><span class="tok-punc">:</span><span class="tok-str">"112:1"</span><span class="tok-punc">,</span> <span class="tok-key">"start"</span><span class="tok-punc">:</span><span class="tok-num">6000</span><span class="tok-punc">,</span> <span class="tok-key">"ends"</span><span class="tok-punc">:</span><span class="tok-num">9000</span><span class="tok-punc">,</span> <span class="tok-key">"repeat"</span><span class="tok-punc">:</span><span class="tok-bool">true</span> <span class="tok-punc">}</span>
+<span class="tok-punc">]</span></code></pre>
+    <p class="footnote">First pass has no <code>repeat</code>. Passes 2 and 3 are marked.</p>
+  </div>
+  <div class="card">
+    <h3>Partial-ayah repeat</h3>
+    <pre><code><span class="tok-com">// full ayah, then only words 3–4 repeated</span>
+<span class="tok-punc">[</span>
+  <span class="tok-punc">{</span> <span class="tok-key">"ayah"</span><span class="tok-punc">:</span><span class="tok-str">"2:255"</span><span class="tok-punc">,</span> <span class="tok-key">"start"</span><span class="tok-punc">:</span><span class="tok-num">0</span><span class="tok-punc">,</span> <span class="tok-key">"ends"</span><span class="tok-punc">:</span><span class="tok-num">8000</span><span class="tok-punc">,</span>
+    <span class="tok-key">"words"</span><span class="tok-punc">:</span><span class="tok-punc">[</span> <span class="tok-com">/* 1..N */</span> <span class="tok-punc">]</span> <span class="tok-punc">}</span><span class="tok-punc">,</span>
+  <span class="tok-punc">{</span> <span class="tok-key">"ayah"</span><span class="tok-punc">:</span><span class="tok-str">"2:255"</span><span class="tok-punc">,</span> <span class="tok-key">"start"</span><span class="tok-punc">:</span><span class="tok-num">8000</span><span class="tok-punc">,</span> <span class="tok-key">"ends"</span><span class="tok-punc">:</span><span class="tok-num">9500</span><span class="tok-punc">,</span> <span class="tok-key">"repeat"</span><span class="tok-punc">:</span><span class="tok-bool">true</span><span class="tok-punc">,</span>
+    <span class="tok-key">"words"</span><span class="tok-punc">:</span><span class="tok-punc">[</span>
+      <span class="tok-punc">{</span> <span class="tok-key">"number"</span><span class="tok-punc">:</span><span class="tok-num">3</span><span class="tok-punc">,</span> <span class="tok-key">"start"</span><span class="tok-punc">:</span><span class="tok-num">8000</span><span class="tok-punc">,</span> <span class="tok-key">"ends"</span><span class="tok-punc">:</span><span class="tok-num">8700</span> <span class="tok-punc">}</span><span class="tok-punc">,</span>
+      <span class="tok-punc">{</span> <span class="tok-key">"number"</span><span class="tok-punc">:</span><span class="tok-num">4</span><span class="tok-punc">,</span> <span class="tok-key">"start"</span><span class="tok-punc">:</span><span class="tok-num">8700</span><span class="tok-punc">,</span> <span class="tok-key">"ends"</span><span class="tok-punc">:</span><span class="tok-num">9500</span> <span class="tok-punc">}</span>
+    <span class="tok-punc">]</span> <span class="tok-punc">}</span>
+<span class="tok-punc">]</span></code></pre>
+    <p class="footnote">Only the repeated words appear; <code>number</code> preserves their position in the ayah.</p>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Loop-back over several ayahs (recite 5–7, then 5–7 again)</h3>
+  <pre><code><span class="tok-punc">[</span>
+  <span class="tok-punc">{</span> <span class="tok-key">"ayah"</span><span class="tok-punc">:</span><span class="tok-str">"55:5"</span> <span class="tok-punc">}</span><span class="tok-punc">,</span> <span class="tok-punc">{</span> <span class="tok-key">"ayah"</span><span class="tok-punc">:</span><span class="tok-str">"55:6"</span> <span class="tok-punc">}</span><span class="tok-punc">,</span> <span class="tok-punc">{</span> <span class="tok-key">"ayah"</span><span class="tok-punc">:</span><span class="tok-str">"55:7"</span> <span class="tok-punc">}</span><span class="tok-punc">,</span>
+  <span class="tok-punc">{</span> <span class="tok-key">"ayah"</span><span class="tok-punc">:</span><span class="tok-str">"55:5"</span><span class="tok-punc">,</span> <span class="tok-key">"repeat"</span><span class="tok-punc">:</span><span class="tok-bool">true</span> <span class="tok-punc">}</span><span class="tok-punc">,</span> <span class="tok-punc">{</span> <span class="tok-key">"ayah"</span><span class="tok-punc">:</span><span class="tok-str">"55:6"</span><span class="tok-punc">,</span> <span class="tok-key">"repeat"</span><span class="tok-punc">:</span><span class="tok-bool">true</span> <span class="tok-punc">}</span><span class="tok-punc">,</span> <span class="tok-punc">{</span> <span class="tok-key">"ayah"</span><span class="tok-punc">:</span><span class="tok-str">"55:7"</span><span class="tok-punc">,</span> <span class="tok-key">"repeat"</span><span class="tok-punc">:</span><span class="tok-bool">true</span> <span class="tok-punc">}</span>
+<span class="tok-punc">]</span></code></pre>
+  <p class="footnote">(<code>start</code>/<code>ends</code> omitted here for brevity — they are required in real payloads.) The timeline order <i>is</i> the recitation order; no separate grouping structure is needed.</p>
+</div>
+
+<h2 id="silence"><span class="hn">9</span>Silence</h2>
+<p class="lead">Reciters pause after words and ayahs. Each word and ayah carries a <code>silence</code> value: the number of milliseconds of trailing silence, <code>0</code> when there is none.</p>
+<table>
+  <thead><tr><th>Convention</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>ends_includes_silence: true</code> <span class="tag" style="margin-left:6px">recommended</span></td><td>The silence is <b>inside</b> <code>[start, ends]</code>. Audible speech ends at <code>ends − silence</code>; the gap up to <code>ends</code> is the pause. Adjacent segments stay contiguous (<code>ends</code> of one = <code>start</code> of the next).</td></tr>
+    <tr><td><code>ends_includes_silence: false</code></td><td><code>ends</code> marks the last audible sample; the pause occupies the gap between this <code>ends</code> and the next <code>start</code>. <code>silence</code> then equals that gap and is purely informational.</td></tr>
+  </tbody>
+</table>
+<div class="callout open"><b>Open decision (per team):</b> we lean toward <code>ends_includes_silence: true</code> so segment spans are gap-free and a highlighter can hold the current word/ayah highlighted through the pause. The flag is written into every payload so consumers never have to guess. Final ratification pending. QUL already normalizes inter-ayah gaps to ~200&nbsp;ms today, which this formalizes.</div>
+
+<h2 id="letters"><span class="hn">10</span>Letters &amp; tashkeel</h2>
+<p class="lead">Letter segments enable per-letter highlighting. A "letter" is one <b>displayed grapheme</b>: the base Arabic letter together with any tashkeel (harakah, shadda, madda, sukun) that sits on it. Tashkeel is never a separate letter entry.</p>
+<div class="card">
+  <p style="margin-top:0">The word <b style="font-size:22px">اللّٰهِ</b> segments into <b>4</b> letters:</p>
+  <table>
+    <thead><tr><th>number</th><th>text</th><th>note</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td style="font-size:20px">ا</td><td>alif</td></tr>
+      <tr><td>2</td><td style="font-size:20px">ل</td><td>lam</td></tr>
+      <tr><td>3</td><td style="font-size:20px">لّٰ</td><td>lam + shadda + dagger alif — one grapheme</td></tr>
+      <tr><td>4</td><td style="font-size:20px">هِ</td><td>ha + kasra</td></tr>
+    </tbody>
+  </table>
+</div>
+<ul class="clean">
+  <li><b>Grouping rule:</b> combining marks attach to the preceding base letter; the <code>text</code> field holds the full grapheme cluster.</li>
+  <li><b>Coverage:</b> letters within a word are contiguous and cover the word's audible span; the sum of letter spans reconstructs the word timing.</li>
+  <li><b>Optional:</b> the entire <code>letters</code> array is omitted when the job's <code>options.letters</code> is <code>false</code>.</li>
+</ul>
+
+<h2 id="security"><span class="hn">11</span>Security &amp; reliability</h2>
+<div class="grid2">
+  <div class="card">
+    <h3>Authentication &amp; integrity</h3>
+    <ul class="clean" style="margin:0">
+      <li><b>HMAC signatures</b> on every webhook and job request: <code>X-QUA-Signature</code> / <code>X-QUL-Signature</code> = HMAC-SHA256(body, shared_secret).</li>
+      <li><b>Timestamp header</b> (<code>X-Timestamp</code>) signed alongside the body to prevent replay; reject skew &gt; 5&nbsp;min.</li>
+      <li>Bearer/API-key on the fetch endpoints in addition to the signature.</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3>Idempotency &amp; retries</h3>
+    <ul class="clean" style="margin:0">
+      <li><b><code>request_id</code></b> makes job creation idempotent; re-posting returns the same job.</li>
+      <li>Callbacks are <b>at-least-once</b>: QUL de-dupes on <code>(job_id, status)</code> and imports idempotently per <code>audio_file_id</code>.</li>
+      <li>QUA retries the callback with exponential backoff until QUL returns <code>2xx</code>; QUL's <code>GET status</code> is the reconciliation fallback.</li>
+    </ul>
+  </div>
+</div>
+<div class="callout"><b>Receiver contract.</b> QUL's callback endpoint must store the raw payload, respond <code>200</code> quickly (well under QUA's timeout), and do fetching/importing in a background job — never inline. This keeps the webhook resilient to slow imports.</div>
+
+<h2 id="mapping"><span class="hn">12</span>Mapping to QUL storage</h2>
+<p class="lead">The schema maps cleanly onto QUL's existing <code>Audio::Segment</code> model — this is a self-describing superset of what QUL already exports, so import is largely a transform, not a migration.</p>
+<table>
+  <thead><tr><th>Schema (interchange)</th><th>QUL <code>Audio::Segment</code></th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>segment.start</code> / <code>segment.ends</code></td><td><code>timestamp_from</code> / <code>timestamp_to</code>, <code>duration_ms</code></td><td>ms; duration derived.</td></tr>
+    <tr><td><code>word {number,start,ends}</code></td><td><code>segments</code> JSONB → <code>[number, start, ends]</code></td><td>QUL uses terse arrays; word metadata (e.g. <code>waqaf</code>) preserved as trailing object.</td></tr>
+    <tr><td><code>letter {number,text,start,ends}</code></td><td><code>letter_segments</code> JSONB → <code>[word_number, text, start, ends]</code></td><td>Column added 2026-08-11; letter <code>number</code> is positional.</td></tr>
+    <tr><td><code>repeat: true</code></td><td><code>has_repetition</code> + <code>repeated_segments</code></td><td>QUL rolls repeated occurrences up per ayah; the timeline order drives detection.</td></tr>
+    <tr><td><code>segment.silence</code> / <code>word.silence</code></td><td>(new) trailing-gap normalization</td><td>Formalizes QUL's existing ~200&nbsp;ms inter-ayah gap handling.</td></tr>
+  </tbody>
+</table>
+<p class="footnote">Naming note: the interchange schema uses <code>ends</code>; QUL's current per-surah JSON export uses <code>end</code>. The importer maps between them. QUL's stored segments are relative-or-absolute per file; the interchange payload is always absolute-from-file-start.</p>
+
+<h2 id="open"><span class="hn">13</span>Open questions</h2>
+<ul class="clean">
+  <li><b>Silence &amp; <code>ends</code>:</b> ratify <code>ends_includes_silence: true</code> (recommended) vs. exclusive. Written into every payload either way.</li>
+  <li><b>Field name <code>ends</code> vs <code>end</code>:</b> keep <code>ends</code> in the contract (current choice) or align to QUL's export <code>end</code>.</li>
+  <li><b>Word <code>text</code>:</b> include the word glyph in the payload for validation, or rely on <code>number</code> + QUL corpus only? (Currently letters carry <code>text</code>; words do not.)</li>
+  <li><b>Delivery of the fetch payload:</b> inline JSON from <code>GET …/segments</code> vs. a pre-signed object-storage URL for very large surahs.</li>
+  <li><b>Partial re-segmentation:</b> should <code>ayah_range</code> jobs patch existing segments or always replace the whole file's set?</li>
+  <li><b>Issue lifecycle:</b> are issues resolved on QUA (re-run segmentation clears them) or acknowledged/dismissed by QUL? Define who owns <code>status</code> transitions.</li>
+</ul>
+
+<hr>
+<p class="footnote">Draft v1.0 · QUA ↔ QUL Audio Segmentation Integration · Generated 2026-08-27. This document is the shared contract of record for both teams; changes are versioned via <code>schema_version</code>.</p>
+
+</div>
+</body>
+</html>
