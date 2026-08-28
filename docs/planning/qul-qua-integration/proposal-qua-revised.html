@@ -117,6 +117,7 @@
   <a href="#security"><span class="n">11</span>Security &amp; reliability</a>
   <a href="#mapping"><span class="n">12</span>Mapping to QUL storage</a>
   <a href="#open"><span class="n">13</span>Open questions</a>
+  <a href="#migration"><span class="n">14</span>Migration plan <i style="color:#9db4ff">(added)</i></a>
 </nav>
 
 
@@ -790,6 +791,16 @@
     <li><b>Release cadence / turnaround expectations</b> for confirmed fixes &mdash; to be agreed once request volume is known.</li>
   </ul>
 
+</div>
+
+
+<h2 id="migration"><span class="hn">14</span>Migration plan <span class="pill qua">added by QUA</span></h2>
+<p class="lead">Staged adoption in three cohorts, split by where a recitation's audio lives today. Each phase gates the next; the existing QUL segment data stays untouched until full integration is signed off.</p>
+
+<div class="card">
+  <div class="step"><div class="num">1</div><div class="body"><b>Shared recitations already on the Tarteel / QUL CDN.</b> QUA already publishes timings keyed to these exact audio files, so there is no audio question &mdash; migrate these first. Import the new-format tiers, test and refine the importer against them, then <b>pilot with a small group of consumers</b> before scaling further. Recommended: surface the new data as a <b>separate page or filter</b> alongside the existing QUL segments, keeping the current-format segments in place until full integration; consumers opt in during the pilot rather than being switched.</div></div>
+  <div class="step"><div class="num">2</div><div class="body"><b>QUA recitations not yet on QUL</b> (audio not Tarteel-hosted). Bringing these into QUL is <b>blocked on the audio-indexing decision</b> (&sect;13): whether consumers point at the original CDN provenance, the original YouTube-sourced files, a mirrored canonical encode, or Tarteel hosting. Resolved by the separate audio-integration plan; these recitations migrate once it lands.</div></div>
+  <div class="step"><div class="num">3</div><div class="body"><b>QUL-only recitations into QUA.</b> These enter QUA's processing and review pipeline before their timings publish &mdash; capacity-bound, cadence to be agreed. This phase also includes an <b>overlap assessment</b>: where a recitation already exists on both sides but with different audio files / links / source provenance, decide per case whether QUA realigns against QUL's audio, or QUL adopts QUA's existing audio and replaces its timings with the published ones. Conditional &mdash; applies only where such overlap is actually found.</div></div>
 </div>
 
 <hr>

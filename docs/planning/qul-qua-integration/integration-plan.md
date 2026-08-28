@@ -151,6 +151,24 @@ Deferred decision. Scope of the audit:
 - The audio-integration plan (original-source vs mirrored encode indexing) — separate doc,
   owner-authored, referenced as an open question in the proposal.
 
+## Workstream H — migration (public §14)
+
+Three cohorts, phased; each internal implication:
+
+1. **Shared recitations on Tarteel/QUL CDN** (channels `tarteel` / `quranicaudio` serving the
+   `qul` source): the pilot cohort — timings already keyed to their CDN files, zero audio work.
+   Internal: enumerate the cohort from the catalog (`source='qul'` / channel match), confirm
+   release coverage, support their importer pilot. QUL side: new data behind a separate
+   page/filter; their old-format segments untouched until sign-off.
+2. **QUA-only recitations** (YouTube-sourced / non-Tarteel CDN): blocked on the audio-indexing
+   decision (owner's audio-integration plan) — original provenance vs mirror vs Tarteel hosting.
+   No internal work until that lands.
+3. **QUL-only recitations into QUA**: normal intake → extraction → review pipeline, capacity-
+   bound. Plus **overlap assessment tooling**: match QUL's list against the catalog by reciter +
+   riwayah + style; for hits with different audio provenance, per-case decision — realign
+   against QUL's audio (new delivery row) vs QUL adopts our audio + timings. Conditional on
+   overlap actually found.
+
 ## Sequencing
 
 1. **Send the revised proposal** (no code dependency).
@@ -160,6 +178,8 @@ Deferred decision. Scope of the audit:
 5. Workstream E pipeline (heaviest; ranged path can trail the full path).
 6. D promotion sources (TS-tab pills, seg-flag formalization, publish-gate promotion) —
    incremental, each independently shippable.
+7. Migration phase 1 pilot (H.1) rides on A; H.2 waits on the audio plan; H.3 is ongoing
+   intake capacity + the overlap assessment.
 
 ## Leak boundary (reminder)
 
