@@ -56,9 +56,14 @@ The projection layer, not the shards: bucket shards already store every occurren
 
 ## Workstream B — letter tokenization audit (blocks the letter tier)
 
-Deferred decision. **Token inventory measured 2026-08-28** over the full Mishary v12 corpus
-(114 `.json.br` shards, 348,387 letter-timing rows; saved at
-`.local/qul_compare/v12_token_inventory.json`):
+Deferred decision. Two audits ran 2026-08-28 (parallel sessions): the **v12 inventory below**
+(the live format) and the **v11 baseline** further down (what the frozen backup and every
+existing release were built from — kept for the delta and its richer silent/co-timing stats).
+
+### Audit findings — v12 inventory (2026-08-28, prod `.json.br`, mishary full mushaf)
+
+114 shards, 348,387 letter-timing rows; saved at
+`.local/qul_compare/v12_token_inventory.json`:
 
 - v12 letter units (`timing.l = [unit_id, word_id, text, start_ms, end_ms, silent]`) carry a
   **100-token** inventory — v11's letter row had 57. Changes vs v11: **shadda is composed into
@@ -69,10 +74,14 @@ Deferred decision. **Token inventory measured 2026-08-28** over the full Mishary
   excluded them). Maddah + silent-zero fusion unchanged.
 - **Null spans are effectively gone in v12**: 1 / 348,387 (the lone `ۣ` row). The historical
   "missing letter time entries" reports do not reproduce in v11 or v12 prod data.
-- Silent flags: wasla 98% silent, otiose `ا۟ و۟ ي۟` 100%, alef/maksura/waw context-dependent.
-- Three tokenization surfaces confirmed, by purpose: letter units (written-letter grain →
-  letters row + release letter tier), columns/cells (mark-level, 146 texts, renderer/animation
-  only — never public), sounds (phones).
+- Silent flags: wasla 98% silent, otiose `ا۟ و۟ ي۟` 100%, alef/maksura/waw context-dependent —
+  the finer per-token distribution in the v11 baseline below still holds directionally.
+- Tokenization-by-purpose: the v11 matrix below carries over with two substitutions — the cell
+  row becomes v12 **columns** (mark-level, 146 texts, native package, renderer/animation only)
+  and the letter row becomes v12 **letter units** (written-letter grain, shadda/dagger now
+  composed as above).
+- The v11 "all tokens collapse cleanly to the 42 vocab" property **did not survive v12** — see
+  the release break below.
 - **LATENT RELEASE BREAK (fix before any v12 cut/publish):**
   `verse_layout._external_letter` (strip `{tatweel, shadda, ۜ ۣ ۪ ۫ ۬}` → 42-token
   `to_external_char`, fail-loud) **crashes on 6 v12 tokens** — the seat+dagger fusions
@@ -88,7 +97,11 @@ Deferred decision. **Token inventory measured 2026-08-28** over the full Mishary
 - Output: a versioned public addendum (the §10 promise in the revised proposal) + the letter
   tier joins B′ in a subsequent release.
 
-### Audit findings — token inventory (2026-08-28, prod v11, mishary + qatami full mushaf)
+### Audit findings — v11 baseline (2026-08-28, prod v11 `.json.gz`, mishary + qatami full mushaf)
+
+Superseded as the live format by v12 above; still describes the frozen v11 backup and what the
+last releases shipped. The silent-flag distribution, co-timed-pair analysis, and
+tokenization-by-purpose matrix remain the reference.
 
 **63 surface tokens**, structured as the 42 base letters plus fused riding marks:
 
