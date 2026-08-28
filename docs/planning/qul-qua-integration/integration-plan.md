@@ -70,6 +70,44 @@ Deferred decision. Scope of the audit:
 - Output: a versioned public addendum (the §10 promise in the revised proposal) + the letter
   tier joins B′ in a subsequent release.
 
+### Audit findings — token inventory (2026-08-28, prod v11, mishary + qatami full mushaf)
+
+**63 surface tokens**, structured as the 42 base letters plus fused riding marks:
+
+| Class | Tokens | Convention |
+|---|---|---|
+| Single-codepoint letters | 42 (consonants, alef family, hamza family + seats, dagger `U+0670`, small waw/yeh `U+06E5/06E6`, small high yeh/noon `U+06E7/06E8`, hamza-above `U+0654`) | Standalone rows — incl. dagger alif and the smalls |
+| `base + maddah U+0653` | 15 composites (`آ وٓ ىٓ يٓ مٓ لٓ نٓ سٓ صٓ عٓ قٓ كٓ ٰٓ ۥٓ ۦٓ`) | Maddah FUSES into its letter's token |
+| `base + silent-zero` | 6 composites (`ا۟ و۟ ي۟ ى۟` rounded `U+06DF`, `ا۠` rectangular `U+06E0`) | Silent-zero marks FUSE too |
+
+All 63 collapse cleanly to the 42-token external vocab (strip `U+0653`/`U+06DF`/`U+06E0`) — no
+gaps, mapping verified against live data. Zero null-timed letters anywhere.
+
+**Silent-flag distribution validates the semantics**: `ٱ` 98.0% silent (the 2% = utterance-initial
+wasl), `ا۟` 99.9% / `و۟ ي۟ ى۟` 100% (otiose), `ل` 14.0% (sun-letter lam), `ى` 22.4% (silent seat
+under a dagger), `ا` 13.6%, silah smalls `ۥ`/`ۦ` 14–27% (waqf-shortened); dagger `ٰ` silent only
+2/18,498 — it virtually always sounds.
+
+**Co-timed adjacent rows** (identical `[start,end]`) are systematic, not noise — they are the
+alignment's shared units: `ٱ`+`ل` ×24.8k (definite article), `و`+`ا۟` ×8.1k (plural waw + otiose
+alef), `ل`+`ل` ×5.4k (Allah), `ى`+`ٰ` ×4.8k (seat + dagger), sun-letter `ل`+consonant,
+`ه`+`ۥ`/`ۦ` (silah). A consumer without the silent flag cannot disambiguate these pairs —
+**strong case for shipping the silent flag in the public letter tier**.
+
+**Tokenization-by-purpose matrix** (the "different tokenization for different purposes" answer):
+
+| Surface | Granularity | Consumer |
+|---|---|---|
+| Shard letter row | Rasm graphemes: haraka stripped, maddah/silent-zero fused, dagger + smalls standalone, `silent` flag | Timing index; animation; the public letter tier's base |
+| Shard cell row (v11 slot 5) | Mark-level: every written mark a cell (haraka/tanween/madd separate, shadda composed), roles/status/phoneme indices/rules | Tajweed analysis + reporting — internal + Inspector UI only; NOT for QUL/consumers |
+| FE animation | Letter row + cell-driven folding (riding marks fold onto hosts, share-groups co-highlight, silent letters currently co-highlight via shared spans) | Inspector Timestamps tab |
+| Published external | Letter row mapped through the 42-token vocab (maddah + silent-zero dropped) | Releases (GH/HF) |
+
+**Pending decision (visual review):** silent letters in the animation — co-highlight with the
+sounding neighbour (current behaviour via shared spans) vs no highlight at all; mergers always
+co-highlight. Whichever wins, the public tier ships timings as-is + the silent flag so consumers
+make their own choice.
+
 ## Workstream C — partner API (inbound)
 
 - New blueprint (e.g. `routes/partner/`), thin per convention; service logic Flask-free.
