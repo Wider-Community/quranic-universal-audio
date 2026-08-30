@@ -8,6 +8,11 @@ For the valid event names per state + the payload shape per event, open
 docs/reference/state-machine.md. This script does NOT validate either —
 it forwards straight to services/state/state.transition, which raises on
 an unknown event or bad payload.
+
+Works for genesis too: a slug with no state row yet is fine for the events
+whose handler inserts the first row (catalog.added, reciter.requested) — the
+latter is how a hand-minted delivery is seeded into awaiting_alignment before
+promotion. Any other event on a missing slug raises UnknownReciter.
 """
 
 from __future__ import annotations
@@ -35,11 +40,15 @@ def main() -> int:
     def _run(ctx) -> int:
         from services.state import state as state_service  # noqa: E402
 
+        # A missing row is not an error: the genesis events (catalog.added,
+        # reciter.requested) insert the first row when before is None. Let
+        # transition() enforce validity — a non-genesis event on a missing slug
+        # raises UnknownReciter from its handler rather than being pre-empted here.
         row = state_service.get_row(a.slug)
         if row is None:
-            print(f"unknown slug {a.slug}", file=sys.stderr)
-            return 4
-        print(f"BEFORE: state={row.state.value}  marked_ready={row.marked_ready}")
+            print("BEFORE: (no state row — genesis insert)")
+        else:
+            print(f"BEFORE: state={row.state.value}  marked_ready={row.marked_ready}")
 
         payload = json.loads(a.payload) if a.payload else None
         if a.dry_run:
