@@ -1,0 +1,48 @@
+{
+  "chapter": 1,
+  "entries": [
+    {
+      "ref": "1",
+      "segments": [
+        {
+          "confidence": 0.97,
+          "matched_ref": "1:1:1-1:1:4",
+          "time_end": 4210,
+          "time_start": 0,
+          "wrap_word_ranges": null
+        },
+        {
+          "confidence": 0.88,
+          "matched_ref": "1:2:1-1:2:4",
+          "time_end": 9880,
+          "time_start": 4210,
+          "wrap_word_ranges": [
+            [
+              "1:2:1",
+              "1:2:2",
+              "1:2:4"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "ref": "2",
+      "segments": [
+        {
+          "confidence": 0.0,
+          "matched_ref": "",
+          "time_end": 12000,
+          "time_start": 9880,
+          "wrap_word_ranges": null
+        }
+      ]
+    }
+  ],
+  "source_offset_ms": 0,
+  "source_url": "https://example.invalid/media/001.mp3",
+  "trim_span_ms": [
+    120,
+    12500
+  ]
+}

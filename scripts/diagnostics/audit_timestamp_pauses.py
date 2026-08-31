@@ -31,12 +31,33 @@ sys.path.insert(0, str(ROOT / "scripts" / "bucket"))
 import _bootstrap as bucket  # noqa: E402
 
 from qua_shared.timestamps_codec import decode_document  # noqa: E402
-from qua_shared.timestamps_pipeline import (  # noqa: E402
-    _matched_ref_to_output_key,
-    build_mfa_ref,
-)
 
 DEFAULT_MANIFEST = "https://hetchyy-quranic-universal-audio.hf.space/api/ts/manifest"
+
+
+def _matched_ref_to_output_key(matched_ref: str) -> str | None:
+    """Segment matched_ref to its output key: '1:1:1-1:1:4' -> '1:1';
+    cross-verse '37:151:3-37:152:2' kept as-is. None when not a paired ref."""
+    for prefix in ("Basmala+", "Isti'adha+"):
+        if matched_ref.startswith(prefix):
+            matched_ref = matched_ref[len(prefix) :]
+    parts = matched_ref.split("-")
+    if len(parts) != 2:
+        return None
+    start_parts, end_parts = parts[0].split(":"), parts[1].split(":")
+    if len(start_parts) != 3 or len(end_parts) != 3:
+        return None
+    start_sura, start_ayah = start_parts[0], start_parts[1]
+    return f"{start_sura}:{start_ayah}" if start_ayah == end_parts[1] else matched_ref
+
+
+def build_mfa_ref(seg: dict) -> str | None:
+    """The alignable verse ref for a segment, or None to skip (empty ref, low
+    confidence, or a transition segment like Amin/Takbir with no colon)."""
+    matched_ref = seg.get("matched_ref", "")
+    if not matched_ref or seg.get("confidence", 0) <= 0 or ":" not in matched_ref:
+        return None
+    return matched_ref
 
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("huggingface_hub").setLevel(logging.WARNING)

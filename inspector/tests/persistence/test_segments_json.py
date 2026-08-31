@@ -4,7 +4,40 @@ from __future__ import annotations
 
 import json
 
+from adapters.segments_json import build_segments_doc
+
 _HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
+
+# Transcribed from one offline-writer run:
+# qua-aligner-offline/work/sweepout/mohammed_siddiq_al_minshawi_1967_drive/
+#   detailed__sil600.json  (the segment below, entry ref "106")
+#   segments__sil600.json  (the expected row under key "106:1:1-106:2:4")
+_WRAPPED_ENTRY = {
+    "ref": "106",
+    "segments": [
+        {
+            "time_start": 0,
+            "time_end": 15880,
+            "matched_ref": "106:1:1-106:2:4",
+            "confidence": 0.69,
+            "wrap_word_ranges": [["106:1:1", "106:1:2", "106:2:4"]],
+        }
+    ],
+}
+_WRAPPED_KEY = "106:1:1-106:2:4"
+_EXPECTED_ROW = [1, 4, 0, 15880, {"repeated": [[1, 2], [1, 4]]}]
+
+
+def test_segments_doc_omits_repeated_by_default():
+    """Without the flag a wrapped segment still produces a 4-element row."""
+    doc = build_segments_doc([_WRAPPED_ENTRY])
+    assert doc[_WRAPPED_KEY] == [_EXPECTED_ROW[:4]]
+
+
+def test_segments_doc_repeated_matches_offline_writer():
+    """With the flag on, the fifth element matches the published offline row."""
+    doc = build_segments_doc([_WRAPPED_ENTRY], with_repeated=True)
+    assert doc[_WRAPPED_KEY] == [_EXPECTED_ROW]
 
 
 def test_segments_json_rebuild_parity(load_fixture, tmp_reciter_dir, signed_in_client):

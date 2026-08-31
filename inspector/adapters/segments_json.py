@@ -4,6 +4,10 @@ Extracted verbatim from ``services/save.py:rebuild_segments_json``.  The
 on-disk format is verse-aggregated tuples ``[start_word, end_word, t_from, t_to]``
 keyed by verse ref string, with a ``_meta`` block preserved from the existing
 file.  The tuple shape and ``_meta`` structure are unchanged (MUST-3).
+
+``with_repeated`` opts a caller into the pipeline writer's fifth element,
+``{"repeated": [[from_word, to_word], ...]}``, for segments carrying
+``wrap_word_ranges``.
 """
 
 from __future__ import annotations
@@ -14,12 +18,33 @@ from pathlib import Path
 from utils.references import seg_sort_key
 
 
-def build_segments_doc(entries: list[dict], existing_meta: dict | None = None) -> dict:
+def _repeated_element(ref_from: str, ref_to: str, wrap_word_ranges: list) -> dict:
+    """Build the ``{"repeated": [[from_word, to_word], ...]}`` row element."""
+    from utils.repetitions import compute_reading_sequence
+
+    sections = compute_reading_sequence(ref_from, ref_to, wrap_word_ranges)
+    return {
+        "repeated": [
+            [int(sec_from.rsplit(":", 1)[1]), int(sec_to.rsplit(":", 1)[1])]
+            for sec_from, sec_to in sections
+        ]
+    }
+
+
+def build_segments_doc(
+    entries: list[dict],
+    existing_meta: dict | None = None,
+    *,
+    with_repeated: bool = False,
+) -> dict:
     """Pure function: build the verse-aggregated segments.json doc from entries.
 
     Returns ``{"_meta": existing_meta, "<verse_ref>": [[start_word, end_word,
     t_from, t_to], ...], ...}`` sorted by ``seg_sort_key``. The ``_meta`` block
     is preserved from the existing file when supplied; otherwise empty.
+
+    With ``with_repeated`` set, a segment carrying a truthy ``wrap_word_ranges``
+    gains a fifth row element describing the reading-order sections.
     """
     verse_data: dict[str, list] = defaultdict(list)
 
@@ -47,12 +72,15 @@ def build_segments_doc(entries: list[dict], existing_meta: dict | None = None) -
             t_from = seg.get("time_start", 0)
             t_to = seg.get("time_end", 0)
 
+            row = [start_word, end_word, t_from, t_to]
+            wrap_ranges = seg.get("wrap_word_ranges")
+            if with_repeated and wrap_ranges:
+                row.append(_repeated_element(parts[0], parts[1], wrap_ranges))
+
             if start_ayah == end_ayah:
-                verse_data[f"{start_sura}:{start_ayah}"].append(
-                    [start_word, end_word, t_from, t_to]
-                )
+                verse_data[f"{start_sura}:{start_ayah}"].append(row)
             else:
-                verse_data[ref].append([start_word, end_word, t_from, t_to])
+                verse_data[ref].append(row)
 
     seg_doc: dict = {"_meta": existing_meta or {}}
     for key in sorted(verse_data.keys(), key=seg_sort_key):

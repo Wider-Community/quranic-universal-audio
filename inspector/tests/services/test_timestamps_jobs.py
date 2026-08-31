@@ -1,109 +1,79 @@
-"""Tests for the ``job_status`` log-persistence backstop.
+"""Tests for the batch-Space timestamps launcher.
 
-The in-container job self-writes its terminal record WITHOUT logs; the backstop
-in ``job_status`` must backfill the captured log tail onto a logless terminal
-record (the original bug: logs only persisted while the record read
-running/unknown, so successful runs never saved logs → empty history).
+``launch`` signs + POSTs the run to the batch timing Space; ``job_status`` reads
+the bucket run-log record the Space writes (no HF Job to inspect) and fires the
+idempotent completion / failure fallbacks on a terminal record.
 """
 
 from __future__ import annotations
 
-import sys
-import types
 from datetime import UTC
-from typing import Any
-
-import pytest
 
 from services.admin import timestamps_jobs
 
 
-class _Stage:
-    def __init__(self, stage):
-        self.stage = stage
-
-
-class _Info:
-    def __init__(self, stage):
-        self.status = _Stage(stage)
-
-
-@pytest.fixture
-def fake_hf(monkeypatch):
-    """Stub huggingface_hub.inspect_job / fetch_job_logs (imported inside
-    ``job_status``). Returns a handle to set the reported stage + log lines."""
-    state = {"stage": "succeeded", "logs": ["line1", "line2"]}
-    mod: Any = types.ModuleType("huggingface_hub")
-    mod.inspect_job = lambda job_id: _Info(state["stage"])
-    mod.fetch_job_logs = lambda job_id: list(state["logs"])
-    monkeypatch.setitem(sys.modules, "huggingface_hub", mod)
-    return state
-
-
-def test_backstop_backfills_logs_on_logless_succeeded_record(fake_hf, monkeypatch):
-    # Job self-wrote a terminal record but with no logs (the bug case).
-    existing = {
+def test_job_status_reads_record_and_fires_success(monkeypatch):
+    rec = {
         "job_id": "j1",
         "slug": "r",
         "type": "ts",
         "status": "succeeded",
-        "started_at": "t0",
-        "ended_at": "t1",
-        "logs": [],
+        "logs": ["a", "b"],
+        "url": None,
     }
-    monkeypatch.setattr(timestamps_jobs, "read_job_record", lambda slug, jid: dict(existing))
-    written = {}
-    monkeypatch.setattr(
-        timestamps_jobs,
-        "_write_job_record",
-        lambda rec: written.update(rec.model_dump(exclude_none=True)),
-    )
+    monkeypatch.setattr(timestamps_jobs, "read_job_record", lambda slug, jid: dict(rec))
+    completed = []
+    monkeypatch.setattr(timestamps_jobs, "complete_timestamps_job", lambda s, j: completed.append((s, j)))
 
     out = timestamps_jobs.job_status("r", "j1")
 
     assert out["status"] == "succeeded"
-    assert out["logs"] == ["line1", "line2"]
-    # The persisted record gained logs but kept its terminal status + ended_at.
-    assert written["logs"] == ["line1", "line2"]
-    assert written["status"] == "succeeded"
-    assert written["ended_at"] == "t1"
+    assert out["logs"] == ["a", "b"]
+    assert completed == [("r", "j1")]  # success fires the publish/regen path
 
 
-def test_backstop_noop_when_record_already_has_logs(fake_hf, monkeypatch):
-    existing = {"job_id": "j1", "slug": "r", "type": "ts", "status": "succeeded", "logs": ["old"]}
-    monkeypatch.setattr(timestamps_jobs, "read_job_record", lambda slug, jid: dict(existing))
-    writes = []
-    monkeypatch.setattr(timestamps_jobs, "_write_job_record", lambda rec: writes.append(rec))
-
-    timestamps_jobs.job_status("r", "j1")
-
-    assert writes == []  # nothing changed → no rewrite
-
-
-def test_backstop_sets_terminal_status_on_running_record(fake_hf, monkeypatch):
-    fake_hf["stage"] = "failed"
-    existing = {
-        "job_id": "j1",
-        "slug": "r",
-        "type": "ts",
-        "status": "running",
-        "started_at": "t0",
-        "logs": [],
-    }
-    monkeypatch.setattr(timestamps_jobs, "read_job_record", lambda slug, jid: dict(existing))
-    written = {}
-    monkeypatch.setattr(
-        timestamps_jobs,
-        "_write_job_record",
-        lambda rec: written.update(rec.model_dump(exclude_none=True)),
-    )
+def test_job_status_failure_notes_failed(monkeypatch):
+    rec = {"job_id": "j1", "slug": "r", "type": "ts", "status": "failed", "logs": []}
+    monkeypatch.setattr(timestamps_jobs, "read_job_record", lambda slug, jid: dict(rec))
+    noted = []
+    monkeypatch.setattr(timestamps_jobs, "note_timestamps_job_failed", lambda s: noted.append(s))
 
     out = timestamps_jobs.job_status("r", "j1")
 
     assert out["status"] == "failed"
-    assert written["status"] == "failed"
-    assert written["logs"] == ["line1", "line2"]
-    assert written.get("ended_at")  # backfilled
+    assert noted == ["r"]
+
+
+def test_job_status_unknown_when_no_record(monkeypatch):
+    monkeypatch.setattr(timestamps_jobs, "read_job_record", lambda slug, jid: None)
+    out = timestamps_jobs.job_status("r", "missing")
+    assert out["status"] == "unknown"
+    assert out["logs"] == []
+
+
+def test_launch_posts_space_and_links_run(monkeypatch):
+    from qua_shared.schemas import TsJobSettings
+    from services.admin import ts_space_client
+    from services.state import state as state_service
+    from services.storage import cache as _cache
+
+    monkeypatch.setattr(state_service, "get_row", lambda slug: object())
+    posted = {}
+
+    def _fake_start(slug, *, chapters=None, beams=None):
+        posted.update(slug=slug, chapters=chapters, beams=beams)
+        return "run-xyz"
+
+    monkeypatch.setattr(ts_space_client, "start_run", _fake_start)
+    linked = []
+    monkeypatch.setattr(state_service, "record_timestamps_job", lambda s, j: linked.append((s, j)))
+    monkeypatch.setattr(_cache, "invalidate_in_flight_jobs_cache", lambda: None)
+
+    out = timestamps_jobs.launch("r", settings=TsJobSettings(beams=[50, 5], chapters=[108]))
+
+    assert out == {"job_id": "run-xyz", "url": None}
+    assert posted == {"slug": "r", "chapters": [108], "beams": [50, 5]}
+    assert linked == [("r", "run-xyz")]
 
 
 # ---------------------------------------------------------------------------

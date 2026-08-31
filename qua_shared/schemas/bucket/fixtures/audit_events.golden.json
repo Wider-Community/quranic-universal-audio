@@ -1,0 +1,64 @@
+[
+  {
+    "chapter": 75,
+    "kind": "waqf_sakt",
+    "targets_after": [
+      {
+        "confidence": 0.68,
+        "final_index": 11,
+        "index_at_save": 12,
+        "matched_ref": "75:27:1-75:27:3",
+        "time_end": 55900,
+        "time_start": 51200
+      }
+    ],
+    "targets_before": [
+      {
+        "confidence": 0.71,
+        "final_index": null,
+        "index_at_save": 12,
+        "matched_ref": "75:27:1-75:27:2",
+        "time_end": 53400,
+        "time_start": 51200
+      },
+      {
+        "confidence": 0.64,
+        "final_index": null,
+        "index_at_save": 13,
+        "matched_ref": "75:27:3-75:27:3",
+        "time_end": 55900,
+        "time_start": 53400
+      }
+    ]
+  },
+  {
+    "chapter": 75,
+    "kind": "delete_segment",
+    "targets_after": [],
+    "targets_before": [
+      {
+        "confidence": 0.93,
+        "final_index": null,
+        "index_at_save": 0,
+        "matched_ref": "Basmala",
+        "time_end": 5100,
+        "time_start": 0
+      }
+    ]
+  },
+  {
+    "chapter": 83,
+    "kind": "delete_segment",
+    "targets_after": [],
+    "targets_before": [
+      {
+        "confidence": 0.93,
+        "final_index": null,
+        "index_at_save": 0,
+        "matched_ref": "Basmala",
+        "time_end": 4800,
+        "time_start": 0
+      }
+    ]
+  }
+]
