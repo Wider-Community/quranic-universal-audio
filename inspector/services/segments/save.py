@@ -24,7 +24,7 @@ from domain.command import validate_patch_dict
 from qua_shared.schemas import Actor, FlagFollowUp, SegmentFlag
 from services.audio import op_peaks as op_peaks_svc
 from services.audio.peaks_history import append_peaks_records
-from services.segments.qalqala import compute_qalqala_letter
+from services.segments.stamping import stamp_segment
 from services.storage import cache, data_dir
 from services.storage.data_loader import (
     get_single_word_verses,
@@ -297,51 +297,6 @@ def _make_seg(
     return _adapter_make_seg(s, existing_by_time, existing_by_uid, word_counts)
 
 
-def _stamp_persisted_classifier_fields(seg: dict, single_word_verses: set | None = None) -> None:
-    """Set the per-seg fields the validate fast-path reads instead of recomputing.
-
-    Called by every save path that mutates a segment dict; ensures
-    ``qalqala_letter`` and ``is_boundary_adj`` stay in lockstep with
-    ``matched_ref`` after an edit.
-
-    ``is_boundary_adj`` is computed structural-only here (``canonical=None``):
-    user edits don't touch the phonemic-side ASR data which only exists at
-    extraction time. Extraction-time stamping passes canonical to capture
-    the phonemic side.
-    """
-    from services.validation.classifier import compute_is_boundary_adj
-
-    seg["qalqala_letter"] = compute_qalqala_letter(seg)
-
-    if single_word_verses is None:
-        single_word_verses = get_single_word_verses()
-
-    matched_ref = seg.get("matched_ref") or ""
-    parts = matched_ref.split("-")
-    if len(parts) == 2:
-        sp = parts[0].split(":")
-        ep = parts[1].split(":")
-        if len(sp) == 3 and len(ep) == 3:
-            try:
-                surah = int(sp[0])
-                s_ayah = int(sp[1])
-                s_word = int(sp[2])
-                e_word = int(ep[2])
-                seg["is_boundary_adj"] = compute_is_boundary_adj(
-                    seg,
-                    surah,
-                    s_ayah,
-                    s_word,
-                    e_word,
-                    single_word_verses,
-                    None,
-                )
-                return
-            except ValueError:
-                pass
-    seg["is_boundary_adj"] = False
-
-
 def _apply_full_replace(
     matching: list[dict], updates: dict, existing_by_time: dict, existing_by_uid: dict
 ):
@@ -358,7 +313,7 @@ def _apply_full_replace(
             for s in updates["segments"]
         ]
         for seg in new_segs:
-            _stamp_persisted_classifier_fields(seg, single_word_verses)
+            stamp_segment(seg, single_word_verses)
         matching[0]["segments"] = new_segs
         return None
 
@@ -396,7 +351,7 @@ def _apply_full_replace(
             }, 400
 
         new_seg = _make_seg(s, existing_by_time, existing_by_uid, word_counts)
-        _stamp_persisted_classifier_fields(new_seg, single_word_verses)
+        stamp_segment(new_seg, single_word_verses)
         candidates[0]["segments"].append(new_seg)
     return None
 
@@ -424,7 +379,7 @@ def _apply_patch(matching: list[dict], updates: dict) -> None:
                     flat_segments[idx].pop("ignored_categories", None)
                     flat_segments[idx].pop("ignored", None)
             # Re-stamp persisted classifier fields since matched_ref/text changed.
-            _stamp_persisted_classifier_fields(flat_segments[idx], single_word_verses)
+            stamp_segment(flat_segments[idx], single_word_verses)
 
 
 def _utc_now_iso() -> str:

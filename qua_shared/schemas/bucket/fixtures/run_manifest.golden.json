@@ -1,0 +1,120 @@
+{
+  "artifacts": [
+    {
+      "bytes": 4096,
+      "path": "candidates/1.json",
+      "sha256": "87af8d2f98893bf0902d5c2a153081b8b50e689a0d1252f59d4a8cdeae2a88bd"
+    },
+    {
+      "bytes": 4097,
+      "path": "candidates/112.json",
+      "sha256": "cf15c54b49fc6754b5a0812272fd53a9ec27f5dd8879d09be04f8e189e92e30b"
+    },
+    {
+      "bytes": 4098,
+      "path": "audio/1.mp3",
+      "sha256": "dfb59ee794125b8ba82c67eb3eb66dea272570a183e1a71abde4376c6d53c377"
+    },
+    {
+      "bytes": 4099,
+      "path": "audio/112.mp3",
+      "sha256": "e1e1d76de8987009fdd9f524668f689c423918cd2e2b225ce570346c0a92b58a"
+    },
+    {
+      "bytes": 4100,
+      "path": "events.json",
+      "sha256": "2d25bf4e2a1f8a3ddfc438667b0af9a206b2c660e452d9a5e4dbca0a004f8f4d"
+    },
+    {
+      "bytes": 4101,
+      "path": "coverage_report.json",
+      "sha256": "6c2145c0b51efe089a74f9433c05dbcfcc2b5ca2f0068ffa82ada1356d9ef3e5"
+    },
+    {
+      "bytes": 4102,
+      "path": "chapter_sources.json",
+      "sha256": "2f25fc92f1a915ceeedf589006abda6d6e0889cce2bb51c0807efbfb61cf1222"
+    },
+    {
+      "bytes": 4103,
+      "path": "sidecars/low_confidence_v2.json",
+      "sha256": "89880ffcffdf547baabc91a133f544a80abe75d5919b3ad6ca9370bc42158f4c"
+    },
+    {
+      "bytes": 4104,
+      "path": "sidecars/auto_split_v1.json",
+      "sha256": "fcd887a8bdc22666d955b2d5696badec0af5c0f8b1d86956eb3ad6e7e0f20181"
+    },
+    {
+      "bytes": 8192,
+      "path": "run.log",
+      "sha256": "a25d89eb3cf293c198d930928ad3dfba24fce46c5ecad6863377b76614c231b9"
+    }
+  ],
+  "component_keys": {
+    "matching": "matching.macro_first@v2",
+    "recognition": "recognition.whisper",
+    "segmentation": "segmentation.recitation_v2"
+  },
+  "created_at": "2026-08-07T09:15:00Z",
+  "deleted_basmala_chapters": [
+    112
+  ],
+  "inputs": {
+    "audio_source": "https://example.invalid/playlist",
+    "chapters": [
+      1,
+      112
+    ],
+    "delivery_checksum": null,
+    "slug": "example-reciter",
+    "source_urls": {
+      "1": "https://example.invalid/media/001.mp3",
+      "112": "https://example.invalid/media/112.mp3"
+    }
+  },
+  "model_revisions": {
+    "asr": "example-org/whisper-quran-large",
+    "boundary_head": "example-org/boundary-head@1f2e3d4",
+    "mfa_model_id": "quran-aligner-default",
+    "mfa_store": "9c8b7a6958473625140f9c8b7a6958473625140f",
+    "vad": "example-org/recitation-segmenter-v2"
+  },
+  "profile": {
+    "matcher": "matching.macro_first@v2",
+    "name": "extraction.v2",
+    "stages": {
+      "recognition": {
+        "method": "asr.whisper",
+        "params": {
+          "beam": 5,
+          "language": "ar"
+        }
+      },
+      "segmentation": {
+        "method": "recitation_v2",
+        "params": {
+          "min_silence_ms": 300,
+          "min_speech_ms": 250,
+          "pad_left_ms": 40
+        }
+      }
+    },
+    "version": 2
+  },
+  "profile_sha256": "f16266a3dba1bf4f9a73ecd79ff2604b3a2a7e0d3f9a912a7447f55c307e1480",
+  "required": [
+    "candidates/1.json",
+    "candidates/112.json",
+    "audio/1.mp3",
+    "audio/112.mp3",
+    "events.json",
+    "coverage_report.json",
+    "chapter_sources.json",
+    "sidecars/low_confidence_v2.json",
+    "sidecars/auto_split_v1.json"
+  ],
+  "run_id": "run-20260807-0001",
+  "slug": "example-reciter",
+  "source_commit": "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c"
+}

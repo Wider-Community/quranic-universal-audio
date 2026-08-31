@@ -9,10 +9,12 @@ docs/reference/state-machine.md. This script does NOT validate either —
 it forwards straight to services/state/state.transition, which raises on
 an unknown event or bad payload.
 
-Works for genesis too: a slug with no state row yet is fine for the events
-whose handler inserts the first row (catalog.added, reciter.requested) — the
-latter is how a hand-minted delivery is seeded into awaiting_alignment before
-promotion. Any other event on a missing slug raises UnknownReciter.
+A slug with no state row is not an error for the genesis events: ``catalog.added``
+and ``reciter.requested`` insert the first row. The latter takes a hand-minted
+delivery from no row at all to ``awaiting_alignment``, and that seed has to exist
+before the pipeline uploads ``reciters/<slug>/`` or ``auto_detect`` ignores the
+folder forever. So a missing row is reported and passed through rather than
+refused; the service rejects it for any event that needs one.
 """
 
 from __future__ import annotations
@@ -46,7 +48,7 @@ def main() -> int:
         # raises UnknownReciter from its handler rather than being pre-empted here.
         row = state_service.get_row(a.slug)
         if row is None:
-            print("BEFORE: (no state row — genesis insert)")
+            print(f"BEFORE: no state row for {a.slug}")
         else:
             print(f"BEFORE: state={row.state.value}  marked_ready={row.marked_ready}")
 
