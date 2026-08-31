@@ -1,10 +1,16 @@
-# Timestamp generation job
+# Timestamp generation
 
-The timestamp job aligns recorded audio and writes native timestamp-shard v12. The complete stored contract is [shards.md](shards.md).
+Timestamps are produced on the batch timing Space (ADR 0002 slice B), not an
+in-container HF Job. The Inspector fires a run with a signed POST to the Space's
+`/internal/v1/timestamps` route (`services/admin/ts_space_client.py`); the Space
+aligns and writes native timestamp-shard v12 + `ts_validation.json` straight to
+the inspector bucket, plus a run-log record the Inspector polls
+(`services/admin/timestamps_jobs.py`). QUA is a pure consumer of the shards. The
+complete stored contract is [shards.md](shards.md).
 
 ## Responsibilities
 
-The job owns acoustic work only:
+The producer owns acoustic work only:
 
 - resolve recorded segments and their connected-wasl relationships;
 - obtain chapter audio;
@@ -18,7 +24,7 @@ It does not construct frontend cells, rename tajweed rules, synthesize bridges, 
 
 ## Native build
 
-`qua_shared.timestamps_pipeline` calls `qua_shared.timestamps_shards.build_timestamp_shards`, which delegates to `qua_sdk.integrations.shards.build_native_shards`.
+The Space's whole-verse producer passes timing occurrences to `qua_sdk.integrations.shards.build_native_shards`.
 
 For each chapter the builder:
 
@@ -35,26 +41,11 @@ Cross-verse wasl is never split or rephonemized as pausal. Known chains such as 
 
 ## Version pinning
 
-The staged SDK marker records both the timestamp-shard schema version and the
-clean Git revision of the staged SDK tree. `.github/config/repo.yml` pins that
-revision. The generation environment pins quranic-phonemizer `2.15.3`; a
-mismatched package, schema, SDK revision, dirty SDK source tree, or missing
-marker blocks the job before alignment output is published.
-
-`qua_jobs/run_generate_timestamps.py` is the container entrypoint. It is
-stdlib-only and checks the installed distribution before importing the real
-generator. If the cached public job image carries an older producer, the
-wrapper installs exactly `quranic-phonemizer==2.15.3` into that image's active
-environment and then replaces itself with `generate_timestamps.py`. The
-prebuilt image therefore affects startup time only; it cannot weaken the pin.
-Bootstrap-mode jobs use the same wrapper after installing the pinned stack.
-
-When a local SDK checkout is available, its clean revision is checked against
-the configured pin before any SDK files or marker are uploaded. A wrong local
-branch cannot poison the durable staged copy and then merely fail the later
-launch gate.
-
-MFA remains acoustic emphatic-fatha-only. The additional display phonemes are same-cardinality notation choices and never enter the acoustic model or redistribute intervals.
+The Space image bakes the SDK + quranic-phonemizer `2.15.3`; a chapter's shard
+`_meta` records the schema version, native schema version, renderer codec
+version, and phonemizer version it was built with. MFA remains acoustic
+emphatic-fatha-only. The additional display phonemes are same-cardinality
+notation choices and never enter the acoustic model or redistribute intervals.
 
 ## Inputs and outputs
 
