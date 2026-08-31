@@ -216,6 +216,18 @@ _REGISTRY: dict[str, IssueDefinition] = {
         display_title="Basmala + Amin",
         description="",
     ),
+    "missed_pause": IssueDefinition(
+        kind="missed_pause",
+        card_type="generic",
+        severity="info",
+        accordion_order=14,
+        can_ignore=True,
+        auto_suppress=True,
+        persists_ignore=True,
+        scope="per_segment",
+        display_title="Missed Pauses (ه/ة)",
+        description="Contains a mid-segment word bearing a stop sign and ending in ه or ة — verify whether the reciter paused there and the segmenter missed the split.",
+    ),
 }
 
 

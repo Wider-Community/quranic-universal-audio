@@ -182,6 +182,7 @@ def validate_reciter_segments(reciter: str) -> dict | None:
         "qalqala": len(detail["qalqala"]),
         "muqattaat": len(detail["muqattaat"]),
         "basmala_amin": len(detail["basmala_amin"]),
+        "missed_pause": len(detail["missed_pause"]),
     }
 
     result = {
@@ -199,6 +200,7 @@ def validate_reciter_segments(reciter: str) -> dict | None:
         "muqattaat": detail["muqattaat"],
         "qalqala": detail["qalqala"],
         "basmala_amin": detail["basmala_amin"],
+        "missed_pause": detail["missed_pause"],
         "category_counts": category_counts,
         "stats": stats,
         # Precomputed split-group closures keyed by root uid. The FE reads

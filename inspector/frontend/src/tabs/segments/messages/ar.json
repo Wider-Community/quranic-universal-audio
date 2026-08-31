@@ -341,6 +341,7 @@
   "segments_validation_qalqala_title": "القلقلة",
   "segments_validation_muqattaat_title": "المقطّعات",
   "segments_validation_basmala_amin_title": "البسملة + آمين",
+  "segments_validation_missed_pause_title": "وقفات مُفوَّتة (ه/ة)",
   "segments_guide_flag_button_label": "🚩 دليل",
   "segments_guide_flag_button_flagged_label": "🚩 مؤشّر",
   "segments_guide_flag_button_title": "أشِر إلى هذا التعديل كمثال لدليل القائمة",

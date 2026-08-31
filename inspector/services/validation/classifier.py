@@ -50,6 +50,7 @@ from typing import Any
 from config import LOW_CONFIDENCE_DETAIL_THRESHOLD, LOW_CONFIDENCE_THRESHOLD
 from constants import MUQATTAAT_VERSES, STANDALONE_REFS, STANDALONE_WORDS
 from services.reference.quran_refs import dk_text_for_ref
+from services.validation.missed_pause import interior_candidate_locs
 from services.validation.registry import PER_SEGMENT_CATEGORIES
 from utils.arabic_text import strip_quran_deco
 from utils.references import seg_belongs_to_entry
@@ -220,8 +221,10 @@ def classify_flags(
     Keys:
       - ``failed``, ``audio_bleeding``, ``repetitions``, ``low_confidence``,
         ``low_confidence_detail``, ``low_confidence_v2``, ``cross_verse``,
-        ``boundary_adj``, ``muqattaat``, ``qalqala``: bool.
+        ``boundary_adj``, ``muqattaat``, ``qalqala``, ``missed_pause``: bool.
       - ``qalqala_letter``: ``str | None`` — populated when ``qalqala`` fires.
+      - ``missed_pause_words``: ``list[str]`` — candidate word locs
+        (``"s:a:w"``) strictly inside the range when ``missed_pause`` fires.
       - ``end_of_verse``: bool — reserved (callers pass ``word_counts`` to
         compute this themselves).
 
@@ -242,6 +245,8 @@ def classify_flags(
         "muqattaat": False,
         "qalqala": False,
         "qalqala_letter": None,
+        "missed_pause": False,
+        "missed_pause_words": [],
         "end_of_verse": False,
         # basmala_amin detection lives in services/validation/detail.py
         # (per-chapter scan + verse 1:1 / 1:7 overlap rule) rather than
@@ -309,6 +314,12 @@ def classify_flags(
     if qalqala_letter and not is_suppressed_for(seg, "qalqala"):
         result["qalqala"] = True
         result["qalqala_letter"] = qalqala_letter
+
+    if not is_suppressed_for(seg, "missed_pause"):
+        missed_locs = interior_candidate_locs(surah, s_ayah, s_word, e_ayah, e_word)
+        if missed_locs:
+            result["missed_pause"] = True
+            result["missed_pause_words"] = missed_locs
 
     return result
 

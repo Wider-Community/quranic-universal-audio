@@ -31,6 +31,7 @@ _DETAIL_LIST_KEYS = (
     "muqattaat",
     "qalqala",
     "basmala_amin",
+    "missed_pause",
 )
 
 

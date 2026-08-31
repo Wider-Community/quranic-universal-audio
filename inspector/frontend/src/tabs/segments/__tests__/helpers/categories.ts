@@ -16,6 +16,7 @@ export const ALL_CATEGORIES = [
   'qalqala',
   'muqattaat',
   'basmala_amin',
+  'missed_pause',
 ] as const;
 
 export type CategoryName = typeof ALL_CATEGORIES[number];
@@ -31,6 +32,7 @@ export const PER_SEGMENT_CATEGORIES: CategoryName[] = [
   'qalqala',
   'muqattaat',
   'basmala_amin',
+  'missed_pause',
 ];
 
 export const CAN_IGNORE_CATEGORIES: CategoryName[] = [
@@ -40,6 +42,7 @@ export const CAN_IGNORE_CATEGORIES: CategoryName[] = [
   'audio_bleeding',
   'boundary_adj',
   'basmala_amin',
+  'missed_pause',
 ];
 
 export const PERSISTS_IGNORE_CATEGORIES: CategoryName[] = [...CAN_IGNORE_CATEGORIES];
@@ -54,4 +57,5 @@ export const AUTO_SUPPRESS_CATEGORIES: CategoryName[] = [
   'audio_bleeding',
   'boundary_adj',
   'basmala_amin',
+  'missed_pause',
 ];

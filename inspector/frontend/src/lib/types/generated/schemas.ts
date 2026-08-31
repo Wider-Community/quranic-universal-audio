@@ -51,7 +51,8 @@ export type SegValAnyItem =
   | SegValRepetitionItem
   | SegValMuqattaatItem
   | SegValQalqalaItem
-  | SegValBasmalaAminItem;
+  | SegValBasmalaAminItem
+  | SegValMissedPauseItem;
 export type AudioCategory = "by_surah" | "by_ayah";
 
 export interface AdminActiveClaim {
@@ -1829,6 +1830,29 @@ export interface SegValBasmalaAminItem {
   classified_issues?: string[];
 }
 /**
+ * ``missed_pause`` — a segment containing a mid-range word that bears a
+ * stop/pause sign and ends in ه or ة (candidate missed segmenter split).
+ */
+export interface SegValMissedPauseItem {
+  chapter: number;
+  seg_index: number;
+  segment_uid?: string | null;
+  ref: string;
+  time: string;
+  words?: SegValMissedPauseWord[];
+  classified_issues?: string[];
+}
+/**
+ * One candidate word inside a ``missed_pause`` item: its word loc
+ * (``"surah:ayah:word"``), Digital Khatt text, and the stop/pause sign
+ * character found in the text.
+ */
+export interface SegValMissedPauseWord {
+  ref: string;
+  text: string;
+  mark?: string | null;
+}
+/**
  * ``GET /api/seg/validate/<reciter>`` — issues grouped by category.
  *
  * ``errors`` and ``structural_errors`` are the SAME list under two keys
@@ -1853,6 +1877,7 @@ export interface SegValidateResponse {
   muqattaat?: SegValMuqattaatItem[];
   qalqala?: SegValQalqalaItem[];
   basmala_amin?: SegValBasmalaAminItem[];
+  missed_pause?: SegValMissedPauseItem[];
   category_counts?: {
     [k: string]: number;
   };

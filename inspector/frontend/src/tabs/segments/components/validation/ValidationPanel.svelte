@@ -328,6 +328,7 @@
         muqattaat: 'val-cross-count',
         qalqala: 'val-cross-count',
         basmala_amin: 'val-cross-count',
+        missed_pause: 'val-cross-count',
     };
     function _countClassFor(kind: string): string {
         const override = COUNT_CLASS_OVERRIDES[kind];

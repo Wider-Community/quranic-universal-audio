@@ -206,6 +206,19 @@ export const IssueRegistry: Readonly<Record<string, IssueDefinition>> = Object.f
         description: '',
         sorts: [{ kind: 'quran_order', default: true }],
     },
+    missed_pause: {
+        kind: 'missed_pause',
+        cardType: 'generic',
+        severity: 'info',
+        accordionOrder: 14,
+        canIgnore: true,
+        autoSuppress: true,
+        persistsIgnore: true,
+        scope: 'per_segment',
+        displayTitle: 'Missed Pauses (ه/ة)',
+        description: 'Contains a mid-segment word bearing a stop sign and ending in ه or ة — verify whether the reciter paused there and the segmenter missed the split.',
+        sorts: [{ kind: 'quran_order', default: true }],
+    },
 });
 
 const _entries = Object.entries(IssueRegistry) as [string, IssueDefinition][];

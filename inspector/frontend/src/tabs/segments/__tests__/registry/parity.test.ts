@@ -27,6 +27,7 @@ const PY_SNAPSHOT = {
   qalqala:           { canIgnore: false, autoSuppress: false, persistsIgnore: false, scope: 'per_segment', cardType: 'generic',        severity: 'info',    accordionOrder: 11, displayTitle: 'Qalqala' },
   muqattaat:         { canIgnore: false, autoSuppress: false, persistsIgnore: false, scope: 'per_segment', cardType: 'generic',        severity: 'info',    accordionOrder: 12, displayTitle: 'Muqattaʼat' },
   basmala_amin:      { canIgnore: true,  autoSuppress: true,  persistsIgnore: true,  scope: 'per_segment', cardType: 'generic',        severity: 'info',    accordionOrder: 13, displayTitle: 'Basmala + Amin' },
+  missed_pause:      { canIgnore: true,  autoSuppress: true,  persistsIgnore: true,  scope: 'per_segment', cardType: 'generic',        severity: 'info',    accordionOrder: 14, displayTitle: 'Missed Pauses (ه/ة)' },
 };
 
 describe('TS ↔ Python registry parity', () => {

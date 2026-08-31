@@ -149,6 +149,7 @@ def test_validate_any_item_union_accepts_every_variant(installed):
         "muqattaat",
         "qalqala",
         "basmala_amin",
+        "missed_pause",
     ]
     seen = 0
     for cat in category_keys:

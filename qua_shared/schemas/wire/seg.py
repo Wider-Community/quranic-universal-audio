@@ -572,6 +572,33 @@ class SegValBasmalaAminItem(BaseModel):
     classified_issues: list[str] = Field(default_factory=list)
 
 
+class SegValMissedPauseWord(BaseModel):
+    """One candidate word inside a ``missed_pause`` item: its word loc
+    (``"surah:ayah:word"``), Digital Khatt text, and the stop/pause sign
+    character found in the text."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ref: Ref
+    text: str
+    mark: str | None = None
+
+
+class SegValMissedPauseItem(BaseModel):
+    """``missed_pause`` — a segment containing a mid-range word that bears a
+    stop/pause sign and ends in ه or ة (candidate missed segmenter split)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    chapter: int
+    seg_index: int
+    segment_uid: str | None = None
+    ref: Ref
+    time: str
+    words: list[SegValMissedPauseWord] = Field(default_factory=list)
+    classified_issues: list[str] = Field(default_factory=list)
+
+
 # Plain union over every variant — NOT a Pydantic discriminator union (no
 # shared on-wire discriminator field exists). json2ts renders this as a named
 # TS union of the member interfaces.
@@ -589,6 +616,7 @@ SegValAnyItemUnion = (
     | SegValMuqattaatItem
     | SegValQalqalaItem
     | SegValBasmalaAminItem
+    | SegValMissedPauseItem
 )
 
 
@@ -656,6 +684,7 @@ class SegValidateResponse(BaseModel):
     muqattaat: list[SegValMuqattaatItem] = Field(default_factory=list)
     qalqala: list[SegValQalqalaItem] = Field(default_factory=list)
     basmala_amin: list[SegValBasmalaAminItem] = Field(default_factory=list)
+    missed_pause: list[SegValMissedPauseItem] = Field(default_factory=list)
     category_counts: dict[str, int] = Field(default_factory=dict)
     stats: SegValStats | None = None
     split_group_index: dict[str, list[str]] = Field(default_factory=dict)

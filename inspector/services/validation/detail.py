@@ -2,7 +2,7 @@
 
 Iterates entries and returns the detail lists (failed, low_confidence,
 boundary_adj, cross_verse, audio_bleeding, repetitions, muqattaat,
-qalqala, basmala_amin) plus the verse_segments coverage map. Each detail item carries a
+qalqala, basmala_amin, missed_pause) plus the verse_segments coverage map. Each detail item carries a
 ``classified_issues`` field — the full category list the segment matches
 under the unified classifier (forward-compat for multi-category card
 indicators on the frontend).
@@ -14,13 +14,14 @@ from collections import defaultdict
 
 from config import LOW_CONFIDENCE_DETAIL_THRESHOLD, MISSED_BASMALA_FLAG_MIN_DELETED
 from services.reference.quran_refs import dk_text_for_ref
-from services.storage.data_loader import load_detailed
+from services.storage.data_loader import get_dk_words_flat, load_detailed
 from services.validation.classifier import (
     classify_flags,
     classify_segment,
     is_ignored_for,
     is_suppressed_for,
 )
+from services.validation.missed_pause import pause_mark_for
 from services.validation.registry import PER_SEGMENT_CATEGORIES
 from utils.formatting import format_ms
 from utils.references import chapter_from_ref, seg_belongs_to_entry
@@ -125,7 +126,8 @@ def _build_detail_lists(
     Returns a dict with keys:
       chapter_seg_idx, verse_segments,
       failed, low_confidence, low_confidence_v2, boundary_adj, cross_verse,
-      audio_bleeding, repetitions, muqattaat, qalqala, basmala_amin.
+      audio_bleeding, repetitions, muqattaat, qalqala, basmala_amin,
+      missed_pause.
 
     ``probe_failed_uids`` is the set of segment UIDs flagged by the
     extraction-time MFA tight-beam probe; pass ``None`` (or omit) when
@@ -156,6 +158,7 @@ def _build_detail_lists(
     repetitions: list[dict] = []
     muqattaat: list[dict] = []
     qalqala: list[dict] = []
+    missed_pause: list[dict] = []
     basmala_11: list[tuple[dict, bool]] = []
     basmala_amin_17: list[tuple[dict, bool]] = []
     chapter_seg_idx: dict[int, int] = {}
@@ -436,6 +439,24 @@ def _build_detail_lists(
                     }
                 )
 
+            if flags["missed_pause"]:
+                dk = get_dk_words_flat()
+                words = []
+                for loc in flags["missed_pause_words"]:
+                    text = dk.get(loc, "")
+                    words.append({"ref": loc, "text": text, "mark": pause_mark_for(text)})
+                missed_pause.append(
+                    {
+                        "chapter": chapter,
+                        "seg_index": i,
+                        "segment_uid": seg_uid,
+                        "ref": matched_ref,
+                        "time": f"{format_ms(t_start)}-{format_ms(t_end)}",
+                        "words": words,
+                        "classified_issues": classified,
+                    }
+                )
+
             if surah == 1 and (s_ayah <= 1 <= e_ayah or s_ayah <= 7 <= e_ayah):
                 # Suppression is applied at the output gate (below), not at
                 # candidate collection. If a user resolves the canonical
@@ -543,6 +564,7 @@ def _build_detail_lists(
         "muqattaat": muqattaat,
         "qalqala": qalqala,
         "basmala_amin": combined_basmala_amin,
+        "missed_pause": missed_pause,
     }
 
 
