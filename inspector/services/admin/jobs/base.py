@@ -186,6 +186,17 @@ def running_job_for(*, kind: str | None = None, slug: str | None = None) -> tupl
                 return str(j_kind), (hf_job_id(job) or "")
     except Exception as exc:
         log.warning("running_job_for(kind=%s, slug=%s) failed: %s", kind, slug, exc)
+    # Timestamps runs on the batch Space, not an HF Job (ADR 0002 slice B) — the
+    # cross-kind per-slug mutex must still see one, from its bucket run-log.
+    if slug is not None and kind in (None, "timestamps"):
+        try:
+            from services.admin import timestamps_jobs
+
+            run_id = timestamps_jobs.running_job_for(slug)
+            if run_id:
+                return "timestamps", run_id
+        except Exception as exc:  # noqa: BLE001 — never block on the bucket read
+            log.warning("running_job_for ts-space check (slug=%s) failed: %s", slug, exc)
     return None
 
 
@@ -270,6 +281,15 @@ def _fetch_in_flight(kinds: tuple[str, ...]) -> list[dict]:
     except Exception as exc:
         log.warning("list_in_flight_jobs(%s) failed: %s", kinds, exc)
         return []
+    # Timestamps runs on the batch Space (ADR 0002 slice B), not an HF Job, so
+    # ``list_jobs`` never yields them — fold in the bucket run-log's running run.
+    if "timestamps" in kinds:
+        try:
+            from services.admin import timestamps_jobs
+
+            out.extend(timestamps_jobs.in_flight_runs())
+        except Exception as exc:  # noqa: BLE001 — never fail the whole listing
+            log.warning("in-flight ts-space fold-in failed: %s", exc)
     _cache.set_in_flight_jobs_cache(kinds, out)
     return out
 
