@@ -1,10 +1,9 @@
 """Verse-level timestamps-validation sidecar — ``reciters/<slug>/ts_validation.json``.
 
 The verse-level analogue of the segment-level ``low_confidence_v2.json`` probe.
-Produced by the multi-beam alignment pass in
-``qua_shared/timestamps_pipeline.py::build_ts_validation`` (written there as a
-plain dict — the pipeline runs inside the HF job with a minimal dependency set,
-so it never constructs this model). These models exist for the *readers*: the
+Produced by the batch timing Space's multi-beam whole-verse alignment pass
+(written as a plain dict alongside the shards). These models exist for the
+*readers*: the
 Inspector read-path that serves the sidecar owner-gated, and the
 ``pydantic-to-typescript`` FE codegen (re-exported via ``fe_types.py``) that
 gives the Timestamps-tab "ts-validation" accordion a typed shape.
