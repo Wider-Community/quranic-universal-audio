@@ -263,7 +263,7 @@ def _copy_bucket_content(backend, slugs: list[str], stage_root: Path) -> dict:
             dst.parent.mkdir(parents=True, exist_ok=True)
             dst.write_bytes(data)
             n += 1
-        # Timestamps shards (released reciters only) — small per-chapter JSON
+        # Timestamps shards (released reciters only) — compact per-chapter Brotli JSON
         # that drives the Timestamps tab. No-op for non-released reciters.
         try:
             shards = backend.list_dir(f"reciters/{slug}/timestamps") or []
@@ -271,7 +271,7 @@ def _copy_bucket_content(backend, slugs: list[str], stage_root: Path) -> dict:
             shards = []
         for shard in shards:
             name = Path(shard).name
-            if not name.endswith(".json"):
+            if not name.endswith(".json.br"):
                 continue
             try:
                 data = backend.read_bytes(f"reciters/{slug}/timestamps/{name}")
@@ -310,7 +310,7 @@ def _publish(stage_root: Path, dataset_id: str, token: str) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    p = argparse.ArgumentParser(description=(__doc__ or "").split("\n\n")[0])
     p.add_argument("--reciters", required=True, help="Comma-separated delivery slug(s) to include.")
     p.add_argument(
         "--bucket",

@@ -13,11 +13,11 @@ function av(
     verseRef: string,
     words: ReturnType<typeof w>[],
     time_start_ms: number,
-    bridgesOutTo: string | null = null,
+    waslOutTo: string | null = null,
 ): AssembledVerse {
     return {
         verseRef,
-        bridgesOutTo,
+        waslOutTo,
         data: { time_start_ms, words } as unknown as TsVerseData,
     };
 }

@@ -15,7 +15,7 @@ Run ONLY inside a GitHub Action AND meaningless        → .github/scripts/
 Otherwise it's an operational CLI                      → scripts/<function>/ :
   deploy/       ship the app / build + boot the image
   devenv/       set up a contributor / fixtures
-  codegen/      regenerate committed artifacts (FE types, README badges)
+  codegen/      regenerate committed artifacts (FE types, rule catalogue, badges)
   bucket/       read/write the HF bucket (raw CLI + reciter round-trip)
   backfills/    re-runnable data catch-up / one-off data fixes
   diagnostics/  measure / assert (no mutation)
@@ -43,6 +43,7 @@ no-op-or-error by design. Idempotent `backfill_*`/`purge_*`/`convert_*` stay in
 
 ### `codegen/`
 - `regen_fe_types.py` — regenerate the FE TypeScript types from `qua_shared/schemas/` (CI-checked)
+- `regen_tajweed_rules.py` — regenerate the 45-rule native catalogue from quranic-phonemizer 2.15.3
 - `update_readme_badges.py` — regenerate the root README stats badges from the prod bucket (daily cron)
 
 ### `bucket/`
@@ -60,7 +61,6 @@ no-op-or-error by design. Idempotent `backfill_*`/`purge_*`/`convert_*` stay in
 ### `diagnostics/`
 - `bench_storage.py` — benchmark backend read/write hot paths
 - `check_eligibility_parity.py` — assert DB-backed eligibility == legacy git-tracked set
-- `ts_cell_drift.py` — scan a bucket's TS shards for the FE cell-snap precondition (stored phones ≠ phonemizer), classify each divergence (waqf / ibtidāʾ-waṣl / merger / domain), and flag structurally-broken re-stamps
 
 ### `migrations/`
 Frozen, completed one-shot schema moves — see [`migrations/README.md`](migrations/README.md).

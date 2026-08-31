@@ -20,7 +20,7 @@
     import * as m from '$lib/paraglide/messages';
     import { i18n } from '$lib/i18n/locale.svelte';
     import { themeStore } from '../../../lib/stores/theme.svelte';
-    import { harakaRenderStyle } from '../utils/haraka-render';
+    import { markRenderStyle as harakaRenderStyle, waqfRenderStyle } from '@quranic-phonemizer/cells';
     import { LEGEND, type LegendRow } from '../utils/tajweed-rules';
     import {
         isGroupEnabled,
@@ -30,15 +30,13 @@
         setRuleEnabled,
         tajweedSettings,
     } from '../stores/tajweed-settings';
-    import { waqfRenderStyle } from '../utils/waqf-render';
 
     /** Distinct legendKeys of a row list, in order — the set a group toggle drives
      *  (qalqala's two rows collapse to one key). */
     const keysOf = (rows: LegendRow[]): string[] => [...new Set(rows.map((r) => r.legendKey))];
 
-    // The two dashed-haraka exemplars in the Other-rules key, positioned with the
-    // real per-glyph calibration (damma U+064F pinned above, kasra U+0650 below).
-    const DAMMA = 'ُ';
+    // Status exemplars use the real per-glyph calibration and renderer borders.
+    const FATHA = 'َ';
     const KASRA = 'ِ';
 
     // Waqf stop-sign key — the mushaf pause marks, each shown in a real analysis
@@ -111,7 +109,8 @@
     const changeColourTitle = $derived((i18n.locale, m.ts_tajweed_panel_change_colour_title()));
     const stateOn = $derived((i18n.locale, m.ts_tajweed_panel_state_on()));
     const stateOff = $derived((i18n.locale, m.ts_tajweed_panel_state_off()));
-    const keyUnwrittenCaption = $derived((i18n.locale, m.ts_tajweed_panel_key_unwritten_caption()));
+    const keyTransformedCaption = $derived((i18n.locale, m.ts_tajweed_panel_key_transformed_caption()));
+    const keyInsertedCaption = $derived((i18n.locale, m.ts_tajweed_panel_key_inserted_caption()));
     const keySilentCaption = $derived((i18n.locale, m.ts_tajweed_panel_key_silent_caption()));
     const waqfSectionTitle = $derived((i18n.locale, m.ts_tajweed_panel_waqf_section_title()));
 </script>
@@ -133,6 +132,7 @@
                     type="button"
                     class="tjs-swatch"
                     class:kubra={row.kubra}
+                    class:border={row.border}
                     style:--sw={`var(${row.colorVar})`}
                     title={changeColourTitle}
                     onclick={() => inputs[label]?.click()}
@@ -227,21 +227,37 @@
 
                 {#if group.category === 'other'}
                     <div class="tjs-key">
-                        <div class="tjs-key-row">
+                        <div class="tjs-status-keys">
+                        <div class="tjs-key-row status-key">
                             <span class="tjs-key-cells">
-                                <span class="kcell big dashed">ا</span>
+                                <span class="kcell big transformed">أ</span>
                                 <span class="kdia">
-                                    <span class="kharaka pin-top dashed">
-                                        <span class="kg" style={harakaRenderStyle(DAMMA)}>{DAMMA}</span>
+                                    <span class="kharaka pin-top transformed">
+                                        <span class="kg" style={harakaRenderStyle(FATHA)}>{FATHA}</span>
                                     </span>
-                                    <span class="kharaka pin-bottom dashed">
+                                    <span class="kharaka pin-bottom transformed">
                                         <span class="kg" style={harakaRenderStyle(KASRA)}>{KASRA}</span>
                                     </span>
                                 </span>
                             </span>
-                            <span class="kcap">{keyUnwrittenCaption}</span>
+                            <span class="kcap">{keyTransformedCaption}</span>
                         </div>
-                        <div class="tjs-key-row">
+                        <div class="tjs-key-row status-key">
+                            <span class="tjs-key-cells">
+                                <span class="kcell big inserted">ا</span>
+                                <span class="kdia">
+                                    <span class="kharaka pin-top inserted">
+                                        <span class="kg" style={harakaRenderStyle(FATHA)}>{FATHA}</span>
+                                    </span>
+                                    <span class="kharaka pin-bottom inserted">
+                                        <span class="kg" style={harakaRenderStyle(KASRA)}>{KASRA}</span>
+                                    </span>
+                                </span>
+                            </span>
+                            <span class="kcap">{keyInsertedCaption}</span>
+                        </div>
+                        </div>
+                        <div class="tjs-key-row silent-key">
                             <span class="tjs-key-cells">
                                 <span class="kcell big silent">ٱ</span>
                             </span>
@@ -428,6 +444,13 @@
         border-color: var(--accent);
         box-shadow: inset 0 -3px 0 var(--sw), 0 0 0 2px var(--accent-tint);
     }
+    /* Special-rules preview: the full ring the cell draws, not a bottom bar. */
+    .tjs-swatch.border {
+        box-shadow: inset 0 0 0 2px var(--sw);
+    }
+    .tjs-swatch.border:hover {
+        box-shadow: inset 0 0 0 2px var(--sw), 0 0 0 2px var(--accent-tint);
+    }
     /* kubrā preview: short side-wraps curling up the chip's bottom corners. */
     .tjs-swatch.kubra .kl,
     .tjs-swatch.kubra .kr {
@@ -528,6 +551,11 @@
         flex-direction: column;
         gap: 7px;
     }
+    .tjs-status-keys {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: var(--s-2);
+    }
     .tjs-key-row {
         display: flex;
         align-items: center;
@@ -586,8 +614,12 @@
     .kharaka.pin-bottom {
         bottom: 0;
     }
-    .kharaka.dashed {
+    .kharaka.transformed {
         border-style: dashed;
+        border-color: var(--ts-inserted-border);
+    }
+    .kharaka.inserted {
+        border-style: solid;
         border-color: var(--ts-inserted-border);
     }
     .kg {
@@ -598,8 +630,13 @@
         font-size: calc(var(--analysis-letter-font-size, 1.05rem) * var(--haraka-scale, 1.4));
         transform: translate(var(--haraka-shift, 0em), var(--haraka-raise, 0em));
     }
-    .kcell.dashed {
+    .kcell.transformed {
         border-style: dashed;
+        border-color: var(--ts-inserted-border);
+        color: var(--ts-idle-fg);
+    }
+    .kcell.inserted {
+        border-style: solid;
         border-color: var(--ts-inserted-border);
         color: var(--ts-idle-fg);
     }

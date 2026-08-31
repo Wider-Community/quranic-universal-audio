@@ -20,11 +20,11 @@ import qua_sdk.components.timing.runtimes.mfa_local as mfa_local_module
 from qua_sdk.components.timing.lib import resolve_word_boundary_allocation
 from qua_sdk.components.timing.wire import (
     BatchEnvelope,
-    LetterRow,
     ResultRow,
     WordPhone,
     WordRow,
 )
+from qua_sdk.schemas.timing import LetterTiming
 
 import qua_shared.timestamps_pipeline as tp
 from qua_shared.timestamps_pipeline import LocalMfaBackend, _convert_word, _worker_align
@@ -58,7 +58,7 @@ def _ok_envelope(refs) -> BatchEnvelope:
                     start=0.0,
                     end=0.5,
                     phone_indices=[0],
-                    letters=[LetterRow(char="b", start=0.0, end=0.5)],
+                    letters=[LetterTiming(char="b", start=0.0, end=0.5)],
                     phones=[WordPhone(phone="B", start=0.0, end=0.5)],
                 )
             ],

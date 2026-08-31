@@ -368,6 +368,7 @@ def read_record_bytes(kind: str, slug: str | None, job_id: str) -> bytes | None:
 # something (e.g. a new entrypoint shipped but Dockerfile not updated).
 REQUIRED_ENTRYPOINTS = (
     "qua_jobs/generate_timestamps.py",
+    "qua_jobs/run_generate_timestamps.py",
     "qua_jobs/publish_hf.py",
     "qua_jobs/publish_hf_batch.py",
     "qua_jobs/refresh_hf_catalog.py",

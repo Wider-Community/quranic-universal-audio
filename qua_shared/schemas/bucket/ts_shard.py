@@ -1,212 +1,117 @@
-"""Per-chapter Timestamps shard schema — ``reciters/<slug>/timestamps/<ch>.json.gz``.
-
-The temporal segment-array shape written by
-``qua_shared/timestamps_shards.py::build_segment_shards`` and consumed by the
-deployed Timestamps tab read-path (a byte pass-through — Flask serves the
-gzip verbatim, the FE decompresses and renders it).
-
-The FE consumes this document, so it MUST codegen cleanly. The word payload is
-a flat positional tuple (``TsShardWord``) modelled as a ``RootModel[tuple[...]]``
-so ``pydantic-to-typescript`` emits a positional TS tuple matching the FE-typed
-``TsShardWord`` projection in ``inspector/frontend/src/lib/types/ts-client.ts``.
-
-Document shape (decompressed)::
-
-    {
-      "_meta": {schema_version, chapter, audio_category, <aligner provenance>},
-      "segments": [{"ref": "1:1", "t": [start_ms, end_ms], "words": [<word>, ...]}, ...]
-    }
-
-Each ``word`` is the 5- or 6-slot tuple::
-
-    [word_idx, start_ms, end_ms, letters[], phones[](, cells[])]
-
-where ``letters`` is ``[char, start_ms|null, end_ms|null(, silent)]`` rows (the
-4th ``silent`` bool lands from schema v4 — phonemizer ``silent_flags()``) and
-``phones`` is ``[phone, start_ms, end_ms, ...optional flags]`` rows (slot 5
-may carry a cross-word tajweed bridge rule — see
-``qua_sdk.components.timing.lib.cells``).
-
-The optional 6th slot ``cells`` (schema v5) is the per-character phoneme cells
-from the phonemizer's ``character_phoneme_mappings()`` — the full per-character
-breakdown. From the SDK annotator move, cells include ``role == 'base'``
-(consonant) rows alongside ``haraka``/``tanween``/``madd`` — the structure is
-unchanged (``CellTiming`` / ``ts_shard_cells.parse_cell`` already tolerate every
-role), only the role set written is wider. Each cell is the positional row
-``[chars, role, status, phoneme_indices, source_letter_index, tag, share_group
-(, phoneme_rule_tags)]``; see ``qua_shared/ts_shard_cells.py``. ``phoneme_indices``
-are **word-local indices over the word's indexable phones** (the qalqala ``Q``
-excluded, same coordinate space as the bridge index). The optional 8th slot
-``phoneme_rule_tags`` (schema v8) is a per-phoneme tag list parallel to
-``phoneme_indices`` — each entry a rule key or ``None`` — for cells whose phonemes
-carry distinct tajweed (muqattaat). Read via ``ts_shard_cells.parse_cell`` — never
-unpack positionally, and tolerate a missing 6th slot on v3/v4 shards and a missing
-8th slot on v5-v7 shards.
-
-Extras handling: ``extra="forbid"`` + ``strip_and_warn`` on the document and
-``_meta``. The word/letter/phone tuples are positional and are validated by
-arity, not by a key set, so they carry no extras surface.
-"""
+"""Compact native timestamp shard v12 stored as ``timestamps/<chapter>.json.br``."""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, RootModel, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .._extras import strip_and_warn
-from .cell_vocab import CellRole, CellStatus
-from .tajweed_vocab import TajweedRule
-
-# Letter timing triple: [char, start_ms, end_ms]; timings may be null when the
-# aligner couldn't place an individual letter. A 4th slot ``silent`` (bool) is
-# present from schema v4 — true when the grapheme produces no audible phoneme at
-# its own position (hamza wasl, lam shamsiyah, the otiose tanween alef, …), so
-# the highlight skips it once each letter is its own cell. Sourced from the
-# phonemizer's ``silent_flags()``; absent on legacy v3 shards.
-LetterTiming = tuple[str, int | None, int | None] | tuple[str, int | None, int | None, bool]
-
-# Phone row: [phone, start_ms, end_ms, ...optional flags]. Heterogeneous and
-# variable-length (slot 5 = cross-word bridge rule when present), so it stays a
-# loose ``list`` of the union of cell types rather than a fixed tuple.
-PhoneTiming = list[str | int | bool]
-
-# Cell row (the 6th word slot): a per-character haraka/tanween cell.
-# ``[chars, role, status, phoneme_indices, source_letter_index, tag, share_group
-#   (, phoneme_rule_tags (, secondary_tags))]``.
-# ``role`` / ``status`` are the codegen-source enums (``bucket/cell_vocab``);
-# ``phoneme_indices`` are word-local indices over the word's indexable phones.
-# The optional 8th slot ``phoneme_rule_tags`` (schema v8) is a per-phoneme tag
-# list parallel to ``phoneme_indices`` (same length), each entry a rule key or
-# ``None`` — carries per-phoneme tajweed for cells whose phonemes diverge from
-# the cell ``tag`` (muqattaat: the long vowel gets its madd, a merged nasal gets
-# its idgham, etc.). The optional 9th slot ``secondary_tags`` (schema v9) lists
-# extra rules that co-occur on the grapheme but lost the single-``tag`` pick (in
-# practice ``["tafkheem"]`` on a heavy madd/qalqala cell); when only it is present
-# the 8th slot is padded ``None`` to keep it position-stable. Both absent on older
-# shards (readers tolerate the missing slots).
-CellTiming = (
-    tuple[str, CellRole, CellStatus, list[int], int, str | None, int | None]
-    | tuple[
-        str, CellRole, CellStatus, list[int], int, str | None, int | None, list[str | None] | None
-    ]
-    | tuple[
-        str,
-        CellRole,
-        CellStatus,
-        list[int],
-        int,
-        str | None,
-        int | None,
-        list[str | None] | None,
-        list[str],
-    ]
-)
+TsShardPart = tuple[str, int, int, int, int]
+TsWordTiming = tuple[int, int]
+TsSoundTiming = tuple[int, int]
+TsUnitTiming = tuple[int, int, str, int | None, int | None, Literal[0, 1]]
+TsColumnTiming = tuple[str | int, int | None, int | None]
 
 
-class TsShardWord(
-    RootModel[
-        tuple[int, int, int, list[LetterTiming], list[PhoneTiming]]
-        | tuple[int, int, int, list[LetterTiming], list[PhoneTiming], list[CellTiming]]
-    ]
-):
-    """One encoded word inside a segment — a flat positional tuple.
-
-    Slots: ``[word_idx, start_ms, end_ms, letters, phones(, cells)]``. Modelled as
-    a ``RootModel`` over a 5- **or** 6-tuple (the 6th ``cells`` slot is schema v5)
-    so the FE codegen emits a positional TS tuple (mirrors ``TsShardWord`` in
-    ``ts-client.ts``) rather than an object, and v3/v4 shards still validate.
-    """
-
-
-class TsShardCell(BaseModel):
-    """Named (object) view of a positional ``CellTiming`` row.
-
-    The shard stores cells positionally (``CellTiming``) and they are read via
-    ``ts_shard_cells.parse_cell`` — this model is the codegen vehicle that emits
-    ``CellRole`` / ``CellStatus`` / ``TajweedRule`` as TS string unions for the FE
-    (json2ts drops enums referenced only inside a positional tuple), and documents
-    the row's fields by name. It is never validated against real shard data (the
-    positional ``CellTiming`` is), so typing the rule slots as ``TajweedRule`` is a
-    codegen convenience that does not constrain the byte-pass-through read.
-    """
-
+class _Closed(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    chars: str
-    role: CellRole
-    status: CellStatus
-    phoneme_indices: list[int]
-    source_letter_index: int
-    tag: TajweedRule | None = None
-    share_group: int | None = None
-    phoneme_rule_tags: list[TajweedRule | None] | None = None
-    secondary_tags: list[TajweedRule] | None = None
+
+class TsCompactRender(_Closed):
+    v: Literal[1]
+    m: tuple[str, str, str]
+    p: list[str]
+    r: list[str]
+    w: list[list[Any]]
+    b: list[list[Any]]
+
+    @model_validator(mode="after")
+    def _counts(self):
+        if len(self.w) != len(self.b):
+            raise ValueError("compact word and boundary counts differ")
+        return self
 
 
-class TsShardSegment(BaseModel):
-    """One recited segment in a chapter's temporal ``segments[]`` array.
+class TsShardTiming(_Closed):
+    w: list[TsWordTiming]
+    s: list[TsSoundTiming]
+    l: list[TsUnitTiming]  # noqa: E741 - compact wire key, not a local variable
+    c: list[TsColumnTiming]
 
-    ``ref`` is always a single verse ``"surah:ayah"``; ``t`` is the segment's
-    ``[start_ms, end_ms]`` span. A verse may recur across several entries
-    (loopbacks / re-dos) — every accepted occurrence is one entry, emitted in
-    recitation order.
+    @model_validator(mode="after")
+    def _ordered(self):
+        for label, rows in (("word", self.w), ("sound", self.s)):
+            if any(end < start for start, end in rows):
+                raise ValueError(f"{label} timing end precedes start")
+        for _, _, _, start, end, _ in self.l:
+            if (start is None) != (end is None):
+                raise ValueError("letter timing has a half-null interval")
+            if start is not None and end is not None and end < start:
+                raise ValueError("letter timing end precedes start")
+        for _, start, end in self.c:
+            if (start is None) != (end is None):
+                raise ValueError("column timing has a half-null interval")
+            if start is not None and end is not None and end < start:
+                raise ValueError("column timing end precedes start")
+        return self
 
-    ``wasl`` (v10, optional) marks an occurrence that continued into the *next*
-    occurrence without a stop: its junction word carries waṣl (not waqf)
-    phonemes, and the FE walks consecutive flagged occurrences to reconstruct a
-    waṣl group. Absent (= False) on a stop/waqf occurrence.
-    """
 
-    model_config = ConfigDict(extra="forbid")
+class TsShardReading(_Closed):
+    id: str = Field(min_length=1)
+    parts: list[TsShardPart]
+    render: TsCompactRender
+    timing: TsShardTiming
 
-    ref: str = Field(..., min_length=1)
-    t: tuple[int, int]
-    words: list[TsShardWord] = Field(default_factory=list)
-    wasl: bool = False
+    @model_validator(mode="after")
+    def _closure(self):
+        if len(self.timing.w) != len(self.render.w):
+            raise ValueError("word timing count differs from compact words")
+        if len(self.timing.s) != len(self.render.p):
+            raise ValueError("sound timing count differs from compact tokens")
+        for ref, start, end, first, count in self.parts:
+            if not ref or end < start or first < 0 or count < 1:
+                raise ValueError("invalid compact part")
+            if first + count > len(self.render.w):
+                raise ValueError("compact part references unknown words")
+        return self
+
+
+class TsNativeProfile(_Closed):
+    riwayah: str = Field(min_length=1)
+    script: str = Field(min_length=1)
+    variant: dict[str, str]
+    extra_phonemes: list[str]
 
 
 class TsShardMeta(BaseModel):
-    """Slim per-shard ``_meta`` block.
-
-    Aligner provenance (``padding``, ``beam``, ``method``, ``aligner_model``,
-    ``shared_cmvn``, ``audio_source``, ``created_at``) passes through when the
-    source ``_meta`` carried it. Audio routing (reciter / url_template /
-    audio_urls) is deliberately NOT here — the audio-manifest sidecar is the
-    source of truth. ``extra="allow"`` so the optional provenance fields the
-    writer copies through stay typed-open for the FE.
-    """
-
     model_config = ConfigDict(extra="allow")
 
-    schema_version: int
-    chapter: int
-    audio_category: str
+    schema_version: Literal[12]
+    chapter: int = Field(ge=1, le=114)
+    audio_category: str = Field(min_length=1)
+    phonemizer_version: str = Field(min_length=1)
+    native_schema_version: Literal[2]
+    renderer_codec_version: Literal[1]
+    native_profile: TsNativeProfile
 
 
-class TsShardDoc(BaseModel):
-    """The decompressed body of one chapter shard: ``_meta`` + ``segments[]``.
-
-    The on-disk JSON key is ``_meta`` (leading underscore); pydantic disallows
-    leading-underscore field names, so it is exposed as ``meta`` Python-side
-    with ``alias="_meta"``. Serialise with ``model_dump(by_alias=True)``.
-    """
-
+class TsShardDoc(_Closed):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    meta: TsShardMeta = Field(..., alias="_meta")
-    segments: list[TsShardSegment] = Field(default_factory=list)
+    meta: TsShardMeta = Field(alias="_meta")
+    readings: list[TsShardReading]
 
-    @model_validator(mode="before")
-    @classmethod
-    def _surface_extras(cls, data: Any) -> Any:
-        if not isinstance(data, dict):
-            return data
-        declared = set(TsShardDoc.model_fields)
-        declared.add("_meta")  # JSON-side alias for ``meta``
-        return strip_and_warn(
-            data,
-            declared=declared,
-            dead=set(),
-            model_name="TsShardDoc",
-        )
+
+__all__ = [
+    "TsColumnTiming",
+    "TsCompactRender",
+    "TsNativeProfile",
+    "TsShardDoc",
+    "TsShardMeta",
+    "TsShardPart",
+    "TsShardReading",
+    "TsShardTiming",
+    "TsSoundTiming",
+    "TsUnitTiming",
+    "TsWordTiming",
+]

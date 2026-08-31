@@ -30,8 +30,8 @@ def smoke() -> int:
             storage_paths.segments_path("saad_al_ghamdi") == "reciters/saad_al_ghamdi/segments.json"
         )
         assert (
-            storage_paths.timestamps_path("saad_al_ghamdi", 1)
-            == "reciters/saad_al_ghamdi/timestamps/1.json"
+            storage_paths.timestamps_path_br("saad_al_ghamdi", 1)
+            == "reciters/saad_al_ghamdi/timestamps/1.json.br"
         )
         assert (
             storage_paths.audio_manifest_path("saad_al_ghamdi_mp3quran")

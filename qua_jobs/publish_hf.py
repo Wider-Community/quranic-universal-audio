@@ -2,8 +2,8 @@
 """HF Job entrypoint: publish one recitation to the HF dataset (v2 track).
 
 Reads the recitation's bucket artifacts (``detailed.json`` + per-chapter
-``timestamps/<n>.json.gz`` + Xing-master ``audio/<n>.mp3``) and pushes a
-parquet split to the public HF dataset under ``<riwayah>/<slug>``. Audio
+``timestamps/<n>.json.br`` + Xing-master ``audio/<n>.mp3``) and pushes a
+parquet config to the public HF dataset under ``<slug>/train``. Audio
 clips are produced by in-process MP3 frame-index slicing
 (``qua_shared/mp3_frames.py``) — each chapter is read + indexed once, then
 every verse clip is a byte-exact frame-range copy with the start snapped to
@@ -679,11 +679,11 @@ def _push_to_hf(slug: str, riwayah: str, rows: list[dict], audio_bytes: list[byt
     )
     ds = Dataset.from_dict(data, features=features)
 
-    log.info("pushing %d rows to %s/%s/%s", len(data["audio"]), repo_id, riwayah, slug)
+    log.info("pushing %d rows to %s/%s/train", len(data["audio"]), repo_id, slug)
     ds.push_to_hub(
         repo_id,
-        config_name=riwayah,
-        split=slug,
+        config_name=slug,
+        split="train",
         token=os.environ.get("HF_TOKEN"),
         max_shard_size="10GB",
         commit_message=f"publish {riwayah}/{slug}",
@@ -923,7 +923,7 @@ def publish_slug(
     # recited) is dropped — no row, no audio slice. Coverage falls by that count.
     # The editor/TS tab still shows these (only the published artifacts gate).
     from qua_shared.surah_words import word_counts_from_surah_info
-    from qua_shared.timestamps_dedup import select_complete_verses
+    from qua_shared.timestamps_native import select_complete_verses
 
     timestamps, dropped_incomplete = select_complete_verses(
         timestamps, word_counts_from_surah_info(surah_info)

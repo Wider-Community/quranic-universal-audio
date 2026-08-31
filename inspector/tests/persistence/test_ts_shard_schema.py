@@ -1,128 +1,88 @@
-"""Round-trip tests for the per-chapter Timestamps shard schema.
-
-Schema lives at ``qua_shared/schemas/bucket/ts_shard.py`` and models the
-decompressed body of ``reciters/<slug>/timestamps/<ch>.json.gz`` — the
-temporal segment-array shape produced by
-``qua_shared/timestamps_shards.py::build_segment_shards``.
-
-The FE consumes this document, so the word payload is a positional tuple
-(``TsShardWord``) that must survive parse → ``model_dump`` byte/shape-equal
-(modulo JSON having no tuple type — tuples serialise as lists).
-"""
+"""Strict round-trip tests for compact timestamp shard v12."""
 
 from __future__ import annotations
 
-import json
-
 import pytest
+from pydantic import ValidationError
 
-from qua_shared.schemas import TsShardDoc, TsShardWord
-
-
-def _sample_word() -> list:
-    """One 5-slot word tuple: [word_idx, start_ms, end_ms, letters, phones].
-
-    ``letters`` mixes a 4-slot row carrying the v4 ``silent`` flag with legacy
-    3-slot triples (one null timing to exercise the optional slot); ``phones``
-    carries a 3-cell row and a 4-cell bridge-tagged row (slot 5 = cross-word
-    tajweed bridge rule).
-    """
-    return [
-        1,
-        100,
-        540,
-        [["ب", 100, 180, False], ["س", 180, None], ["م", 280, 540]],
-        [["b", 100, 180], ["s", 180, 280, "bridge:idgham"]],
-    ]
+from qua_shared.schemas import TsShardDoc
 
 
-def _sample_doc() -> dict:
-    """Minimal but representative shard doc with `_meta` + two segments."""
+def _doc() -> dict:
     return {
         "_meta": {
-            "schema_version": 3,
+            "schema_version": 12,
             "chapter": 1,
             "audio_category": "by_surah",
-            "aligner_model": "mfa-arabic-v3",
-            "created_at": "2026-05-01T00:00:00Z",
-        },
-        "segments": [
-            {"ref": "1:1", "t": [100, 540], "words": [_sample_word()]},
-            {
-                "ref": "1:2",
-                "t": [600, 900],
-                "words": [[2, 600, 900, [["ا", 600, 900]], [["a", 600, 900]]]],
+            "phonemizer_version": "2.15.0",
+            "native_schema_version": 2,
+            "renderer_codec_version": 1,
+            "native_profile": {
+                "riwayah": "hafs",
+                "script": "uthmani",
+                "variant": {},
+                "extra_phonemes": ["emphatic_fatha"],
             },
+            "aligner_model": "mfa-arabic-v3",
+        },
+        "readings": [
+            {
+                "id": "r1",
+                "parts": [["1:3", 100, 500, 0, 1]],
+                "render": {
+                    "v": 1,
+                    "m": ["1:3:1", "canon", "native"],
+                    "p": ["b"],
+                    "r": [],
+                    "w": [["1:3:1", "ب", [], [[0, [], []]], [], [], []]],
+                    "b": [[3, [], [], [], 3, None]],
+                },
+                "timing": {
+                    "w": [[100, 500]],
+                    "s": [[100, 500]],
+                    "l": [[0, 0, "ب", 100, 500, 0]],
+                    "c": [],
+                },
+            }
         ],
     }
 
 
-def _normalize(obj):
-    """JSON round-trip to coerce tuples → lists for shape comparison."""
-    return json.loads(json.dumps(obj))
+def test_native_v12_round_trips_compact_storage():
+    doc = _doc()
+    model = TsShardDoc.model_validate(doc)
+    assert model.model_dump(by_alias=True, mode="json") == doc
 
 
-def test_shard_doc_parses_and_round_trips():
-    doc = _sample_doc()
-    m = TsShardDoc.model_validate(doc)
-    # exclude_defaults mirrors the writer: optional additive fields (the v10
-    # ``wasl`` flag) are emitted only when set, so a pre-v10 shard round-trips
-    # byte-stable instead of gaining ``wasl: False`` on every segment.
-    out = m.model_dump(by_alias=True, exclude_defaults=True)
-    assert _normalize(out) == _normalize(doc)
+def test_meta_preserves_generation_provenance():
+    model = TsShardDoc.model_validate(_doc())
+    assert (model.meta.model_extra or {})["aligner_model"] == "mfa-arabic-v3"
 
 
-def test_shard_segment_wasl_flag_round_trips():
-    doc = _sample_doc()
-    doc["_meta"]["schema_version"] = 10
-    doc["segments"][0]["wasl"] = True  # this occurrence continues into the next
-    m = TsShardDoc.model_validate(doc)
-    out = m.model_dump(by_alias=True, exclude_defaults=True)
-    assert _normalize(out) == _normalize(doc)
-    assert out["segments"][0]["wasl"] is True
-    assert "wasl" not in out["segments"][1]  # default False stays omitted
-
-
-def test_shard_word_tuple_round_trips():
-    word = _sample_word()
-    m = TsShardWord.model_validate(word)
-    # RootModel.root holds the tuple; serialised it is the same positional shape.
-    assert _normalize(m.model_dump()) == _normalize(word)
-    assert isinstance(m.root, tuple)
-    assert m.root[0] == 1 and m.root[1] == 100 and m.root[2] == 540
-
-
-def test_shard_word_arity_is_five():
-    """A word with the wrong number of positional slots is rejected — this is
-    the contract the FE positional tuple relies on."""
-    too_short = [1, 100, 540, [["ب", 100, 180]]]  # missing phones slot
-    with pytest.raises(ValueError):
-        TsShardWord.model_validate(too_short)
-
-
-def test_shard_doc_requires_meta():
-    doc = _sample_doc()
-    doc.pop("_meta")
-    with pytest.raises(ValueError):
+def test_renderer_codec_version_is_guarded():
+    doc = _doc()
+    doc["readings"][0]["render"]["v"] = 2
+    with pytest.raises(ValidationError):
         TsShardDoc.model_validate(doc)
 
 
-def test_shard_meta_passes_provenance_through():
-    """`_meta` is ``extra="allow"`` so optional aligner provenance the writer
-    copies through stays on the model rather than being dropped."""
-    m = TsShardDoc.model_validate(_sample_doc())
-    assert m.meta.audio_category == "by_surah"
-    assert (m.meta.model_extra or {}).get("aligner_model") == "mfa-arabic-v3"
+def test_unknown_top_level_and_reading_fields_are_rejected():
+    doc = _doc()
+    doc["legacy_segments"] = []
+    with pytest.raises(ValidationError):
+        TsShardDoc.model_validate(doc)
+    doc = _doc()
+    doc["readings"][0]["share_group"] = 1
+    with pytest.raises(ValidationError):
+        TsShardDoc.model_validate(doc)
 
 
-def test_shard_doc_strips_unknown_top_level_field(caplog):
-    """An unrecognised top-level key (not ``_meta``/``segments``) is stripped
-    with a WARNING via ``strip_and_warn`` — surfaces writer/schema drift."""
-    import logging
-
-    caplog.set_level(logging.WARNING, logger="qua_shared.schemas._extras")
-    doc = _sample_doc()
-    doc["bogus"] = {"junk": 1}
-    m = TsShardDoc.model_validate(doc)
-    assert (m.model_extra or {}) == {}
-    assert "bogus" in " ".join(r.getMessage() for r in caplog.records)
+def test_invalid_timing_and_part_ranges_are_rejected():
+    doc = _doc()
+    doc["readings"][0]["timing"]["s"][0] = [100, 99]
+    with pytest.raises(ValidationError, match="timing end precedes start"):
+        TsShardDoc.model_validate(doc)
+    doc = _doc()
+    doc["readings"][0]["parts"][0] = ["1:3", 500, 100, 0, 1]
+    with pytest.raises(ValidationError, match="invalid compact part"):
+        TsShardDoc.model_validate(doc)

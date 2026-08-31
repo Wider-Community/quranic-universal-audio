@@ -3,9 +3,9 @@
 Bucket-only: manifest is composed from state (released reciters)
 + catalog (display + delivery metadata). Per-chapter audio URLs are not in
 the manifest — the FE reads them from the canonical ``/api/audio/surahs``
-endpoint. Per-chapter shards are read as raw gzip from
-``<bucket>/reciters/<slug>/timestamps/<chapter>.json.gz`` on demand — the
-bucket gz body is the wire body (segment-array shape), so serving is a byte
+endpoint. Per-chapter shards are read as raw Brotli from
+``<bucket>/reciters/<slug>/timestamps/<chapter>.json.br`` on demand. The
+bucket body is the compact v12 wire body, so serving is a byte
 pass-through cached through a small per-process LRU so chapter scrubbing
 within one reciter doesn't re-pay the bucket fetch.
 
@@ -25,7 +25,7 @@ from pathlib import Path
 
 from config import DK_SCRIPT_PATH
 from qua_shared.schemas import ReciterCatalog, TsManifestResponse
-from qua_shared.timestamps_shards import SCHEMA_VERSION
+from qua_shared.timestamps_shards import MANIFEST_SCHEMA_VERSION
 from services.audio.audio_meta import chapter_numbers, vbr_chapters_for_reciter
 from services.state import catalog as catalog_service
 from services.state import state as state_service
@@ -75,7 +75,7 @@ def _build_manifest_dict(reciters_block: dict[str, dict]) -> dict:
     """
     manifest = TsManifestResponse.model_validate(
         {
-            "schema_version": SCHEMA_VERSION,
+            "schema_version": MANIFEST_SCHEMA_VERSION,
             "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "commit": "",
             "dataset_base_url": "",
@@ -239,25 +239,25 @@ def _ensure_built() -> None:
 
 def _dev_fixture_shard(reciter: str, chapter: int) -> bytes | None:
     """Dev-only override: when ``TS_DEV_FIXTURES`` points at a bucket-shaped dir,
-    serve ``<dir>/reciters/<reciter>/timestamps/<chapter>.json.gz`` from disk
-    instead of the bucket — for iterating on locally-generated v5 shards. Never
+    serve ``<dir>/reciters/<reciter>/timestamps/<chapter>.json.br`` from disk
+    instead of the bucket for local shard iteration. Never
     set in production."""
     base = os.environ.get("TS_DEV_FIXTURES")
     if not base:
         return None
     try:
         return (
-            Path(base) / "reciters" / reciter / "timestamps" / f"{chapter}.json.gz"
+            Path(base) / "reciters" / reciter / "timestamps" / f"{chapter}.json.br"
         ).read_bytes()
     except OSError:
         return None
 
 
 def _load_bucket_shard(reciter: str, chapter: int) -> bytes | None:
-    """Return the raw gzipped per-chapter shard from the bucket, or ``None``.
+    """Return the raw Brotli per-chapter shard from the bucket, or ``None``.
 
-    The bucket gz body IS the wire body (segment-array shape, slim ``_meta``) —
-    the read path is a byte pass-through, no inflate/reshape/recompress. LRU
+    The bucket body is the compact v12 wire body. The read path is a byte
+    pass-through with no inflate/reshape/recompress. LRU
     so chapter scrubbing within one reciter doesn't re-pay the bucket fetch.
     """
     dev = _dev_fixture_shard(reciter, chapter)
@@ -268,7 +268,7 @@ def _load_bucket_shard(reciter: str, chapter: int) -> bytes | None:
     if cached is not None:
         _shard_lru.move_to_end(key)
         return cached
-    body = data_dir.read_timestamps_chapter_gz(reciter, chapter)
+    body = data_dir.read_timestamps_chapter_br(reciter, chapter)
     if body is None:
         return None
     _shard_lru[key] = body

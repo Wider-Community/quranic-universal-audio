@@ -848,7 +848,7 @@ def main() -> int:
     surah_info = json.loads((refs_dir / "surah_info.json").read_bytes())
     from qua_shared.coverage import missing_coverage, verse_counts_from_surah_info
     from qua_shared.surah_words import word_counts_from_surah_info
-    from qua_shared.timestamps_dedup import select_complete_verses
+    from qua_shared.timestamps_native import select_complete_verses
 
     word_counts = word_counts_from_surah_info(surah_info)
     surah_verse_counts = verse_counts_from_surah_info(surah_info)

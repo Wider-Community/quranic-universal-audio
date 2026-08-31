@@ -17,6 +17,7 @@
     import * as m from '../../../lib/paraglide/messages';
     import { can } from '../../../lib/stores/capabilities';
     import { playerContext } from '../../../lib/stores/player-context';
+    import { dashPort } from '../../../lib/playback/dash-port';
     import type { TsReport } from '../../../lib/types/generated/schemas';
     import { getVerseReports } from '../services/reports-client';
     import {
@@ -29,7 +30,7 @@
     } from '../stores/report-mode';
     import { currentVerseReports, loadReciterReports, openReportedVerseKeys } from '../stores/ts-reports';
     import { get } from 'svelte/store';
-    import { selectedVerse } from '../stores/verse';
+    import { focusWaslGroup, loadedVerse, selectedVerse } from '../stores/verse';
     import ReportIcon from './report/ReportIcon.svelte';
     import ReportMenu from './report/ReportMenu.svelte';
 
@@ -38,6 +39,7 @@
     let open = $state(false);
     let snapSlug = $state('');
     let snapVerse = $state('');
+    let snapReadingId = $state('');
     let verseReports = $state<TsReport[]>([]);
     let warmedKey = $state('');
 
@@ -83,9 +85,23 @@
         warmedKey = key;
         snapSlug = slug;
         snapVerse = verse;
+        snapReadingId = readingIdFor(verse);
         const seed = get(currentVerseReports);
         if (seed.length) verseReports = seed;
         await loadVerse();
+    }
+
+    function readingIdFor(verse: string): string {
+        const data = get(focusWaslGroup)?.data ?? get(loadedVerse)?.data;
+        const matches = data?.native.filter((reading) =>
+            reading.parts.some((part) => part.ref === verse),
+        ) ?? [];
+        if (matches.length === 1) return matches[0]!.id;
+        const at = dashPort.currentTimeMs();
+        const active = matches.filter((reading) => reading.parts.some((part) =>
+            part.ref === verse && part.t[0] <= at && at < part.t[1],
+        ));
+        return active.length === 1 ? active[0]!.id : '';
     }
 
     function toggle(): void {
@@ -97,6 +113,7 @@
         const key = `${curSlug}:${curVerse}`;
         snapSlug = curSlug;
         snapVerse = curVerse;
+        snapReadingId = readingIdFor(curVerse);
         if (key !== warmedKey) {
             const seed = get(currentVerseReports);
             verseReports = seed.length ? seed : [];
@@ -173,6 +190,7 @@
                 <ReportMenu
                     slug={snapSlug}
                     verseKey={snapVerse}
+                    readingId={snapReadingId}
                     {verseReports}
                     onchanged={onChanged}
                     onenterMode={onEnterMode}

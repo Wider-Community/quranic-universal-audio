@@ -30,6 +30,7 @@
         submitRequest,
     } from '../../../lib/api/requests';
     import CountryPicker from '../../../lib/components/CountryPicker.svelte';
+    import { pushToast } from '../../../lib/stores/toast';
     import { loadCatalogJson } from '../../../lib/resources/catalog';
     import { isOwner } from '../../../lib/stores/current-user';
     import type {
@@ -222,6 +223,11 @@
                 comments.trim() ? comments.trim() : null,
                 autoClaim,
             );
+            pushToast({
+                kind: 'success',
+                text: m.dashboard_submit_queued_toast(),
+                ttl: 9000,
+            });
             dispatch('submitted', { slug: delivery.slug });
         } catch (e) {
             formError = (e as Error).message;

@@ -311,6 +311,22 @@ def notify_owners_new_request(
             "notifications.notify_owners_new_request failed for request=%s", request_id
         )
 
+    # Separate try: the in-app rail fan-out above must not be skipped or rolled
+    # back by an email failure, and vice versa.
+    try:
+        from services.email import emit as email_emit
+
+        email_emit.emit_owners_new_request(
+            requester_hf_user_id=requester.hf_user_id,
+            reciter_name=reciter_name or "a new request",
+            kind=kind,
+            body=body,
+        )
+    except Exception:  # noqa: BLE001 — best-effort; never break the submission
+        logger.exception(
+            "notifications.notify_owners_new_request email failed for request=%s", request_id
+        )
+
 
 def notify_owners_ts_report(
     *,

@@ -19,7 +19,7 @@
  * - `phonemes` forces the phoneme row ON while leaving the letters row at the
  *   user's current setting (the inverse of timing/tajweed). Any number of phoneme
  *   cells are flagged, no comment, no per-cell control; rows group by word at
- *   submit. Cross-word merger (bridge) phonemes carry `phoneme_flat_index = -1`.
+ *   submit. Cross-word merger phonemes target their native bridge id.
  *
  * Switching focus to a new cell auto-discards the previously focused annotation
  * when it is still incomplete (missing a required subtype / rule pick / comment),
@@ -29,7 +29,7 @@ import { derived, get, writable } from 'svelte/store';
 
 import { dashPort } from '../../../lib/playback/dash-port';
 import { exitLoop } from '../../../lib/playback/loop';
-import type { TsReportTarget } from '../../../lib/types/generated/schemas';
+import type { TsReport, TsReportTarget } from '../../../lib/types/generated/schemas';
 import { type CellKey, targetCellKey, type TimingDir } from '../utils/report-target';
 import { showLetters, showPhonemes } from './display';
 import {
@@ -72,6 +72,7 @@ export interface StagedTajweed {
     kind: 'tajweed';
     cellKey: CellKey;
     target: TsReportTarget;
+    wordIndex: number;
     subtype: TajweedSubtype;
     /** Internal rule tag ids present on the cell (the picker's options). */
     ruleOptions: string[];
@@ -93,7 +94,7 @@ export interface StagedSilence {
     kind: 'silence';
     cellKey: CellKey;
     target: TsReportTarget;
-    /** The word before the flagged boundary (= the gap target's `word_index`). */
+    /** Display ordinal of the word before the native boundary. */
     gapWordIndex: number;
     subtype: SilenceSubtype;
     /** Boundary axes — `pause_boundary` only (≥1 set to be complete). The binary
@@ -166,6 +167,12 @@ function seedOwnFlags(
     category: 'timing' | 'tajweed' | 'phonemes' | 'silence',
     subtype?: TajweedSubtype | SilenceSubtype,
 ): void {
+    const displayWordIndex = (report: TsReport): number => {
+        const native = report.snapshot?.native as Record<string, unknown> | undefined;
+        const ref = typeof native?.word_ref === 'string' ? native.word_ref : '';
+        const ordinal = Number(ref.split(':')[2]);
+        return Number.isInteger(ordinal) ? ordinal - 1 : -1;
+    };
     const m = new Map<CellKey, StagedAnnotation>();
     for (const r of get(currentVerseReports)) {
         if (!r.mine || r.status !== 'open' || r.category !== category) continue;
@@ -179,7 +186,7 @@ function seedOwnFlags(
                 kind: 'silence',
                 cellKey: key,
                 target: r.target,
-                gapWordIndex: r.target.word_index ?? -1,
+                gapWordIndex: displayWordIndex(r),
                 subtype: (r.subtype as SilenceSubtype) ?? 'pause_missed',
                 onset: (r.onset as TimingDir | null) ?? null,
                 offset: (r.offset as TimingDir | null) ?? null,
@@ -190,7 +197,7 @@ function seedOwnFlags(
                 kind: 'timing',
                 cellKey: key,
                 target: r.target,
-                wordIndex: r.target.word_index ?? -1,
+                wordIndex: displayWordIndex(r),
                 onset: (r.onset as TimingDir | null) ?? null,
                 offset: (r.offset as TimingDir | null) ?? null,
                 comment: r.comment ?? '',
@@ -201,8 +208,8 @@ function seedOwnFlags(
                 kind: 'phonemes',
                 cellKey: key,
                 target: r.target,
-                wordIndex: r.target.word_index ?? -1,
-                glyph: r.snapshot?.chars ?? '',
+                wordIndex: displayWordIndex(r),
+                glyph: String(r.snapshot?.native?.token ?? r.snapshot?.native?.text ?? ''),
                 originalId: r.id,
             });
         } else {
@@ -211,6 +218,7 @@ function seedOwnFlags(
                 kind: 'tajweed',
                 cellKey: key,
                 target: r.target,
+                wordIndex: displayWordIndex(r),
                 subtype: (r.subtype as TajweedSubtype) ?? 'wrong_rule',
                 ruleOptions: tags,
                 selectedRuleTags: tags,

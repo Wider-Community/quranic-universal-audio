@@ -13,6 +13,7 @@ destination is the prod bucket.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -44,10 +45,14 @@ def main() -> int:
 
     from huggingface_hub import sync_bucket
 
-    res = sync_bucket(src=a.src, dst=a.dst, delete=a.delete, dry_run=a.dry_run)
-    # res surfaces the planned/applied ops; print compact summary.
-    for line in str(res).splitlines():
-        print(line)
+    res = sync_bucket(
+        source=a.src,
+        dest=a.dst,
+        delete=a.delete,
+        dry_run=a.dry_run,
+        quiet=True,
+    )
+    print(json.dumps(res.summary(), sort_keys=True))
     return 0
 
 

@@ -39,7 +39,7 @@ export const TS_ZOOM_ANIMATE_MS_PER_SEC = 35;
  *  of callsites import the old name; safe to remove once they migrate. */
 export const TS_ZOOM_ANIMATE_MS = TS_ZOOM_ANIMATE_MIN_MS;
 
-/** Delay in ms for single-click handlers in `UnifiedDisplay`. The DOM fires
+/** Delay in ms for single-click handlers in `TimedAnalysisRow`. The DOM fires
  *  `click` before `dblclick`, so a deferred single-click that dblclick cancels
  *  is the clean way to disambiguate "seek / swap loop" from "toggle loop". */
 export const TS_CLICK_DELAY_MS = 220;

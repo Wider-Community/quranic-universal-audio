@@ -6,7 +6,7 @@ artifact is written. Failures block the publish and surface the offending
 verses in ``validation_summary``.
 
 Input shape is the source-relative per-verse map produced by re-stitching
-``reciters/<slug>/timestamps/<chapter>.json.gz`` shards back together. Each
+``reciters/<slug>/timestamps/<chapter>.json.br`` shards back together. Each
 verse entry is the canonical projection used by the FE today:
 
     {

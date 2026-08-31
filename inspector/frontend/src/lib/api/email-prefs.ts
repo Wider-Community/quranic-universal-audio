@@ -42,6 +42,7 @@ export const DEFAULT_EMAIL_PREFS: EmailPrefs = {
     github_release: false,
     riwayah_new_recitation: false,
     riwayah_first_available: false,
+    owner_new_request: false,
     reciters: [],
     riwayahs: [],
 };
@@ -73,6 +74,7 @@ export function normalizeEmailPrefs(raw: unknown): EmailPrefs {
         github_release: r.github_release === true,
         riwayah_new_recitation: r.riwayah_new_recitation === true,
         riwayah_first_available: r.riwayah_first_available === true,
+        owner_new_request: r.owner_new_request === true,
         reciters: asStringArray(r.reciters),
         riwayahs: asStringArray(r.riwayahs),
     };

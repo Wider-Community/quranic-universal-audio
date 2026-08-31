@@ -56,6 +56,7 @@
     --tj-mutamathilayn: #6b680f;    /* olive */
     --tj-mutaqaribayn: #938f15;     /* olive */
     --tj-mutajanisayn: #e3dc1c;     /* yellow */
+    --tj-special: #d9534f;          /* coral — the full-cell border rules */
 }
 
 * {
