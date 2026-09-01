@@ -1,10 +1,11 @@
 """Missed-pause candidate detection for the ``missed_pause`` category.
 
 A candidate word bears a Quranic stop/pause sign (U+06D6..U+06DC) AND ends in
-ه or ة after stripping diacritics/decoration — the segmenter's known
-missed-pause class. A segment flags when such a word sits strictly inside its
-matched word range (not the first word, not the last): the stop sign gives a
-high pause prior, and non-edge means the segmenter did not split there.
+one of the pausal letters ه / ة / م / ن after stripping diacritics/decoration
+— the segmenter's known missed-pause class. A segment flags when such a word
+sits strictly inside its matched word range (not the first word, not the
+last): the stop sign gives a high pause prior, and non-edge means the
+segmenter did not split there.
 
 The candidate set is derived once from the Digital Khatt word map and cached
 at module level (lazy).
@@ -18,8 +19,9 @@ from utils.arabic_text import last_arabic_letter
 # Quranic stop/pause signs: ۖ ۗ ۘ ۙ ۚ ۛ ۜ (U+06D6..U+06DC).
 PAUSE_SIGNS: frozenset[str] = frozenset(chr(c) for c in range(0x06D6, 0x06DD))
 
-# Pausal finals the segmenter is known to miss: ه (U+0647), ة (U+0629).
-_PAUSAL_FINALS = frozenset({"ه", "ة"})
+# Pausal finals the segmenter is known to miss:
+# ه (U+0647), ة (U+0629), م (U+0645), ن (U+0646).
+PAUSAL_FINALS: frozenset[str] = frozenset({"ه", "ة", "م", "ن"})
 
 # Runaway-ayah guard; mirrors ``quran_refs.dk_text_for_ref``.
 _MAX_AYAH_BOUNDARY = 300
@@ -34,7 +36,7 @@ def candidate_locs() -> frozenset[str]:
         _candidates = frozenset(
             loc
             for loc, text in get_dk_words_flat().items()
-            if any(s in text for s in PAUSE_SIGNS) and last_arabic_letter(text) in _PAUSAL_FINALS
+            if any(s in text for s in PAUSE_SIGNS) and last_arabic_letter(text) in PAUSAL_FINALS
         )
     return _candidates
 
@@ -79,4 +81,17 @@ def interior_candidate_locs(
     return out
 
 
-__all__ = ["PAUSE_SIGNS", "candidate_locs", "interior_candidate_locs", "pause_mark_for"]
+def pausal_letter_for(text: str) -> str | None:
+    """Return the word's final pausal letter (ه / ة / م / ن), or None."""
+    last = last_arabic_letter(text)
+    return last if last in PAUSAL_FINALS else None
+
+
+__all__ = [
+    "PAUSAL_FINALS",
+    "PAUSE_SIGNS",
+    "candidate_locs",
+    "interior_candidate_locs",
+    "pausal_letter_for",
+    "pause_mark_for",
+]

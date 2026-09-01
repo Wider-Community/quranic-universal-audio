@@ -1,8 +1,11 @@
-"""``missed_pause`` classification: interior stop-sign ه/ة words only.
+"""``missed_pause`` classification: interior stop-sign ه/ة/م/ن words only.
 
 Uses the real Digital Khatt data (same as the qalqala classifier tests):
 2:2:4 ``رَيْبَۛ`` bears a stop sign but ends in ب (non-candidate);
-2:2:5 ``فِيهِۛ`` bears a stop sign and ends in ه (candidate).
+2:2:5 ``فِيهِۛ`` bears a stop sign and ends in ه (candidate);
+2:191:7 ``أَخْرَجُوكُمْۚ`` ends in م; 2:185:12 ``وَٱلْفُرْقَانِۚ`` ends in ن;
+2:185:17 ``فَلْيَصُمْهُۖ`` ends in ه (pairs with 2:185:12 for the
+mixed-letter single-item case).
 """
 
 from __future__ import annotations
@@ -18,13 +21,14 @@ def _classify(seg: dict) -> list[str]:
 
 
 def _flags(seg: dict) -> dict:
+    ayah = int(seg["matched_ref"].split("-")[0].split(":")[1])
     return classify_flags(
         seg,
         entry_ref="2",
         is_by_ayah=False,
         surah=2,
-        s_ayah=2,
-        e_ayah=2,
+        s_ayah=ayah,
+        e_ayah=ayah,
         s_word=int(seg["matched_ref"].split("-")[0].split(":")[2]),
         e_word=int(seg["matched_ref"].split("-")[1].split(":")[2]),
         single_word_verses=set(),
@@ -72,6 +76,20 @@ def test_ignored_categories_suppresses():
     assert "missed_pause" not in _classify(seg)
 
 
+def test_interior_meem_final_word_flags():
+    seg = {"matched_ref": "2:191:6-2:191:8", "confidence": 1.0}
+    flags = _flags(seg)
+    assert flags["missed_pause"] is True
+    assert flags["missed_pause_words"] == ["2:191:7"]
+
+
+def test_interior_noon_final_word_flags():
+    seg = {"matched_ref": "2:185:11-2:185:13", "confidence": 1.0}
+    flags = _flags(seg)
+    assert flags["missed_pause"] is True
+    assert flags["missed_pause_words"] == ["2:185:12"]
+
+
 def test_two_word_segment_never_flags():
     seg = {"matched_ref": "2:2:4-2:2:5", "confidence": 1.0}
     assert _flags(seg)["missed_pause"] is False
@@ -110,4 +128,37 @@ def test_detail_item_carries_words_with_text_and_mark():
     word = item["words"][0]
     assert word["ref"] == CANDIDATE_LOC
     assert word["mark"] == "ۛ"  # ۛ
+    assert word["letter"] == "ه"
     assert "ۛ" in word["text"]
+
+
+def test_mixed_letter_candidates_yield_one_item_with_both_words():
+    # 2:185:11-2:185:18 contains 2:185:12 (ن) and 2:185:17 (ه) interior.
+    entries = [
+        {
+            "ref": "2",
+            "segments": [
+                {
+                    "segment_uid": "mp-mixed",
+                    "matched_ref": "2:185:11-2:185:18",
+                    "confidence": 1.0,
+                    "time_start": 0,
+                    "time_end": 8000,
+                }
+            ],
+        }
+    ]
+    detail = _build_detail_lists(
+        entries,
+        is_by_ayah=False,
+        word_counts={(2, 185): 50},
+        canonical=None,
+        single_word_verses=set(),
+    )
+    items = detail["missed_pause"]
+    assert len(items) == 1  # one card per segment, never one per letter
+    words = items[0]["words"]
+    assert [(w["ref"], w["letter"]) for w in words] == [
+        ("2:185:12", "ن"),
+        ("2:185:17", "ه"),
+    ]

@@ -21,7 +21,7 @@ from services.validation.classifier import (
     is_ignored_for,
     is_suppressed_for,
 )
-from services.validation.missed_pause import pause_mark_for
+from services.validation.missed_pause import pausal_letter_for, pause_mark_for
 from services.validation.registry import PER_SEGMENT_CATEGORIES
 from utils.formatting import format_ms
 from utils.references import chapter_from_ref, seg_belongs_to_entry
@@ -444,7 +444,14 @@ def _build_detail_lists(
                 words = []
                 for loc in flags["missed_pause_words"]:
                     text = dk.get(loc, "")
-                    words.append({"ref": loc, "text": text, "mark": pause_mark_for(text)})
+                    words.append(
+                        {
+                            "ref": loc,
+                            "text": text,
+                            "mark": pause_mark_for(text),
+                            "letter": pausal_letter_for(text),
+                        }
+                    )
                 missed_pause.append(
                     {
                         "chapter": chapter,

@@ -574,19 +574,21 @@ class SegValBasmalaAminItem(BaseModel):
 
 class SegValMissedPauseWord(BaseModel):
     """One candidate word inside a ``missed_pause`` item: its word loc
-    (``"surah:ayah:word"``), Digital Khatt text, and the stop/pause sign
-    character found in the text."""
+    (``"surah:ayah:word"``), Digital Khatt text, the stop/pause sign character
+    found in the text, and its final pausal letter (ه / ة / م / ن)."""
 
     model_config = ConfigDict(extra="forbid")
 
     ref: Ref
     text: str
     mark: str | None = None
+    letter: str | None = None
 
 
 class SegValMissedPauseItem(BaseModel):
     """``missed_pause`` — a segment containing a mid-range word that bears a
-    stop/pause sign and ends in ه or ة (candidate missed segmenter split)."""
+    stop/pause sign and ends in a pausal letter ه / ة / م / ن (candidate
+    missed segmenter split)."""
 
     model_config = ConfigDict(extra="forbid")
 

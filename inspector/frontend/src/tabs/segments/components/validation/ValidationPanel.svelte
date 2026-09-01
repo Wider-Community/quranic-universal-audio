@@ -11,6 +11,7 @@
      *
      * LC-slider: reactive `lcThreshold` drives Low Confidence item filtering.
      * Qalqala filter: reactive `activeQalqalaLetter` + `qalqalaEndOfVerse`.
+     * Missed-pause filter: reactive `activeMissedPauseLetter`.
      *
      * Virtualization: the cards container for the open category virtualizes
      * its list when the item count exceeds VIRTUALIZE_THRESHOLD. Only the
@@ -34,7 +35,7 @@
     import { shadowPrewarm } from '../../../../lib/playback/shadow-audio';
     import { can } from '../../../../lib/stores/capabilities';
     import { currentUser } from '../../../../lib/stores/current-user';
-    import type { SegValAnyItem, SegValLowConfidenceItem, SegValQalqalaItem, SegValidateResponse } from '../../../../lib/types/generated/schemas';
+    import type { SegValAnyItem, SegValLowConfidenceItem, SegValMissedPauseItem, SegValQalqalaItem, SegValidateResponse } from '../../../../lib/types/generated/schemas';
     import { activeTab } from '../../../../lib/utils/active-tab';
     import { TAB_NAMES } from '../../../../lib/utils/constants';
     import { pendingSegmentsDeepLink, type SegmentsDeepLink } from '../../../../lib/utils/goto-segments';
@@ -118,6 +119,10 @@
     const QALQALA_LETTERS_ORDER: ReadonlyArray<string> = ['\u0642', '\u0637', '\u0628', '\u062c', '\u062f'];
     let activeQalqalaLetter: string | null = null;
     let qalqalaEndOfVerse: boolean = false;
+
+    // ---- Missed-pause letter filter ----
+    const MISSED_PAUSE_LETTERS_ORDER: ReadonlyArray<string> = ['\u0647', '\u0629', '\u0645', '\u0646'];
+    let activeMissedPauseLetter: string | null = null;
 
     // ---- Virtualization constants ----
     /** Fallback card height (px) before real measurement. MissingVersesCard with
@@ -292,6 +297,9 @@
         isQalqala: boolean;
         /** Letters present in qalqala items (for filter buttons). */
         qalqalaLetters: string[];
+        isMissedPause: boolean;
+        /** Pausal letters present in missed_pause items (for filter buttons). */
+        missedPauseLetters: string[];
         /** Sort options this accordion offers (undefined = no sort pills). */
         sorts?: readonly SortOption[];
     }
@@ -310,6 +318,8 @@
         isLowConf: boolean;
         isQalqala: boolean;
         qalqalaLetters: string[];
+        isMissedPause: boolean;
+        missedPauseLetters: string[];
         sorts?: readonly SortOption[];
     }
 
@@ -407,6 +417,8 @@
             let isLowConf = false;
             let isQalqala = false;
             let qalqalaLetters: string[] = [];
+            let isMissedPause = false;
+            let missedPauseLetters: string[] = [];
 
             if (defn.kind === 'low_confidence') {
                 isLowConf = true;
@@ -425,6 +437,18 @@
                     if (i.qalqala_letter) present.add(i.qalqala_letter);
                 }
                 qalqalaLetters = QALQALA_LETTERS_ORDER.filter((l) => present.has(l));
+            } else if (defn.kind === 'missed_pause') {
+                isMissedPause = true;
+                const mp = items as SegValMissedPauseItem[];
+                // Same single-pass letter harvest as qalqala, over the
+                // per-item candidate word lists.
+                const present = new Set<string>();
+                for (const i of mp) {
+                    for (const w of i.words ?? []) {
+                        if (w.letter) present.add(w.letter);
+                    }
+                }
+                missedPauseLetters = MISSED_PAUSE_LETTERS_ORDER.filter((l) => present.has(l));
             }
 
             return {
@@ -436,6 +460,8 @@
                 isLowConf,
                 isQalqala,
                 qalqalaLetters,
+                isMissedPause,
+                missedPauseLetters,
                 sorts: defn.sorts,
             };
         });
@@ -449,6 +475,7 @@
         _lcThreshold: number,
         _activeQalqalaLetter: string | null,
         _qalqalaEndOfVerse: boolean,
+        _activeMissedPauseLetter: string | null,
         _sortPrefs: SortPrefs,
         _autoSplitMap: Record<string, { refs: string[] }> | null,
     ): CategoryDescriptor[] {
@@ -475,6 +502,15 @@
                 visibleItems = filtered;
                 // Qalqala: badge tracks the active filter (parallel to LC).
                 summaryCount = filtered.length;
+            } else if (b.isMissedPause && _activeMissedPauseLetter) {
+                const mp = b.items as SegValMissedPauseItem[];
+                // A segment shows iff ≥1 of its candidate words ends with the
+                // active letter; each segment renders once regardless of how
+                // many candidate words (or letters) it contains.
+                const filtered = mp.filter((i) =>
+                    (i.words ?? []).some((w) => w.letter === _activeMissedPauseLetter));
+                visibleItems = filtered;
+                summaryCount = filtered.length;
             }
             // Sort the post-filter list per the active (kind, dir) for this
             // accordion. resolveSort falls back to the registry default and
@@ -493,6 +529,8 @@
                 isLowConf: b.isLowConf,
                 isQalqala: b.isQalqala,
                 qalqalaLetters: b.qalqalaLetters,
+                isMissedPause: b.isMissedPause,
+                missedPauseLetters: b.missedPauseLetters,
                 sorts: b.sorts,
             });
         }
@@ -500,13 +538,14 @@
     }
 
     $: _baseDescriptors = buildBaseDescriptors($segValidation, $segAllData, chapter, $localeStore);
-    $: categories = projectVisible(_baseDescriptors, lcThreshold, activeQalqalaLetter, qalqalaEndOfVerse, $valSortPrefs, $autoSplitMap);
+    $: categories = projectVisible(_baseDescriptors, lcThreshold, activeQalqalaLetter, qalqalaEndOfVerse, activeMissedPauseLetter, $valSortPrefs, $autoSplitMap);
     // Filter signature: the subset of inputs that change the displayed list —
-    // narrowing (chapter / LC threshold / qalqala letter / end-of-verse) plus
-    // the active sort (so a sort change re-pins the open accordion's snapshot
-    // against the freshly ordered list). Lifted to top-level so the re-pin
-    // reactive can also react to sig flips while the same accordion stays open.
-    $: _filterSig = `${chapter}|${lcThreshold}|${activeQalqalaLetter ?? ''}|${qalqalaEndOfVerse}|${JSON.stringify($valSortPrefs)}`;
+    // narrowing (chapter / LC threshold / qalqala letter / end-of-verse /
+    // missed-pause letter) plus the active sort (so a sort change re-pins the
+    // open accordion's snapshot against the freshly ordered list). Lifted to
+    // top-level so the re-pin reactive can also react to sig flips while the
+    // same accordion stays open.
+    $: _filterSig = `${chapter}|${lcThreshold}|${activeQalqalaLetter ?? ''}|${qalqalaEndOfVerse}|${activeMissedPauseLetter ?? ''}|${JSON.stringify($valSortPrefs)}`;
     $: {
         // If the filter sig hasn't changed for a category, preserve its
         // context-shown map so structural edits (split/merge) that republish
@@ -1104,6 +1143,24 @@
                             title={qalqalaEovTitle}
                             on:click={() => { qalqalaEndOfVerse = !qalqalaEndOfVerse; }}
                         >{qalqalaEovButtonLabel}</button>
+                    </div>
+                {/if}
+
+                <!-- Missed-pause letter filter -->
+                {#if cat.isMissedPause && cat.missedPauseLetters.length > 0}
+                    <div class="lc-slider-row qalqala-filter-row">
+                        <span class="lc-slider-label">{filterByLetterLabel}</span>
+                        {#each cat.missedPauseLetters as letter}
+                            <button
+                                class="val-btn val-cross qalqala-letter-btn"
+                                class:active={activeMissedPauseLetter === letter}
+                                title={m.segments_validation_missed_pause_letter_title({ letter })}
+                                data-letter={letter}
+                                on:click={() => {
+                                    activeMissedPauseLetter = activeMissedPauseLetter === letter ? null : letter;
+                                }}
+                            >{letter}</button>
+                        {/each}
                     </div>
                 {/if}
 
