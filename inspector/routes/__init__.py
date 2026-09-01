@@ -42,6 +42,7 @@ def register_blueprints(app):
     from routes.public.static import static_bp
     from routes.qf_auth import qf_auth_bp
     from routes.qf_content import qf_content_bp
+    from routes.samples import samples_bp
     from routes.segments.data import seg_data_bp
     from routes.segments.edit import seg_edit_bp
     from routes.segments.peaks import peaks_bp
@@ -70,6 +71,7 @@ def register_blueprints(app):
     app.register_blueprint(admin_internal_bp)
     app.register_blueprint(requests_bp)
     app.register_blueprint(ts_bp)
+    app.register_blueprint(samples_bp)
     app.register_blueprint(ts_reports_bp)
     app.register_blueprint(seg_data_bp)
     app.register_blueprint(seg_edit_bp)

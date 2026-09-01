@@ -3,7 +3,8 @@
 - ``require_same_origin`` — CSRF defense via Origin/Referer check on POST/PUT/DELETE.
 - ``require_edit_lock`` — gate save/undo routes on (signed in + active claim
   + row is editable). Supports ``admin_bypass=True`` for maintainer/owner
-  override on under_review rows.
+  override on under_review rows. ``sample--<id>`` slugs have no row: the gate
+  is the ``samples.manage`` capability plus row existence.
 - ``require_role(*roles)`` — generic role gate for admin endpoints. Composes
   ``require_signed_in_or_401`` + ``require_role_or_403`` and injects the
   authenticated user as the first positional argument into the handler.
@@ -26,6 +27,7 @@ from services import state as state_service
 from services.auth import capabilities as _capabilities
 from services.errors import Codes, error_body
 from services.state.labels import humanize_state
+from services.storage import storage_paths
 
 
 def api_error(
@@ -166,6 +168,31 @@ def require_capability(capability: str):
     return wrap
 
 
+def _sample_edit_gate(fn, user, slug: str, args, kwargs):
+    """Edit gate for ``sample--<id>`` slugs: no lifecycle row, no claim.
+
+    Any signed-in holder of ``samples.manage`` may edit any sample; the row
+    must exist. ``g.current_row`` stays ``None`` (samples have no state row).
+    """
+    from services.db import repo_samples
+
+    if not _capabilities.can(user, "samples.manage"):
+        return api_error(
+            "You don't have permission for this action.",
+            code=Codes.FORBIDDEN_CAPABILITY,
+            status=403,
+        )
+    if repo_samples.get(storage_paths.sample_id_from_slug(slug)) is None:
+        return api_error(
+            "That sample couldn't be found.",
+            code=Codes.UNKNOWN_RECITER,
+            status=404,
+        )
+    g.current_user = user
+    g.current_row = None
+    return fn(*args, **kwargs)
+
+
 def require_edit_lock(reciter_param: str = "reciter", *, admin_bypass: bool = False):
     """Gate a route on (signed in + editable row + authorised actor).
 
@@ -195,6 +222,8 @@ def require_edit_lock(reciter_param: str = "reciter", *, admin_bypass: bool = Fa
             slug = kwargs.get(reciter_param)
             if not slug:
                 abort(400, description=f"missing {reciter_param!r} in route")
+            if storage_paths.is_sample_slug(slug):
+                return _sample_edit_gate(fn, user, slug, args, kwargs)
             row = state_service.get_row(slug)
             if row is None:
                 return api_error(

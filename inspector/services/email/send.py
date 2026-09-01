@@ -90,6 +90,8 @@ def _deliver(to: str, subject: str, html: str, text: str | None) -> None:
             detail = e.read().decode("utf-8", "replace")[:300]
         except Exception:  # noqa: BLE001
             pass
-        logger.error("email send failed → %s | subject=%s | HTTP %s %s", to, subject, e.code, detail)
+        logger.error(
+            "email send failed → %s | subject=%s | HTTP %s %s", to, subject, e.code, detail
+        )
     except Exception:  # noqa: BLE001 — best-effort; never raise into the caller
         logger.exception("email send failed → %s | subject=%s", to, subject)

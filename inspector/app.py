@@ -85,6 +85,7 @@ from config import (
     DEFAULT_PORT,
     FLASK_DEV_VALUE,
     FLASK_ENV_VAR,
+    SAMPLES_MAX_UPLOAD_BYTES,
     SERVER_HOST,
 )
 from services import auth as auth_service
@@ -292,6 +293,7 @@ if _behind_proxy:
 # Our identity cookie is separate and signed with the same secret.
 try:
     app.secret_key = get_session_secret()
+    app.config["MAX_CONTENT_LENGTH"] = SAMPLES_MAX_UPLOAD_BYTES
 except MissingSecret as e:
     # Local dev / test paths may not have the secret seeded. Anyone hitting
     # an OAuth route gets a 503 from auth_service.is_oauth_configured().

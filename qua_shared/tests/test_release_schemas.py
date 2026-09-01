@@ -111,9 +111,7 @@ def test_coverage_missing_keys_omitted_when_complete():
 
 
 def test_coverage_missing_keys_present_and_round_trip():
-    cov = ReleaseCoverage(
-        surahs=30, ayahs=327, missing_surahs="1-84", missing_verses="2:3"
-    )
+    cov = ReleaseCoverage(surahs=30, ayahs=327, missing_surahs="1-84", missing_verses="2:3")
     dumped = cov.model_dump(mode="json")
     assert dumped["missing_surahs"] == "1-84"
     assert dumped["missing_verses"] == "2:3"

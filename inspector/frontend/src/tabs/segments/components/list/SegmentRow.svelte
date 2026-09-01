@@ -54,6 +54,9 @@ import type { Segment } from '../../../../lib/types/view-models';
     } from '../../stores/edit';
     import { activeFilters } from '../../stores/filters';
     import { savedFilterView } from '../../stores/navigation';
+    import { isSampleMode } from '../../stores/samples';
+    import { missingWordsSegKeys } from '../../stores/validation';
+    import { deriveRowChips, type RowChip } from '../../utils/samples/chips';
     import {
         chapterIndexKey,
         flashSegmentIndices,
@@ -282,6 +285,16 @@ import type { Segment } from '../../../../lib/types/view-models';
         : `#${seg.index}`;
 
     $: playButtonTitle = tr($localeStore, m.segments_row_play_button_title());
+    // Sample mode: the three review signals live on the row, not in the accordion.
+    $: rowChips = (void segStoreTick, $isSampleMode && mode === 'normal' && instanceRole === 'main'
+        ? deriveRowChips(seg, $missingWordsSegKeys, rowChapter)
+        : []) as RowChip[];
+    $: chipLabel = (chip: RowChip) => tr(
+        $localeStore,
+        chip === 'low_conf'
+            ? m.segments_chip_low_conf()
+            : chip === 'repetition' ? m.segments_chip_repetition() : m.segments_chip_missing_words(),
+    );
     $: gotoButtonLabel = tr($localeStore, m.segments_row_goto_button());
     $: flagAriaLabel = tr($localeStore, !canEditFlag
         ? m.segments_row_flag_view_other_aria_label()
@@ -1021,6 +1034,9 @@ import type { Segment } from '../../../../lib/types/view-models';
                 {/if}
                 <span class="seg-text-sep">|</span>
                 <span class="seg-text-conf {confClass}" class:seg-history-changed={changedConf}>{confText}</span>
+                {#each rowChips as chip (chip)}
+                    <span class="seg-chip" class:seg-chip-warn={chip !== 'repetition'}>{chipLabel(chip)}</span>
+                {/each}
             </div>
             <div class="seg-text-times" class:seg-history-changed={changedDur} title={durTitle}>
                 <TimeRange
@@ -1042,6 +1058,14 @@ import type { Segment } from '../../../../lib/types/view-models';
 </div>
 
 <style>
+    /* ---- Sample-mode row chips ---- */
+    .seg-chip {
+        display: inline-flex; align-items: center; height: 18px; padding: 0 7px; margin-inline-start: 6px;
+        background: var(--panel-2); border: 1px solid var(--border-quiet); border-radius: 999px;
+        font-size: 10.5px; font-family: var(--font-mono); color: var(--text-secondary); white-space: nowrap;
+    }
+    .seg-chip-warn { background: var(--state-error-bg); border-color: oklch(0.86 0.130 75 / 0.4); color: var(--state-error-fg); }
+
     /* ---- Flag button (manual "needs a second look") ---- */
     /* A peer of the play/go-to controls. Idle reads as a quiet outline; an
        active flag fills with the warm amber attention token so a flagged row

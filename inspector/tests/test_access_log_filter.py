@@ -21,7 +21,9 @@ def _rec(line: str) -> logging.LogRecord:
 
 
 def _line(method: str, path: str, status: int) -> str:
-    return f'1.2.3.4 - - [23/Jun/2026:13:01:31 +0000] "{method} {path} HTTP/1.1" {status} 99 "-" "ua"'
+    return (
+        f'1.2.3.4 - - [23/Jun/2026:13:01:31 +0000] "{method} {path} HTTP/1.1" {status} 99 "-" "ua"'
+    )
 
 
 def test_drops_static_asset_success():

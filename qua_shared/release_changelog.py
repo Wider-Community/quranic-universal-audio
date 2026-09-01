@@ -81,7 +81,9 @@ def _member_table(members: list[dict]) -> list[str]:
 def _has_missing(members: list[dict]) -> bool:
     return any((m.get("missing_surahs") or m.get("missing_verses")) for m in members)
 
+
 # Removed _MISSING_CALLOUT and its use
+
 
 def _accordion(summary: str, body_lines: list[str]) -> list[str]:
     return [f"<details><summary>{summary}</summary>", "", *body_lines, "</details>"]

@@ -92,6 +92,10 @@ ACCORDION_CONTEXT = {
     "audio_bleeding": "shown",
 }
 
+# Maintainer sample uploads (one audio + one JSON, multipart). Applied as the
+# app-wide request body cap; every other request body is far smaller.
+SAMPLES_MAX_UPLOAD_BYTES = 300 * 1024 * 1024
+
 # HTTP / subprocess timeouts (seconds)
 FFMPEG_TIMEOUT = 15
 FFMPEG_FULL_TIMEOUT = 300
