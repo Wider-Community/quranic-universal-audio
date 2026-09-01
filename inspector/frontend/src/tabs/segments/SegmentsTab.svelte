@@ -11,6 +11,7 @@
     import { get, type Readable } from 'svelte/store';
 
     import { fetchJson } from '../../lib/api';
+    import { listSamples } from '../../lib/api/samples';
     import { release } from '../../lib/api/claims-client';
     import { getReciterTaskStore, type ReciterTask,refreshReciterTask } from '../../lib/api/reciter-task';
     import { localeStore, tr } from '../../lib/i18n/locale-store';
@@ -30,6 +31,7 @@
     import HistoryPanel from './components/history/HistoryPanel.svelte';
     import MarkReadyReviewModal from './components/footer/MarkReadyReviewModal.svelte';
     import SegmentsList from './components/list/SegmentsList.svelte';
+    import SamplesPanel from './components/samples/SamplesPanel.svelte';
     import SavePreview from './components/save/SavePreview.svelte';
     import AccordionGuideModal from './components/validation/AccordionGuideModal.svelte';
     import GuidesGateModal from './components/validation/GuidesGateModal.svelte';
@@ -53,6 +55,16 @@
     import { historyVisible } from './stores/history';
     import { savedFilterView, targetSegmentIndex } from './stores/navigation';
     import { segAudioElement, segListElement, waveformContainer } from './stores/playback';
+    import {
+        canManageSamples,
+        isSampleMode,
+        isSampleSlug,
+        sampleEditingMode,
+        samples,
+        segmentsSubTab,
+        type SegmentsSubTab,
+        visibleSubTabs,
+    } from './stores/samples';
     import { savePreviewVisible } from './stores/save';
     import { accordionViewActive, valUiOpenCategory } from './stores/validation';
     import { loadChapterData } from './utils/data/chapter-actions';
@@ -69,6 +81,13 @@
 
     $: guideEntryLabel = tr($localeStore, m.segments_guide_entry_label());
     $: guideUnreadAriaLabel = tr($localeStore, m.segments_guide_unread_aria_label());
+    $: subTabLabel = (id: SegmentsSubTab) => tr(
+        $localeStore,
+        id === 'samples' ? m.segments_subtab_samples() : m.segments_subtab_editor(),
+    );
+    $: subTabs = visibleSubTabs($canManageSamples);
+    // Snap back if the samples tab disappears under a live capability change.
+    $: if (!subTabs.includes($segmentsSubTab)) segmentsSubTab.set('editor');
 
     // Reciter-task subscription: bound to the selected reciter. The store
     // self-polls every 30 s while subscribed; we replace the binding when
@@ -96,8 +115,11 @@
     // onboarding gate the instant the user opens the final guide — no task
     // poll needed. Replaces the imperative setEditingMode calls that used to
     // live in the task subscription / refresh paths.
+    // Samples have no claim/lifecycle row: the gate is the capability alone.
     $: setEditingMode(
-        syncEditingMode($currentUser, reciterTask, allGuidesRead($currentUser.guides_read)),
+        $isSampleMode
+            ? sampleEditingMode($currentUser)
+            : syncEditingMode($currentUser, reciterTask, allGuidesRead($currentUser.guides_read)),
     );
 
     // Refresh task immediately after a state-mutating action; the polling
@@ -127,7 +149,7 @@
     let _lastBoundReciter: string | null = null;
     $: if (typeof $selectedReciter === 'string' && $selectedReciter && $selectedReciter !== _lastBoundReciter) {
         _lastBoundReciter = $selectedReciter;
-        _bindTask($selectedReciter);
+        _bindTask(isSampleSlug($selectedReciter) ? null : $selectedReciter);
         void onReciterChange($selectedReciter);
     }
 
@@ -230,7 +252,16 @@
             const rs = await fetchJson<SegReciter[]>('/api/seg/reciters');
             segAllReciters.set(rs);
             const saved = localStorage.getItem(LS_KEYS.SEG_RECITER);
-            const validSaved = saved && rs.some((r) => r.slug === saved) ? saved : null;
+            let validSaved: string | null = null;
+            if (saved && isSampleSlug(saved)) {
+                // A sample slug survives reload only while it still exists and
+                // the viewer may still see samples.
+                const list = get(canManageSamples) ? await listSamples() : [];
+                samples.set(list);
+                validSaved = list.some((s) => s.slug === saved) ? saved : null;
+            } else {
+                validSaved = saved && rs.some((r) => r.slug === saved) ? saved : null;
+            }
             if (!validSaved && saved) {
                 // Drop the stale slug so we don't keep hammering 404 endpoints
                 // every reload. The user picks a fresh reciter from the list.
@@ -242,7 +273,7 @@
                 // _bindTask + onReciterChange imperatively right here).
                 _lastBoundReciter = validSaved;
                 selectedReciter.set(validSaved);
-                _bindTask(validSaved);
+                _bindTask(isSampleSlug(validSaved) ? null : validSaved);
                 await onReciterChange(validSaved);
                 // Kick the shared catalog fetch; the footer chip's identity +
                 // bucket derive reactively from `$catalogData` once it lands.
@@ -300,6 +331,20 @@
     async function onReciterChange(reciter: string): Promise<void> {
         if (reciter) localStorage.setItem(LS_KEYS.SEG_RECITER, reciter);
         await reloadCurrentReciter();
+    }
+    /** Open a sample from the samples list in the editor, straight on its
+     *  one pseudo-chapter. */
+    function openSample(slug: string): void {
+        _lastBoundReciter = slug;
+        selectedReciter.set(slug);
+        _bindTask(null);
+        segmentsSubTab.set('editor');
+        const chapter = get(samples).find((x) => x.slug === slug)?.pseudo_chapter;
+        void onReciterChange(slug).then(() => {
+            if (!chapter || get(selectedReciter) !== slug) return;
+            selectedChapter.set(String(chapter));
+            void loadChapterData(slug, String(chapter));
+        });
     }
     function onChapterChange(ev: CustomEvent<string>): void {
         const v = ev.detail;
@@ -360,7 +405,8 @@
     $: if ($segAllData) { void getChapterSegments($selectedChapter || 0); }
 
     let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
-    $: if ($autoSaveEnabled && $dirtyTick > 0 && $isDirtyStore) {
+    // Samples always autosave — there is no manual save flow for them.
+    $: if (($autoSaveEnabled || $isSampleMode) && $dirtyTick > 0 && $isDirtyStore) {
         if (autoSaveTimer) clearTimeout(autoSaveTimer);
         autoSaveTimer = setTimeout(() => {
             if ($isDirtyStore) {
@@ -398,7 +444,26 @@
     style:--seg-font-size={cssFontSize || null}
     style:--seg-word-spacing={cssWordSpacing || null}
 >
-    {#if !$historyVisible && !$savePreviewVisible}
+    {#if $canManageSamples && !$historyVisible && !$savePreviewVisible}
+        <nav class="seg-subtabs" aria-label="Segments sections">
+            {#each subTabs as id (id)}
+                <button
+                    type="button"
+                    class="seg-subtab"
+                    class:active={$segmentsSubTab === id}
+                    on:click={() => segmentsSubTab.set(id)}
+                >
+                    {subTabLabel(id)}
+                </button>
+            {/each}
+        </nav>
+    {/if}
+
+    {#if $segmentsSubTab === 'samples' && $canManageSamples && !$historyVisible && !$savePreviewVisible}
+        <SamplesPanel onOpen={openSample} />
+    {/if}
+
+    {#if $segmentsSubTab === 'editor' && !$historyVisible && !$savePreviewVisible}
         <!-- Persistent entry point to the review guides + shortcuts. Opens the same
              modal the first-edit gate uses, in voluntary `browse` mode — available
              any time, not just when a blocked edit triggers the gate. The cyan
@@ -424,20 +489,23 @@
     <!-- StatsPanel transitively imports chart.js (~85 KB br). Lazy-load so
          the charts chunk only ships when a maintainer/owner actually views
          the Segments tab — Dashboard / non-admin visitors never pay this cost. -->
-    {#if ($currentUser.role === 'maintainer' || $currentUser.role === 'owner') && !$historyVisible && !$savePreviewVisible}
+    {#if ($currentUser.role === 'maintainer' || $currentUser.role === 'owner') && $segmentsSubTab === 'editor' && !$isSampleMode && !$historyVisible && !$savePreviewVisible}
         {#await import('./components/stats/StatsPanel.svelte') then mod}
             <svelte:component this={mod.default} />
         {/await}
     {/if}
 
-    {#if !$historyVisible && !$savePreviewVisible}
+    {#if $segmentsSubTab === 'editor' && !$historyVisible && !$savePreviewVisible}
         <!-- The validation accordion is a GLOBAL view — always all chapters,
              never filtered by `selectedChapter`. Chapter-scoped review happens
              through the chapter-cards `<SegmentsList>` below; the accordion
              is the place to see every outstanding issue across the reciter
              regardless of which Sura is currently selected in the picker. -->
+        <!-- Samples surface their signals as row chips instead of the accordion. -->
         <div id="seg-validation" class="seg-validation" use:waveformContainer>
-            <ValidationPanel chapter={null} />
+            {#if !$isSampleMode}
+                <ValidationPanel chapter={null} />
+            {/if}
         </div>
 
         <FiltersBar hidden={filterBarHidden} />
@@ -501,6 +569,40 @@
        footer min-height is `--seg-footer-h` (60px); add a token cushion. */
     #segments-panel-inner {
         padding-bottom: calc(var(--seg-footer-actual-h, var(--seg-footer-h, 60px)) + var(--s-3));
+    }
+
+    /* Editor / Samples sub-tab strip (maintainers only). */
+    .seg-subtabs {
+        display: flex;
+        align-items: stretch;
+        gap: var(--s-1);
+        height: 32px;
+        margin-bottom: var(--s-2, 8px);
+        border-bottom: 1px solid var(--border-quiet);
+    }
+    .seg-subtab {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        padding: 0 var(--s-3);
+        background: transparent;
+        border: 0;
+        color: var(--text-muted);
+        font: inherit;
+        font-size: var(--fs-body);
+        cursor: pointer;
+    }
+    .seg-subtab:hover:not(.active) { color: var(--text-secondary); }
+    .seg-subtab.active { color: var(--text-primary); }
+    .seg-subtab.active::after {
+        content: '';
+        position: absolute;
+        left: var(--s-3);
+        right: var(--s-3);
+        bottom: -1px;
+        height: 2px;
+        background: var(--accent);
+        border-radius: 2px 2px 0 0;
     }
 
     /* Persistent guide/shortcuts entry point at the top of the tab. */

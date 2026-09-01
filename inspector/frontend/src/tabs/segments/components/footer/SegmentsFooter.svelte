@@ -42,6 +42,7 @@
     import { getSurahInfo, surahInfoReady } from '../../../../lib/utils/surah-info';
     import { SEGMENTS_SPEEDS } from '../../../../lib/utils/speed-control';
     import { autoSaveEnabled, toggleAutoSave } from '../../stores/autosave';
+    import { activeSample, isSampleMode, segmentsSubTab } from '../../stores/samples';
     import {
         livePlayingVerse,
         pickerDisplayChapter,
@@ -487,7 +488,10 @@
 
     $: canPlay = $segPortReady && !!($segData?.audio_url || $playingSegmentIndex);
 
-    $: identityTitle = tr($localeStore, hasReciter ? m.segments_footer_switch_reciter_title() : m.segments_footer_pick_reciter_title());
+    $: identityTitle = tr($localeStore, $isSampleMode
+        ? m.segments_samples_back_to_list_title()
+        : hasReciter ? m.segments_footer_switch_reciter_title() : m.segments_footer_pick_reciter_title());
+    $: sampleTag = tr($localeStore, m.segments_samples_tag());
     $: pickReciterLabel = tr($localeStore, m.segments_footer_pick_reciter_title());
     $: awaitingAdminTitle = tr($localeStore, m.segments_footer_awaiting_admin_title());
     $: markedReadyPill = tr($localeStore, m.segments_footer_marked_ready_pill());
@@ -572,11 +576,16 @@
                 type="button"
                 class="identity"
                 class:placeholder={!hasReciter}
-                on:click={() => (pickerOpen = true)}
+                on:click={() => ($isSampleMode ? segmentsSubTab.set('samples') : (pickerOpen = true))}
                 aria-haspopup="dialog"
                 title={identityTitle}
             >
-                {#if hasReciter && contextName}
+                {#if $isSampleMode}
+                    <span class="sample-identity">
+                        <span class="sample-tag">{sampleTag}</span>
+                        <span class="sample-name">{$activeSample?.name ?? $selectedReciter}</span>
+                    </span>
+                {:else if hasReciter && contextName}
                     <ReciterChip
                         name={contextName}
                         nameAr={contextNameAr}
@@ -591,7 +600,7 @@
                 {/if}
             </button>
 
-            {#if hasReciter && !showSavePreview}
+            {#if hasReciter && !showSavePreview && !$isSampleMode}
                 <div class="reciter-actions">
                     {#if reciterTask?.row.marked_ready}
                         <span class="status-pill marked-ready" title={awaitingAdminTitle}>
@@ -753,8 +762,9 @@
                                 <button
                                     type="button"
                                     class="autosave-toggle"
-                                    class:on={$autoSaveEnabled}
-                                    aria-pressed={$autoSaveEnabled}
+                                    class:on={$autoSaveEnabled || $isSampleMode}
+                                    aria-pressed={$autoSaveEnabled || $isSampleMode}
+                                    disabled={$isSampleMode}
                                     title={autosaveTitle}
                                     on:click={() => toggleAutoSave(!$autoSaveEnabled)}
                                 >
@@ -765,16 +775,16 @@
                                 <button
                                     type="button"
                                     class="action save"
-                                    class:primary={$isDirtyStore && !$autoSaveEnabled}
+                                    class:primary={$isDirtyStore && !$autoSaveEnabled && !$isSampleMode}
                                     class:saved={!$isDirtyStore}
-                                    class:auto-busy={$autoSaveEnabled && $isDirtyStore}
-                                    disabled={saveDisabled}
+                                    class:auto-busy={($autoSaveEnabled || $isSampleMode) && $isDirtyStore}
+                                    disabled={saveDisabled || $isSampleMode}
                                     on:click={onSegSaveClick}
                                 >
                                     {#if !$isDirtyStore}
                                         <span class="save-glyph" aria-hidden="true">✓</span>
                                         <span>{savedGlyphLabel}</span>
-                                    {:else if $autoSaveEnabled}
+                                    {:else if $autoSaveEnabled || $isSampleMode}
                                         <span class="save-pulse" aria-hidden="true"></span>
                                         <span>{autosavingLabel}</span>
                                     {:else}
@@ -913,6 +923,14 @@
         align-items: center;
         justify-content: center;
     }
+
+    .sample-identity { display: inline-flex; align-items: center; gap: var(--s-2); min-width: 0; }
+    .sample-tag {
+        font-size: 9.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;
+        padding: 1px 6px; border-radius: 999px; background: var(--state-available-bg);
+        color: var(--state-available-fg); border: 1px solid oklch(0.84 0.110 300 / 0.4);
+    }
+    .sample-name { color: var(--text-primary); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
     .reciter-actions {
         display: inline-flex;

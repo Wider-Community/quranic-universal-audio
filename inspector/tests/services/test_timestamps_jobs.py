@@ -23,7 +23,9 @@ def test_job_status_reads_record_and_fires_success(monkeypatch):
     }
     monkeypatch.setattr(timestamps_jobs, "read_job_record", lambda slug, jid: dict(rec))
     completed = []
-    monkeypatch.setattr(timestamps_jobs, "complete_timestamps_job", lambda s, j: completed.append((s, j)))
+    monkeypatch.setattr(
+        timestamps_jobs, "complete_timestamps_job", lambda s, j: completed.append((s, j))
+    )
 
     out = timestamps_jobs.job_status("r", "j1")
 

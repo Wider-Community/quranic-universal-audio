@@ -1375,6 +1375,33 @@ export interface PublicReciterPage {
   total: number;
   next_cursor?: number | null;
 }
+export interface SampleRenameRequest {
+  name: string;
+}
+/**
+ * One sample as the list and the acks render it.
+ */
+export interface SampleRow {
+  id: string;
+  slug: string;
+  name: string;
+  owner_hf_user_id: string;
+  owner_login?: string | null;
+  status: "processing" | "ready" | "failed";
+  error?: string | null;
+  audio_filename: string;
+  audio_duration_ms?: number | null;
+  source_schema: "alignment" | "alignment_resource";
+  pseudo_chapter: number;
+  created_at: string;
+  last_save_at?: string | null;
+  last_export_at?: string | null;
+  changed_since_export: boolean;
+  can_manage: boolean;
+}
+export interface SamplesListResponse {
+  samples: SampleRow[];
+}
 /**
  * ``GET /api/seg/all/<reciter>`` success body.
  *

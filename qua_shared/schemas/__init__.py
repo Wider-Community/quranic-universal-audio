@@ -190,6 +190,7 @@ from .wire.release import (
     VerseTimestampsDoc,
     WordTimestampsDoc,
 )
+from .wire.samples import SampleRenameRequest, SampleRow, SamplesListResponse
 from .wire.seg import (
     FlagAuthor,
     FlagComment,
@@ -352,6 +353,9 @@ __all__ = [
     "AudioCategory",
     "Announcement",
     "AnnouncementAdmin",
+    "SampleRenameRequest",
+    "SampleRow",
+    "SamplesListResponse",
     "AnnouncementCreate",
     "AudioManifestSidecar",
     "AudioSurahEntry",

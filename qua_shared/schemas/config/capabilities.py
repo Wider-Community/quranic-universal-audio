@@ -486,6 +486,15 @@ CAPABILITIES: tuple[Capability, ...] = (
         maintainer=False,
     ),
     _c(
+        "samples.manage",
+        G_ADMIN,
+        "Manage alignment samples",
+        "Upload, edit and export alignment samples (one audio + one aligner "
+        "JSON) in the Segments tab. Maintainer by default.",
+        contributor=False,
+        maintainer=True,
+    ),
+    _c(
         "notifications.receive_review_alerts",
         G_ADMIN,
         "Receive review alerts",

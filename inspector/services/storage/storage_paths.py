@@ -28,6 +28,42 @@ from datetime import datetime
 # state-driven ``wip/`` + ``published/`` split (see data-migrations.md).
 RECITERS_PREFIX = "reciters"
 
+# Maintainer-uploaded alignment samples: one audio + one aligner JSON, edited
+# with the Segments view. A sample is addressed by a namespaced slug
+# ``sample--<id>``; real reciter slugs never contain ``-`` (``SLUG_RE``), so the
+# two namespaces cannot collide. Content lives under ``samples/<id>/`` with the
+# same per-reciter file names, so every slug-keyed reader works unchanged.
+SAMPLES_PREFIX = "samples"
+SAMPLE_SLUG_PREFIX = "sample--"
+
+
+def is_sample_slug(slug: str) -> bool:
+    return slug.startswith(SAMPLE_SLUG_PREFIX)
+
+
+def sample_id_from_slug(slug: str) -> str:
+    if not is_sample_slug(slug):
+        raise ValueError(f"not a sample slug: {slug!r}")
+    return slug[len(SAMPLE_SLUG_PREFIX) :]
+
+
+def sample_slug(sample_id: str) -> str:
+    return f"{SAMPLE_SLUG_PREFIX}{sample_id}"
+
+
+def sample_dir(sample_id: str) -> str:
+    return f"{SAMPLES_PREFIX}/{sample_id}"
+
+
+def sample_source_path(sample_id: str) -> str:
+    """The uploaded aligner JSON, byte-for-byte, for round-trip export."""
+    return f"{sample_dir(sample_id)}/source.json"
+
+
+def sample_sidecar_path(sample_id: str) -> str:
+    """Import sidecar: envelope kind, pseudo-chapter, uid -> original segment map."""
+    return f"{sample_dir(sample_id)}/sample.json"
+
 
 def state_path() -> str:
     return "state/reciter_state.json"
@@ -42,6 +78,8 @@ def audio_durations_path() -> str:
 
 
 def audio_manifest_path(slug: str) -> str:
+    if is_sample_slug(slug):
+        return f"{sample_dir(sample_id_from_slug(slug))}/audio_manifest.json"
     return f"catalog/audio_manifest/{slug}.json"
 
 
@@ -86,11 +124,13 @@ def discarded_requests_path() -> str:
 
 
 def reciter_dir(slug: str) -> str:
+    if is_sample_slug(slug):
+        return sample_dir(sample_id_from_slug(slug))
     return f"{RECITERS_PREFIX}/{slug}"
 
 
 def reciter_file(slug: str, name: str) -> str:
-    return f"{RECITERS_PREFIX}/{slug}/{name}"
+    return f"{reciter_dir(slug)}/{name}"
 
 
 def segments_path(slug: str) -> str:

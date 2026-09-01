@@ -137,6 +137,7 @@ from .wire.release import (
     StaleReason,
     SuggestedAction,
 )
+from .wire.samples import SampleRenameRequest, SampleRow, SamplesListResponse
 from .wire.seg import (
     SegAllResponse,
     SegConfigResponse,
@@ -174,6 +175,9 @@ from .wire.ts_reports import (
 
 __all__ = [
     "Announcement",
+    "SampleRenameRequest",
+    "SampleRow",
+    "SamplesListResponse",
     "AdminDiscardedDelivery",
     "AdminViewReciter",
     "AudioSurahEntry",

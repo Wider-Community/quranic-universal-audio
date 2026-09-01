@@ -23,6 +23,7 @@ from qua_shared.schemas.wire.seg import (
 )
 from services.auto_split import compute_auto_split as _compute_auto_split
 from services.save import save_seg_data as _save_seg_data
+from services.storage import storage_paths
 from services.undo import undo_batch as _undo_batch
 from services.undo import undo_ops as _undo_ops
 from utils.decorators import require_edit_lock, require_same_origin
@@ -39,6 +40,17 @@ def _actor_from_g() -> Actor:
         login_at_time=user.login,
         role=role_val,
     )
+
+
+def _touch_sample(reciter: str, result) -> None:
+    """Stamp ``samples.last_save_at`` after a successful sample write."""
+    if isinstance(result, tuple) or not storage_paths.is_sample_slug(reciter):
+        return
+    from services.db import repo_samples
+    from services.db.connection import transaction
+
+    with transaction():
+        repo_samples.touch_last_save(storage_paths.sample_id_from_slug(reciter))
 
 
 def _error(envelope: ErrorEnvelope, status: int):
@@ -77,6 +89,7 @@ def seg_save(reciter, chapter):
         {k: updates[k] for k in ("segments", "operations", "full_replace") if k in updates}
     )
     result = _save_seg_data(reciter, chapter, updates, actor=_actor_from_g())
+    _touch_sample(reciter, result)
     return _serialize_result(result, SegSaveResponse)
 
 
@@ -90,6 +103,7 @@ def seg_undo_batch(reciter):
         return _error(ErrorEnvelope(error="Missing batch_id"), 400)
     req = SegUndoBatchRequest.model_validate(body)
     result = _undo_batch(reciter, req.batch_id, actor=_actor_from_g())
+    _touch_sample(reciter, result)
     return _serialize_result(result, SegUndoResponse)
 
 
@@ -135,4 +149,5 @@ def seg_undo_ops(reciter):
         set(req.op_ids),
         actor=_actor_from_g(),
     )
+    _touch_sample(reciter, result)
     return _serialize_result(result, SegUndoResponse)

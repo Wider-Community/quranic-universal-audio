@@ -15,6 +15,17 @@ import type { SegValidateResponse } from '../../../lib/types/generated/schemas';
 /** Validation data for the currently-loaded reciter, or null if none loaded. */
 export const segValidation = writable<SegValidateResponse | null>(null);
 
+/** `"<chapter>:<index>"` of every segment a `missing_words` item points at.
+ *  Sample-mode rows read this to show the missing-words chip; `seg_indices`
+ *  are chapter-relative, the same numbering as `/all`'s `index`. */
+export const missingWordsSegKeys = derived(segValidation, ($v) => {
+    const keys = new Set<string>();
+    for (const item of $v?.missing_words ?? []) {
+        for (const idx of item.seg_indices ?? []) keys.add(`${item.chapter}:${idx}`);
+    }
+    return keys;
+});
+
 /** Server-supplied split-group closures keyed by root uid. Read by accordion
  *  cards to expand a split chain without subscribing to historyData. Empty
  *  map until the first validate response lands. */
