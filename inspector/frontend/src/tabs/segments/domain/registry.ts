@@ -216,7 +216,7 @@ export const IssueRegistry: Readonly<Record<string, IssueDefinition>> = Object.f
         persistsIgnore: true,
         scope: 'per_segment',
         displayTitle: 'Missed Pauses',
-        description: 'Contains a mid-segment word bearing a stop sign and ending in a pausal letter (ه/ة/م/ن) — verify whether the reciter paused there and the segmenter missed the split.',
+        description: 'Contains a mid-segment word bearing a stop sign and ending in a pausal letter (ه/ة/م/ن/ء) — verify whether the reciter paused there and the segmenter missed the split.',
         sorts: [{ kind: 'quran_order', default: true }],
     },
 });

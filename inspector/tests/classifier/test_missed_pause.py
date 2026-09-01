@@ -1,11 +1,11 @@
-"""``missed_pause`` classification: interior stop-sign ه/ة/م/ن words only.
+"""``missed_pause`` classification: interior stop-sign ه/ة/م/ن/hamza words only.
 
 Uses the real Digital Khatt data (same as the qalqala classifier tests):
 2:2:4 ``رَيْبَۛ`` bears a stop sign but ends in ب (non-candidate);
 2:2:5 ``فِيهِۛ`` bears a stop sign and ends in ه (candidate);
 2:191:7 ``أَخْرَجُوكُمْۚ`` ends in م; 2:185:12 ``وَٱلْفُرْقَانِۚ`` ends in ن;
 2:185:17 ``فَلْيَصُمْهُۖ`` ends in ه (pairs with 2:185:12 for the
-mixed-letter single-item case).
+mixed-letter single-item case); 2:13:12 ``ٱلسُّفَهَآءُۗ`` ends in a hamza seat.
 """
 
 from __future__ import annotations
@@ -88,6 +88,31 @@ def test_interior_noon_final_word_flags():
     flags = _flags(seg)
     assert flags["missed_pause"] is True
     assert flags["missed_pause_words"] == ["2:185:12"]
+
+
+def test_interior_hamza_final_word_flags():
+    seg = {"matched_ref": "2:13:11-2:13:13", "confidence": 1.0}
+    flags = _flags(seg)
+    assert flags["missed_pause"] is True
+    assert flags["missed_pause_words"] == ["2:13:12"]
+
+
+def test_every_hamza_seat_reports_as_one_class():
+    # One filter chip for hamza, not one per seat.
+    from services.validation.missed_pause import HAMZA_SEATS, pausal_letter_for
+
+    assert {pausal_letter_for(f"ما{seat}") for seat in HAMZA_SEATS} == {"ء"}
+    # Word-final alef-madda is a madd coda, not a hamza stop.
+    assert pausal_letter_for("ماآ") is None
+
+
+def test_silent_small_letter_does_not_mask_the_coda():
+    # هُۥ / هِۦ — the pronoun suffix trails a silent small waw/ya that is also
+    # category Lo, so a plain letter scan returns it instead of the ه.
+    from services.validation.missed_pause import pausal_letter_for
+
+    assert pausal_letter_for("نفسهۥۚ") == "ه"
+    assert pausal_letter_for("فضلهۦۖ") == "ه"
 
 
 def test_two_word_segment_never_flags():

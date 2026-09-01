@@ -1,8 +1,9 @@
 """Missed-pause candidate detection for the ``missed_pause`` category.
 
 A candidate word bears a Quranic stop/pause sign (U+06D6..U+06DC) AND ends in
-one of the pausal letters ه / ة / م / ن after stripping diacritics/decoration
-— the segmenter's known missed-pause class. A segment flags when such a word
+one of the pausal letters ه / ة / م / ن or any hamza seat after stripping
+diacritics/decoration — the segmenter's known missed-pause classes. A segment
+flags when such a word
 sits strictly inside its matched word range (not the first word, not the
 last): the stop sign gives a high pause prior, and non-edge means the
 segmenter did not split there.
@@ -13,15 +14,22 @@ at module level (lazy).
 
 from __future__ import annotations
 
+import unicodedata as _ud
+
 from services.storage.data_loader import get_dk_words_flat, get_word_counts
-from utils.arabic_text import last_arabic_letter
 
 # Quranic stop/pause signs: ۖ ۗ ۘ ۙ ۚ ۛ ۜ (U+06D6..U+06DC).
 PAUSE_SIGNS: frozenset[str] = frozenset(chr(c) for c in range(0x06D6, 0x06DD))
 
+# Hamza seats, all reported as a single ``ء`` class: ء (U+0621), أ (U+0623),
+# ؤ (U+0624), إ (U+0625), ئ (U+0626). Word-final آ (U+0622) is excluded — its
+# coda is the madd, not the glottal stop.
+HAMZA: str = "ء"
+HAMZA_SEATS: frozenset[str] = frozenset({"ء", "أ", "ؤ", "إ", "ئ"})
+
 # Pausal finals the segmenter is known to miss:
-# ه (U+0647), ة (U+0629), م (U+0645), ن (U+0646).
-PAUSAL_FINALS: frozenset[str] = frozenset({"ه", "ة", "م", "ن"})
+# ه (U+0647), ة (U+0629), م (U+0645), ن (U+0646), and any hamza seat.
+PAUSAL_FINALS: frozenset[str] = frozenset({"ه", "ة", "م", "ن"}) | HAMZA_SEATS
 
 # Runaway-ayah guard; mirrors ``quran_refs.dk_text_for_ref``.
 _MAX_AYAH_BOUNDARY = 300
@@ -36,7 +44,7 @@ def candidate_locs() -> frozenset[str]:
         _candidates = frozenset(
             loc
             for loc, text in get_dk_words_flat().items()
-            if any(s in text for s in PAUSE_SIGNS) and last_arabic_letter(text) in PAUSAL_FINALS
+            if any(s in text for s in PAUSE_SIGNS) and pausal_letter_for(text) is not None
         )
     return _candidates
 
@@ -81,13 +89,42 @@ def interior_candidate_locs(
     return out
 
 
+# Quranic small high letters: ۥ (U+06E5), ۦ (U+06E6). Silent madd carriers that
+# trail the real coda and are category ``Lo``, so a plain letter scan returns
+# them instead of the ه they follow.
+_SILENT_CARRIERS: frozenset[str] = frozenset({"ۥ", "ۦ"})
+
+
+def _raw_final_letter(text: str) -> str | None:
+    """Last spoken letter of ``text``, unnormalised.
+
+    Two things a generic scan gets wrong here: ``strip_quran_deco`` folds a
+    seated hamza onto its carrier (أ→ا, ؤ→و, ئ→ي), erasing a hamza coda, and
+    the silent small-letter carriers outrank the coda they follow.
+    """
+    for ch in reversed(text):
+        if ch in _SILENT_CARRIERS:
+            continue
+        if _ud.category(ch) == "Lo":
+            return ch
+    return None
+
+
 def pausal_letter_for(text: str) -> str | None:
-    """Return the word's final pausal letter (ه / ة / م / ن), or None."""
-    last = last_arabic_letter(text)
+    """Return the word's final pausal letter, or None.
+
+    Every hamza seat collapses to ``ء`` so the accordion shows one hamza
+    filter rather than one per seat.
+    """
+    last = _raw_final_letter(text)
+    if last in HAMZA_SEATS:
+        return HAMZA
     return last if last in PAUSAL_FINALS else None
 
 
 __all__ = [
+    "HAMZA",
+    "HAMZA_SEATS",
     "PAUSAL_FINALS",
     "PAUSE_SIGNS",
     "candidate_locs",

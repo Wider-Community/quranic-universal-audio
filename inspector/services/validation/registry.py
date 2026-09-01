@@ -226,7 +226,7 @@ _REGISTRY: dict[str, IssueDefinition] = {
         persists_ignore=True,
         scope="per_segment",
         display_title="Missed Pauses",
-        description="Contains a mid-segment word bearing a stop sign and ending in a pausal letter (ه/ة/م/ن) — verify whether the reciter paused there and the segmenter missed the split.",
+        description="Contains a mid-segment word bearing a stop sign and ending in a pausal letter (ه/ة/م/ن/ء) — verify whether the reciter paused there and the segmenter missed the split.",
     ),
 }
 
