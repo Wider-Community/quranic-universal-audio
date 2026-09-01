@@ -32,6 +32,11 @@ def _row(view: dict) -> dict:
     return SampleRow.model_validate(view).model_dump(mode="json")
 
 
+def _list_body(views: list[dict]) -> dict:
+    rows = [SampleRow.model_validate(v) for v in views]
+    return SamplesListResponse(samples=rows).model_dump(mode="json")
+
+
 def _handle(exc: Exception):
     if isinstance(exc, samples_service.SampleNotFound):
         return jsonify({"error": "sample not found"}), 404
@@ -45,8 +50,7 @@ def _handle(exc: Exception):
 @samples_bp.route("")
 @require_capability("samples.manage")
 def list_samples(user):
-    rows = [_row(v) for v in samples_service.list_samples(user)]
-    return jsonify(SamplesListResponse(samples=rows).model_dump(mode="json"))
+    return jsonify(_list_body(samples_service.list_samples(user)))
 
 
 @samples_bp.route("", methods=["POST"])

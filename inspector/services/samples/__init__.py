@@ -163,7 +163,7 @@ def create_sample(
         )
 
     _spawn(_finish_ingest, (sample_id, slug, chapter, mp3_path))
-    return _row_view(repo_samples.get(sample_id), user)
+    return get_sample(sample_id, user)
 
 
 def _spawn(target, args: tuple) -> None:
@@ -264,6 +264,8 @@ def export_sample(sample_id: str, *, user: Any) -> tuple[str, bytes]:
     backend = get_backend()
     source_doc = json.loads(backend.read_bytes(storage_paths.sample_source_path(sample_id)))
     sidecar = backend.read_json(storage_paths.sample_sidecar_path(sample_id))
+    if not isinstance(sidecar, dict):
+        raise SampleError("sample sidecar is malformed")
     entries = load_detailed(slug)
     doc = detailed_to_alignment(entries, sidecar, source_doc)
     with _sync.durable_transaction():
