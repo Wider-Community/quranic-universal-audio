@@ -154,7 +154,7 @@ def test_save_via_seg_route_flags_export_then_export_clears(
 
     segs = client.get(f"/api/seg/all/{slug}").get_json()["segments"]
     payload = {
-        "segments": [{"index": 1, "confidence": 0.7}],
+        "segments": [{"index": 1, "matched_ref": "2:2:4-2:3:1", "confidence": 0.7}],
         "operations": [],
     }
     saved = client.post(f"/api/seg/save/{slug}/2", json=payload, headers=_JSON)

@@ -332,13 +332,19 @@
         if (reciter) localStorage.setItem(LS_KEYS.SEG_RECITER, reciter);
         await reloadCurrentReciter();
     }
-    /** Open a sample from the samples list in the editor. */
+    /** Open a sample from the samples list in the editor, straight on its
+     *  one pseudo-chapter. */
     function openSample(slug: string): void {
         _lastBoundReciter = slug;
         selectedReciter.set(slug);
         _bindTask(null);
-        void onReciterChange(slug);
         segmentsSubTab.set('editor');
+        const chapter = get(samples).find((x) => x.slug === slug)?.pseudo_chapter;
+        void onReciterChange(slug).then(() => {
+            if (!chapter || get(selectedReciter) !== slug) return;
+            selectedChapter.set(String(chapter));
+            void loadChapterData(slug, String(chapter));
+        });
     }
     function onChapterChange(ev: CustomEvent<string>): void {
         const v = ev.detail;
