@@ -12,7 +12,12 @@
  * live here too. Codegen'd wire rows are imported from `./generated/schemas`.
  */
 
-import type { Actor as GenActor, ErrorEnvelope, SegmentFlagView } from './generated/schemas';
+import type {
+    Actor as GenActor,
+    ErrorEnvelope,
+    SegWordTiming,
+    SegmentFlagView,
+} from './generated/schemas';
 
 // ---------------------------------------------------------------------------
 // Reference strings: "surah:ayah[:word]" or compound "S:A:W-S:A:W"
@@ -70,6 +75,9 @@ export interface Segment {
     /** Manual "needs a second look" flag thread. Present (on /api/seg/all)
      *  only when the segment is flagged. */
     flag?: SegmentFlagView | null;
+    /** Per-word spans (audio-absolute ms) on sample segments; absent on
+     *  pipeline deliveries. Every edit reducer keeps or drops words. */
+    word_timings?: SegWordTiming[] | null;
     // ---- Client-only working fields (no wire producer) ----
     /** Reference text, populated client-side for display/edit. */
     matched_text?: string;

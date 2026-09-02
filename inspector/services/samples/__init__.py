@@ -256,15 +256,6 @@ def delete_sample(sample_id: str, *, user: Any) -> None:
     cache.pop_reciter_peaks_response_cache(slug)
 
 
-def sample_words(sample_id: str) -> dict[str, list[dict]]:
-    """``segment_uid -> word timings`` carried by the upload (empty when none)."""
-    if repo_samples.get(sample_id) is None:
-        raise SampleNotFound(sample_id)
-    sidecar = get_backend().read_json(storage_paths.sample_sidecar_path(sample_id))
-    words = sidecar.get("words") if isinstance(sidecar, dict) else None
-    return words if isinstance(words, dict) else {}
-
-
 def export_sample(sample_id: str, *, user: Any) -> tuple[str, bytes]:
     """Return ``(filename, json_bytes)`` in the schema the sample was uploaded in."""
     row = repo_samples.get(sample_id)

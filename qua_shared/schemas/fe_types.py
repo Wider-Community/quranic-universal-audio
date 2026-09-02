@@ -138,11 +138,11 @@ from .wire.release import (
     SuggestedAction,
 )
 from .wire.samples import (
+    SampleRealignRequest,
+    SampleRealignResponse,
     SampleRenameRequest,
     SampleRow,
     SamplesListResponse,
-    SampleWord,
-    SampleWordsResponse,
 )
 from .wire.seg import (
     SegAllResponse,
@@ -162,6 +162,7 @@ from .wire.seg import (
     SegUndoResponse,
     SegValAnyItem,
     SegValidateResponse,
+    SegWordTiming,
 )
 from .wire.timestamps import TsConfigResponse, TsManifestResponse
 from .wire.ts_reports import (
@@ -182,9 +183,9 @@ from .wire.ts_reports import (
 __all__ = [
     "Announcement",
     "SampleRenameRequest",
+    "SampleRealignRequest",
+    "SampleRealignResponse",
     "SampleRow",
-    "SampleWord",
-    "SampleWordsResponse",
     "SamplesListResponse",
     "AdminDiscardedDelivery",
     "AdminViewReciter",
@@ -201,6 +202,7 @@ __all__ = [
     "SegReciter",
     "SegRecitersResponse",
     "SegSaveRequest",
+    "SegWordTiming",
     "SegSaveResponse",
     "SegSegmentPeaksRequest",
     "SegSegmentPeaksResponse",

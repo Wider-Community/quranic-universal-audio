@@ -54,8 +54,11 @@ import type { Segment } from '../../../../lib/types/view-models';
     } from '../../stores/edit';
     import { activeFilters } from '../../stores/filters';
     import { savedFilterView } from '../../stores/navigation';
-    import { isSampleMode, playingWord, sampleWords } from '../../stores/samples';
+    import { activeSample, isSampleMode, playingWord, sampleHasWordTimings } from '../../stores/samples';
     import { missingWordsSegKeys } from '../../stores/validation';
+    import { realignSampleSegment, SampleApiError } from '../../../../lib/api/samples';
+    import { pushToast } from '../../../../lib/stores/toast';
+    import { setWordTimingsOnSegment } from '../../utils/edit/setWordTimings';
     import { deriveRowChips, type RowChip } from '../../utils/samples/chips';
     import { type BodyToken, tokenizeBody } from '../../utils/samples/words';
     import {
@@ -282,7 +285,7 @@ import type { Segment } from '../../../../lib/types/view-models';
     })();
     // Sample word highlight: per-word spans only when the upload carried
     // timings for this segment; the playhead tick sets `playingWord`.
-    $: bodyTokens = ($isSampleMode && seg.segment_uid && $sampleWords[seg.segment_uid]
+    $: bodyTokens = (void segStoreTick, $isSampleMode && seg.word_timings?.length
         ? tokenizeBody(bodyText, bodyRef, $quranRefs?.verse_word_counts)
         : null) as BodyToken[] | null;
     $: activeWordLocation = $playingWord && $playingWord.uid === seg.segment_uid
@@ -296,14 +299,32 @@ import type { Segment } from '../../../../lib/types/view-models';
     $: playButtonTitle = tr($localeStore, m.segments_row_play_button_title());
     // Sample mode: the three review signals live on the row, not in the accordion.
     $: rowChips = (void segStoreTick, $isSampleMode && mode === 'normal' && instanceRole === 'main'
-        ? deriveRowChips(seg, $missingWordsSegKeys, rowChapter)
+        ? deriveRowChips(seg, $missingWordsSegKeys, rowChapter, $quranRefs?.verse_word_counts, $sampleHasWordTimings)
         : []) as RowChip[];
+    let realignBusy = false;
     $: chipLabel = (chip: RowChip) => tr(
         $localeStore,
         chip === 'low_conf'
             ? m.segments_chip_low_conf()
-            : chip === 'repetition' ? m.segments_chip_repetition() : m.segments_chip_missing_words(),
+            : chip === 'repetition'
+              ? m.segments_chip_repetition()
+              : chip === 'missing_words'
+                ? m.segments_chip_missing_words()
+                : realignBusy ? m.segments_chip_realign_busy() : m.segments_chip_realign(),
     );
+    async function onRealignClick(): Promise<void> {
+        const sample = $activeSample;
+        if (!sample || !seg.segment_uid || realignBusy) return;
+        realignBusy = true;
+        try {
+            const words = await realignSampleSegment(sample.id, seg.segment_uid);
+            setWordTimingsOnSegment(seg, words);
+        } catch (e) {
+            pushToast({ kind: 'error', text: e instanceof SampleApiError ? e.message : String(e) });
+        } finally {
+            realignBusy = false;
+        }
+    }
     $: gotoButtonLabel = tr($localeStore, m.segments_row_goto_button());
     $: flagAriaLabel = tr($localeStore, !canEditFlag
         ? m.segments_row_flag_view_other_aria_label()
@@ -1044,7 +1065,16 @@ import type { Segment } from '../../../../lib/types/view-models';
                 <span class="seg-text-sep">|</span>
                 <span class="seg-text-conf {confClass}" class:seg-history-changed={changedConf}>{confText}</span>
                 {#each rowChips as chip (chip)}
-                    <span class="seg-chip" class:seg-chip-warn={chip !== 'repetition'}>{chipLabel(chip)}</span>
+                    {#if chip === 'realign'}
+                        <button
+                            type="button"
+                            class="seg-chip seg-chip-warn seg-chip-btn"
+                            disabled={realignBusy || readOnly}
+                            on:click|stopPropagation={onRealignClick}
+                        >{chipLabel(chip)}</button>
+                    {:else}
+                        <span class="seg-chip" class:seg-chip-warn={chip !== 'repetition'}>{chipLabel(chip)}</span>
+                    {/if}
                 {/each}
             </div>
             <div class="seg-text-times" class:seg-history-changed={changedDur} title={durTitle}>
@@ -1087,6 +1117,9 @@ import type { Segment } from '../../../../lib/types/view-models';
     }
 
     /* ---- Sample-mode row chips ---- */
+    .seg-chip-btn { cursor: pointer; font: inherit; }
+    .seg-chip-btn:hover:not(:disabled) { border-color: var(--state-error-fg); }
+    .seg-chip-btn:disabled { cursor: default; opacity: 0.6; }
     .seg-chip {
         display: inline-flex; align-items: center; height: 18px; padding: 0 7px; margin-inline-start: 6px;
         background: var(--panel-2); border: 1px solid var(--border-quiet); border-radius: 999px;

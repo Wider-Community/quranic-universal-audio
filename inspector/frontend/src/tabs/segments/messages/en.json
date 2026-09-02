@@ -501,5 +501,8 @@
   "segments_samples_back_to_list_title": "Back to the samples list",
   "segments_chip_low_conf": "Low confidence",
   "segments_chip_repetition": "Repetition",
-  "segments_chip_missing_words": "Missing words"
+  "segments_chip_missing_words": "Missing words",
+  "segments_chip_realign": "Realign words",
+  "segments_chip_realign_busy": "Realigning…",
+  "segments_history_optype_set_word_timings": "Word timings"
 }

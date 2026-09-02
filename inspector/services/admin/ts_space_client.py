@@ -26,6 +26,9 @@ from typing import Any
 # SHA-256 of empty bytes — the audio part is always absent (bucket-mount I/O).
 _EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 _ROUTE = "/internal/v1/timestamps"
+_ALIGN_ROUTE = "/internal/v1/align_items"
+_ALIGN_PROFILE_ID = "timing.batch@v1"
+_ALIGN_TIMEOUT_S = 120
 _PROFILE_ID = "timing.timestamps@v1"
 _SECRET_VERSION = "v1"
 
@@ -57,7 +60,9 @@ def _canonical(value: Any) -> str:
     raise TypeError(f"{type(value).__name__} is not canonicalizable for timestamps signing")
 
 
-def _sign_headers(body: dict, secret: bytes, hf_token: str | None) -> tuple[bytes, dict[str, str]]:
+def _sign_headers(
+    body: dict, secret: bytes, hf_token: str | None, *, route: str = _ROUTE
+) -> tuple[bytes, dict[str, str]]:
     """Serialize ``body``, compute the production-HMAC headers, return both."""
     raw = json.dumps(body).encode("utf-8")
     metadata_sha256 = hashlib.sha256(_canonical(body).encode("utf-8")).hexdigest()
@@ -67,7 +72,7 @@ def _sign_headers(body: dict, secret: bytes, hf_token: str | None) -> tuple[byte
         (
             _SECRET_VERSION,
             "POST",
-            _ROUTE,
+            route,
             timestamp,
             nonce,
             "",  # operation_id — the accept carries none
@@ -142,3 +147,39 @@ def start_run(
     except (ValueError, KeyError) as exc:
         raise TsSpaceError(f"timestamps Space returned no run_id: {resp.text[:200]}") from exc
     return str(run_id)
+
+
+def align_item(*, ref: str, repo: str, path: str, start_ms: int, end_ms: int) -> dict:
+    """Align one bucket audio span against ``ref`` on the batch Space; return
+    its NDJSON row (``{ref, status, words?, error?}``). The Space cuts the
+    span from the bucket object itself, so no audio bytes travel."""
+    from huggingface_hub import get_token
+
+    body: dict[str, Any] = {
+        "schema_version": 1,
+        "profile_id": _ALIGN_PROFILE_ID,
+        "params": {},
+        "seed_psil": False,
+        "items": [
+            {
+                "ref": ref,
+                "audio": {"repo": repo, "path": path, "start_ms": start_ms, "end_ms": end_ms},
+            }
+        ],
+    }
+    raw, headers = _sign_headers(body, _secret(), get_token(), route=_ALIGN_ROUTE)
+
+    import requests
+
+    try:
+        resp = requests.post(
+            space_url() + _ALIGN_ROUTE, data=raw, headers=headers, timeout=_ALIGN_TIMEOUT_S
+        )
+    except requests.RequestException as exc:
+        raise TsSpaceError(f"timing Space unreachable: {exc}") from exc
+    if resp.status_code != 200:
+        raise TsSpaceError(f"timing Space {resp.status_code}: {resp.text[:300]}")
+    rows = [json.loads(line) for line in resp.text.splitlines() if line.strip()]
+    if len(rows) != 1 or not isinstance(rows[0], dict):
+        raise TsSpaceError(f"timing Space returned {len(rows)} rows for one item")
+    return rows[0]

@@ -12,8 +12,8 @@ import { derived, writable } from 'svelte/store';
 import { can } from '../../../lib/stores/capabilities';
 import type { CurrentUser } from '../../../lib/stores/current-user';
 import type { EditingMode } from '../../../lib/stores/editing-mode';
-import type { SampleRow, SampleWord } from '../../../lib/types/generated/schemas';
-import { selectedReciter } from './chapter';
+import type { SampleRow } from '../../../lib/types/generated/schemas';
+import { segAllData, selectedReciter } from './chapter';
 
 export const SAMPLE_SLUG_PREFIX = 'sample--';
 export const SAMPLES_CAPABILITY = 'samples.manage';
@@ -55,10 +55,6 @@ export function sampleEditingMode(user: CurrentUser | null): EditingMode {
     return { kind: user.role === 'owner' ? 'owner' : 'maintainer' };
 }
 
-/** Word timings of the open sample, keyed by `segment_uid` (empty when the
- *  upload carried none). Loaded by `openSample`, cleared on reciter change. */
-export const sampleWords = writable<Record<string, SampleWord[]>>({});
-
 /** The word under the playhead in the open sample: `{uid, location}` so a
  *  row wakes only when the active word changes, not every frame. */
 export interface PlayingWord {
@@ -74,3 +70,11 @@ export function setPlayingWord(next: PlayingWord | null): void {
         return next;
     });
 }
+
+/** True when any segment of the open sample carries word timings — the
+ *  gate for the per-row realign chip (a sample uploaded without timings
+ *  should not nag on every row). */
+export const sampleHasWordTimings = derived(
+    [isSampleMode, segAllData],
+    ([sample, all]) => sample && !!all?.segments?.some((s) => !!s.word_timings?.length),
+);

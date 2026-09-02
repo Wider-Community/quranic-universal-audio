@@ -82,7 +82,7 @@ export const EDIT_OP_LABELS: Record<string, string> = {
     merge_segments: 'Merge', delete_segment: 'Deletion',
     edit_reference: 'Reference edit', confirm_reference: 'Reference confirmation',
     auto_fix_missing_word: 'Auto-fill missing word', ignore_issue: 'Ignored issue',
-    set_is_wasl: 'Wasl annotation', flag_segment: 'Flag comment',
+    set_is_wasl: 'Wasl annotation', set_word_timings: 'Word timings', flag_segment: 'Flag comment',
     pipeline: 'Pipeline edit', remove_sadaqa: 'Remove Sadaqa',
 };
 

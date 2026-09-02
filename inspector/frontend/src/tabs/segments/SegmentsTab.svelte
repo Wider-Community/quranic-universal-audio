@@ -11,7 +11,7 @@
     import { get, type Readable } from 'svelte/store';
 
     import { fetchJson } from '../../lib/api';
-    import { fetchSampleWords, listSamples } from '../../lib/api/samples';
+    import { listSamples } from '../../lib/api/samples';
     import { release } from '../../lib/api/claims-client';
     import { getReciterTaskStore, type ReciterTask,refreshReciterTask } from '../../lib/api/reciter-task';
     import { localeStore, tr } from '../../lib/i18n/locale-store';
@@ -61,7 +61,6 @@
         isSampleSlug,
         sampleEditingMode,
         samples,
-        sampleWords,
         segmentsSubTab,
         setPlayingWord,
         type SegmentsSubTab,
@@ -332,7 +331,6 @@
     }
     async function onReciterChange(reciter: string): Promise<void> {
         if (reciter) localStorage.setItem(LS_KEYS.SEG_RECITER, reciter);
-        sampleWords.set({});
         setPlayingWord(null);
         await reloadCurrentReciter();
     }
@@ -343,13 +341,9 @@
         selectedReciter.set(slug);
         _bindTask(null);
         segmentsSubTab.set('editor');
-        const sample = get(samples).find((x) => x.slug === slug);
-        const chapter = sample?.pseudo_chapter;
-        void onReciterChange(slug).then(async () => {
-            if (!sample || get(selectedReciter) !== slug) return;
-            const words = await fetchSampleWords(sample.id);
-            if (get(selectedReciter) === slug) sampleWords.set(words);
-            if (!chapter) return;
+        const chapter = get(samples).find((x) => x.slug === slug)?.pseudo_chapter;
+        void onReciterChange(slug).then(() => {
+            if (!chapter || get(selectedReciter) !== slug) return;
             selectedChapter.set(String(chapter));
             void loadChapterData(slug, String(chapter));
         });

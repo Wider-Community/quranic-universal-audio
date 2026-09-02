@@ -525,5 +525,8 @@
   "segments_samples_back_to_list_title": "العودة إلى قائمة العينات",
   "segments_chip_low_conf": "ثقة منخفضة",
   "segments_chip_repetition": "تكرار",
-  "segments_chip_missing_words": "كلمات ناقصة"
+  "segments_chip_missing_words": "كلمات ناقصة",
+  "segments_chip_realign": "إعادة محاذاة الكلمات",
+  "segments_chip_realign_busy": "جارٍ إعادة المحاذاة…",
+  "segments_history_optype_set_word_timings": "توقيتات الكلمات"
 }

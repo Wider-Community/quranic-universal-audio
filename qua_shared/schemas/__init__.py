@@ -191,11 +191,11 @@ from .wire.release import (
     WordTimestampsDoc,
 )
 from .wire.samples import (
+    SampleRealignRequest,
+    SampleRealignResponse,
     SampleRenameRequest,
     SampleRow,
     SamplesListResponse,
-    SampleWord,
-    SampleWordsResponse,
 )
 from .wire.seg import (
     FlagAuthor,
@@ -240,6 +240,7 @@ from .wire.seg import (
     SegValRepetitionItem,
     SegValStats,
     SegValStructuralErrorItem,
+    SegWordTiming,
 )
 from .wire.timestamps import (
     Letter,
@@ -274,6 +275,7 @@ __all__ = [
     "SegSaveFullSegment",
     "SegSavePatchSegment",
     "SegSaveRequest",
+    "SegWordTiming",
     "SegSaveResponse",
     "SegSegmentPeaks",
     "SegSegmentPeaksRequest",
@@ -360,9 +362,9 @@ __all__ = [
     "Announcement",
     "AnnouncementAdmin",
     "SampleRenameRequest",
+    "SampleRealignRequest",
+    "SampleRealignResponse",
     "SampleRow",
-    "SampleWord",
-    "SampleWordsResponse",
     "SamplesListResponse",
     "AnnouncementCreate",
     "AudioManifestSidecar",

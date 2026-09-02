@@ -7,7 +7,7 @@
  * `null`. `activeWordLocation` picks the word under the playhead.
  */
 
-import type { SampleWord } from '../../../../lib/types/generated/schemas';
+import type { SegWordTiming } from '../../../../lib/types/generated/schemas';
 import type { Ref } from '../../../../lib/types/view-models';
 import type { VerseWordCounts } from '../data/references';
 import { _normalizeRef, parseSegRef } from '../data/references';
@@ -46,7 +46,7 @@ export function tokenizeBody(
 }
 
 /** Location of the word whose span contains `timeMs`, else `null`. */
-export function activeWordLocation(words: readonly SampleWord[], timeMs: number): string | null {
+export function activeWordLocation(words: readonly SegWordTiming[], timeMs: number): string | null {
     for (const word of words) {
         if (timeMs >= word.start_ms && timeMs < word.end_ms) return word.location;
     }

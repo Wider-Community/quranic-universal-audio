@@ -38,10 +38,17 @@ import type {
     SegmentCommand,
     SegmentPatch,
     SetIsWaslCommand,
+    SetWordTimingsCommand,
     SplitCommand,
     TrimCommand,
 } from './command';
 import { IssueRegistry } from './registry';
+import {
+    clipWordTimings,
+    concatWordTimings,
+    filterWordTimingsToRef,
+    partitionWordTimings,
+} from '../utils/samples/word-timings';
 
 const HISTORY_NEUTRAL_CONTEXT_CATEGORIES = new Set(['muqattaat']);
 
@@ -68,6 +75,7 @@ const OP_TYPE_BY_COMMAND: Readonly<Record<Operation, string>> = Object.freeze({
     ignoreIssue: 'ignore_issue',
     autoFixMissingWord: 'auto_fix_missing_word',
     setIsWasl: 'set_is_wasl',
+    setWordTimings: 'set_word_timings',
     flagSegment: 'flag_segment',
 });
 
@@ -184,6 +192,7 @@ function _reduceTrim(state: ApplyCommandState, cmd: TrimCommand, ctx?: ApplyComm
     if (cmd.delta.time_start != null) next.time_start = cmd.delta.time_start;
     if (cmd.delta.time_end != null) next.time_end = cmd.delta.time_end;
     next.confidence = 1.0;
+    next.word_timings = clipWordTimings(target.word_timings, next.time_start, next.time_end);
     const resolved = _resolvedFromContext(cmd.sourceCategory ?? cmd.contextCategory);
 
     const op = _baseOperation(cmd, target, chapter, target.index, ctx);
@@ -274,6 +283,7 @@ function _reduceSplit(state: ApplyCommandState, cmd: SplitCommand, ctx?: ApplyCo
         : null;
 
     const pieces: Segment[] = [];
+    const pieceWords = partitionWordTimings(target.word_timings, target.time_start, target.time_end, cursors);
     for (let i = 0; i < nPieces; i++) {
         const start = i === 0 ? target.time_start : cursors[i - 1]!;
         const end = i === nPieces - 1 ? target.time_end : cursors[i]!;
@@ -283,6 +293,7 @@ function _reduceSplit(state: ApplyCommandState, cmd: SplitCommand, ctx?: ApplyCo
             time_end: end,
         };
         delete piece.wrap_word_ranges;
+        piece.word_timings = pieceWords[i] ?? null;
         if (i === 0) {
             // Keep parent uid + index for piece 0.
         } else {
@@ -291,7 +302,10 @@ function _reduceSplit(state: ApplyCommandState, cmd: SplitCommand, ctx?: ApplyCo
                 ?? _newUid(ctx);
             piece.index = target.index + i;
         }
-        if (refs[i] !== undefined) piece.matched_ref = refs[i]!;
+        if (refs[i] !== undefined) {
+            piece.matched_ref = refs[i]!;
+            piece.word_timings = filterWordTimingsToRef(piece.word_timings, piece.matched_ref);
+        }
         if (texts[i] !== undefined) piece.matched_text = texts[i]!;
         if (i < nPieces - 1) {
             piece.is_wasl = waslOverrides ? waslOverrides[i] === true : false;
@@ -382,6 +396,10 @@ function _reduceMerge(state: ApplyCommandState, cmd: MergeCommand, ctx?: ApplyCo
         confidence: 1.0,
     };
     merged.ignored_categories = mergedIc.size ? [...mergedIc] : undefined;
+    merged.word_timings = filterWordTimingsToRef(
+        concatWordTimings(first.word_timings, second.word_timings),
+        merged.matched_ref,
+    );
     // Merging changes the seg's matched_ref + geometry; any wrap that was
     // scoped to ``first`` may not apply to the merged span. Drop wrap for
     // the same reasons split and edit-ref do.
@@ -460,6 +478,7 @@ function _reduceEditReference(
     // re-tag a real repetition seg whose ref they edited.
     if (target.matched_ref !== cmd.matched_ref) {
         delete next.wrap_word_ranges;
+        next.word_timings = filterWordTimingsToRef(target.word_timings, cmd.matched_ref);
     }
     const resolved = _resolvedFromContext(cmd.sourceCategory ?? cmd.contextCategory);
 
@@ -615,6 +634,45 @@ function _reduceSetIsWasl(
     };
 }
 
+function _reduceSetWordTimings(
+    state: ApplyCommandState,
+    cmd: SetWordTimingsCommand,
+    ctx?: ApplyCommandContext,
+): CommandResult {
+    const target = _findSeg(state, cmd.segmentUid);
+    if (!target) throw new Error(`applyCommand[setWordTimings]: segment '${cmd.segmentUid}' not found`);
+    const chapter = _chapterFor(target, state);
+
+    const next = _cloneSeg(target);
+    next.word_timings = cmd.word_timings?.length ? [...cmd.word_timings] : null;
+
+    const op = _baseOperation(cmd, target, chapter, target.index, ctx);
+    op.fix_kind = cmd.fixKind ?? 'manual';
+    op.snapshots.before = [_snapshot(target)];
+    op.snapshots.after = [_snapshot(next)];
+    op.targets_before = op.snapshots.before;
+    op.targets_after = op.snapshots.after;
+    op.affected_chapters = [chapter];
+
+    const nextState: CommandNextState = {
+        byId: { [next.segment_uid ?? cmd.segmentUid]: next },
+        affectedChapter: chapter,
+    };
+    return {
+        nextState,
+        operation: op,
+        affectedChapters: [chapter],
+        validationDelta: { resolved: [], introduced: [] },
+        patch: _buildPatch(
+            [_snapshot(target)],
+            [_snapshot(next)],
+            [],
+            [],
+            [chapter],
+        ),
+    };
+}
+
 function _reduceFlagSegment(
     state: ApplyCommandState,
     cmd: FlagSegmentCommand,
@@ -683,6 +741,7 @@ function _reduceAutoFixMissingWord(
     next.matched_ref = cmd.matched_ref;
     if (cmd.matched_text !== undefined) next.matched_text = cmd.matched_text;
     next.confidence = 1.0;
+    next.word_timings = filterWordTimingsToRef(target.word_timings, cmd.matched_ref);
 
     const op = _baseOperation(cmd, target, chapter, target.index, ctx);
     op.op_context_category = cmd.contextCategory ?? cmd.sourceCategory ?? 'missing_words';
@@ -738,6 +797,8 @@ export function applyCommand(
             return _reduceAutoFixMissingWord(state as ApplyCommandState, command, ctx);
         case 'setIsWasl':
             return _reduceSetIsWasl(state as ApplyCommandState, command, ctx);
+        case 'setWordTimings':
+            return _reduceSetWordTimings(state as ApplyCommandState, command, ctx);
         case 'flagSegment':
             return _reduceFlagSegment(state as ApplyCommandState, command, ctx);
         default: {

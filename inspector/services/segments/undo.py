@@ -65,6 +65,8 @@ def snap_to_segment(snap: dict) -> dict:
         seg["wrap_word_ranges"] = snap["wrap_word_ranges"]
     if snap.get("ignored_categories"):
         seg["ignored_categories"] = list(snap["ignored_categories"])
+    if snap.get("word_timings"):
+        seg["word_timings"] = list(snap["word_timings"])
     return seg
 
 

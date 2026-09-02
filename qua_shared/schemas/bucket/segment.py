@@ -72,6 +72,18 @@ class SegmentFlag(BaseModel):
     follow_ups: list[FlagFollowUp] = Field(default_factory=list)
 
 
+class WordTiming(BaseModel):
+    """One word's span inside a segment, audio-absolute ms. ``location`` is the
+    ``surah:ayah:word`` key the word aligns to; ``word`` is its display text."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    word: str = ""
+    location: str
+    start_ms: int = Field(..., ge=0)
+    end_ms: int = Field(..., ge=0)
+
+
 class DetailedSegment(BaseModel):
     """Atomic seg in a chapter's ``segments`` list.
 
@@ -97,6 +109,9 @@ class DetailedSegment(BaseModel):
       - ``segment_uid`` — UUIDv7 stamped by save-flow merge / split / strip
         ops and by the ``/seg/all`` lazy backfill route. Absent on fresh
         extraction output.
+      - ``word_timings`` — per-word spans carried by an uploaded sample (or a
+        maintainer realign). Edits keep the words that still fit the seg's
+        span and ref and drop the rest; absent on pipeline deliveries.
       - ``ignored_categories`` — per-seg category-level ignore set written
         by the "ignore this issue" accordion action; consulted by
         ``services/validation/classifier.py::is_ignored_for`` to suppress
@@ -124,6 +139,7 @@ class DetailedSegment(BaseModel):
     confidence: float = Field(0.0, ge=0.0, le=1.0)
     wrap_word_ranges: list[list[str]] | None = None
     segment_uid: str | None = None
+    word_timings: list[WordTiming] | None = None
 
     # === Per-seg "ignore this issue" state (see proposal for refactor) ===
     ignored_categories: list[str] | None = None

@@ -378,6 +378,16 @@ def _apply_patch(matching: list[dict], updates: dict) -> None:
                 else:
                     flat_segments[idx].pop("ignored_categories", None)
                     flat_segments[idx].pop("ignored", None)
+            if "word_timings" in upd:
+                if upd.get("word_timings"):
+                    flat_segments[idx]["word_timings"] = upd["word_timings"]
+                else:
+                    flat_segments[idx].pop("word_timings", None)
+            if "word_timings" in upd:
+                if upd.get("word_timings"):
+                    flat_segments[idx]["word_timings"] = upd["word_timings"]
+                else:
+                    flat_segments[idx].pop("word_timings", None)
             # Re-stamp persisted classifier fields since matched_ref/text changed.
             stamp_segment(flat_segments[idx], single_word_verses)
 

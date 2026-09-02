@@ -16,7 +16,7 @@
  * dispatcher's convenience and never leaks into the operation log.
  */
 
-import type { FlagAuthor } from '../../../lib/types/generated/schemas';
+import type { FlagAuthor, SegWordTiming } from '../../../lib/types/generated/schemas';
 import type { EditOp, Segment } from '../../../lib/types/view-models';
 import type { SegSnapshot } from '../stores/dirty';
 
@@ -33,6 +33,7 @@ export type Operation =
     | 'ignoreIssue'
     | 'autoFixMissingWord'
     | 'setIsWasl'
+    | 'setWordTimings'
     | 'flagSegment';
 
 // ---------------------------------------------------------------------------
@@ -143,6 +144,14 @@ export interface SetIsWaslCommand extends CommandBase {
     is_wasl: boolean;
 }
 
+/** Replace a segment's per-word timings (a maintainer realign on a sample);
+ *  `null` clears them. */
+export interface SetWordTimingsCommand extends CommandBase {
+    type: 'setWordTimings';
+    segmentUid: string;
+    word_timings: SegWordTiming[] | null;
+}
+
 /** Flag a segment with a comment thread. The actor + timestamps are stamped
  *  server-side (never trusted from the client). ``intent`` distinguishes:
  *  - ``set``      — create a flag (comment required).
@@ -169,6 +178,7 @@ export type SegmentCommand =
     | IgnoreIssueCommand
     | AutoFixMissingWordCommand
     | SetIsWaslCommand
+    | SetWordTimingsCommand
     | FlagSegmentCommand;
 
 // ---------------------------------------------------------------------------

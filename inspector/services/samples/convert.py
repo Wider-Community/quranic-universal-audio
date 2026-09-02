@@ -9,13 +9,14 @@ Three upload shapes are accepted, sniffed from the JSON:
   time_to, ref_from, ref_to, special_type, confidence, ...}]}``.
 
 Import produces one ``DetailedEntry`` per sample (one audio = one pseudo-chapter)
-plus a sidecar that remembers the shape, the pseudo-chapter, every original
-segment keyed by the ``segment_uid`` it became, the segments that were not
-live spans (``filtered`` / ``merged_into``), and per-segment word timings
-(``words``, audio-absolute ms) when the upload carried them. Export reverses that: originals are
-copied back with their edited fields overridden, new segments get fresh ids,
-dropped originals are re-appended, and everything outside ``segments`` is
-preserved.
+plus a sidecar that remembers the shape, the pseudo-chapter, and the segments
+that were not live spans (``filtered`` / ``merged_into``). Per-segment
+``words`` timings become ``DetailedSegment.word_timings`` (audio-absolute ms)
+so every edit and undo carries them. Export reverses that: originals are
+copied back with their edited fields overridden (``words`` rewritten
+segment-relative, or removed when the edits dropped them), new segments get
+fresh ids, dropped originals are re-appended, and everything outside
+``segments`` is preserved.
 
 Pure functions, no I/O.
 """
@@ -26,7 +27,7 @@ import copy
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from qua_shared.schemas.bucket.segment import DetailedSegment
+from qua_shared.schemas.bucket.segment import DetailedSegment, WordTiming
 from utils.uuid7 import uuid7
 
 EnvelopeKind = Literal["alignment", "alignment_resource", "legacy"]
@@ -136,13 +137,13 @@ def _read_wraps(kind: EnvelopeKind, seg: dict) -> list[list[str]] | None:
     return out
 
 
-def _read_words(seg: dict, start_ms: int) -> list[dict] | None:
+def _read_words(seg: dict, start_ms: int) -> list[WordTiming] | None:
     """Word timings as audio-absolute ms; the upload stores them relative to
     the segment start in seconds. ``None`` when the segment carries none."""
     raw = seg.get("words")
     if not isinstance(raw, list) or not raw:
         return None
-    out: list[dict] = []
+    out: list[WordTiming] = []
     for w in raw:
         if not isinstance(w, dict) or w.get("start") is None or w.get("end") is None:
             continue
@@ -150,12 +151,14 @@ def _read_words(seg: dict, start_ms: int) -> list[dict] | None:
             start, end = float(w["start"]), float(w["end"])
         except (TypeError, ValueError):
             continue
-        out.append({
-            "word": str(w.get("word") or ""),
-            "location": str(w.get("location") or ""),
-            "start_ms": start_ms + round(start * 1000),
-            "end_ms": start_ms + round(end * 1000),
-        })
+        out.append(
+            WordTiming(
+                word=str(w.get("word") or ""),
+                location=str(w.get("location") or ""),
+                start_ms=start_ms + round(start * 1000),
+                end_ms=start_ms + round(end * 1000),
+            )
+        )
     return out or None
 
 
@@ -183,7 +186,6 @@ def alignment_to_detailed(
         raise SampleConvertError("upload has no segments")
 
     originals: dict[str, dict] = {}
-    words: dict[str, list[dict]] = {}
     dropped: list[dict] = []
     live: list[tuple[int, dict]] = []
     for raw in raw_segments:
@@ -201,10 +203,9 @@ def alignment_to_detailed(
             confidence=float(raw.get("confidence") or 0.0),
             wrap_word_ranges=_read_wraps(kind, raw),
             segment_uid=uid,
+            word_timings=_read_words(raw, start),
         )
         originals[uid] = raw
-        if (timed := _read_words(raw, start)) is not None:
-            words[uid] = timed
         live.append((start, seg.model_dump(exclude_none=True)))
 
     if not live:
@@ -224,7 +225,6 @@ def alignment_to_detailed(
         "pseudo_chapter": pseudo_chapter,
         "originals": originals,
         "dropped": dropped,
-        "words": words,
     }
     return {"_meta": meta, "entries": entries}, sidecar
 
@@ -265,6 +265,25 @@ def _infer_kind(matched_ref: str) -> str | None:
     return "quran" if ":" in matched_ref else "special"
 
 
+def _write_words(out: dict, seg: dict) -> None:
+    """Rewrite ``words`` segment-relative from ``word_timings``; drop a stale
+    upload ``words`` list when the edits left the segment without timings."""
+    timings = seg.get("word_timings")
+    if not timings:
+        out.pop("words", None)
+        return
+    origin = seg["time_start"]
+    out["words"] = [
+        {
+            "word": w.get("word", ""),
+            "location": w["location"],
+            "start": round((w["start_ms"] - origin) / 1000, 3),
+            "end": round((w["end_ms"] - origin) / 1000, 3),
+        }
+        for w in timings
+    ]
+
+
 def _write_segment(kind: EnvelopeKind, base: dict | None, seg: dict, next_id) -> dict:
     matched_ref = seg.get("matched_ref") or ""
     start_s, end_s = seg["time_start"] / 1000, seg["time_end"] / 1000
@@ -291,6 +310,7 @@ def _write_segment(kind: EnvelopeKind, base: dict | None, seg: dict, next_id) ->
             out["special_type"] = matched_ref or None
         out["confidence"] = confidence
         out["kind"] = _infer_kind(matched_ref)
+        _write_words(out, seg)
         return out
     out = copy.deepcopy(base) if base is not None else {"id": next_id(), "matched_text": ""}
     out["region"] = {"start_s": start_s, "end_s": end_s}
@@ -299,6 +319,8 @@ def _write_segment(kind: EnvelopeKind, base: dict | None, seg: dict, next_id) ->
     out["wrap_ranges"] = _tuples_to_wrap_ranges(seg.get("wrap_word_ranges"))
     if base is None:
         out["kind"] = _infer_kind(matched_ref)
+    if (base is not None and "words" in base) or seg.get("word_timings"):
+        _write_words(out, seg)
     return out
 
 

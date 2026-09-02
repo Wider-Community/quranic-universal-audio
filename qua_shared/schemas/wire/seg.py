@@ -178,13 +178,25 @@ class SegDataSegment(BaseModel):
     is_wasl: bool | None = None
 
 
+class SegWordTiming(BaseModel):
+    """One word span on a seg (audio-absolute ms); mirrors ``bucket.WordTiming``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    word: str = ""
+    location: str
+    start_ms: int
+    end_ms: int
+
+
 class SegAllSegment(BaseModel):
     """A segment row as emitted by ``GET /api/seg/all`` (all-chapter scope).
 
     Differs from the ``/data`` row: carries ``chapter`` + ``segment_uid`` +
     ``entry_ref`` and OMITS ``audio_url`` (redundant with the top-level
     ``audio_by_chapter`` map). ``wrap_word_ranges`` / ``ignored_categories`` /
-    ``is_wasl`` / ``flag`` are emitted only when present on the seg.
+    ``is_wasl`` / ``flag`` / ``word_timings`` are emitted only when present on
+    the seg.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -202,6 +214,8 @@ class SegAllSegment(BaseModel):
     ignored_categories: list[str] | None = None
     is_wasl: bool | None = None
     flag: SegmentFlagView | None = None
+    word_timings: list[SegWordTiming] | None = None
+    word_timings: list[SegWordTiming] | None = None
 
 
 class SegmentsChapterSummary(BaseModel):
@@ -276,7 +290,8 @@ class SegSavePatchSegment(BaseModel):
     """One segment in a ``patch`` (field-level) save payload.
 
     The patch path keys updates by chapter-local ``index`` and only rewrites
-    ``matched_ref`` / ``confidence`` / ``ignored_categories``.
+    ``matched_ref`` / ``confidence`` / ``ignored_categories`` /
+    ``word_timings`` (when the key is present: ``null`` clears).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -287,6 +302,7 @@ class SegSavePatchSegment(BaseModel):
     confidence: float
     ignored_categories: list[str] | None = None
     is_wasl: bool | None = None
+    word_timings: list[SegWordTiming] | None = None
 
 
 class SegSaveFullSegment(BaseModel):
@@ -302,6 +318,8 @@ class SegSaveFullSegment(BaseModel):
     wrap_word_ranges: list | None = None
     ignored_categories: list[str] | None = None
     is_wasl: bool | None = None
+    word_timings: list[SegWordTiming] | None = None
+    word_timings: list[SegWordTiming] | None = None
 
 
 class SegSaveRequest(BaseModel):

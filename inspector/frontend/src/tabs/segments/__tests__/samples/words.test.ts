@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { SampleWord } from '../../../../lib/types/generated/schemas';
+import type { SegWordTiming } from '../../../../lib/types/generated/schemas';
 import { activeWordLocation, tokenizeBody } from '../../utils/samples/words';
 
 const VWC = { '11:1': 2, '11:2': 4 };
@@ -17,7 +17,7 @@ describe('tokenizeBody', () => {
 });
 
 describe('activeWordLocation', () => {
-    const words: SampleWord[] = [
+    const words: SegWordTiming[] = [
         { word: 'a', location: '11:1:1', start_ms: 1000, end_ms: 2000 },
         { word: 'b', location: '11:1:2', start_ms: 2000, end_ms: 3500 },
     ];

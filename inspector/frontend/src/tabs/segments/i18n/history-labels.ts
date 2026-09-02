@@ -18,6 +18,7 @@ export const EDIT_OP_TITLE: Readonly<Record<string, () => string>> = Object.free
     auto_fix_missing_word: m.segments_history_optype_auto_fix_missing_word,
     ignore_issue: m.segments_history_optype_ignore_issue,
     set_is_wasl: m.segments_history_optype_set_is_wasl,
+    set_word_timings: m.segments_history_optype_set_word_timings,
     flag_segment: m.segments_history_optype_flag_segment,
     pipeline: m.segments_history_optype_pipeline,
     remove_sadaqa: m.segments_history_optype_remove_sadaqa,

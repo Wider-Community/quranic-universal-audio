@@ -22,12 +22,15 @@ from pydantic import ValidationError
 
 from config import AUDIO_MIME_TYPES
 from qua_shared.schemas import (
+    SampleRealignRequest,
+    SampleRealignResponse,
     SampleRenameRequest,
     SampleRow,
     SamplesListResponse,
-    SampleWordsResponse,
 )
 from services import samples as samples_service
+from services.admin.ts_space_client import TsSpaceError
+from services.samples import realign as realign_service
 from utils.decorators import require_capability, require_same_origin
 
 samples_bp = Blueprint("samples", __name__, url_prefix="/api/samples")
@@ -115,14 +118,24 @@ def delete_sample(user, sample_id):
     return ("", 204)
 
 
-@samples_bp.route("/<sample_id>/words")
+@samples_bp.route("/<sample_id>/realign", methods=["POST"])
+@require_same_origin
 @require_capability("samples.manage")
-def sample_words(user, sample_id):
+def realign_sample_segment(user, sample_id):
+    """Word timings for one segment from the timing Space; the FE commits them."""
     try:
-        words = samples_service.sample_words(sample_id)
-    except samples_service.SampleNotFound as exc:
+        req = SampleRealignRequest.model_validate(request.get_json(silent=True) or {})
+    except ValidationError as exc:
+        return jsonify({"error": "segment_uid required", "details": exc.errors()}), 400
+    try:
+        timings = realign_service.realign_segment(sample_id, req.segment_uid)
+    except realign_service.RealignUnsupported as exc:
+        return jsonify({"error": str(exc)}), 409
+    except (samples_service.SampleError, samples_service.SampleNotFound) as exc:
         return _handle(exc)
-    return jsonify(SampleWordsResponse.model_validate({"words": words}).model_dump())
+    except TsSpaceError as exc:
+        return jsonify({"error": str(exc)}), 502
+    return jsonify(SampleRealignResponse.model_validate({"word_timings": timings}).model_dump())
 
 
 @samples_bp.route("/<sample_id>/export")

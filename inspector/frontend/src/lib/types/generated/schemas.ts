@@ -872,6 +872,9 @@ export interface DetailedEntry {
  *   - ``segment_uid`` — UUIDv7 stamped by save-flow merge / split / strip
  *     ops and by the ``/seg/all`` lazy backfill route. Absent on fresh
  *     extraction output.
+ *   - ``word_timings`` — per-word spans carried by an uploaded sample (or a
+ *     maintainer realign). Edits keep the words that still fit the seg's
+ *     span and ref and drop the rest; absent on pipeline deliveries.
  *   - ``ignored_categories`` — per-seg category-level ignore set written
  *     by the "ignore this issue" accordion action; consulted by
  *     ``services/validation/classifier.py::is_ignored_for`` to suppress
@@ -892,10 +895,21 @@ export interface DetailedSegment {
   confidence?: number;
   wrap_word_ranges?: string[][] | null;
   segment_uid?: string | null;
+  word_timings?: WordTiming[] | null;
   ignored_categories?: string[] | null;
   ignored?: boolean | null;
   is_wasl?: boolean;
   flag?: SegmentFlag | null;
+}
+/**
+ * One word's span inside a segment, audio-absolute ms. ``location`` is the
+ * ``surah:ayah:word`` key the word aligns to; ``word`` is its display text.
+ */
+export interface WordTiming {
+  word?: string;
+  location: string;
+  start_ms: number;
+  end_ms: number;
 }
 /**
  * A flag on a single segment: a required root comment + reply thread.
@@ -1375,6 +1389,21 @@ export interface PublicReciterPage {
   total: number;
   next_cursor?: number | null;
 }
+export interface SampleRealignRequest {
+  segment_uid: string;
+}
+export interface SampleRealignResponse {
+  word_timings: SegWordTiming[];
+}
+/**
+ * One word span on a seg (audio-absolute ms); mirrors ``bucket.WordTiming``.
+ */
+export interface SegWordTiming {
+  word?: string;
+  location: string;
+  start_ms: number;
+  end_ms: number;
+}
 export interface SampleRenameRequest {
   name: string;
 }
@@ -1398,17 +1427,6 @@ export interface SampleRow {
   last_export_at?: string | null;
   changed_since_export: boolean;
   can_manage: boolean;
-}
-export interface SampleWord {
-  word: string;
-  location: string;
-  start_ms: number;
-  end_ms: number;
-}
-export interface SampleWordsResponse {
-  words: {
-    [k: string]: SampleWord[];
-  };
 }
 export interface SamplesListResponse {
   samples: SampleRow[];
@@ -1443,7 +1461,8 @@ export interface SegAllResponse {
  * Differs from the ``/data`` row: carries ``chapter`` + ``segment_uid`` +
  * ``entry_ref`` and OMITS ``audio_url`` (redundant with the top-level
  * ``audio_by_chapter`` map). ``wrap_word_ranges`` / ``ignored_categories`` /
- * ``is_wasl`` / ``flag`` are emitted only when present on the seg.
+ * ``is_wasl`` / ``flag`` / ``word_timings`` are emitted only when present on
+ * the seg.
  */
 export interface SegAllSegment {
   chapter: number;
@@ -1459,6 +1478,7 @@ export interface SegAllSegment {
   ignored_categories?: string[] | null;
   is_wasl?: boolean | null;
   flag?: SegmentFlagView | null;
+  word_timings?: SegWordTiming[] | null;
 }
 /**
  * A segment's flag thread: a root comment plus follow-up replies.

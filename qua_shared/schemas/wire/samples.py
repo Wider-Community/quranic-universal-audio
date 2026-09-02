@@ -8,8 +8,9 @@ slug ``sample--<id>``. The list row carries ownership, ingest status and the
 - ``SampleRow`` — one list entry (``GET /api/samples``, create/rename acks).
 - ``SamplesListResponse`` — the list envelope.
 - ``SampleRenameRequest`` — ``PATCH /api/samples/<id>`` body.
-- ``SampleWordsResponse`` — ``GET /api/samples/<id>/words``: per-segment word
-  timings the upload carried, audio-absolute ms, keyed by ``segment_uid``.
+- ``SampleRealignRequest`` / ``SampleRealignResponse`` — ``POST
+  /api/samples/<id>/realign``: fresh word timings for one segment from the
+  timing Space (audio-absolute ms), for the FE to commit via a save.
 """
 
 from __future__ import annotations
@@ -17,6 +18,8 @@ from __future__ import annotations
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from .seg import SegWordTiming
 
 SampleStatus = Literal["processing", "ready", "failed"]
 SampleSourceSchema = Literal["alignment", "alignment_resource", "legacy"]
@@ -57,16 +60,13 @@ class SampleRenameRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=120)
 
 
-class SampleWord(BaseModel):
+class SampleRealignRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    word: str
-    location: str
-    start_ms: int
-    end_ms: int
+    segment_uid: str = Field(..., min_length=1)
 
 
-class SampleWordsResponse(BaseModel):
+class SampleRealignResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    words: dict[str, list[SampleWord]]
+    word_timings: list[SegWordTiming]

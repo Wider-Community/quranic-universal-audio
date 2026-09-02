@@ -106,6 +106,7 @@ export function snapshotSeg(seg: Segment): SegSnapshot {
     // the EditChainRow split-leaf renderer can render its wasl/waqf tag
     // straight from history without consulting the live seg.
     if (seg.is_wasl) snap.is_wasl = true;
+    if (seg.word_timings?.length) snap.word_timings = seg.word_timings.map((w) => ({ ...w }));
     return snap;
 }
 

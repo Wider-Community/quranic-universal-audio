@@ -179,12 +179,65 @@ def test_save_via_seg_route_flags_export_then_export_clears(
     assert contrib.post(f"/api/seg/save/{slug}/2", json=payload, headers=_JSON).status_code == 403
 
 
-def test_words_route_returns_absolute_ms_keyed_by_uid(signed_in_client, tmp_reciter_dir, stub_ingest):
+def test_word_timings_surface_on_all_and_survive_a_structural_save(
+    signed_in_client, tmp_reciter_dir, stub_ingest
+):
     client, _ = signed_in_client(role="maintainer")
     doc = _alignment()
     doc["segments"][0]["words"] = [{"word": "w", "location": "2:1:1", "start": 0.1, "end": 0.6}]
     row = _upload(client, alignment=doc).get_json()
-    uid = client.get(f"/api/seg/all/{row['slug']}").get_json()["segments"][0]["segment_uid"]
-    words = client.get(f"/api/samples/{row['id']}/words").get_json()["words"]
-    assert words == {uid: [{"word": "w", "location": "2:1:1", "start_ms": 600, "end_ms": 1100}]}
-    assert client.get("/api/samples/nope/words").status_code == 404
+    slug = row["slug"]
+    seg = client.get(f"/api/seg/all/{slug}").get_json()["segments"][0]
+    timings = [{"word": "w", "location": "2:1:1", "start_ms": 600, "end_ms": 1100}]
+    assert seg["word_timings"] == timings
+
+    # Structural save with the key present is authoritative; without it the
+    # existing timings are inherited.
+    payload = {
+        "full_replace": True,
+        "segments": [{
+            "segment_uid": seg["segment_uid"],
+            "time_start": seg["time_start"],
+            "time_end": seg["time_end"],
+            "matched_ref": seg["matched_ref"],
+            "confidence": 1.0,
+            "audio_url": "",
+            "ignored_categories": [],
+        }],
+        "operations": [],
+    }
+    assert client.post(f"/api/seg/save/{slug}/2", json=payload, headers=_ORIGIN).status_code == 200
+    assert client.get(f"/api/seg/all/{slug}").get_json()["segments"][0]["word_timings"] == timings
+    payload["segments"][0]["word_timings"] = None
+    assert client.post(f"/api/seg/save/{slug}/2", json=payload, headers=_ORIGIN).status_code == 200
+    assert "word_timings" not in client.get(f"/api/seg/all/{slug}").get_json()["segments"][0]
+
+
+def test_realign_returns_space_words_as_absolute_ms(
+    signed_in_client, tmp_reciter_dir, stub_ingest, monkeypatch
+):
+    from services.admin import ts_space_client
+
+    client, _ = signed_in_client(role="maintainer")
+    row = _upload(client).get_json()
+    seg = client.get(f"/api/seg/all/{row['slug']}").get_json()["segments"][0]
+    calls = []
+
+    def fake_align(**kw):
+        calls.append(kw)
+        return {"ref": kw["ref"], "status": "ok",
+                "words": [{"location": "2:1:1", "text": "x", "start": 0.25, "end": 0.9}]}
+
+    monkeypatch.setattr(ts_space_client, "align_item", fake_align)
+    resp = client.post(
+        f"/api/samples/{row['id']}/realign", json={"segment_uid": seg["segment_uid"]}, headers=_ORIGIN
+    )
+    assert resp.status_code == 200, resp.get_data(as_text=True)
+    assert resp.get_json()["word_timings"] == [
+        {"word": "x", "location": "2:1:1", "start_ms": 750, "end_ms": 1400}
+    ]
+    assert calls[0]["path"].endswith(f"samples/{row['id']}/audio/2.mp3")
+    assert (calls[0]["start_ms"], calls[0]["end_ms"]) == (500, 2000)
+    assert client.post(
+        f"/api/samples/{row['id']}/realign", json={"segment_uid": "nope"}, headers=_ORIGIN
+    ).status_code == 404

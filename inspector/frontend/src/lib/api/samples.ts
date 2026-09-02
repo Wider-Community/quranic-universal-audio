@@ -7,11 +7,12 @@
  */
 
 import type {
+    SampleRealignRequest,
+    SampleRealignResponse,
     SampleRenameRequest,
     SampleRow,
     SamplesListResponse,
-    SampleWord,
-    SampleWordsResponse,
+    SegWordTiming,
 } from '../types/generated/schemas';
 import { fetchJson } from './index';
 
@@ -41,13 +42,17 @@ export async function listSamples(): Promise<SampleRow[]> {
     return body.samples;
 }
 
-/** Word timings the sample's upload carried, keyed by `segment_uid`. */
-export async function fetchSampleWords(id: string): Promise<Record<string, SampleWord[]>> {
-    const body = await fetchJson<SampleWordsResponse & { error?: string }>(
-        `/api/samples/${encodeURIComponent(id)}/words`,
-    );
-    if (body.error || !body.words) return {};
-    return body.words;
+/** Fresh word timings for one segment from the timing Space (audio-absolute
+ *  ms). The caller commits them via the `setWordTimings` command. */
+export async function realignSampleSegment(id: string, segmentUid: string): Promise<SegWordTiming[]> {
+    const body: SampleRealignRequest = { segment_uid: segmentUid };
+    const res = await fetch(`/api/samples/${encodeURIComponent(id)}/realign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    });
+    if (!res.ok) throw await _errorOf(res);
+    return ((await res.json()) as SampleRealignResponse).word_timings;
 }
 
 export async function uploadSample(name: string, audio: File, source: File): Promise<SampleRow> {

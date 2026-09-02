@@ -3,6 +3,7 @@
  * clean up dirty state on success.
  */
 
+import type { SegWordTiming } from '../../../../lib/types/generated/schemas';
 import { get as storeGet } from 'svelte/store';
 
 import { type ApiErrorBody,friendlyError } from '../../../../lib/errors/friendly';
@@ -43,6 +44,7 @@ interface SaveSegmentPayloadFull {
     wrap_word_ranges?: unknown;
     ignored_categories?: string[];
     is_wasl?: boolean;
+    word_timings?: SegWordTiming[] | null;
 }
 
 interface SaveSegmentPayloadPatch {
@@ -52,6 +54,7 @@ interface SaveSegmentPayloadPatch {
     confidence: number;
     ignored_categories?: string[];
     is_wasl?: boolean;
+    word_timings?: SegWordTiming[] | null;
 }
 
 interface SavePayloadFull {
@@ -176,6 +179,7 @@ export async function executeSave(isAutoSave = false): Promise<void> {
                         };
                         if (s.wrap_word_ranges) o.wrap_word_ranges = s.wrap_word_ranges;
                         if (s.is_wasl) o.is_wasl = true;
+                        o.word_timings = s.word_timings ?? null;
                         return o;
                     }),
                     operations: chOps,
@@ -193,6 +197,7 @@ export async function executeSave(isAutoSave = false): Promise<void> {
                             ignored_categories: seg.ignored_categories ?? [],
                         };
                         if (seg.is_wasl) upd.is_wasl = true;
+                        upd.word_timings = seg.word_timings ?? null;
                         updates.push(upd);
                     }
                 }

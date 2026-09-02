@@ -185,7 +185,7 @@ def test_legacy_export_is_sniffed_imported_and_round_tripped():
     assert back["_meta"] == {"schema_version": 1}
 
 
-def test_import_keeps_word_timings_as_absolute_ms():
+def test_word_timings_ride_on_the_segment_and_export_back_relative():
     original = _legacy()
     original["segments"][1]["words"] = [
         {"word": "إِذَا", "location": "84:1:1", "start": 0.4, "end": 1.2},
@@ -195,9 +195,23 @@ def test_import_keeps_word_timings_as_absolute_ms():
     kind, container = sniff_envelope(original)
     doc, sidecar = alignment_to_detailed(kind, container, pseudo_chapter=84)
     segs = doc["entries"][0]["segments"]
-    assert segs[0]["segment_uid"] not in sidecar["words"]
-    assert sidecar["words"][segs[1]["segment_uid"]] == [
+    assert "word_timings" not in segs[0]
+    assert segs[1]["word_timings"] == [
         {"word": "إِذَا", "location": "84:1:1", "start_ms": 6180, "end_ms": 6980},
         {"word": "ٱلسَّمَآءُ", "location": "84:1:2", "start_ms": 6980, "end_ms": 8530},
     ]
-    assert detailed_to_alignment(doc["entries"], sidecar, original) == original
+
+    back = detailed_to_alignment(doc["entries"], sidecar, original)
+    assert back["segments"][1]["words"] == [
+        {"word": "إِذَا", "location": "84:1:1", "start": 0.4, "end": 1.2},
+        {"word": "ٱلسَّمَآءُ", "location": "84:1:2", "start": 1.2, "end": 2.75},
+    ]
+
+    # A trim moves the origin: exported times shift; dropping the timings
+    # removes the stale upload list.
+    segs[1]["time_start"] = 6000
+    back = detailed_to_alignment(doc["entries"], sidecar, original)
+    assert back["segments"][1]["words"][0]["start"] == 0.18
+    segs[1].pop("word_timings")
+    back = detailed_to_alignment(doc["entries"], sidecar, original)
+    assert "words" not in back["segments"][1]

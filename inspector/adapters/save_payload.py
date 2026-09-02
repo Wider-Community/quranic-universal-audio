@@ -96,6 +96,24 @@ def make_seg(
     elif bool(existing.get("is_wasl")):
         result["is_wasl"] = True
 
+    # Word timings are FE-authoritative when the key is present: every edit
+    # reducer clips/partitions/filters them, and ``null`` means "dropped".
+    # A payload without the key (older client) inherits the existing value.
+    if "word_timings" in s:
+        if s.get("word_timings"):
+            result["word_timings"] = s["word_timings"]
+    elif existing.get("word_timings"):
+        result["word_timings"] = existing["word_timings"]
+
+    # Word timings are FE-authoritative when the key is present: every edit
+    # reducer clips/partitions/filters them, and ``null`` means "dropped".
+    # A payload without the key (older client) inherits the existing value.
+    if "word_timings" in s:
+        if s.get("word_timings"):
+            result["word_timings"] = s["word_timings"]
+    elif existing.get("word_timings"):
+        result["word_timings"] = existing["word_timings"]
+
     # Flag thread is never carried in the save payload — it is mutated only
     # via flag ops. Inherit any existing flag so a structural full_replace
     # doesn't wipe it.
