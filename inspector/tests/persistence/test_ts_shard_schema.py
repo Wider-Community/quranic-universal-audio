@@ -1,4 +1,4 @@
-"""Strict round-trip tests for compact timestamp shard v12."""
+"""Strict round-trip tests for compact timestamp shard v13."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from qua_shared.schemas import TsShardDoc
 def _doc() -> dict:
     return {
         "_meta": {
-            "schema_version": 12,
+            "schema_version": 13,
             "chapter": 1,
             "audio_category": "by_surah",
             "phonemizer_version": "2.15.0",
@@ -36,11 +36,12 @@ def _doc() -> dict:
                     "r": [],
                     "w": [["1:3:1", "ب", [], [[0, [], []]], [], [], []]],
                     "b": [[3, [], [], [], 3, None]],
+                    "a": [[0, [0], [0], [0], "ب", [0], 0, None]],
                 },
                 "timing": {
                     "w": [[100, 500]],
                     "s": [[100, 500]],
-                    "l": [[0, 0, "ب", 100, 500, 0]],
+                    "a": [[100, 500]],
                     "c": [],
                 },
             }
@@ -48,7 +49,7 @@ def _doc() -> dict:
     }
 
 
-def test_native_v12_round_trips_compact_storage():
+def test_native_v13_round_trips_compact_storage():
     doc = _doc()
     model = TsShardDoc.model_validate(doc)
     assert model.model_dump(by_alias=True, mode="json") == doc

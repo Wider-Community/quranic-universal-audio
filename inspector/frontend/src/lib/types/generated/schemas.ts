@@ -1927,6 +1927,7 @@ export interface TsCompactRender {
   r: string[];
   w: unknown[][];
   b: unknown[][];
+  a: unknown[][];
 }
 /**
  * ``GET /api/ts/config`` — display constants + read-path URLs.
@@ -2079,7 +2080,7 @@ export interface TsReportTarget {
  */
 export interface TsReportSnapshot {
   native_schema_version?: 2;
-  shard_schema_version?: 12;
+  shard_schema_version?: 12 | 13;
   native?: {
     [k: string]: unknown;
   };
@@ -2164,7 +2165,7 @@ export interface TsShardDoc {
   readings: TsShardReading[];
 }
 export interface TsShardMeta {
-  schema_version: 12;
+  schema_version: 13;
   chapter: number;
   audio_category: string;
   phonemizer_version: string;
@@ -2182,7 +2183,7 @@ export interface TsShardReading {
 export interface TsShardTiming {
   w: [unknown, unknown][];
   s: [unknown, unknown][];
-  l: [unknown, unknown, unknown, unknown, unknown, unknown][];
+  a: [unknown, unknown][];
   c: [unknown, unknown, unknown][];
 }
 /**

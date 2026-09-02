@@ -1,4 +1,4 @@
-"""Decode the compact renderer/timing payload stored in schema-v12 shards."""
+"""Decode the compact renderer/timing payload stored in schema-v13 shards."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ _STATUSES = ("present", "inserted", "replaced", "dropped", "gap")
 _SIDES = ("before", "after")
 _STATES = ("start", "join", "sakt", "stop")
 _GROUP_KINDS = ("base", "vowel")
+_ANIMATION_POLICIES = ("timed", "cohighlight_previous", "cohighlight_next")
 
 
 class TimestampCodecError(ValueError):
@@ -214,28 +215,21 @@ def decode_reading(reading: dict[str, Any]) -> dict[str, Any]:
     timing = reading["timing"]
     word_times = timing["w"]
     states = [row["state"] for row in boundaries]
-    letters = [
+    animation_tokens = [
         {
-            "source_unit_id": row[0],
-            "word_id": row[1],
-            "text": row[2],
-            "start_ms": row[3],
-            "end_ms": row[4],
-            "silent": bool(row[5]),
+            "id": index,
+            "word_id": meta[0],
+            "source_unit_ids": meta[1],
+            "character_ids": meta[2],
+            "paint_character_ids": meta[3],
+            "text": meta[4],
+            "sound_ids": meta[5],
+            "policy": _at(_ANIMATION_POLICIES, meta[6], "animation policy"),
+            "target_token_id": meta[7],
+            "start_ms": span[0],
+            "end_ms": span[1],
         }
-        for row in timing["l"]
-    ]
-    source_units = [
-        {
-            "id": row["source_unit_id"],
-            "word_id": row["word_id"],
-            "text": row["text"],
-            "kind": "letter",
-            "owned_sound_ids": [],
-            "presented_sound_ids": [],
-            "silent": row["silent"],
-        }
-        for row in letters
+        for index, (meta, span) in enumerate(zip(render["a"], timing["a"], strict=True))
     ]
     result = _native_result(render, words, boundaries)
     return {
@@ -246,7 +240,7 @@ def decode_reading(reading: dict[str, Any]) -> dict[str, Any]:
             "schema_version": 2,
             "source": {
                 "text": " ".join(row["display_text"] for row in words),
-                "units": source_units,
+                "animation_tokens": animation_tokens,
             },
         },
         "cells": {"schema_version": 2, "cell_view": {"words": words, "boundaries": boundaries}},
@@ -259,7 +253,7 @@ def decode_reading(reading: dict[str, Any]) -> dict[str, Any]:
                 {"sound_id": index, "start_ms": row[0], "end_ms": row[1]}
                 for index, row in enumerate(timing["s"])
             ],
-            "units": letters,
+            "animation_tokens": animation_tokens,
             "columns": [
                 {"column_id": row[0], "start_ms": row[1], "end_ms": row[2]} for row in timing["c"]
             ],

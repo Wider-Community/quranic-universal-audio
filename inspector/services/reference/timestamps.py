@@ -256,7 +256,7 @@ def _dev_fixture_shard(reciter: str, chapter: int) -> bytes | None:
 def _load_bucket_shard(reciter: str, chapter: int) -> bytes | None:
     """Return the raw Brotli per-chapter shard from the bucket, or ``None``.
 
-    The bucket body is the compact v12 wire body. The read path is a byte
+    The bucket body is the compact v13 wire body. The read path is a byte
     pass-through with no inflate/reshape/recompress. LRU
     so chapter scrubbing within one reciter doesn't re-pay the bucket fetch.
     """

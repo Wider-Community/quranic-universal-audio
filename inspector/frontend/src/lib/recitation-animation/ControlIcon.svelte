@@ -18,6 +18,7 @@
             | 'droplet'
             | 'motion-hybrid' | 'motion-snap'
             | 'size-down' | 'size-up'
+            | 'silent-cohighlight' | 'silent-omit'
             | 'letters' | 'phonemes' | 'globe' | 'tajweed' | 'wipe'
             | 'bookmark' | 'bookmark-filled' | 'bookmarks-panel' | 'help';
         size?: number;
@@ -43,6 +44,15 @@
         'eye-hidden':
             '<path d="M2 12C5 4.5 19 4.5 22 12 19 19.5 5 19.5 2 12Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" opacity=".5"/>'
             + '<line x1="3.5" y1="20.5" x2="20.5" y2="3.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>',
+        // Silent-letter paint policy. A small sounding mark sits above its
+        // written host: solid host = co-highlight; dashed host = keep visible
+        // but omit from the highlight. State is carried by shape, not colour.
+        'silent-cohighlight':
+            '<circle cx="15.2" cy="5.8" r="2.2" fill="currentColor"/>'
+            + '<path d="M4.2 13.1c1.8 5.4 11.7 6.5 15.6 0v2.8c-4.9 5.1-14 4-15.6-2.8Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
+        'silent-omit':
+            '<circle cx="15.2" cy="5.8" r="2.2" fill="currentColor"/>'
+            + '<path d="M4.2 13.1c.8 2.5 2.8 4 5.2 4.6M14.3 17.7c2.3-.7 4.4-2.2 5.5-4.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
         'droplet':
             '<path d="M12 3s-7 8-7 12a7 7 0 0 0 14 0c0-4-7-12-7-12Z" fill="currentColor"/>',
         // Continuous glide: a knob on a track with directional chevrons (slides

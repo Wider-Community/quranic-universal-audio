@@ -16,12 +16,12 @@ from qua_shared.timestamps_shards import (
     validated_brotli_shard,
     write_validated_shard,
 )
-from qua_shared.timestamps_v12_audit import V12AuditError
+from qua_shared.timestamps_v13_audit import V13AuditError
 from qua_shared.verse_layout import load_canonical_verses
 
 
 def _reading(reading_id: str, specs: list[tuple[str, tuple[int, int], list[int]]]) -> dict:
-    words, word_timing, letters, parts, boundaries = [], [], [], [], []
+    words, word_timing, animation, animation_timing, parts, boundaries = [], [], [], [], [], []
     for ref, span, indexes in specs:
         first = len(words)
         width = max(1, (span[1] - span[0]) // len(indexes))
@@ -32,7 +32,10 @@ def _reading(reading_id: str, specs: list[tuple[str, tuple[int, int], list[int]]
             words.append([f"{ref}:{index}", "x", [], [], [], [], []])
             boundaries.append([1, [], [], [], None, None])
             word_timing.append([start, end])
-            letters.append([100 + word_id, word_id, "x", start, end, 0])
+            animation.append(
+                [word_id, [100 + word_id], [200 + word_id], [200 + word_id], "x", [], 0, None]
+            )
+            animation_timing.append([start, end])
         parts.append([ref, span[0], span[1], first, len(indexes)])
     return {
         "id": reading_id,
@@ -44,15 +47,16 @@ def _reading(reading_id: str, specs: list[tuple[str, tuple[int, int], list[int]]
             "r": [],
             "w": words,
             "b": boundaries,
+            "a": animation,
         },
-        "timing": {"w": word_timing, "s": [], "l": letters, "c": []},
+        "timing": {"w": word_timing, "s": [], "a": animation_timing, "c": []},
     }
 
 
 def _shard(readings: list[dict]) -> dict:
     return {
         "_meta": {
-            "schema_version": 12,
+            "schema_version": 13,
             "chapter": 1,
             "audio_category": "by_surah",
             "phonemizer_version": "2.15",
@@ -133,7 +137,7 @@ def test_decoder_uses_word_timings_across_verse_parts_in_one_reading():
 def test_native_projection_rejects_every_old_schema():
     shard = _shard([])
     shard["_meta"]["schema_version"] = 11
-    with pytest.raises(ValueError, match="version 12"):
+    with pytest.raises(ValueError, match="version 13"):
         project_native_shard(shard)
 
 
@@ -191,10 +195,10 @@ def test_validated_writer_emits_the_canonical_brotli_bytes(tmp_path):
     assert target.read_bytes() == payload
 
 
-def test_release_projection_rejects_a_v12_identity_closure_gap(tmp_path):
+def test_release_projection_rejects_a_v13_identity_closure_gap(tmp_path):
     shard = _shard([_reading("r1", [("1:1", (0, 100), [1])])])
-    shard["readings"][0]["timing"]["l"][0][1] = 9
+    shard["readings"][0]["render"]["a"][0][0] = 9
     (tmp_path / "1.json.br").write_bytes(brotli_shard(shard))
 
-    with pytest.raises(V12AuditError, match="letter words"):
+    with pytest.raises(V13AuditError, match="animation words"):
         load_canonical_verses(tmp_path)

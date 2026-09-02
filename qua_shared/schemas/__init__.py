@@ -46,6 +46,7 @@ from .bucket.segment import (
 from .bucket.segments_doc import SegmentsDoc
 from .bucket.ts_job_record import TsJobRecord, TsJobSettings
 from .bucket.ts_shard import (
+    TsAnimationTiming,
     TsColumnTiming,
     TsCompactRender,
     TsNativeProfile,
@@ -55,7 +56,6 @@ from .bucket.ts_shard import (
     TsShardReading,
     TsShardTiming,
     TsSoundTiming,
-    TsUnitTiming,
     TsWordTiming,
 )
 from .bucket.ts_validation import TsValidationDoc, TsValidationMeta, TsValidationVerse
@@ -451,7 +451,7 @@ __all__ = [
     "TsCompactRender",
     "TsNativeProfile",
     "TsSoundTiming",
-    "TsUnitTiming",
+    "TsAnimationTiming",
     "TsWordTiming",
     "TsConfigResponse",
     "TsManifestReciter",

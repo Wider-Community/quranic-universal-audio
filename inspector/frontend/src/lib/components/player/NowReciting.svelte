@@ -9,7 +9,7 @@
      * timings come from the shared recitation-data loader (kept off `tabs/*`).
      *
      * The display CONTROLS live in this component's handle row — flanking the
-     * collapse chip (upcoming-eye · word/letter | size− · size+). The filmstrip
+     * collapse chip (silent policy · word/letter · upcoming-eye | size− · size+). The filmstrip
      * motion (glide) toggle sits on the filmstrip itself, right of the bookmark
      * buttons. Config + collapse state are shared via the recitation store; below
      * the handle sit the line + the filmstrip.
@@ -46,12 +46,18 @@
         recitationConfigStore,
         recitationFocus,
         recitationOpen,
+        recitationSilentOmit,
         SIZE_MAX,
         SIZE_MIN,
         sizeDown,
         sizeUp,
         toggleGranularity,
+        toggleSilentOmit,
     } from '../../recitation-animation/recitation-settings';
+    import {
+        loadShapedGlyphs,
+        type ShapedGlyphFixture,
+    } from '../../recitation-animation/shaped-glyphs';
     import { accentVarText } from '../../utils/accent-override';
     import { theme$ } from '../../stores/theme.svelte';
     import {
@@ -70,6 +76,7 @@
     let units = $state<AnimUnit[]>([]);
     let ayahs = $state<AyahBoundary[]>([]);
     let coverage = $state<ChapterCoverage | undefined>(undefined);
+    let shapedGlyphs = $state<ShapedGlyphFixture | undefined>(undefined);
     let rootH = $state(0);
     // The verse currently under the playhead + its coverage status, reported by
     // the filmstrip — drives the contextual "missing words" pill.
@@ -121,7 +128,7 @@
     const near = (a: number, b: number): boolean => Math.abs(a - b) < 0.001;
     const upcomingLabel = $derived(
         (i18n.locale,
-        near(config.unreachedOpacity, 0.8)
+        near(config.unreachedOpacity, 1)
             ? m.common_player_upcoming_state_full()
             : near(config.unreachedOpacity, 0)
               ? m.common_player_upcoming_state_hidden()
@@ -180,6 +187,7 @@
             units = [];
             ayahs = [];
             coverage = undefined;
+            shapedGlyphs = undefined;
             activeCell = null;
             recitationAyahs.set([]);
             return;
@@ -187,9 +195,16 @@
         const slug = reciterSlug;
         const chapter = surahNum;
         const controller = new AbortController();
-        void loadChapterRecitation(slug, chapter, controller.signal)
-            .then(async (res) => {
+        void Promise.all([
+            loadChapterRecitation(slug, chapter, controller.signal),
+            // Shaped geometry is a teleprompter enhancement. A missing static
+            // asset must not suppress the independently loaded filmstrip/cell
+            // timeline; LineAnimation retains its native-text fallback.
+            loadShapedGlyphs(chapter, controller.signal).catch(() => undefined),
+        ])
+            .then(async ([res, glyphs]) => {
                 if (controller.signal.aborted) return;
+                shapedGlyphs = glyphs;
                 units = res?.units ?? [];
                 ayahs = res?.ayahs ?? [];
                 coverage = res?.coverage;
@@ -205,6 +220,7 @@
                     units = [];
                     ayahs = [];
                     coverage = undefined;
+                    shapedGlyphs = undefined;
                     activeCell = null;
                     recitationAyahs.set([]);
                 }
@@ -245,7 +261,7 @@
 {#if shown}
     <div class="now-reciting" bind:clientHeight={rootH} style={accentVarText(config.highlightColor, $theme$)}>
         <!-- Handle row: the recitation display controls flank the collapse chip.
-             Left = upcoming-eye · word/letter; right = size− · size+. Collapsing
+             Left = silent policy · word/letter · upcoming-eye; right = size− · size+. Collapsing
              hides the recitation LINE *and* this settings row (only the chip
              stays); the filmstrip stays. Chevron points up when collapsed
              (expand), down when expanded (collapse). -->
@@ -261,17 +277,26 @@
             {#if $recitationOpen}
                 <div class="nr-ctrls" role="group" aria-label={m.common_player_recitation_display_group()}>
                     <button
-                        type="button" class="nr-btn"
-                        aria-label={m.common_player_upcoming_visibility_label()}
-                        title={m.common_player_upcoming_text_title({ state: upcomingLabel })}
-                        onclick={cycleUpcoming}
-                    ><ControlIcon name={eyeIconName(config)} size={18} /></button>
+                        type="button" class="nr-btn nr-btn--silent"
+                        aria-pressed={$recitationSilentOmit}
+                        aria-label={m.common_player_silent_omit_label()}
+                        title={$recitationSilentOmit
+                            ? m.common_player_silent_omit_on_title()
+                            : m.common_player_silent_omit_off_title()}
+                        onclick={toggleSilentOmit}
+                    ><ControlIcon name={$recitationSilentOmit ? 'silent-omit' : 'silent-cohighlight'} /></button>
                     <button
                         type="button" class="nr-btn"
                         aria-label={m.common_player_granularity_toggle_label()}
                         title={config.granularity === 'char' ? m.common_player_granularity_char_title() : m.common_player_granularity_word_title()}
                         onclick={toggleGranularity}
                     ><ControlIcon name={granIconName(config)} /></button>
+                    <button
+                        type="button" class="nr-btn"
+                        aria-label={m.common_player_upcoming_visibility_label()}
+                        title={m.common_player_upcoming_text_title({ state: upcomingLabel })}
+                        onclick={cycleUpcoming}
+                    ><ControlIcon name={eyeIconName(config)} size={18} /></button>
                 </div>
             {/if}
 
@@ -317,6 +342,8 @@
                 {config}
                 {getTimeMs}
                 {playing}
+                {shapedGlyphs}
+                omitSilentHighlights={$recitationSilentOmit}
                 open={true}
                 showHeader={false}
                 onSeekToWord={seek}
@@ -428,6 +455,10 @@
         transition: color var(--t-fast), background var(--t-fast);
     }
     .nr-btn:hover:not(:disabled) { color: var(--text-primary); background: var(--panel-2); }
+    .nr-btn:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 1px;
+    }
     .nr-btn:disabled { opacity: 0.3; cursor: not-allowed; }
     .strip-wrap {
         display: flex;

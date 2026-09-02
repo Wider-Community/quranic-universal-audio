@@ -22,13 +22,14 @@ function reading(
                 `${refs[Math.min(index, refs.length - 1)]}:1`, 'x', [], [], [], [], [],
             ]),
             b: words.map(() => [3, [], [], [], 1, null]),
+            a: [],
         },
-        timing: { w: words, s: [], l: [], c: [] },
+        timing: { w: words, s: [], a: [], c: [] },
     };
 }
 
 const meta = {
-    schema_version: 12,
+    schema_version: 13,
     native_schema_version: 2,
     renderer_codec_version: 1,
 };

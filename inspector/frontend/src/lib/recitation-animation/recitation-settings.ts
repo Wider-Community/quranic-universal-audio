@@ -14,15 +14,21 @@
  */
 import { derived, get, writable, type Readable } from 'svelte/store';
 
-import type { FilmstripMotion, RecitationAnimConfig } from './config';
+import type { FilmstripMotion, Granularity, RecitationAnimConfig } from './config';
 import { loadPrefs, savePrefs } from './nowreciting-prefs';
 import type { AyahBoundary } from './types';
 
 const initial = loadPrefs();
 
 export const recitationConfigStore = writable<RecitationAnimConfig>(initial.config);
+export const recitationOpacityByGranularity = writable<Record<Granularity, number>>(
+    initial.unreachedOpacityByGranularity,
+);
 export const recitationOpen = writable<boolean>(initial.collapsed === null ? true : !initial.collapsed);
 export const recitationAvailable = writable<boolean>(false);
+/** Persistent paint policy: true leaves silent timing borrowers visible without
+ * giving them the active highlight. It only changes letter-mode paint. */
+export const recitationSilentOmit = writable<boolean>(initial.silentOmit);
 /** Ayah boundaries of the currently-loaded published chapter (chapter-absolute
  *  ms). Published by NowReciting; read by the footer seek buttons to jump
  *  ayah-by-ayah. Empty when nothing published is loaded. */
@@ -58,30 +64,55 @@ export const recitationAyahAt = writable<((ms: number) => string | null) | null>
 let persistReady = false;
 function persist(): void {
     if (!persistReady) return;
-    savePrefs({ config: get(recitationConfigStore), collapsed: !get(recitationOpen) });
+    savePrefs({
+        config: get(recitationConfigStore),
+        unreachedOpacityByGranularity: get(recitationOpacityByGranularity),
+        silentOmit: get(recitationSilentOmit),
+        collapsed: !get(recitationOpen),
+    });
 }
 recitationConfigStore.subscribe(persist);
+recitationOpacityByGranularity.subscribe(persist);
 recitationOpen.subscribe(persist);
+recitationSilentOmit.subscribe(persist);
 persistReady = true;
 
 const near = (a: number, b: number): boolean => Math.abs(a - b) < 0.001;
 
 export const SIZE_MIN = 20;
-export const SIZE_MAX = 36;
+export const SIZE_MAX = 42;
 const SIZE_STEP = 2;
-const UPCOMING_CYCLE = [0, 0.2, 0.8]; // invisible → dim → full (starts at dim → full)
+const UPCOMING_CYCLE = [0, 0.2, 1]; // invisible → dim → full (starts at dim → full)
 
 function patch(p: Partial<RecitationAnimConfig>): void {
     recitationConfigStore.update((c) => ({ ...c, ...p }));
 }
 
 export function toggleGranularity(): void {
-    patch({ granularity: get(recitationConfigStore).granularity === 'word' ? 'char' : 'word' });
+    const current = get(recitationConfigStore);
+    const next = current.granularity === 'word' ? 'char' : 'word';
+    recitationOpacityByGranularity.update((values) => ({
+        ...values,
+        [current.granularity]: current.unreachedOpacity,
+    }));
+    patch({
+        granularity: next,
+        unreachedOpacity: get(recitationOpacityByGranularity)[next],
+    });
+}
+export function toggleSilentOmit(): void {
+    recitationSilentOmit.update((value) => !value);
 }
 export function cycleUpcoming(): void {
-    const cur = get(recitationConfigStore).unreachedOpacity;
+    const current = get(recitationConfigStore);
+    const cur = current.unreachedOpacity;
     const i = UPCOMING_CYCLE.findIndex((v) => near(v, cur));
-    patch({ unreachedOpacity: UPCOMING_CYCLE[(i + 1) % UPCOMING_CYCLE.length] ?? 0.2 });
+    const next = UPCOMING_CYCLE[(i + 1) % UPCOMING_CYCLE.length] ?? 0.2;
+    recitationOpacityByGranularity.update((values) => ({
+        ...values,
+        [current.granularity]: next,
+    }));
+    patch({ unreachedOpacity: next });
 }
 export function cycleMotion(): void {
     const next: FilmstripMotion =
@@ -103,7 +134,7 @@ export function granIconName(c: RecitationAnimConfig): 'gran-word' | 'gran-lette
     return c.granularity === 'char' ? 'gran-letter' : 'gran-word';
 }
 export function eyeIconName(c: RecitationAnimConfig): 'eye-full' | 'eye-dim' | 'eye-hidden' {
-    return near(c.unreachedOpacity, 0.8) ? 'eye-full' : near(c.unreachedOpacity, 0) ? 'eye-hidden' : 'eye-dim';
+    return near(c.unreachedOpacity, 1) ? 'eye-full' : near(c.unreachedOpacity, 0) ? 'eye-hidden' : 'eye-dim';
 }
 export function motionIconName(c: RecitationAnimConfig): 'motion-hybrid' | 'motion-snap' {
     return c.filmstripMotion === 'snap' ? 'motion-snap' : 'motion-hybrid';

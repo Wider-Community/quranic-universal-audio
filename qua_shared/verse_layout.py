@@ -102,9 +102,9 @@ def _fit_boundary(
 
 
 def load_canonical_verses(ts_dir: Path) -> dict[str, dict]:
-    """Project every native-v12 chapter shard into canonical verse timings."""
+    """Project every native-v13 chapter shard into canonical verse timings."""
     from qua_shared.timestamps_native import project_native_shard
-    from qua_shared.timestamps_v12_audit import audit_v12_document
+    from qua_shared.timestamps_v13_audit import audit_v13_document
 
     out: dict[str, dict] = {}
     if not ts_dir.exists():
@@ -120,7 +120,7 @@ def load_canonical_verses(ts_dir: Path) -> dict[str, dict]:
         if name.endswith(".br"):
             raw = brotli.decompress(raw)
         document = json.loads(raw)
-        audit_v12_document(document)
+        audit_v13_document(document)
         out.update(project_native_shard(document))
     return out
 

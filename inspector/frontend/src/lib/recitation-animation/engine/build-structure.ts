@@ -23,7 +23,14 @@ export interface AnimSourceWord {
     display_text: string;
     start: number;
     end: number;
-    letters: { char: string; start: number | null; end: number | null }[];
+    letters: {
+        char: string;
+        start: number | null;
+        end: number | null;
+        tokenId?: number;
+        paintCharacterIds?: number[];
+        silent?: boolean;
+    }[];
 }
 
 export interface AnimChar {
@@ -33,6 +40,10 @@ export interface AnimChar {
     groupId: string;
     /** A non-recited symbol (rub-el-hizb, sajdah): rendered in place, never lit. */
     inert: boolean;
+    /** Producer animation-token identity; present in schema-v13 readings. */
+    tokenId?: number;
+    /** A timing borrower with no producer-owned or presented sound. */
+    silent: boolean;
     /** Per-occurrence [start,end] for this cell, index-aligned to the unit's
      *  `intervals` (filled by the caller from `occurrenceLetters`). A repeat uses
      *  the entry for the take being recited; an `undefined` entry (or absent
@@ -124,14 +135,24 @@ export function buildAnimStructure(words: AnimSourceWord[]): AnimWord[] {
         // out before grouping — they carry no MFA timing and must never join the
         // reveal as a highlight cell.
         const { clean, leading, trailing } = splitDecorators(word.display_text || word.text);
-        const charGroups = splitIntoCharGroups(clean);
         const letters = word.letters || [];
+        const directTokens = letters.length > 0
+            && letters.every((letter) => letter.tokenId !== undefined);
+        const charGroups = directTokens ? [] : splitIntoCharGroups(clean);
 
         // One cell per grapheme cluster (base letter + all its combining marks).
         // A cluster whose base is a non-recited symbol (rub-el-hizb, sajdah) is
         // `inert`: rendered in place but never highlighted, and it takes no MFA
         // letter.
-        const chars: AnimChar[] = charGroups.map((group) => {
+        const chars: AnimChar[] = directTokens ? letters.map((letter) => ({
+            text: letter.char,
+            start: letter.start ?? word.start,
+            end: letter.end ?? word.end,
+            groupId: `g${groupIdCounter++}`,
+            inert: letter.start === null || letter.end === null,
+            tokenId: letter.tokenId,
+            silent: letter.silent ?? false,
+        })) : charGroups.map((group) => {
             const base = group.codePointAt(0);
             // The dagger alef is its own cell — anchor it on an invisible word
             // joiner so the lone superscript shapes into its own run.
@@ -141,18 +162,21 @@ export function buildAnimStructure(words: AnimSourceWord[]): AnimWord[] {
                 end: word.end,
                 groupId: `g${groupIdCounter++}`,
                 inert: base !== undefined && INERT_SYMBOLS.has(base),
+                silent: false,
             };
         });
 
         // Stamp each cluster's canonical [start,end] from the MFA letters (the
         // first-occurrence timeline). The same routine drives each repeat
         // occurrence's per-take timings (attached later by the surface).
-        const times = stampCharTimes(chars, letters, word.start, word.end);
-        for (let di = 0; di < chars.length; di++) {
-            const span = chars[di];
-            if (!span) continue;
-            span.start = times[di]!.start;
-            span.end = times[di]!.end;
+        if (!directTokens) {
+            const times = stampCharTimes(chars, letters, word.start, word.end);
+            for (let di = 0; di < chars.length; di++) {
+                const span = chars[di];
+                if (!span) continue;
+                span.start = times[di]!.start;
+                span.end = times[di]!.end;
+            }
         }
 
         out.push({
