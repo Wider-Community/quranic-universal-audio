@@ -11,6 +11,7 @@ import { get } from 'svelte/store';
 
 import { fetchJson } from '../../../../lib/api';
 import { loadQuranRefs, quranRefs } from '../../../../lib/refs/quran-refs';
+import { specialTextFor } from '../../../../lib/refs/special-text';
 import type { SegAllResponse, SegValidateResponse } from '../../../../lib/types/generated/schemas';
 import { preconnectOrigins } from '../../../../lib/utils/preconnect';
 import type { SegAllState } from '../../stores/chapter';
@@ -51,7 +52,8 @@ function _hydrateSegAll(all: SegAllResponse): SegAllState {
             seg.audio_url = audioByChapter[String(seg.chapter)] ?? '';
         }
         if (!seg.matched_text && dkWords && vwc) {
-            seg.matched_text = dkTextForRef(seg.matched_ref, dkWords, vwc);
+            seg.matched_text =
+                dkTextForRef(seg.matched_ref, dkWords, vwc) || specialTextFor(seg.matched_ref);
         }
     }
     return hydrated;
