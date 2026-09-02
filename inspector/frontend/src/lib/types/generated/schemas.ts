@@ -1391,7 +1391,7 @@ export interface SampleRow {
   error?: string | null;
   audio_filename: string;
   audio_duration_ms?: number | null;
-  source_schema: "alignment" | "alignment_resource";
+  source_schema: "alignment" | "alignment_resource" | "legacy";
   pseudo_chapter: number;
   created_at: string;
   last_save_at?: string | null;

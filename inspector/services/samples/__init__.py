@@ -37,6 +37,7 @@ from utils.uuid7 import uuid7
 
 from . import audio_ingest
 from .convert import (
+    EnvelopeKind,
     SampleConvertError,
     alignment_to_detailed,
     detailed_to_alignment,
@@ -89,7 +90,7 @@ def _audio_manifest(sample_id: str, chapter: int, *, size_bytes: int, probe: dic
     }
 
 
-def _parse_source(json_bytes: bytes) -> tuple[str, dict, dict]:
+def _parse_source(json_bytes: bytes) -> tuple[EnvelopeKind, dict, dict]:
     if len(json_bytes) > SOURCE_JSON_MAX_BYTES:
         raise SampleError("JSON is too large")
     try:
@@ -113,10 +114,10 @@ def create_sample(
     if len(name) > NAME_MAX:
         raise SampleError(f"name must be at most {NAME_MAX} characters")
 
-    kind, source_doc, alignment = _parse_source(json_bytes)
-    chapter = resolve_pseudo_chapter(alignment)
+    kind, _source_doc, container = _parse_source(json_bytes)
+    chapter = resolve_pseudo_chapter(kind, container)
     try:
-        detailed, sidecar = alignment_to_detailed(alignment, pseudo_chapter=chapter)
+        detailed, sidecar = alignment_to_detailed(kind, container, pseudo_chapter=chapter)
     except SampleConvertError as exc:
         raise SampleError(str(exc)) from exc
 

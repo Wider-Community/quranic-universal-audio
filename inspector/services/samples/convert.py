@@ -1,18 +1,20 @@
-"""Aligner ``Alignment`` contract <-> bucket ``detailed.json`` conversion.
+"""Aligner export <-> bucket ``detailed.json`` conversion for uploaded samples.
 
-A sample upload is the aligner app's export: either a bare ``Alignment``
-(``{segments: [...], chapter?}``) or an ``AlignmentResource`` envelope
-(``{alignment: {...}, ...}``). Each ``MatchedSegment`` carries a seconds-based
-``region`` and ``wrap_ranges`` objects; the Inspector edits millisecond
-``time_start``/``time_end`` and ``wrap_word_ranges`` tuples.
+Three upload shapes are accepted, sniffed from the JSON:
+
+- ``alignment`` — the aligner ``Alignment`` contract: ``{segments:[MatchedSegment], chapter?}``
+  with seconds-based ``region`` and ``wrap_ranges`` objects.
+- ``alignment_resource`` — the same wrapped in the API envelope ``{alignment: {...}, ...}``.
+- ``legacy`` — the aligner app's file export: ``{_meta, segments:[{segment, time_from,
+  time_to, ref_from, ref_to, special_type, confidence, ...}]}``.
 
 Import produces one ``DetailedEntry`` per sample (one audio = one pseudo-chapter)
-plus a sidecar that remembers the pseudo-chapter, every original segment keyed
-by the ``segment_uid`` it became, and the segments that were not live spans
-(``filtered`` / ``merged_into``). Export reverses that: originals are copied
-back with their edited fields overridden, new segments get fresh ids, dropped
-originals are re-appended, and the envelope is preserved in every field except
-``segments``.
+plus a sidecar that remembers the shape, the pseudo-chapter, every original
+segment keyed by the ``segment_uid`` it became, and the segments that were not
+live spans (``filtered`` / ``merged_into``). Export reverses that: originals are
+copied back with their edited fields overridden, new segments get fresh ids,
+dropped originals are re-appended, and everything outside ``segments`` is
+preserved.
 
 Pure functions, no I/O.
 """
@@ -26,7 +28,7 @@ from typing import Any, Literal
 from qua_shared.schemas.bucket.segment import DetailedSegment
 from utils.uuid7 import uuid7
 
-EnvelopeKind = Literal["alignment", "alignment_resource"]
+EnvelopeKind = Literal["alignment", "alignment_resource", "legacy"]
 
 SIDECAR_SCHEMA_VERSION = 1
 
@@ -36,15 +38,19 @@ class SampleConvertError(ValueError):
 
 
 def sniff_envelope(doc: Any) -> tuple[EnvelopeKind, dict]:
-    """Return ``(kind, alignment_dict)`` for a bare Alignment or a resource envelope."""
+    """Return ``(kind, container)`` where ``container["segments"]`` is the list."""
     if not isinstance(doc, dict):
         raise SampleConvertError("JSON root must be an object")
     inner = doc.get("alignment")
     if isinstance(inner, dict) and isinstance(inner.get("segments"), list):
         return "alignment_resource", inner
-    if isinstance(doc.get("segments"), list):
-        return "alignment", doc
-    raise SampleConvertError("JSON has no `segments` list (expected an aligner Alignment export)")
+    segments = doc.get("segments")
+    if not isinstance(segments, list):
+        raise SampleConvertError("JSON has no `segments` list (expected an aligner export)")
+    first = next((s for s in segments if isinstance(s, dict)), None)
+    if first is not None and "time_from" in first and "region" not in first:
+        return "legacy", doc
+    return "alignment", doc
 
 
 def _chapter_of_ref(ref: str | None) -> int | None:
@@ -56,37 +62,66 @@ def _chapter_of_ref(ref: str | None) -> int | None:
         return None
 
 
-def resolve_pseudo_chapter(alignment: dict) -> int:
+def resolve_pseudo_chapter(kind: EnvelopeKind, container: dict) -> int:
     """The single chapter key every segment of the sample is filed under."""
-    ch = alignment.get("chapter")
+    ch = container.get("chapter")
     if isinstance(ch, int) and 1 <= ch <= 114:
         return ch
-    for seg in alignment.get("segments", []):
-        found = _chapter_of_ref(seg.get("matched_ref")) if isinstance(seg, dict) else None
+    for seg in container.get("segments", []):
+        if not isinstance(seg, dict):
+            continue
+        found = _chapter_of_ref(_read_ref(kind, seg))
         if found is not None and 1 <= found <= 114:
             return found
     return 1
 
 
-def _is_live(seg: dict) -> bool:
+# ---------------------------------------------------------------------------
+# Per-shape readers
+# ---------------------------------------------------------------------------
+
+
+def _read_id(kind: EnvelopeKind, seg: dict) -> Any:
+    return seg.get("segment") if kind == "legacy" else seg.get("id")
+
+
+def _is_live(kind: EnvelopeKind, seg: dict) -> bool:
+    if kind == "legacy":
+        return True
     return not seg.get("filtered") and seg.get("merged_into") is None
 
 
-def _region_ms(seg: dict) -> tuple[int, int]:
-    region = seg.get("region")
-    if not isinstance(region, dict):
-        raise SampleConvertError(f"segment {seg.get('id')!r} has no region")
+def _read_span_s(kind: EnvelopeKind, seg: dict) -> tuple[float, float]:
+    if kind == "legacy":
+        start, end = seg.get("time_from"), seg.get("time_to")
+    else:
+        region = seg.get("region")
+        if not isinstance(region, dict):
+            raise SampleConvertError(f"segment {_read_id(kind, seg)!r} has no region")
+        start, end = region.get("start_s"), region.get("end_s")
+    if start is None or end is None:
+        raise SampleConvertError(f"segment {_read_id(kind, seg)!r} has no time span")
     try:
-        start = round(float(region["start_s"]) * 1000)
-        end = round(float(region["end_s"]) * 1000)
-    except (KeyError, TypeError, ValueError) as exc:
-        raise SampleConvertError(f"segment {seg.get('id')!r} has a malformed region") from exc
-    if end <= start or start < 0:
-        raise SampleConvertError(f"segment {seg.get('id')!r} has an empty or inverted region")
-    return start, end
+        return float(start), float(end)
+    except (TypeError, ValueError) as exc:
+        raise SampleConvertError(
+            f"segment {_read_id(kind, seg)!r} has a malformed time span"
+        ) from exc
 
 
-def _wrap_ranges_to_tuples(wrap_ranges: Any) -> list[list[str]] | None:
+def _read_ref(kind: EnvelopeKind, seg: dict) -> str:
+    if kind != "legacy":
+        return seg.get("matched_ref") or ""
+    ref_from, ref_to = seg.get("ref_from") or "", seg.get("ref_to") or ""
+    if ref_from and ref_to:
+        return f"{ref_from}-{ref_to}"
+    return seg.get("special_type") or ""
+
+
+def _read_wraps(kind: EnvelopeKind, seg: dict) -> list[list[str]] | None:
+    if kind == "legacy":
+        return None  # the legacy export carries only a has_repeated_words flag
+    wrap_ranges = seg.get("wrap_ranges")
     if not wrap_ranges:
         return None
     out: list[list[str]] = []
@@ -100,22 +135,28 @@ def _wrap_ranges_to_tuples(wrap_ranges: Any) -> list[list[str]] | None:
     return out
 
 
-def _tuples_to_wrap_ranges(wrap_word_ranges: Any) -> list[dict] | None:
-    if not wrap_word_ranges:
-        return None
-    out = []
-    for tup in wrap_word_ranges:
-        entry = {"jump_to": tup[0], "jump_from": tup[1]}
-        entry["repeat_end"] = tup[2] if len(tup) > 2 else None
-        out.append(entry)
-    return out
+def _region_ms(kind: EnvelopeKind, seg: dict) -> tuple[int, int]:
+    start_s, end_s = _read_span_s(kind, seg)
+    start, end = round(start_s * 1000), round(end_s * 1000)
+    if end <= start or start < 0:
+        raise SampleConvertError(
+            f"segment {_read_id(kind, seg)!r} has an empty or inverted time span"
+        )
+    return start, end
 
 
-def alignment_to_detailed(alignment: dict, *, pseudo_chapter: int) -> tuple[dict, dict]:
-    """Convert one Alignment into ``(detailed_doc, sidecar)``."""
-    raw_segments = alignment.get("segments")
+# ---------------------------------------------------------------------------
+# Import
+# ---------------------------------------------------------------------------
+
+
+def alignment_to_detailed(
+    kind: EnvelopeKind, container: dict, *, pseudo_chapter: int
+) -> tuple[dict, dict]:
+    """Convert one upload into ``(detailed_doc, sidecar)``."""
+    raw_segments = container.get("segments")
     if not isinstance(raw_segments, list) or not raw_segments:
-        raise SampleConvertError("alignment has no segments")
+        raise SampleConvertError("upload has no segments")
 
     originals: dict[str, dict] = {}
     dropped: list[dict] = []
@@ -123,24 +164,24 @@ def alignment_to_detailed(alignment: dict, *, pseudo_chapter: int) -> tuple[dict
     for raw in raw_segments:
         if not isinstance(raw, dict):
             raise SampleConvertError("every segment must be an object")
-        if not _is_live(raw):
+        if not _is_live(kind, raw):
             dropped.append(raw)
             continue
-        start, end = _region_ms(raw)
+        start, end = _region_ms(kind, raw)
         uid = uuid7()
         seg = DetailedSegment(
             time_start=start,
             time_end=end,
-            matched_ref=raw.get("matched_ref") or "",
+            matched_ref=_read_ref(kind, raw),
             confidence=float(raw.get("confidence") or 0.0),
-            wrap_word_ranges=_wrap_ranges_to_tuples(raw.get("wrap_ranges")),
+            wrap_word_ranges=_read_wraps(kind, raw),
             segment_uid=uid,
         )
         originals[uid] = raw
         live.append((start, seg.model_dump(exclude_none=True)))
 
     if not live:
-        raise SampleConvertError("alignment has no live segments (all filtered or merged)")
+        raise SampleConvertError("upload has no live segments (all filtered or merged)")
     live.sort(key=lambda item: item[0])
     entries = [{"ref": str(pseudo_chapter), "segments": [seg for _, seg in live]}]
     meta = {
@@ -152,6 +193,7 @@ def alignment_to_detailed(alignment: dict, *, pseudo_chapter: int) -> tuple[dict
     }
     sidecar = {
         "schema_version": SIDECAR_SCHEMA_VERSION,
+        "kind": kind,
         "pseudo_chapter": pseudo_chapter,
         "originals": originals,
         "dropped": dropped,
@@ -159,8 +201,24 @@ def alignment_to_detailed(alignment: dict, *, pseudo_chapter: int) -> tuple[dict
     return {"_meta": meta, "entries": entries}, sidecar
 
 
-def _next_id_allocator(originals: dict[str, dict], dropped: list[dict]):
-    ids = [s.get("id") for s in [*originals.values(), *dropped]]
+# ---------------------------------------------------------------------------
+# Export
+# ---------------------------------------------------------------------------
+
+
+def _tuples_to_wrap_ranges(wrap_word_ranges: Any) -> list[dict] | None:
+    if not wrap_word_ranges:
+        return None
+    out = []
+    for tup in wrap_word_ranges:
+        entry = {"jump_to": tup[0], "jump_from": tup[1]}
+        entry["repeat_end"] = tup[2] if len(tup) > 2 else None
+        out.append(entry)
+    return out
+
+
+def _next_id_allocator(kind: EnvelopeKind, originals: dict[str, dict], dropped: list[dict]):
+    ids = [_read_id(kind, s) for s in [*originals.values(), *dropped]]
     ints = [i for i in ids if isinstance(i, int)]
     counter = (max(ints) if ints else -1) + 1
 
@@ -179,35 +237,62 @@ def _infer_kind(matched_ref: str) -> str | None:
     return "quran" if ":" in matched_ref else "special"
 
 
+def _write_segment(kind: EnvelopeKind, base: dict | None, seg: dict, next_id) -> dict:
+    matched_ref = seg.get("matched_ref") or ""
+    start_s, end_s = seg["time_start"] / 1000, seg["time_end"] / 1000
+    confidence = float(seg.get("confidence") or 0.0)
+    if kind == "legacy":
+        out = (
+            copy.deepcopy(base)
+            if base is not None
+            else {
+                "segment": next_id(),
+                "matched_text": "",
+                "has_missing_words": False,
+                "has_repeated_words": False,
+                "error": None,
+            }
+        )
+        out["time_from"], out["time_to"] = start_s, end_s
+        if ":" in matched_ref:
+            ref_from, _, ref_to = matched_ref.partition("-")
+            out["ref_from"], out["ref_to"] = ref_from, ref_to or ref_from
+            out["special_type"] = None
+        else:
+            out["ref_from"], out["ref_to"] = "", ""
+            out["special_type"] = matched_ref or None
+        out["confidence"] = confidence
+        out["kind"] = _infer_kind(matched_ref)
+        return out
+    out = copy.deepcopy(base) if base is not None else {"id": next_id(), "matched_text": ""}
+    out["region"] = {"start_s": start_s, "end_s": end_s}
+    out["matched_ref"] = matched_ref or None
+    out["confidence"] = confidence
+    out["wrap_ranges"] = _tuples_to_wrap_ranges(seg.get("wrap_word_ranges"))
+    if base is None:
+        out["kind"] = _infer_kind(matched_ref)
+    return out
+
+
 def detailed_to_alignment(entries: list[dict], sidecar: dict, original_doc: dict) -> dict:
     """Rebuild the uploaded document with the edited segments swapped in."""
     kind, _ = sniff_envelope(original_doc)
     originals: dict[str, dict] = sidecar.get("originals") or {}
     dropped: list[dict] = sidecar.get("dropped") or []
-    next_id = _next_id_allocator(originals, dropped)
+    next_id = _next_id_allocator(kind, originals, dropped)
 
     rebuilt: list[dict] = []
     for entry in entries:
         for seg in entry.get("segments", []):
             uid = seg.get("segment_uid")
             base = originals.get(uid) if uid else None
-            out = copy.deepcopy(base) if base is not None else {"id": next_id(), "matched_text": ""}
-            out["region"] = {
-                "start_s": seg["time_start"] / 1000,
-                "end_s": seg["time_end"] / 1000,
-            }
-            out["matched_ref"] = seg.get("matched_ref") or None
-            out["confidence"] = float(seg.get("confidence") or 0.0)
-            out["wrap_ranges"] = _tuples_to_wrap_ranges(seg.get("wrap_word_ranges"))
-            if base is None:
-                out["kind"] = _infer_kind(seg.get("matched_ref") or "")
-            rebuilt.append(out)
+            rebuilt.append(_write_segment(kind, base, seg, next_id))
     rebuilt.extend(copy.deepcopy(d) for d in dropped)
-    rebuilt.sort(key=lambda s: (s.get("region") or {}).get("start_s", 0.0))
+    rebuilt.sort(key=lambda s: _read_span_s(kind, s)[0])
 
     doc = copy.deepcopy(original_doc)
     target = doc["alignment"] if kind == "alignment_resource" else doc
     target["segments"] = rebuilt
-    if target.get("chapter") is None and sidecar.get("pseudo_chapter"):
+    if kind != "legacy" and target.get("chapter") is None and sidecar.get("pseudo_chapter"):
         target["chapter"] = sidecar["pseudo_chapter"]
     return doc

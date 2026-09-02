@@ -17,7 +17,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 SampleStatus = Literal["processing", "ready", "failed"]
-SampleSourceSchema = Literal["alignment", "alignment_resource"]
+SampleSourceSchema = Literal["alignment", "alignment_resource", "legacy"]
 
 
 class SampleRow(BaseModel):

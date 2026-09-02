@@ -58,14 +58,14 @@ def test_sniff_bare_and_resource_envelopes():
 
 def test_pseudo_chapter_prefers_explicit_then_first_ref():
     a = _alignment()
-    assert resolve_pseudo_chapter(a) == 2
+    assert resolve_pseudo_chapter("alignment", a) == 2
     a["chapter"] = 36
-    assert resolve_pseudo_chapter(a) == 36
-    assert resolve_pseudo_chapter({"segments": [_seg(0, 0, 1, None)]}) == 1
+    assert resolve_pseudo_chapter("alignment", a) == 36
+    assert resolve_pseudo_chapter("alignment", {"segments": [_seg(0, 0, 1, None)]}) == 1
 
 
 def test_import_converts_seconds_and_wraps_and_drops_non_live():
-    doc, sidecar = alignment_to_detailed(_alignment(), pseudo_chapter=2)
+    doc, sidecar = alignment_to_detailed("alignment", _alignment(), pseudo_chapter=2)
     entry = doc["entries"][0]
     assert entry["ref"] == "2"
     segs = entry["segments"]
@@ -82,14 +82,16 @@ def test_import_converts_seconds_and_wraps_and_drops_non_live():
 def test_import_rejects_inverted_region_and_empty_alignment():
     bad = {"segments": [_seg(0, 2.0, 1.0, "1:1:1-1:1:2")]}
     with pytest.raises(SampleConvertError):
-        alignment_to_detailed(bad, pseudo_chapter=1)
+        alignment_to_detailed("alignment", bad, pseudo_chapter=1)
     with pytest.raises(SampleConvertError):
-        alignment_to_detailed({"segments": []}, pseudo_chapter=1)
+        alignment_to_detailed("alignment", {"segments": []}, pseudo_chapter=1)
 
 
 def test_roundtrip_is_identity_when_unedited():
     original = {"alignment_id": "aln_1", "alignment": _alignment(), "links": {"self": "/x"}}
-    doc, sidecar = alignment_to_detailed(original["alignment"], pseudo_chapter=2)
+    doc, sidecar = alignment_to_detailed(
+        "alignment_resource", original["alignment"], pseudo_chapter=2
+    )
     back = detailed_to_alignment(doc["entries"], sidecar, original)
     assert back["alignment_id"] == "aln_1" and back["links"] == original["links"]
     assert back["alignment"]["chapter"] == 2
@@ -103,7 +105,7 @@ def test_roundtrip_is_identity_when_unedited():
 
 def test_export_carries_edits_and_allocates_ids_for_new_segments():
     original = _alignment()
-    doc, sidecar = alignment_to_detailed(original, pseudo_chapter=2)
+    doc, sidecar = alignment_to_detailed("alignment", original, pseudo_chapter=2)
     segs = doc["entries"][0]["segments"]
     segs[0]["time_end"] = 1500
     segs[0]["matched_ref"] = ""
@@ -116,3 +118,68 @@ def test_export_carries_edits_and_allocates_ids_for_new_segments():
     new = by_id[4]
     assert new["kind"] == "quran" and new["region"] == {"start_s": 1.5, "end_s": 2.0}
     assert [s["id"] for s in back["segments"]] == [0, 4, 1, 2, 3]
+
+
+def _legacy() -> dict:
+    return {
+        "_meta": {"schema_version": 1},
+        "segments": [
+            {
+                "segment": 1,
+                "time_from": 0.98,
+                "time_to": 4.84,
+                "ref_from": "",
+                "ref_to": "",
+                "matched_text": "b",
+                "confidence": 0.9,
+                "has_missing_words": False,
+                "has_repeated_words": False,
+                "special_type": "Basmala",
+                "error": None,
+                "kind": "special",
+                "confidence_band": "high",
+            },
+            {
+                "segment": 2,
+                "time_from": 5.78,
+                "time_to": 22.295,
+                "ref_from": "84:1:1",
+                "ref_to": "84:5:3",
+                "matched_text": "x",
+                "confidence": 1.0,
+                "has_missing_words": False,
+                "has_repeated_words": False,
+                "special_type": None,
+                "error": None,
+                "kind": "quran",
+                "confidence_band": "high",
+            },
+        ],
+    }
+
+
+def test_legacy_export_is_sniffed_imported_and_round_tripped():
+    original = _legacy()
+    kind, container = sniff_envelope(original)
+    assert kind == "legacy"
+    assert resolve_pseudo_chapter(kind, container) == 84
+    doc, sidecar = alignment_to_detailed(kind, container, pseudo_chapter=84)
+    segs = doc["entries"][0]["segments"]
+    assert [(s["time_start"], s["time_end"], s["matched_ref"]) for s in segs] == [
+        (980, 4840, "Basmala"),
+        (5780, 22295, "84:1:1-84:5:3"),
+    ]
+
+    back = detailed_to_alignment(doc["entries"], sidecar, original)
+    assert back == original
+
+    segs[1]["time_end"] = 20000
+    segs[1]["matched_ref"] = "84:1:1-84:4:2"
+    segs.append(
+        {"time_start": 22300, "time_end": 25000, "matched_ref": "84:5:4-84:5:6", "confidence": 0.5}
+    )
+    back = detailed_to_alignment(doc["entries"], sidecar, original)
+    by_id = {s["segment"]: s for s in back["segments"]}
+    assert by_id[2]["time_to"] == 20.0 and by_id[2]["ref_to"] == "84:4:2"
+    assert by_id[3]["ref_from"] == "84:5:4" and by_id[3]["kind"] == "quran"
+    assert back["_meta"] == {"schema_version": 1}
