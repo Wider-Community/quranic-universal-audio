@@ -220,7 +220,6 @@ def test_realign_returns_space_words_as_absolute_ms(
 
     client, _ = signed_in_client(role="maintainer")
     row = _upload(client).get_json()
-    seg = client.get(f"/api/seg/all/{row['slug']}").get_json()["segments"][0]
     calls = []
 
     def fake_align(**kw):
@@ -229,15 +228,17 @@ def test_realign_returns_space_words_as_absolute_ms(
                 "words": [{"location": "2:1:1", "text": "x", "start": 0.25, "end": 0.9}]}
 
     monkeypatch.setattr(ts_space_client, "align_item", fake_align)
-    resp = client.post(
-        f"/api/samples/{row['id']}/realign", json={"segment_uid": seg["segment_uid"]}, headers=_ORIGIN
-    )
+    body = {"segment_uid": "u", "matched_ref": "2:1:1-2:1:2", "time_start": 500, "time_end": 2000}
+    resp = client.post(f"/api/samples/{row['id']}/realign", json=body, headers=_ORIGIN)
     assert resp.status_code == 200, resp.get_data(as_text=True)
     assert resp.get_json()["word_timings"] == [
         {"word": "x", "location": "2:1:1", "start_ms": 750, "end_ms": 1400}
     ]
     assert calls[0]["path"].endswith(f"samples/{row['id']}/audio/2.mp3")
-    assert (calls[0]["start_ms"], calls[0]["end_ms"]) == (500, 2000)
+    assert (calls[0]["ref"], calls[0]["start_ms"], calls[0]["end_ms"]) == ("2:1:1-2:1:2", 500, 2000)
     assert client.post(
-        f"/api/samples/{row['id']}/realign", json={"segment_uid": "nope"}, headers=_ORIGIN
+        f"/api/samples/{row['id']}/realign", json={**body, "matched_ref": "Basmala"}, headers=_ORIGIN
+    ).status_code == 409
+    assert client.post(
+        "/api/samples/nope/realign", json=body, headers=_ORIGIN
     ).status_code == 404

@@ -122,13 +122,15 @@ def delete_sample(user, sample_id):
 @require_same_origin
 @require_capability("samples.manage")
 def realign_sample_segment(user, sample_id):
-    """Word timings for one segment from the timing Space; the FE commits them."""
+    """Word timings for one segment span from the timing Space; the FE commits them."""
     try:
         req = SampleRealignRequest.model_validate(request.get_json(silent=True) or {})
     except ValidationError as exc:
         return jsonify({"error": "segment_uid required", "details": exc.errors()}), 400
     try:
-        timings = realign_service.realign_segment(sample_id, req.segment_uid)
+        timings = realign_service.realign_span(
+            sample_id, ref=req.matched_ref, start_ms=req.time_start, end_ms=req.time_end
+        )
     except realign_service.RealignUnsupported as exc:
         return jsonify({"error": str(exc)}), 409
     except (samples_service.SampleError, samples_service.SampleNotFound) as exc:

@@ -1389,8 +1389,15 @@ export interface PublicReciterPage {
   total: number;
   next_cursor?: number | null;
 }
+/**
+ * The segment as the editor currently holds it: the FE may still be
+ * inside its autosave window, so the bucket copy is not consulted.
+ */
 export interface SampleRealignRequest {
   segment_uid: string;
+  matched_ref: string;
+  time_start: number;
+  time_end: number;
 }
 export interface SampleRealignResponse {
   word_timings: SegWordTiming[];

@@ -12,6 +12,7 @@
 
     import { fetchJson } from '../../lib/api';
     import { listSamples } from '../../lib/api/samples';
+    import { startAutoRealign } from './utils/samples/auto-realign';
     import { release } from '../../lib/api/claims-client';
     import { getReciterTaskStore, type ReciterTask,refreshReciterTask } from '../../lib/api/reciter-task';
     import { localeStore, tr } from '../../lib/i18n/locale-store';
@@ -433,10 +434,15 @@
         cssWordSpacing = cfg.wordSpacing;
         await loadReciters();
         stopCatalogPoll = startCatalogPolling();
+        stopAutoRealign = startAutoRealign();
     });
 
     let stopCatalogPoll: (() => void) | null = null;
-    onDestroy(() => stopCatalogPoll?.());
+    let stopAutoRealign: (() => void) | null = null;
+    onDestroy(() => {
+        stopCatalogPoll?.();
+        stopAutoRealign?.();
+    });
 </script>
 
 <svelte:window on:keydown={onKeydown} />

@@ -114,6 +114,19 @@ export function finalizeOp(chapter: number, op: EditOp): void {
     if (!_opLog.has(chapter)) _opLog.set(chapter, []);
     _opLog.get(chapter)!.push(op);
     _pendingOp = null;
+    for (const fn of _opListeners) fn(chapter, op);
+}
+
+type OpListener = (_chapter: number, _op: EditOp) => void;
+const _opListeners = new Set<OpListener>();
+
+/** Observe every finalised op (after it joined the batch). Returns the
+ *  unsubscribe. */
+export function onOpFinalized(fn: OpListener): () => void {
+    _opListeners.add(fn);
+    return () => {
+        _opListeners.delete(fn);
+    };
 }
 
 // ---------------------------------------------------------------------------

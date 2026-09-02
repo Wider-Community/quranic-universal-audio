@@ -9,8 +9,9 @@ slug ``sample--<id>``. The list row carries ownership, ingest status and the
 - ``SamplesListResponse`` — the list envelope.
 - ``SampleRenameRequest`` — ``PATCH /api/samples/<id>`` body.
 - ``SampleRealignRequest`` / ``SampleRealignResponse`` — ``POST
-  /api/samples/<id>/realign``: fresh word timings for one segment from the
-  timing Space (audio-absolute ms), for the FE to commit via a save.
+  /api/samples/<id>/realign``: fresh word timings for one segment span (as
+  the editor holds it) from the timing Space, audio-absolute ms, for the FE
+  to commit via a save.
 """
 
 from __future__ import annotations
@@ -61,9 +62,15 @@ class SampleRenameRequest(BaseModel):
 
 
 class SampleRealignRequest(BaseModel):
+    """The segment as the editor currently holds it: the FE may still be
+    inside its autosave window, so the bucket copy is not consulted."""
+
     model_config = ConfigDict(extra="forbid")
 
     segment_uid: str = Field(..., min_length=1)
+    matched_ref: str = Field(..., min_length=1)
+    time_start: int = Field(..., ge=0)
+    time_end: int = Field(..., ge=0)
 
 
 class SampleRealignResponse(BaseModel):

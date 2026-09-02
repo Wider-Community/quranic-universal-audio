@@ -526,7 +526,7 @@
   "segments_chip_low_conf": "ثقة منخفضة",
   "segments_chip_repetition": "تكرار",
   "segments_chip_missing_words": "كلمات ناقصة",
-  "segments_chip_realign": "إعادة محاذاة الكلمات",
-  "segments_chip_realign_busy": "جارٍ إعادة المحاذاة…",
-  "segments_history_optype_set_word_timings": "توقيتات الكلمات"
+  "segments_history_optype_set_word_timings": "توقيتات الكلمات",
+  "segments_chip_realign_in": "إعادة المحاذاة خلال {seconds} ث",
+  "segments_chip_realigning": "جارٍ إعادة المحاذاة…"
 }

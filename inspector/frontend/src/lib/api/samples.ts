@@ -42,10 +42,10 @@ export async function listSamples(): Promise<SampleRow[]> {
     return body.samples;
 }
 
-/** Fresh word timings for one segment from the timing Space (audio-absolute
- *  ms). The caller commits them via the `setWordTimings` command. */
-export async function realignSampleSegment(id: string, segmentUid: string): Promise<SegWordTiming[]> {
-    const body: SampleRealignRequest = { segment_uid: segmentUid };
+/** Fresh word timings for one segment span (as the editor holds it) from the
+ *  timing Space, audio-absolute ms. The caller commits them via the
+ *  `setWordTimings` command. */
+export async function realignSampleSegment(id: string, body: SampleRealignRequest): Promise<SegWordTiming[]> {
     const res = await fetch(`/api/samples/${encodeURIComponent(id)}/realign`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

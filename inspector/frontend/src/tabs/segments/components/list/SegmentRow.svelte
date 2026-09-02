@@ -54,11 +54,9 @@ import type { Segment } from '../../../../lib/types/view-models';
     } from '../../stores/edit';
     import { activeFilters } from '../../stores/filters';
     import { savedFilterView } from '../../stores/navigation';
-    import { activeSample, isSampleMode, playingWord, sampleHasWordTimings } from '../../stores/samples';
+    import { isSampleMode, playingWord } from '../../stores/samples';
     import { missingWordsSegKeys } from '../../stores/validation';
-    import { realignSampleSegment, SampleApiError } from '../../../../lib/api/samples';
-    import { pushToast } from '../../../../lib/stores/toast';
-    import { setWordTimingsOnSegment } from '../../utils/edit/setWordTimings';
+    import { realignStatus } from '../../utils/samples/auto-realign';
     import { deriveRowChips, type RowChip } from '../../utils/samples/chips';
     import { type BodyToken, tokenizeBody } from '../../utils/samples/words';
     import {
@@ -299,32 +297,23 @@ import type { Segment } from '../../../../lib/types/view-models';
     $: playButtonTitle = tr($localeStore, m.segments_row_play_button_title());
     // Sample mode: the three review signals live on the row, not in the accordion.
     $: rowChips = (void segStoreTick, $isSampleMode && mode === 'normal' && instanceRole === 'main'
-        ? deriveRowChips(seg, $missingWordsSegKeys, rowChapter, $quranRefs?.verse_word_counts, $sampleHasWordTimings)
+        ? deriveRowChips(seg, $missingWordsSegKeys, rowChapter)
         : []) as RowChip[];
-    let realignBusy = false;
     $: chipLabel = (chip: RowChip) => tr(
         $localeStore,
         chip === 'low_conf'
             ? m.segments_chip_low_conf()
-            : chip === 'repetition'
-              ? m.segments_chip_repetition()
-              : chip === 'missing_words'
-                ? m.segments_chip_missing_words()
-                : realignBusy ? m.segments_chip_realign_busy() : m.segments_chip_realign(),
+            : chip === 'repetition' ? m.segments_chip_repetition() : m.segments_chip_missing_words(),
     );
-    async function onRealignClick(): Promise<void> {
-        const sample = $activeSample;
-        if (!sample || !seg.segment_uid || realignBusy) return;
-        realignBusy = true;
-        try {
-            const words = await realignSampleSegment(sample.id, seg.segment_uid);
-            setWordTimingsOnSegment(seg, words);
-        } catch (e) {
-            pushToast({ kind: 'error', text: e instanceof SampleApiError ? e.message : String(e) });
-        } finally {
-            realignBusy = false;
-        }
-    }
+    // Automatic word realign state (sample mode): countdown, then spinner.
+    $: realignPhase = $isSampleMode && seg.segment_uid && instanceRole === 'main'
+        ? $realignStatus[seg.segment_uid] ?? null
+        : null;
+    $: realignLabel = realignPhase
+        ? realignPhase.phase === 'running'
+            ? tr($localeStore, m.segments_chip_realigning())
+            : tr($localeStore, m.segments_chip_realign_in({ seconds: realignPhase.seconds }))
+        : '';
     $: gotoButtonLabel = tr($localeStore, m.segments_row_goto_button());
     $: flagAriaLabel = tr($localeStore, !canEditFlag
         ? m.segments_row_flag_view_other_aria_label()
@@ -1065,17 +1054,14 @@ import type { Segment } from '../../../../lib/types/view-models';
                 <span class="seg-text-sep">|</span>
                 <span class="seg-text-conf {confClass}" class:seg-history-changed={changedConf}>{confText}</span>
                 {#each rowChips as chip (chip)}
-                    {#if chip === 'realign'}
-                        <button
-                            type="button"
-                            class="seg-chip seg-chip-warn seg-chip-btn"
-                            disabled={realignBusy || readOnly}
-                            on:click|stopPropagation={onRealignClick}
-                        >{chipLabel(chip)}</button>
-                    {:else}
-                        <span class="seg-chip" class:seg-chip-warn={chip !== 'repetition'}>{chipLabel(chip)}</span>
-                    {/if}
+                    <span class="seg-chip" class:seg-chip-warn={chip !== 'repetition'}>{chipLabel(chip)}</span>
                 {/each}
+                {#if realignPhase}
+                    <span class="seg-chip seg-chip-realign" role="status">
+                        <span class="seg-chip-spinner" class:is-running={realignPhase.phase === 'running'}></span>
+                        {realignLabel}
+                    </span>
+                {/if}
             </div>
             <div class="seg-text-times" class:seg-history-changed={changedDur} title={durTitle}>
                 <TimeRange
@@ -1117,9 +1103,13 @@ import type { Segment } from '../../../../lib/types/view-models';
     }
 
     /* ---- Sample-mode row chips ---- */
-    .seg-chip-btn { cursor: pointer; font: inherit; }
-    .seg-chip-btn:hover:not(:disabled) { border-color: var(--state-error-fg); }
-    .seg-chip-btn:disabled { cursor: default; opacity: 0.6; }
+    .seg-chip-realign { background: var(--state-available-bg); border-color: oklch(0.84 0.110 300 / 0.4); color: var(--state-available-fg); }
+    .seg-chip-spinner {
+        width: 10px; height: 10px; border-radius: 50%;
+        border: 2px solid currentColor; border-right-color: transparent; opacity: 0.55;
+    }
+    .seg-chip-spinner.is-running { opacity: 1; animation: seg-chip-spin 0.8s linear infinite; }
+    @keyframes seg-chip-spin { to { transform: rotate(360deg); } }
     .seg-chip {
         display: inline-flex; align-items: center; height: 18px; padding: 0 7px; margin-inline-start: 6px;
         background: var(--panel-2); border: 1px solid var(--border-quiet); border-radius: 999px;
