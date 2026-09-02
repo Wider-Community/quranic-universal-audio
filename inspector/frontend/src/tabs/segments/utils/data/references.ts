@@ -13,7 +13,7 @@ export interface ParsedSegRef {
     word_to: number;
 }
 
-type VerseWordCounts = Record<VerseRef, number>;
+export type VerseWordCounts = Record<VerseRef, number>;
 
 /** Read verse-word-counts from the shared Quran-refs bundle. */
 export function getVerseWordCounts(): VerseWordCounts | undefined {

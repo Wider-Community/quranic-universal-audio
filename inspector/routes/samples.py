@@ -21,7 +21,12 @@ from flask import Blueprint, Response, jsonify, request
 from pydantic import ValidationError
 
 from config import AUDIO_MIME_TYPES
-from qua_shared.schemas import SampleRenameRequest, SampleRow, SamplesListResponse
+from qua_shared.schemas import (
+    SampleRenameRequest,
+    SampleRow,
+    SamplesListResponse,
+    SampleWordsResponse,
+)
 from services import samples as samples_service
 from utils.decorators import require_capability, require_same_origin
 
@@ -108,6 +113,16 @@ def delete_sample(user, sample_id):
     except (samples_service.SampleNotFound, samples_service.SampleForbidden) as exc:
         return _handle(exc)
     return ("", 204)
+
+
+@samples_bp.route("/<sample_id>/words")
+@require_capability("samples.manage")
+def sample_words(user, sample_id):
+    try:
+        words = samples_service.sample_words(sample_id)
+    except samples_service.SampleNotFound as exc:
+        return _handle(exc)
+    return jsonify(SampleWordsResponse.model_validate({"words": words}).model_dump())
 
 
 @samples_bp.route("/<sample_id>/export")

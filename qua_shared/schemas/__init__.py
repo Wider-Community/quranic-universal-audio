@@ -190,7 +190,13 @@ from .wire.release import (
     VerseTimestampsDoc,
     WordTimestampsDoc,
 )
-from .wire.samples import SampleRenameRequest, SampleRow, SamplesListResponse
+from .wire.samples import (
+    SampleRenameRequest,
+    SampleRow,
+    SamplesListResponse,
+    SampleWord,
+    SampleWordsResponse,
+)
 from .wire.seg import (
     FlagAuthor,
     FlagComment,
@@ -355,6 +361,8 @@ __all__ = [
     "AnnouncementAdmin",
     "SampleRenameRequest",
     "SampleRow",
+    "SampleWord",
+    "SampleWordsResponse",
     "SamplesListResponse",
     "AnnouncementCreate",
     "AudioManifestSidecar",

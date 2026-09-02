@@ -12,7 +12,7 @@ import { derived, writable } from 'svelte/store';
 import { can } from '../../../lib/stores/capabilities';
 import type { CurrentUser } from '../../../lib/stores/current-user';
 import type { EditingMode } from '../../../lib/stores/editing-mode';
-import type { SampleRow } from '../../../lib/types/generated/schemas';
+import type { SampleRow, SampleWord } from '../../../lib/types/generated/schemas';
 import { selectedReciter } from './chapter';
 
 export const SAMPLE_SLUG_PREFIX = 'sample--';
@@ -53,4 +53,24 @@ export function sampleEditingMode(user: CurrentUser | null): EditingMode {
         return { kind: 'view', viewReason: 'not-available' };
     }
     return { kind: user.role === 'owner' ? 'owner' : 'maintainer' };
+}
+
+/** Word timings of the open sample, keyed by `segment_uid` (empty when the
+ *  upload carried none). Loaded by `openSample`, cleared on reciter change. */
+export const sampleWords = writable<Record<string, SampleWord[]>>({});
+
+/** The word under the playhead in the open sample: `{uid, location}` so a
+ *  row wakes only when the active word changes, not every frame. */
+export interface PlayingWord {
+    uid: string;
+    location: string;
+}
+export const playingWord = writable<PlayingWord | null>(null);
+
+export function setPlayingWord(next: PlayingWord | null): void {
+    playingWord.update((cur) => {
+        if (next == null) return cur == null ? cur : null;
+        if (cur && cur.uid === next.uid && cur.location === next.location) return cur;
+        return next;
+    });
 }

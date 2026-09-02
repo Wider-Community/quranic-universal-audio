@@ -1399,6 +1399,17 @@ export interface SampleRow {
   changed_since_export: boolean;
   can_manage: boolean;
 }
+export interface SampleWord {
+  word: string;
+  location: string;
+  start_ms: number;
+  end_ms: number;
+}
+export interface SampleWordsResponse {
+  words: {
+    [k: string]: SampleWord[];
+  };
+}
 export interface SamplesListResponse {
   samples: SampleRow[];
 }

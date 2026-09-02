@@ -6,7 +6,13 @@
  * download are plain navigations to attachment responses.
  */
 
-import type { SampleRenameRequest, SampleRow, SamplesListResponse } from '../types/generated/schemas';
+import type {
+    SampleRenameRequest,
+    SampleRow,
+    SamplesListResponse,
+    SampleWord,
+    SampleWordsResponse,
+} from '../types/generated/schemas';
 import { fetchJson } from './index';
 
 export class SampleApiError extends Error {
@@ -33,6 +39,15 @@ export async function listSamples(): Promise<SampleRow[]> {
     const body = await fetchJson<SamplesListResponse & { error?: string }>('/api/samples');
     if (body.error || !Array.isArray(body.samples)) return [];
     return body.samples;
+}
+
+/** Word timings the sample's upload carried, keyed by `segment_uid`. */
+export async function fetchSampleWords(id: string): Promise<Record<string, SampleWord[]>> {
+    const body = await fetchJson<SampleWordsResponse & { error?: string }>(
+        `/api/samples/${encodeURIComponent(id)}/words`,
+    );
+    if (body.error || !body.words) return {};
+    return body.words;
 }
 
 export async function uploadSample(name: string, audio: File, source: File): Promise<SampleRow> {

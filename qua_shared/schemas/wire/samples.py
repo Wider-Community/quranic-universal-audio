@@ -8,6 +8,8 @@ slug ``sample--<id>``. The list row carries ownership, ingest status and the
 - ``SampleRow`` — one list entry (``GET /api/samples``, create/rename acks).
 - ``SamplesListResponse`` — the list envelope.
 - ``SampleRenameRequest`` — ``PATCH /api/samples/<id>`` body.
+- ``SampleWordsResponse`` — ``GET /api/samples/<id>/words``: per-segment word
+  timings the upload carried, audio-absolute ms, keyed by ``segment_uid``.
 """
 
 from __future__ import annotations
@@ -53,3 +55,18 @@ class SampleRenameRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(..., min_length=1, max_length=120)
+
+
+class SampleWord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    word: str
+    location: str
+    start_ms: int
+    end_ms: int
+
+
+class SampleWordsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    words: dict[str, list[SampleWord]]

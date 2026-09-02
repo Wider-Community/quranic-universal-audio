@@ -10,8 +10,9 @@ Three upload shapes are accepted, sniffed from the JSON:
 
 Import produces one ``DetailedEntry`` per sample (one audio = one pseudo-chapter)
 plus a sidecar that remembers the shape, the pseudo-chapter, every original
-segment keyed by the ``segment_uid`` it became, and the segments that were not
-live spans (``filtered`` / ``merged_into``). Export reverses that: originals are
+segment keyed by the ``segment_uid`` it became, the segments that were not
+live spans (``filtered`` / ``merged_into``), and per-segment word timings
+(``words``, audio-absolute ms) when the upload carried them. Export reverses that: originals are
 copied back with their edited fields overridden, new segments get fresh ids,
 dropped originals are re-appended, and everything outside ``segments`` is
 preserved.
@@ -135,6 +136,29 @@ def _read_wraps(kind: EnvelopeKind, seg: dict) -> list[list[str]] | None:
     return out
 
 
+def _read_words(seg: dict, start_ms: int) -> list[dict] | None:
+    """Word timings as audio-absolute ms; the upload stores them relative to
+    the segment start in seconds. ``None`` when the segment carries none."""
+    raw = seg.get("words")
+    if not isinstance(raw, list) or not raw:
+        return None
+    out: list[dict] = []
+    for w in raw:
+        if not isinstance(w, dict) or w.get("start") is None or w.get("end") is None:
+            continue
+        try:
+            start, end = float(w["start"]), float(w["end"])
+        except (TypeError, ValueError):
+            continue
+        out.append({
+            "word": str(w.get("word") or ""),
+            "location": str(w.get("location") or ""),
+            "start_ms": start_ms + round(start * 1000),
+            "end_ms": start_ms + round(end * 1000),
+        })
+    return out or None
+
+
 def _region_ms(kind: EnvelopeKind, seg: dict) -> tuple[int, int]:
     start_s, end_s = _read_span_s(kind, seg)
     start, end = round(start_s * 1000), round(end_s * 1000)
@@ -159,6 +183,7 @@ def alignment_to_detailed(
         raise SampleConvertError("upload has no segments")
 
     originals: dict[str, dict] = {}
+    words: dict[str, list[dict]] = {}
     dropped: list[dict] = []
     live: list[tuple[int, dict]] = []
     for raw in raw_segments:
@@ -178,6 +203,8 @@ def alignment_to_detailed(
             segment_uid=uid,
         )
         originals[uid] = raw
+        if (timed := _read_words(raw, start)) is not None:
+            words[uid] = timed
         live.append((start, seg.model_dump(exclude_none=True)))
 
     if not live:
@@ -197,6 +224,7 @@ def alignment_to_detailed(
         "pseudo_chapter": pseudo_chapter,
         "originals": originals,
         "dropped": dropped,
+        "words": words,
     }
     return {"_meta": meta, "entries": entries}, sidecar
 

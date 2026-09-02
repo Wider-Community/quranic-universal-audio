@@ -50,6 +50,7 @@ import {
 } from '../../stores/chapter';
 import { editCanvas, editMode, splitPreviewSelection } from '../../stores/edit';
 import { displayedSegments } from '../../stores/filters';
+import { updatePlayingWord } from '../samples/word-highlight';
 import {
     activeAudioSource,
     autoPlayEnabled,
@@ -106,6 +107,7 @@ const _drawLoop: AnimationLoop = createAnimationLoop(() => {
     if (_maybeSkipDeletedGap(t)) return;
     drawActivePlayhead(t);
     updateSegHighlight();
+    updatePlayingWord(t);
 });
 
 /**
@@ -227,6 +229,7 @@ function _curChapterUrl(): string {
 function _onRangeTick(timeMs: number): void {
     drawActivePlayhead(timeMs);
     updateSegHighlight();
+    updatePlayingWord(timeMs);
 }
 
 function _onRangeBoundary(ev: { reason: string }): void {

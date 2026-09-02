@@ -183,3 +183,21 @@ def test_legacy_export_is_sniffed_imported_and_round_tripped():
     assert by_id[2]["time_to"] == 20.0 and by_id[2]["ref_to"] == "84:4:2"
     assert by_id[3]["ref_from"] == "84:5:4" and by_id[3]["kind"] == "quran"
     assert back["_meta"] == {"schema_version": 1}
+
+
+def test_import_keeps_word_timings_as_absolute_ms():
+    original = _legacy()
+    original["segments"][1]["words"] = [
+        {"word": "إِذَا", "location": "84:1:1", "start": 0.4, "end": 1.2},
+        {"word": "ٱلسَّمَآءُ", "location": "84:1:2", "start": 1.2, "end": 2.75},
+        {"word": "bad", "location": "84:1:3", "start": None, "end": 3.0},
+    ]
+    kind, container = sniff_envelope(original)
+    doc, sidecar = alignment_to_detailed(kind, container, pseudo_chapter=84)
+    segs = doc["entries"][0]["segments"]
+    assert segs[0]["segment_uid"] not in sidecar["words"]
+    assert sidecar["words"][segs[1]["segment_uid"]] == [
+        {"word": "إِذَا", "location": "84:1:1", "start_ms": 6180, "end_ms": 6980},
+        {"word": "ٱلسَّمَآءُ", "location": "84:1:2", "start_ms": 6980, "end_ms": 8530},
+    ]
+    assert detailed_to_alignment(doc["entries"], sidecar, original) == original

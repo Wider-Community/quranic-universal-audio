@@ -177,3 +177,14 @@ def test_save_via_seg_route_flags_export_then_export_clears(
 
     contrib, _ = signed_in_client(hf_user_id="c1", login="c", role="contributor")
     assert contrib.post(f"/api/seg/save/{slug}/2", json=payload, headers=_JSON).status_code == 403
+
+
+def test_words_route_returns_absolute_ms_keyed_by_uid(signed_in_client, tmp_reciter_dir, stub_ingest):
+    client, _ = signed_in_client(role="maintainer")
+    doc = _alignment()
+    doc["segments"][0]["words"] = [{"word": "w", "location": "2:1:1", "start": 0.1, "end": 0.6}]
+    row = _upload(client, alignment=doc).get_json()
+    uid = client.get(f"/api/seg/all/{row['slug']}").get_json()["segments"][0]["segment_uid"]
+    words = client.get(f"/api/samples/{row['id']}/words").get_json()["words"]
+    assert words == {uid: [{"word": "w", "location": "2:1:1", "start_ms": 600, "end_ms": 1100}]}
+    assert client.get("/api/samples/nope/words").status_code == 404

@@ -54,9 +54,10 @@ import type { Segment } from '../../../../lib/types/view-models';
     } from '../../stores/edit';
     import { activeFilters } from '../../stores/filters';
     import { savedFilterView } from '../../stores/navigation';
-    import { isSampleMode } from '../../stores/samples';
+    import { isSampleMode, playingWord, sampleWords } from '../../stores/samples';
     import { missingWordsSegKeys } from '../../stores/validation';
     import { deriveRowChips, type RowChip } from '../../utils/samples/chips';
+    import { type BodyToken, tokenizeBody } from '../../utils/samples/words';
     import {
         chapterIndexKey,
         flashSegmentIndices,
@@ -279,6 +280,14 @@ import type { Segment } from '../../../../lib/types/view-models';
         }
         return _addVerseMarkers(text, bodyRef, $quranRefs?.verse_word_counts) || text;
     })();
+    // Sample word highlight: per-word spans only when the upload carried
+    // timings for this segment; the playhead tick sets `playingWord`.
+    $: bodyTokens = ($isSampleMode && seg.segment_uid && $sampleWords[seg.segment_uid]
+        ? tokenizeBody(bodyText, bodyRef, $quranRefs?.verse_word_counts)
+        : null) as BodyToken[] | null;
+    $: activeWordLocation = $playingWord && $playingWord.uid === seg.segment_uid
+        ? $playingWord.location
+        : null;
     $: confText = (void segStoreTick, seg.matched_ref ? ((seg.confidence ?? 0) * 100).toFixed(1) + '%' : tr($localeStore, m.segments_row_conf_fail_label()));
     $: indexLabel = (showChapter && seg.chapter != null)
         ? `${seg.chapter}:#${seg.index}`
@@ -1053,11 +1062,30 @@ import type { Segment } from '../../../../lib/types/view-models';
                 <div class="seg-text-label">{contextLabel}</div>
             {/if}
         </div>
-        <div class="seg-text-body" class:seg-history-changed={changedRef}>{bodyText}</div>
+        <div class="seg-text-body" class:seg-history-changed={changedRef}>
+            {#if bodyTokens}
+                {#each bodyTokens as token, i (i)}
+                    {#if i > 0}{' '}{/if}<span
+                        class="seg-word"
+                        class:seg-word-active={token.location != null && token.location === activeWordLocation}
+                    >{token.text}</span>
+                {/each}
+            {:else}
+                {bodyText}
+            {/if}
+        </div>
     </div>
 </div>
 
 <style>
+    /* ---- Sample word highlight ---- */
+    .seg-word { border-radius: var(--r-1); transition: background var(--t-fast) var(--ease-out-quart); }
+    .seg-word-active {
+        background: var(--accent);
+        color: var(--accent-contrast, #0b1020);
+        box-shadow: 0 0 0 2px var(--accent);
+    }
+
     /* ---- Sample-mode row chips ---- */
     .seg-chip {
         display: inline-flex; align-items: center; height: 18px; padding: 0 7px; margin-inline-start: 6px;
