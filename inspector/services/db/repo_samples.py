@@ -17,9 +17,13 @@ from .connection import get_conn
 _COLS = (
     "s.id, s.owner_hf_user_id, u.login_cache AS owner_login, s.name, s.status, s.error, "
     "s.audio_filename, s.audio_duration_ms, s.source_schema, s.pseudo_chapter, "
-    "s.created_at, s.last_save_at, s.last_export_at"
+    "s.created_at, s.last_save_at, s.last_export_at, "
+    "s.reviewed_at, s.reviewed_by, r.login_cache AS reviewed_by_login"
 )
-_FROM = "FROM samples s LEFT JOIN users u ON u.hf_user_id = s.owner_hf_user_id"
+_FROM = (
+    "FROM samples s LEFT JOIN users u ON u.hf_user_id = s.owner_hf_user_id "
+    "LEFT JOIN users r ON r.hf_user_id = s.reviewed_by"
+)
 
 
 def _row_to_dict(row) -> dict[str, Any]:
@@ -37,6 +41,9 @@ def _row_to_dict(row) -> dict[str, Any]:
         "created_at": row["created_at"],
         "last_save_at": row["last_save_at"],
         "last_export_at": row["last_export_at"],
+        "reviewed_at": row["reviewed_at"],
+        "reviewed_by": row["reviewed_by"],
+        "reviewed_by_login": row["reviewed_by_login"],
     }
 
 
@@ -91,9 +98,23 @@ def set_status(sample_id: str, status: str, *, error: str | None = None) -> bool
 
 
 def touch_last_save(sample_id: str, *, at: datetime | None = None) -> bool:
+    """Stamp the save time and drop any review — an edit outdates the sign-off."""
     cur = get_conn().execute(
-        "UPDATE samples SET last_save_at = ? WHERE id = ?",
+        "UPDATE samples SET last_save_at = ?, reviewed_at = NULL, reviewed_by = NULL "
+        "WHERE id = ?",
         (_serde.to_iso(at or _serde.now()), sample_id),
+    )
+    return cur.rowcount > 0
+
+
+def set_reviewed(
+    sample_id: str, *, actor_hf_user_id: str | None, at: datetime | None = None
+) -> bool:
+    """Mark reviewed (``actor_hf_user_id`` set) or clear the review (``None``)."""
+    reviewed_at = _serde.to_iso(at or _serde.now()) if actor_hf_user_id else None
+    cur = get_conn().execute(
+        "UPDATE samples SET reviewed_at = ?, reviewed_by = ? WHERE id = ?",
+        (reviewed_at, actor_hf_user_id, sample_id),
     )
     return cur.rowcount > 0
 

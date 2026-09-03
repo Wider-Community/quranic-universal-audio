@@ -25,6 +25,7 @@ from qua_shared.schemas import (
     SampleRealignRequest,
     SampleRealignResponse,
     SampleRenameRequest,
+    SampleReviewRequest,
     SampleRow,
     SamplesListResponse,
 )
@@ -116,6 +117,22 @@ def delete_sample(user, sample_id):
     except (samples_service.SampleNotFound, samples_service.SampleForbidden) as exc:
         return _handle(exc)
     return ("", 204)
+
+
+@samples_bp.route("/<sample_id>/review", methods=["POST"])
+@require_same_origin
+@require_capability("samples.manage")
+def review_sample(user, sample_id):
+    """Mark the sample reviewed, or clear the sign-off."""
+    try:
+        req = SampleReviewRequest.model_validate(request.get_json(silent=True) or {})
+    except ValidationError as exc:
+        return jsonify({"error": "reviewed must be a boolean", "details": exc.errors()}), 400
+    try:
+        view = samples_service.set_reviewed(sample_id, req.reviewed, user=user)
+    except samples_service.SampleNotFound as exc:
+        return _handle(exc)
+    return jsonify(_row(view))
 
 
 @samples_bp.route("/<sample_id>/realign", methods=["POST"])

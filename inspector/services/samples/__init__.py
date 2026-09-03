@@ -31,7 +31,7 @@ from services.auth import permissions
 from services.db import repo_access, repo_samples
 from services.db import sync as _sync
 from services.storage import cache, data_dir, storage_paths
-from services.storage.data_loader import load_detailed
+from services.storage.data_loader import get_word_counts, load_detailed
 from services.storage.hf_bucket import get_backend
 from utils.uuid7 import uuid7
 
@@ -44,6 +44,7 @@ from .convert import (
     resolve_pseudo_chapter,
     sniff_envelope,
 )
+from .coverage import is_wbw_complete
 
 logger = logging.getLogger(__name__)
 
@@ -205,11 +206,24 @@ def _changed_since_export(row: dict) -> bool:
     return last_export is None or last_save > last_export
 
 
+def _wbw_complete(row: dict) -> bool:
+    """Whether every Quran-ref segment carries timings for all of its words."""
+    if row["status"] != "ready":
+        return False
+    slug = storage_paths.sample_slug(row["id"])
+    try:
+        return is_wbw_complete(load_detailed(slug), get_word_counts())
+    except Exception:  # noqa: BLE001 — a tag is never worth failing the list for
+        logger.exception("sample %s: word-timing coverage check failed", row["id"])
+        return False
+
+
 def _row_view(row: dict, user: Any) -> dict:
     return {
         **row,
         "slug": storage_paths.sample_slug(row["id"]),
         "changed_since_export": _changed_since_export(row),
+        "wbw_complete": _wbw_complete(row),
         "can_manage": _can_manage(row, user),
     }
 
@@ -241,6 +255,20 @@ def rename_sample(sample_id: str, name: str, *, user: Any) -> dict:
     _require_manage(sample_id, user)
     with _sync.durable_transaction():
         repo_samples.rename(sample_id, name)
+    return get_sample(sample_id, user)
+
+
+def set_reviewed(sample_id: str, reviewed: bool, *, user: Any) -> dict:
+    """Mark the sample reviewed (or clear it). Any maintainer may sign off; the
+    next segment save drops the review again."""
+    if repo_samples.get(sample_id) is None:
+        raise SampleNotFound(sample_id)
+    with _sync.durable_transaction():
+        if reviewed:
+            repo_access.ensure_user(user.hf_user_id, login=user.login)
+        repo_samples.set_reviewed(
+            sample_id, actor_hf_user_id=user.hf_user_id if reviewed else None
+        )
     return get_sample(sample_id, user)
 
 

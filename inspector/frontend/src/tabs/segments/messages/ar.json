@@ -528,5 +528,9 @@
   "segments_chip_missing_words": "كلمات ناقصة",
   "segments_history_optype_set_word_timings": "توقيتات الكلمات",
   "segments_chip_realign_in": "إعادة المحاذاة خلال {seconds} ث",
-  "segments_chip_realigning": "جارٍ إعادة المحاذاة…"
+  "segments_chip_realigning": "جارٍ إعادة المحاذاة…",
+  "segments_samples_wbw_tag": "توقيتات كلمة بكلمة",
+  "segments_samples_ready_tag": "جاهز",
+  "segments_samples_review": "وسم كمراجَع",
+  "segments_samples_unreview": "إلغاء وسم المراجعة"
 }

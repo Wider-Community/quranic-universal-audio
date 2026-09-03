@@ -504,5 +504,9 @@
   "segments_chip_missing_words": "Missing words",
   "segments_history_optype_set_word_timings": "Word timings",
   "segments_chip_realign_in": "Realigning in {seconds}s",
-  "segments_chip_realigning": "Realigning…"
+  "segments_chip_realigning": "Realigning…",
+  "segments_samples_wbw_tag": "WBW Timestamps",
+  "segments_samples_ready_tag": "Ready",
+  "segments_samples_review": "Mark reviewed",
+  "segments_samples_unreview": "Unmark reviewed"
 }

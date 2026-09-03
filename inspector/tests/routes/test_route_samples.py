@@ -242,3 +242,53 @@ def test_realign_returns_space_words_as_absolute_ms(
     assert client.post(
         "/api/samples/nope/realign", json=body, headers=_ORIGIN
     ).status_code == 404
+
+
+def test_wbw_tag_tracks_coverage_and_review_clears_on_save(
+    signed_in_client, tmp_reciter_dir, stub_ingest
+):
+    client, _ = signed_in_client(role="maintainer")
+    doc = _alignment()
+    doc["segments"][0]["matched_ref"] = "2:1:1-2:1:2"
+    doc["segments"][0]["words"] = [
+        {"word": "a", "location": "2:1:1", "start": 0.1, "end": 0.4},
+    ]
+    row = _upload(client, alignment=doc).get_json()
+    assert row["wbw_complete"] is False
+
+    # Complete the coverage through the ordinary save path.
+    slug = row["slug"]
+    seg = client.get(f"/api/seg/all/{slug}").get_json()["segments"][0]
+    payload = {
+        "full_replace": True,
+        "segments": [{
+            "segment_uid": seg["segment_uid"],
+            "time_start": seg["time_start"],
+            "time_end": seg["time_end"],
+            "matched_ref": seg["matched_ref"],
+            "confidence": 1.0,
+            "audio_url": "",
+            "ignored_categories": [],
+            "word_timings": [
+                {"word": "a", "location": "2:1:1", "start_ms": 600, "end_ms": 900},
+                {"word": "b", "location": "2:1:2", "start_ms": 900, "end_ms": 1400},
+            ],
+        }],
+        "operations": [],
+    }
+    assert client.post(f"/api/seg/save/{slug}/2", json=payload, headers=_ORIGIN).status_code == 200
+
+    reviewed = client.post(
+        f"/api/samples/{row['id']}/review", json={"reviewed": True}, headers=_ORIGIN
+    ).get_json()
+    assert reviewed["wbw_complete"] is True
+    assert reviewed["reviewed_at"] and reviewed["reviewed_by_login"]
+
+    # Any later save drops the sign-off.
+    assert client.post(f"/api/seg/save/{slug}/2", json=payload, headers=_ORIGIN).status_code == 200
+    after = client.get("/api/samples").get_json()["samples"][0]
+    assert after["reviewed_at"] is None and after["wbw_complete"] is True
+
+    assert client.post(
+        "/api/samples/nope/review", json={"reviewed": True}, headers=_ORIGIN
+    ).status_code == 404

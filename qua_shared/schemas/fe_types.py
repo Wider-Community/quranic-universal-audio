@@ -141,6 +141,7 @@ from .wire.samples import (
     SampleRealignRequest,
     SampleRealignResponse,
     SampleRenameRequest,
+    SampleReviewRequest,
     SampleRow,
     SamplesListResponse,
 )
@@ -185,6 +186,7 @@ __all__ = [
     "SampleRenameRequest",
     "SampleRealignRequest",
     "SampleRealignResponse",
+    "SampleReviewRequest",
     "SampleRow",
     "SamplesListResponse",
     "AdminDiscardedDelivery",

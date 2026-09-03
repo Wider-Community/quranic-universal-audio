@@ -6,6 +6,7 @@ slug ``sample--<id>``. The list row carries ownership, ingest status and the
 "changed since export" signal; the upload itself is multipart (not modelled).
 
 - ``SampleRow`` — one list entry (``GET /api/samples``, create/rename acks).
+- ``SampleReviewRequest`` — ``POST /api/samples/<id>/review`` body.
 - ``SamplesListResponse`` — the list envelope.
 - ``SampleRenameRequest`` — ``PATCH /api/samples/<id>`` body.
 - ``SampleRealignRequest`` / ``SampleRealignResponse`` — ``POST
@@ -46,6 +47,12 @@ class SampleRow(BaseModel):
     last_save_at: str | None = None
     last_export_at: str | None = None
     changed_since_export: bool
+    #: Every Quran-ref segment carries a timing for each word of its ref.
+    wbw_complete: bool = False
+    #: Set while a maintainer's sign-off stands; cleared by the next save.
+    reviewed_at: str | None = None
+    reviewed_by: str | None = None
+    reviewed_by_login: str | None = None
     can_manage: bool
 
 
@@ -59,6 +66,12 @@ class SampleRenameRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(..., min_length=1, max_length=120)
+
+
+class SampleReviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reviewed: bool
 
 
 class SampleRealignRequest(BaseModel):

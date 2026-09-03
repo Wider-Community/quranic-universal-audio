@@ -1414,6 +1414,9 @@ export interface SegWordTiming {
 export interface SampleRenameRequest {
   name: string;
 }
+export interface SampleReviewRequest {
+  reviewed: boolean;
+}
 /**
  * One sample as the list and the acks render it.
  */
@@ -1433,6 +1436,10 @@ export interface SampleRow {
   last_save_at?: string | null;
   last_export_at?: string | null;
   changed_since_export: boolean;
+  wbw_complete?: boolean;
+  reviewed_at?: string | null;
+  reviewed_by?: string | null;
+  reviewed_by_login?: string | null;
   can_manage: boolean;
 }
 export interface SamplesListResponse {

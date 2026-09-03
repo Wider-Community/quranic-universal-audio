@@ -10,6 +10,7 @@ import type {
     SampleRealignRequest,
     SampleRealignResponse,
     SampleRenameRequest,
+    SampleReviewRequest,
     SampleRow,
     SamplesListResponse,
     SegWordTiming,
@@ -40,6 +41,19 @@ export async function listSamples(): Promise<SampleRow[]> {
     const body = await fetchJson<SamplesListResponse & { error?: string }>('/api/samples');
     if (body.error || !Array.isArray(body.samples)) return [];
     return body.samples;
+}
+
+/** Mark the sample reviewed (or clear the sign-off). Any later segment save
+ *  clears it again server-side. */
+export async function reviewSample(id: string, reviewed: boolean): Promise<SampleRow> {
+    const body: SampleReviewRequest = { reviewed };
+    const res = await fetch(`/api/samples/${encodeURIComponent(id)}/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    });
+    if (!res.ok) throw await _errorOf(res);
+    return (await res.json()) as SampleRow;
 }
 
 /** Fresh word timings for one segment span (as the editor holds it) from the
