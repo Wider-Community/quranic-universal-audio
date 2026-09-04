@@ -1,4 +1,4 @@
-"""Canonical timing projection from native timestamp shard v12 documents."""
+"""Canonical timing projection from native timestamp shard v13 documents."""
 
 from __future__ import annotations
 
@@ -13,14 +13,11 @@ def _index(ref: str) -> int:
 
 def _reading_segments(reading: dict) -> list[dict]:
     result = reading["analysis"]["result"]
-    source = reading["source"]["source"]
     words = {int(row["id"]): row for row in result["words"]}
     word_times = {int(row["word_id"]): row for row in reading["timing"]["words"]}
-    unit_times = {int(row["source_unit_id"]): row for row in reading["timing"]["units"]}
-    units_by_word: dict[int, list[dict]] = defaultdict(list)
-    for unit in source["units"]:
-        if unit["kind"] == "letter":
-            units_by_word[int(unit["word_id"])].append(unit)
+    tokens_by_word: dict[int, list[dict]] = defaultdict(list)
+    for token in reading["timing"]["animation_tokens"]:
+        tokens_by_word[int(token["word_id"])].append(token)
 
     out = []
     for part in reading["parts"]:
@@ -29,14 +26,14 @@ def _reading_segments(reading: dict) -> list[dict]:
             word = words[int(word_id)]
             timing = word_times[int(word_id)]
             letters = []
-            for unit in units_by_word[int(word_id)]:
-                span = unit_times[int(unit["id"])]
+            for token in tokens_by_word[int(word_id)]:
                 letters.append(
                     {
-                        "source_unit_id": int(unit["id"]),
-                        "text": unit["text"],
-                        "start_ms": span["start_ms"],
-                        "end_ms": span["end_ms"],
+                        "source_unit_ids": list(map(int, token["source_unit_ids"])),
+                        "text": token["text"],
+                        "start_ms": token["start_ms"],
+                        "end_ms": token["end_ms"],
+                        "policy": token["policy"],
                     }
                 )
             timed_words.append(
@@ -127,9 +124,9 @@ def _project(segments: list[dict]) -> dict:
 
 
 def project_native_shard(shard: dict) -> dict[str, dict]:
-    """Select one canonical timing occasion per verse from a v12 shard."""
-    if (shard.get("_meta") or {}).get("schema_version") != 12:
-        raise ValueError("timestamp shard must use schema version 12")
+    """Select one canonical timing occasion per verse from a v13 shard."""
+    if (shard.get("_meta") or {}).get("schema_version") != 13:
+        raise ValueError("timestamp shard must use schema version 13")
     decoded = decode_document(shard)
     segments = [row for reading in decoded["readings"] for row in _reading_segments(reading)]
     segments.sort(key=lambda row: row["t"][0])

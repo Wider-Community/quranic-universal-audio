@@ -2,7 +2,7 @@
 
 Backs the categorized, cell-addressable Report flow on the Timestamps tab. A
 report names a ``category`` with an optional per-category ``subtype`` and points
-at a native v12 shard target. Targets carry a reading id plus a native entity id;
+at a native v13 shard target. Targets carry a reading id plus a native entity id;
 renderer positions are never persisted.
 
 Served by ``inspector/routes/timestamps/reports.py``:
@@ -182,7 +182,7 @@ class TsReportSnapshot(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     native_schema_version: Literal[2] = 2
-    shard_schema_version: Literal[12] = 12
+    shard_schema_version: Literal[12, 13] = 13
     native: dict[str, object] = Field(default_factory=dict)
     timing: TsReportTimingSnapshot | None = None
 

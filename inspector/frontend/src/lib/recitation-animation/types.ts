@@ -11,6 +11,10 @@ export interface AnimLetter {
     char: string;
     start: number | null;
     end: number | null;
+    tokenId?: number;
+    paintCharacterIds?: number[];
+    /** True only when the producer token owns or presents no performed sound. */
+    silent?: boolean;
 }
 
 /** A single occurrence's time span (seconds). A word has more than one when the

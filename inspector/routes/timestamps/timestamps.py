@@ -94,7 +94,7 @@ def ts_manifest():
 
 @ts_bp.route("/shard/<reciter>/<int:chapter>")
 def ts_shard(reciter, chapter):
-    """Serve a per-chapter Brotli compact v12 shard (byte pass-through)."""
+    """Serve a per-chapter Brotli compact v13 shard (byte pass-through)."""
     # Owner preview: holders of ``timestamps.view_unreleased`` may read shards
     # for generated-but-unreleased reciters; everyone else stays released-only.
     allow_unreleased = _capabilities.can(auth_service.current_user(), "timestamps.view_unreleased")
