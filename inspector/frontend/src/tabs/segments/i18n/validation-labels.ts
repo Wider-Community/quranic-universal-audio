@@ -24,4 +24,6 @@ export const VALIDATION_TITLE: Readonly<Record<string, () => string>> = Object.f
     qalqala: m.segments_validation_qalqala_title,
     muqattaat: m.segments_validation_muqattaat_title,
     basmala_amin: m.segments_validation_basmala_amin_title,
+    hidden_pause: m.segments_validation_hidden_pause_title,
+    false_split: m.segments_validation_false_split_title,
 });

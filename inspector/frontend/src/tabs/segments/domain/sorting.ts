@@ -17,7 +17,7 @@
 import * as m from '../../../lib/paraglide/messages';
 import type { SegValAnyItem } from '../../../lib/types/generated/schemas';
 
-export type SortKind = 'quran_order' | 'confidence' | 'word_count' | 'verse_count' | 'rep_split_count';
+export type SortKind = 'quran_order' | 'confidence' | 'word_count' | 'verse_count' | 'rep_split_count' | 'score';
 export type SortDir = 'asc' | 'desc';
 
 /** A sort an accordion offers. Registry rows hold a readonly list of these. */
@@ -34,6 +34,7 @@ export const SORT_META: Readonly<Record<SortKind, { label: () => string; default
     word_count:      { label: m.segments_validation_sort_words_label,       defaultDir: 'asc' },
     verse_count:     { label: m.segments_validation_sort_verses_label,      defaultDir: 'asc' },
     rep_split_count: { label: m.segments_validation_sort_splits_label,      defaultDir: 'asc' },
+    score:           { label: m.segments_validation_sort_score_label,       defaultDir: 'desc' },
 });
 
 /** Extra inputs some extractors need (resolved at projection time). */
@@ -51,6 +52,8 @@ type ItemFields = {
     ref?: string;
     confidence?: number;
     missing_words?: number[];
+    /** Boundary-review sidecar payload (hidden_pause / false_split items). */
+    boundary?: { score?: number };
 };
 
 function quranKey(it: ItemFields): number[] {
@@ -101,6 +104,8 @@ export function keyFor(kind: SortKind, item: SegValAnyItem, ctx?: SortCtx): numb
             const entry = uid ? ctx?.autoSplitMap?.[uid] : undefined;
             return [entry?.refs.length ?? 1];
         }
+        case 'score':
+            return [it.boundary?.score ?? 0];
     }
 }
 
