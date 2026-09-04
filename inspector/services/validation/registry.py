@@ -216,6 +216,30 @@ _REGISTRY: dict[str, IssueDefinition] = {
         display_title="Basmala + Amin",
         description="",
     ),
+    "hidden_pause": IssueDefinition(
+        kind="hidden_pause",
+        card_type="generic",
+        severity="info",
+        accordion_order=14,
+        can_ignore=True,
+        auto_suppress=True,
+        persists_ignore=True,
+        scope="per_segment",
+        display_title="Hidden Pause (review)",
+        description="Re-segmentation found a pause inside this segment. Auto Split places the proposed cut; ignore if there is no pause.",
+    ),
+    "false_split": IssueDefinition(
+        kind="false_split",
+        card_type="generic",
+        severity="info",
+        accordion_order=15,
+        can_ignore=True,
+        auto_suppress=True,
+        persists_ignore=True,
+        scope="per_segment",
+        display_title="False Split (review)",
+        description="Re-segmentation heard continuous speech across this segment's end. Merge with the next segment if the cut is inside speech; ignore if the pause is real.",
+    ),
 }
 
 

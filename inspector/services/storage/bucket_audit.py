@@ -11,6 +11,8 @@ file we expect to find there:
 * ``edit_history_peaks.jsonl`` -> ``parse_peaks_record`` (per JSONL row)
 * ``low_confidence_v2.json``   -> structural check (``failures`` is list[str])
 * ``auto_split_v1.json``       -> structural check (``by_uid`` dict of slim entries)
+* ``hidden_pause_v1.json``     -> structural check (``by_uid`` dict keyed by segment uid)
+* ``false_split_v1.json``      -> structural check (``by_uid`` dict keyed by segment uid)
 * ``pipeline_meta.json``       -> ``PipelineMeta`` (pydantic v2)
 * ``audio/_done.json``         -> sentinel parse
 * ``audio/<ch>.mp3``           -> existence + non-empty (3-chapter sample)
@@ -547,6 +549,44 @@ def _audit_peaks_slim(backend, path: str) -> FileResult:
 
 # ---------------------------------------------------------------------------
 # Top-level walker
+def _audit_by_uid_sidecar(backend, path: str) -> FileResult:
+    """Boundary-review sidecars (``hidden_pause_v1`` / ``false_split_v1``).
+
+    Expected shape:
+        {"_meta": {...}, "by_uid": {uid: {"kind": str, "chapter": int, ...}}}
+    """
+    try:
+        raw = backend.read_bytes(path)
+    except Exception as e:
+        return FileResult(path, "missing", str(e))
+
+    size = len(raw)
+    try:
+        doc = json.loads(raw)
+    except json.JSONDecodeError as e:
+        return FileResult(path, "error", f"invalid JSON: {e}", size=size)
+
+    if not isinstance(doc, dict):
+        return FileResult(path, "error", "top-level not a dict", size=size)
+    by_uid = doc.get("by_uid")
+    if not isinstance(by_uid, dict):
+        return FileResult(path, "error", "by_uid missing or not a dict", size=size)
+    meta = doc.get("_meta")
+    if meta is not None and not isinstance(meta, dict):
+        return FileResult(path, "error", "_meta is not a dict", size=size)
+    n_bad = sum(1 for entry in by_uid.values() if not isinstance(entry, dict))
+    if n_bad:
+        return FileResult(path, "error", f"{n_bad}/{len(by_uid)} entries not dicts", size=size)
+    return FileResult(
+        path,
+        "ok",
+        f"{len(by_uid)} entries",
+        size=size,
+        items_ok=len(by_uid),
+        items_total=len(by_uid),
+    )
+
+
 # ---------------------------------------------------------------------------
 
 
@@ -558,6 +598,8 @@ TOP_LEVEL_AUDITORS: list[tuple[str, Callable, bool]] = [
     ("edit_history_peaks.jsonl", _audit_peaks_history, False),
     ("low_confidence_v2.json", _audit_low_confidence_v2, False),
     ("auto_split_v1.json", _audit_auto_split_v1, False),
+    ("hidden_pause_v1.json", _audit_by_uid_sidecar, False),
+    ("false_split_v1.json", _audit_by_uid_sidecar, False),
     # pipeline_meta.json is required: Inspector hard-fails on missing sidecar
     # to make backfill a deploy gate. Older reciters need
     # scripts/backfills/backfill_deleted_basmala.py.

@@ -45,6 +45,8 @@ export type SegValAnyItem =
   | SegValStructuralErrorItem
   | SegValLowConfidenceItem
   | SegValLowConfidenceV2Item
+  | SegValHiddenPauseItem
+  | SegValFalseSplitItem
   | SegValBoundaryAdjItem
   | SegValCrossVerseItem
   | SegValAudioBleedingItem
@@ -1767,6 +1769,77 @@ export interface SegValLowConfidenceV2Item {
   classified_issues?: string[];
 }
 /**
+ * ``hidden_pause`` — offline re-segmentation heard a pause inside this
+ * segment. Review-only (owner / maintainer capability).
+ */
+export interface SegValHiddenPauseItem {
+  ref: string;
+  chapter: number;
+  seg_index: number;
+  segment_uid?: string | null;
+  classified_issues?: string[];
+  boundary: SegValHiddenPauseBoundary;
+}
+/**
+ * Sidecar payload on a ``hidden_pause`` item. ``refs`` is ``null`` when
+ * the offline pass could not assign per-section refs (Auto Split falls back
+ * to plain Split). ``score`` = agreeing axes × 1000 + min(gap_ms, 999).
+ */
+export interface SegValHiddenPauseBoundary {
+  cursors?: number[];
+  refs?: string[] | null;
+  score?: number;
+  cuts?: SegValHiddenPauseCut[];
+}
+/**
+ * One proposed cut inside a segment (``hidden_pause_v1`` sidecar).
+ *
+ * ``axes`` names the offline arms that agree on the cut (``trio`` = collar
+ * boundary head, ``lite`` = lite student, ...). ``evidence`` is the
+ * per-axis raw measurement block, passed through for the card.
+ */
+export interface SegValHiddenPauseCut {
+  cursor_ms?: number | null;
+  axes?: string[];
+  gap_ms?: number | null;
+  score?: number | null;
+  word?: string | null;
+  final_class?: string | null;
+  verse_end?: boolean;
+  evidence?: {
+    [k: string]: unknown;
+  };
+}
+/**
+ * ``false_split`` — offline re-segmentation heard continuous speech
+ * across this segment's end. Review-only (owner / maintainer capability).
+ */
+export interface SegValFalseSplitItem {
+  ref: string;
+  chapter: number;
+  seg_index: number;
+  segment_uid?: string | null;
+  classified_issues?: string[];
+  boundary: SegValFalseSplitBoundary;
+}
+/**
+ * Sidecar payload on a ``false_split`` item: the merge target is
+ * ``next_uid`` (the following segment).
+ */
+export interface SegValFalseSplitBoundary {
+  next_uid?: string | null;
+  axes?: string[];
+  gap_ms?: number | null;
+  score?: number;
+  word?: string | null;
+  final_class?: string | null;
+  verse_end?: boolean;
+  is_wasl?: boolean;
+  evidence?: {
+    [k: string]: unknown;
+  };
+}
+/**
  * ``boundary_adj`` — a segment whose boundary may need adjustment.
  */
 export interface SegValBoundaryAdjItem {
@@ -1861,8 +1934,11 @@ export interface SegValBasmalaAminItem {
  * ``errors`` and ``structural_errors`` are the SAME list under two keys
  * (additive alias). ``category_counts`` mirrors the per-category lengths in
  * registry-declared order. ``split_group_index`` maps a root segment uid to
- * its transitive split-descendant uids. ``low_confidence_v2_meta`` is present
- * only when the probe sidecar carried a ``_meta`` block. Each item carries a
+ * its transitive split-descendant uids. ``low_confidence_v2_meta`` /
+ * ``hidden_pause_meta`` / ``false_split_meta`` are present only when the
+ * sidecar carried a ``_meta`` block. ``hidden_pause`` / ``false_split`` (and
+ * their metas) are omitted for viewers without
+ * ``segments.view_boundary_review``. Each item carries a
  * ``classified_issues`` field.
  */
 export interface SegValidateResponse {
@@ -1873,6 +1949,8 @@ export interface SegValidateResponse {
   failed?: SegValFailedItem[];
   low_confidence?: SegValLowConfidenceItem[];
   low_confidence_v2?: SegValLowConfidenceV2Item[];
+  hidden_pause?: SegValHiddenPauseItem[] | null;
+  false_split?: SegValFalseSplitItem[] | null;
   boundary_adj?: SegValBoundaryAdjItem[];
   cross_verse?: SegValCrossVerseItem[];
   audio_bleeding?: SegValAudioBleedingItem[];
@@ -1888,6 +1966,8 @@ export interface SegValidateResponse {
     [k: string]: string[];
   };
   low_confidence_v2_meta?: SegValProbeMeta | null;
+  hidden_pause_meta?: SegValBoundaryMeta | null;
+  false_split_meta?: SegValBoundaryMeta | null;
 }
 /**
  * ``stats`` — per-reciter structural segmentation statistics.
@@ -1914,6 +1994,14 @@ export interface SegValStats {
  * passed through verbatim from the extraction stage.
  */
 export interface SegValProbeMeta {
+  [k: string]: unknown;
+}
+/**
+ * ``hidden_pause_meta`` / ``false_split_meta`` — provenance of the offline
+ * boundary-review sidecars (arms, segment counts, by-axes tallies). Open
+ * shape: the ``_meta`` block is passed through verbatim.
+ */
+export interface SegValBoundaryMeta {
   [k: string]: unknown;
 }
 export interface TsCompactRender {

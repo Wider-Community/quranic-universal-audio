@@ -9,6 +9,8 @@ VALIDATION_CATEGORIES = (
     "failed",
     "low_confidence",
     "low_confidence_v2",
+    "hidden_pause",
+    "false_split",
     "boundary_adj",
     "cross_verse",
     "missing_words",

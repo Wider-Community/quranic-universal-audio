@@ -5,10 +5,12 @@ from flask import Blueprint, jsonify
 from qua_shared.schemas.wire._envelopes import ErrorEnvelope
 from qua_shared.schemas.wire.seg import SegValidateResponse
 from services import cache
+from services.auth import capabilities
+from services.auth.auth import current_user
 from services.history_query import load_edit_history
 from services.segments.history_tiers import generation_timeline
 from services.stats import compute_stats
-from services.validation import validate_reciter_segments
+from services.validation import strip_boundary_review, validate_reciter_segments
 from utils.json_response import orjson_cached_response
 
 seg_val_bp = Blueprint("seg_val", __name__, url_prefix="/api/seg")
@@ -39,18 +41,27 @@ def _serialize_validate(result: dict) -> dict:
     return dumped
 
 
+def _viewer_payload(payload: dict) -> dict:
+    """Redact the boundary-review categories for viewers without
+    ``segments.view_boundary_review``. The cache holds the full payload (it is
+    keyed by reciter only); the projection is per request."""
+    if capabilities.can(current_user(), "segments.view_boundary_review"):
+        return payload
+    return strip_boundary_review(payload)
+
+
 @seg_val_bp.route("/validate/<reciter>")
 def seg_validate(reciter):
     """Validate all chapters for a reciter (cached; invalidated on save)."""
     cached = cache.get_seg_validate_cache(reciter)
     if cached is not None:
-        return orjson_cached_response(cached)
+        return orjson_cached_response(_viewer_payload(cached))
     result = validate_reciter_segments(reciter)
     if result is None:
         return jsonify(ErrorEnvelope(error="Reciter not found").model_dump(exclude_none=True)), 404
     payload = _serialize_validate(result)
     cache.set_seg_validate_cache(reciter, payload)
-    return orjson_cached_response(payload)
+    return orjson_cached_response(_viewer_payload(payload))
 
 
 @seg_val_bp.route("/stats/<reciter>")

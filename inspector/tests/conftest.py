@@ -372,6 +372,8 @@ _SEG_CACHE_NAMES = (
     "_seg_resolved_by_edit",
     "_seg_probe_v2",
     "_seg_auto_split",
+    "_seg_hidden_pause",
+    "_seg_false_split",
     "_seg_pipeline_meta",
     "_seg_history_batches",
     "_seg_split_group_index",

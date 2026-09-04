@@ -11,6 +11,7 @@ indicators on the frontend).
 from __future__ import annotations
 
 from collections import defaultdict
+from typing import Any
 
 from config import LOW_CONFIDENCE_DETAIL_THRESHOLD, MISSED_BASMALA_FLAG_MIN_DELETED
 from services.reference.quran_refs import dk_text_for_ref
@@ -111,6 +112,49 @@ def _classified_issues_from_flags(flags: dict, *, detail: bool) -> list[str]:
     return cats
 
 
+def _int_or_none(v: Any) -> int | None:
+    return int(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+
+
+def _cut_payload(cut: dict) -> dict:
+    return {
+        "cursor_ms": _int_or_none(cut.get("cursor_ms")),
+        "axes": [str(a) for a in (cut.get("axes") or [])],
+        "gap_ms": _int_or_none(cut.get("gap_ms")),
+        "score": _int_or_none(cut.get("score")),
+        "word": cut.get("word"),
+        "final_class": cut.get("final_class"),
+        "verse_end": bool(cut.get("verse_end", False)),
+        "evidence": dict(cut.get("evidence") or {}),
+    }
+
+
+def hidden_pause_boundary(entry: dict) -> dict:
+    """Project a ``hidden_pause_v1`` by-uid entry to the wire ``boundary`` shape."""
+    refs = entry.get("refs")
+    return {
+        "cursors": [int(c) for c in (entry.get("cursors") or [])],
+        "refs": [str(r) for r in refs] if isinstance(refs, list) else None,
+        "score": _int_or_none(entry.get("score")) or 0,
+        "cuts": [_cut_payload(c) for c in (entry.get("cuts") or []) if isinstance(c, dict)],
+    }
+
+
+def false_split_boundary(entry: dict) -> dict:
+    """Project a ``false_split_v1`` by-uid entry to the wire ``boundary`` shape."""
+    return {
+        "next_uid": entry.get("next_uid"),
+        "axes": [str(a) for a in (entry.get("axes") or [])],
+        "gap_ms": _int_or_none(entry.get("gap_ms")),
+        "score": _int_or_none(entry.get("score")) or 0,
+        "word": entry.get("word"),
+        "final_class": entry.get("final_class"),
+        "verse_end": bool(entry.get("verse_end", False)),
+        "is_wasl": bool(entry.get("is_wasl", False)),
+        "evidence": dict(entry.get("evidence") or {}),
+    }
+
+
 def _build_detail_lists(
     entries: list[dict],
     is_by_ayah: bool,
@@ -119,13 +163,20 @@ def _build_detail_lists(
     single_word_verses: set,
     probe_failed_uids: set | None = None,
     deleted_basmala_chapters: set[int] | None = None,
+    hidden_pause_map: dict[str, dict] | None = None,
+    false_split_map: dict[str, dict] | None = None,
 ) -> dict:
     """Iterate entries and build all detail lists + verse_segments map.
 
     Returns a dict with keys:
       chapter_seg_idx, verse_segments,
-      failed, low_confidence, low_confidence_v2, boundary_adj, cross_verse,
-      audio_bleeding, repetitions, muqattaat, qalqala, basmala_amin.
+      failed, low_confidence, low_confidence_v2, hidden_pause, false_split,
+      boundary_adj, cross_verse, audio_bleeding, repetitions, muqattaat,
+      qalqala, basmala_amin.
+
+    ``hidden_pause_map`` / ``false_split_map`` are the ``by_uid`` maps of the
+    offline boundary-review sidecars; each flagged item carries the sidecar
+    payload under ``boundary`` so the card can render the evidence.
 
     ``probe_failed_uids`` is the set of segment UIDs flagged by the
     extraction-time MFA tight-beam probe; pass ``None`` (or omit) when
@@ -150,6 +201,8 @@ def _build_detail_lists(
     failed: list[dict] = []
     low_confidence: list[dict] = []
     low_confidence_v2: list[dict] = []
+    hidden_pause: list[dict] = []
+    false_split: list[dict] = []
     boundary_adj: list[dict] = []
     cross_verse: list[dict] = []
     audio_bleeding: list[dict] = []
@@ -315,6 +368,8 @@ def _build_detail_lists(
                 single_word_verses,
                 canonical,
                 probe_failed_uids=probe_failed_uids,
+                hidden_pause_uids=hidden_pause_map,
+                false_split_uids=false_split_map,
             )
             classified = _classified_issues_from_flags(flags, detail=True)
 
@@ -386,6 +441,30 @@ def _build_detail_lists(
                         "seg_index": i,
                         "segment_uid": seg_uid,
                         "classified_issues": classified,
+                    }
+                )
+
+            if flags["hidden_pause"]:
+                hidden_pause.append(
+                    {
+                        "ref": matched_ref,
+                        "chapter": chapter,
+                        "seg_index": i,
+                        "segment_uid": seg_uid,
+                        "classified_issues": classified,
+                        "boundary": hidden_pause_boundary((hidden_pause_map or {})[seg_uid]),
+                    }
+                )
+
+            if flags["false_split"]:
+                false_split.append(
+                    {
+                        "ref": matched_ref,
+                        "chapter": chapter,
+                        "seg_index": i,
+                        "segment_uid": seg_uid,
+                        "classified_issues": classified,
+                        "boundary": false_split_boundary((false_split_map or {})[seg_uid]),
                     }
                 )
 
@@ -536,6 +615,8 @@ def _build_detail_lists(
         "failed": failed,
         "low_confidence": low_confidence,
         "low_confidence_v2": low_confidence_v2,
+        "hidden_pause": hidden_pause,
+        "false_split": false_split,
         "boundary_adj": boundary_adj,
         "cross_verse": cross_verse,
         "audio_bleeding": audio_bleeding,
