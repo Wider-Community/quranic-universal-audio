@@ -52,7 +52,7 @@ type ItemFields = {
     ref?: string;
     confidence?: number;
     missing_words?: number[];
-    /** Boundary-review sidecar payload (hidden_pause / false_split items). */
+    /** Boundary-review sidecar payload (hidden_pause / false_split / unmarked_wasl items). */
     boundary?: { score?: number };
 };
 

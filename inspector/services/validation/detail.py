@@ -141,7 +141,8 @@ def hidden_pause_boundary(entry: dict) -> dict:
 
 
 def false_split_boundary(entry: dict) -> dict:
-    """Project a ``false_split_v1`` by-uid entry to the wire ``boundary`` shape."""
+    """Project a ``false_split_v1`` / ``unmarked_wasl_v1`` by-uid entry to the
+    wire ``boundary`` shape (both sidecars describe the join to ``next_uid``)."""
     return {
         "next_uid": entry.get("next_uid"),
         "axes": [str(a) for a in (entry.get("axes") or [])],
@@ -165,18 +166,20 @@ def _build_detail_lists(
     deleted_basmala_chapters: set[int] | None = None,
     hidden_pause_map: dict[str, dict] | None = None,
     false_split_map: dict[str, dict] | None = None,
+    unmarked_wasl_map: dict[str, dict] | None = None,
 ) -> dict:
     """Iterate entries and build all detail lists + verse_segments map.
 
     Returns a dict with keys:
       chapter_seg_idx, verse_segments,
       failed, low_confidence, low_confidence_v2, hidden_pause, false_split,
-      boundary_adj, cross_verse, audio_bleeding, repetitions, muqattaat,
-      qalqala, basmala_amin.
+      unmarked_wasl, boundary_adj, cross_verse, audio_bleeding, repetitions,
+      muqattaat, qalqala, basmala_amin.
 
-    ``hidden_pause_map`` / ``false_split_map`` are the ``by_uid`` maps of the
-    offline boundary-review sidecars; each flagged item carries the sidecar
-    payload under ``boundary`` so the card can render the evidence.
+    ``hidden_pause_map`` / ``false_split_map`` / ``unmarked_wasl_map`` are the
+    ``by_uid`` maps of the offline boundary-review sidecars; each flagged item
+    carries the sidecar payload under ``boundary`` so the card can render the
+    evidence.
 
     ``probe_failed_uids`` is the set of segment UIDs flagged by the
     extraction-time MFA tight-beam probe; pass ``None`` (or omit) when
@@ -203,6 +206,7 @@ def _build_detail_lists(
     low_confidence_v2: list[dict] = []
     hidden_pause: list[dict] = []
     false_split: list[dict] = []
+    unmarked_wasl: list[dict] = []
     boundary_adj: list[dict] = []
     cross_verse: list[dict] = []
     audio_bleeding: list[dict] = []
@@ -370,6 +374,7 @@ def _build_detail_lists(
                 probe_failed_uids=probe_failed_uids,
                 hidden_pause_uids=hidden_pause_map,
                 false_split_uids=false_split_map,
+                unmarked_wasl_uids=unmarked_wasl_map,
             )
             classified = _classified_issues_from_flags(flags, detail=True)
 
@@ -465,6 +470,18 @@ def _build_detail_lists(
                         "segment_uid": seg_uid,
                         "classified_issues": classified,
                         "boundary": false_split_boundary((false_split_map or {})[seg_uid]),
+                    }
+                )
+
+            if flags["unmarked_wasl"]:
+                unmarked_wasl.append(
+                    {
+                        "ref": matched_ref,
+                        "chapter": chapter,
+                        "seg_index": i,
+                        "segment_uid": seg_uid,
+                        "classified_issues": classified,
+                        "boundary": false_split_boundary((unmarked_wasl_map or {})[seg_uid]),
                     }
                 )
 
@@ -617,6 +634,7 @@ def _build_detail_lists(
         "low_confidence_v2": low_confidence_v2,
         "hidden_pause": hidden_pause,
         "false_split": false_split,
+        "unmarked_wasl": unmarked_wasl,
         "boundary_adj": boundary_adj,
         "cross_verse": cross_verse,
         "audio_bleeding": audio_bleeding,

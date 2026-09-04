@@ -46,7 +46,10 @@
 
     // ---- Derived ----
     $: issueMsg = (item as { msg?: string }).msg;
-    $: isBoundaryReview = category === 'hidden_pause' || category === 'false_split';
+    $: isBoundaryReview = category === 'hidden_pause' || category === 'false_split' || category === 'unmarked_wasl';
+    // Unmarked Wasl resolves with the WASL/WAQF picker on the join to the next
+    // segment, so the card renders it between the row and its next context.
+    $: showWaslPicker = category === 'unmarked_wasl';
 
     // Subscribe to segAllData so resolvedSeg re-derives after split/merge
     // mutates item.seg_index in place. _resolveIssue reads segAllData via
@@ -260,6 +263,9 @@
                 {/if}
             {/if}
         {/each}
+        {#if showWaslPicker && lastMember && nextSeg}
+            <WaslBoundary leftSeg={lastMember} rightSeg={nextSeg} />
+        {/if}
         {#if nextSeg}
             <SegmentRow
                 seg={nextSeg}

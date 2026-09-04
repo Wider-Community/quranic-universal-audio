@@ -217,14 +217,15 @@ def classify_flags(
     probe_failed_uids: set | None = None,
     hidden_pause_uids: Container[str] | None = None,
     false_split_uids: Container[str] | None = None,
+    unmarked_wasl_uids: Container[str] | None = None,
 ) -> dict[str, Any]:
     """Return per-category boolean flags + auxiliary fields for one segment.
 
     Keys:
       - ``failed``, ``audio_bleeding``, ``repetitions``, ``low_confidence``,
         ``low_confidence_detail``, ``low_confidence_v2``, ``hidden_pause``,
-        ``false_split``, ``cross_verse``, ``boundary_adj``, ``muqattaat``,
-        ``qalqala``: bool.
+        ``false_split``, ``unmarked_wasl``, ``cross_verse``, ``boundary_adj``,
+        ``muqattaat``, ``qalqala``: bool.
       - ``qalqala_letter``: ``str | None`` — populated when ``qalqala`` fires.
       - ``end_of_verse``: bool — reserved (callers pass ``word_counts`` to
         compute this themselves).
@@ -234,9 +235,9 @@ def classify_flags(
     signal). Pass ``None`` to skip the v2 check; pass an empty set when
     the sidecar exists but listed no failures.
 
-    ``hidden_pause_uids`` / ``false_split_uids`` are the uid sets (or by-uid
-    maps) from the offline boundary-review sidecars; a segment flags when its
-    uid is present and the category is not suppressed.
+    ``hidden_pause_uids`` / ``false_split_uids`` / ``unmarked_wasl_uids`` are
+    the uid sets (or by-uid maps) from the offline boundary-review sidecars; a
+    segment flags when its uid is present and the category is not suppressed.
     """
     result: dict[str, Any] = {
         "failed": False,
@@ -247,6 +248,7 @@ def classify_flags(
         "low_confidence_v2": False,
         "hidden_pause": False,
         "false_split": False,
+        "unmarked_wasl": False,
         "cross_verse": False,
         "boundary_adj": False,
         "muqattaat": False,
@@ -296,6 +298,8 @@ def classify_flags(
         result["hidden_pause"] = not is_suppressed_for(seg, "hidden_pause")
     if seg_uid and false_split_uids and seg_uid in false_split_uids:
         result["false_split"] = not is_suppressed_for(seg, "false_split")
+    if seg_uid and unmarked_wasl_uids and seg_uid in unmarked_wasl_uids:
+        result["unmarked_wasl"] = not is_suppressed_for(seg, "unmarked_wasl")
 
     if s_ayah != e_ayah:
         if not is_ignored_for(seg, "cross_verse"):
@@ -361,6 +365,7 @@ def classify_segment(
     probe_failed_uids: set | None = None,
     hidden_pause_uids: Container[str] | None = None,
     false_split_uids: Container[str] | None = None,
+    unmarked_wasl_uids: Container[str] | None = None,
 ) -> list[str]:
     """Classify one segment and return the category list.
 
@@ -406,6 +411,7 @@ def classify_segment(
         probe_failed_uids=probe_failed_uids,
         hidden_pause_uids=hidden_pause_uids,
         false_split_uids=false_split_uids,
+        unmarked_wasl_uids=unmarked_wasl_uids,
     )
     return _flags_to_categories(flags, detail=detail)
 
@@ -426,6 +432,7 @@ def classify_segment_full(
     probe_failed_uids: set | None = None,
     hidden_pause_uids: Container[str] | None = None,
     false_split_uids: Container[str] | None = None,
+    unmarked_wasl_uids: Container[str] | None = None,
 ) -> dict:
     """Like :func:`classify_segment` but returns a dict with auxiliary fields.
 
@@ -477,6 +484,7 @@ def classify_segment_full(
         probe_failed_uids=probe_failed_uids,
         hidden_pause_uids=hidden_pause_uids,
         false_split_uids=false_split_uids,
+        unmarked_wasl_uids=unmarked_wasl_uids,
     )
     return {
         "categories": _flags_to_categories(flags, detail=detail),
@@ -496,6 +504,7 @@ def classify_entry(
     probe_failed_uids: set | None = None,
     hidden_pause_uids: Container[str] | None = None,
     false_split_uids: Container[str] | None = None,
+    unmarked_wasl_uids: Container[str] | None = None,
 ) -> dict[str, dict]:
     """Classify every segment in an entry.
 
@@ -521,6 +530,7 @@ def classify_entry(
             probe_failed_uids=probe_failed_uids,
             hidden_pause_uids=hidden_pause_uids,
             false_split_uids=false_split_uids,
+            unmarked_wasl_uids=unmarked_wasl_uids,
         )
         out[uid] = {
             "categories": info["categories"],

@@ -158,6 +158,7 @@ from .wire.seg import (
     SegValFalseSplitItem,
     SegValHiddenPauseItem,
     SegValidateResponse,
+    SegValUnmarkedWaslItem,
 )
 from .wire.timestamps import TsConfigResponse, TsManifestResponse
 from .wire.ts_reports import (
@@ -204,6 +205,7 @@ __all__ = [
     "SegValAnyItem",
     "SegValFalseSplitItem",
     "SegValHiddenPauseItem",
+    "SegValUnmarkedWaslItem",
     "SegValidateResponse",
     "SegmentFlagView",
     "SegmentsChapterSummary",

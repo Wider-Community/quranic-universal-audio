@@ -1,4 +1,4 @@
-"""Boundary-review categories (``hidden_pause`` / ``false_split``).
+"""Boundary-review categories (``hidden_pause`` / ``false_split`` / ``unmarked_wasl``).
 
 Covers the classifier flags, the detail-list items (with the sidecar
 ``boundary`` payload round-tripping through ``SegValidateResponse``), and the
@@ -50,6 +50,21 @@ FALSE_ENTRY = {
     "verse_end": True,
     "evidence": {"trio": {"start_ms": 0, "end_ms": 3000, "ref": "1:1:1-1:1:4"}},
 }
+WASL_ENTRY = {
+    "kind": "unmarked_wasl",
+    "chapter": 1,
+    "next_uid": "u2",
+    "axes": ["trio", "lite"],
+    "gap_ms": 0,
+    "score": 2000,
+    "ref_before": "1:1:1-1:1:4",
+    "ref_after": "1:2:1-1:2:4",
+    "is_wasl": False,
+    "word": "الرحيم",
+    "final_class": "nasal",
+    "verse_end": True,
+    "evidence": {"trio": {"start_ms": 0, "end_ms": 6000, "ref": "1:1:1-1:2:4"}},
+}
 
 
 def _seg(uid: str, ref: str, **extra) -> dict:
@@ -73,6 +88,7 @@ def test_flags_default_false_without_sidecars():
     flags = _flags(_seg("u1", "1:1:1-1:1:4"))
     assert flags["hidden_pause"] is False
     assert flags["false_split"] is False
+    assert flags["unmarked_wasl"] is False
 
 
 def test_flags_fire_on_uid_membership():
@@ -80,12 +96,28 @@ def test_flags_fire_on_uid_membership():
         _seg("u1", "1:1:1-1:1:4"),
         hidden_pause_uids={"u1": HIDDEN_ENTRY},
         false_split_uids={"u1"},
+        unmarked_wasl_uids={"u1": WASL_ENTRY},
     )
     assert flags["hidden_pause"] is True
     assert flags["false_split"] is True
+    assert flags["unmarked_wasl"] is True
     assert classify_segment(
-        _seg("u1", "1:1:1-1:1:4"), hidden_pause_uids={"u1"}, false_split_uids={"u1"}
-    ) == ["hidden_pause", "false_split"]
+        _seg("u1", "1:1:1-1:1:4"),
+        hidden_pause_uids={"u1"},
+        false_split_uids={"u1"},
+        unmarked_wasl_uids={"u1"},
+    ) == ["hidden_pause", "false_split", "unmarked_wasl"]
+
+
+def test_unmarked_wasl_flag_is_independent_and_suppressible():
+    seg = _seg("u1", "1:1:1-1:1:4")
+    flags = _flags(seg, unmarked_wasl_uids={"u1"})
+    assert flags["unmarked_wasl"] is True
+    assert flags["false_split"] is False
+    ignored = _seg("u1", "1:1:1-1:1:4", ignored_categories=["unmarked_wasl"])
+    assert _flags(ignored, unmarked_wasl_uids={"u1"})["unmarked_wasl"] is False
+    edited = _seg("u1", "1:1:1-1:1:4", _resolved_by_edit=["unmarked_wasl"])
+    assert _flags(edited, unmarked_wasl_uids={"u1"})["unmarked_wasl"] is False
 
 
 def test_flags_respect_ignored_categories():
@@ -116,7 +148,10 @@ def _detail(entries, **kw):
 def test_detail_items_carry_boundary_payload_and_validate():
     entries = [{"ref": "1", "segments": [_seg("u1", "1:1:1-1:1:4"), _seg("u2", "1:2:1-1:2:4")]}]
     detail = _detail(
-        entries, hidden_pause_map={"u1": HIDDEN_ENTRY}, false_split_map={"u1": FALSE_ENTRY}
+        entries,
+        hidden_pause_map={"u1": HIDDEN_ENTRY},
+        false_split_map={"u1": FALSE_ENTRY},
+        unmarked_wasl_map={"u1": WASL_ENTRY},
     )
 
     (hp,) = detail["hidden_pause"]
@@ -135,12 +170,27 @@ def test_detail_items_carry_boundary_payload_and_validate():
     assert fs["boundary"]["gap_ms"] == 40
     assert fs["boundary"]["verse_end"] is True
 
+    (uw,) = detail["unmarked_wasl"]
+    assert uw["segment_uid"] == "u1"
+    assert "unmarked_wasl" in uw["classified_issues"]
+    assert uw["boundary"]["next_uid"] == "u2"
+    assert uw["boundary"]["axes"] == ["trio", "lite"]
+    assert uw["boundary"]["gap_ms"] == 0
+    assert uw["boundary"]["score"] == 2000
+    assert uw["boundary"]["is_wasl"] is False
+    assert uw["boundary"]["verse_end"] is True
+
     resp = SegValidateResponse.model_validate(
-        {"hidden_pause": detail["hidden_pause"], "false_split": detail["false_split"]}
+        {
+            "hidden_pause": detail["hidden_pause"],
+            "false_split": detail["false_split"],
+            "unmarked_wasl": detail["unmarked_wasl"],
+        }
     )
     dumped = resp.model_dump(mode="json", exclude_unset=True, by_alias=True)
     assert dumped["hidden_pause"][0]["boundary"]["cuts"][0]["word"] == "الرحمن"
     assert dumped["false_split"][0]["boundary"]["word"] == "الرحيم"
+    assert dumped["unmarked_wasl"][0]["boundary"]["evidence"]["trio"]["end_ms"] == 6000
 
 
 def test_detail_null_refs_ride_through_as_null():
@@ -156,16 +206,24 @@ def test_detail_lists_empty_without_sidecars():
     detail = _detail(entries)
     assert detail["hidden_pause"] == []
     assert detail["false_split"] == []
+    assert detail["unmarked_wasl"] == []
 
 
 def test_strip_boundary_review_removes_arrays_and_zeroes_counts():
     result = {
         "hidden_pause": [{"x": 1}],
         "false_split": [{"y": 2}],
+        "unmarked_wasl": [{"w": 4}],
         "hidden_pause_meta": {"a": 1},
         "false_split_meta": {"b": 2},
+        "unmarked_wasl_meta": {"c": 3},
         "cross_verse": [{"z": 3}],
-        "category_counts": {"hidden_pause": 1, "false_split": 1, "cross_verse": 1},
+        "category_counts": {
+            "hidden_pause": 1,
+            "false_split": 1,
+            "unmarked_wasl": 1,
+            "cross_verse": 1,
+        },
     }
     out = strip_boundary_review(result)
     for cat in BOUNDARY_REVIEW_CATEGORIES:
@@ -190,19 +248,28 @@ def test_validate_reciter_segments_gate(monkeypatch, tmp_reciter_dir):
     monkeypatch.setattr(
         val, "load_false_split", lambda _r: ({first: FALSE_ENTRY}, {"kind": "false_split"})
     )
+    monkeypatch.setattr(
+        val, "load_unmarked_wasl", lambda _r: ({first: WASL_ENTRY}, {"kind": "unmarked_wasl"})
+    )
 
     full = val.validate_reciter_segments(reciter)
     assert full is not None
     assert full["category_counts"]["hidden_pause"] == 1
     assert full["category_counts"]["false_split"] == 1
+    assert full["category_counts"]["unmarked_wasl"] == 1
     assert full["hidden_pause"][0]["segment_uid"] == first
+    assert full["unmarked_wasl"][0]["segment_uid"] == first
     assert full["hidden_pause_meta"] == {"kind": "hidden_pause"}
     assert full["false_split_meta"] == {"kind": "false_split"}
+    assert full["unmarked_wasl_meta"] == {"kind": "unmarked_wasl"}
 
     gated = val.validate_reciter_segments(reciter, include_boundary_review=False)
     assert gated is not None
     assert "hidden_pause" not in gated
     assert "false_split_meta" not in gated
+    assert "unmarked_wasl" not in gated
+    assert "unmarked_wasl_meta" not in gated
     assert gated["category_counts"]["hidden_pause"] == 0
     assert gated["category_counts"]["false_split"] == 0
+    assert gated["category_counts"]["unmarked_wasl"] == 0
     assert gated["category_counts"]["cross_verse"] == full["category_counts"]["cross_verse"]

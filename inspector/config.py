@@ -90,6 +90,7 @@ ACCORDION_CONTEXT = {
     "muqattaat": "hidden",
     "qalqala": "hidden",
     "audio_bleeding": "shown",
+    "unmarked_wasl": "next_only",
 }
 
 # Maintainer sample uploads (one audio + one JSON, multipart). Applied as the

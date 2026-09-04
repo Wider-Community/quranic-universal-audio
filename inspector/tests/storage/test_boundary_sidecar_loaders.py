@@ -1,4 +1,5 @@
-"""``load_hidden_pause`` / ``load_false_split`` — sidecar readers + cache."""
+"""``load_hidden_pause`` / ``load_false_split`` / ``load_unmarked_wasl`` —
+sidecar readers + cache."""
 
 from __future__ import annotations
 
@@ -7,7 +8,11 @@ import json
 import pytest
 
 from services.storage import cache
-from services.storage.data_loader import load_false_split, load_hidden_pause
+from services.storage.data_loader import (
+    load_false_split,
+    load_hidden_pause,
+    load_unmarked_wasl,
+)
 
 SLUG = "loader_reciter"
 
@@ -26,8 +31,10 @@ def _write(d, name: str, doc: dict) -> None:
 def test_absent_sidecars_yield_empty_and_cache(reciter_dir):
     assert load_hidden_pause(SLUG) == ({}, None)
     assert load_false_split(SLUG) == ({}, None)
+    assert load_unmarked_wasl(SLUG) == ({}, None)
     assert cache.get_seg_hidden_pause(SLUG) == ({}, None)
     assert cache.get_seg_false_split(SLUG) == ({}, None)
+    assert cache.get_seg_unmarked_wasl(SLUG) == ({}, None)
 
 
 def test_sidecars_parse_by_uid_and_meta(reciter_dir):
@@ -46,6 +53,20 @@ def test_sidecars_parse_by_uid_and_meta(reciter_dir):
         {"kind": "hidden_pause", "segments": 1},
     )
     assert load_false_split(SLUG) == ({"u9": {"next_uid": "u10"}}, {"kind": "false_split"})
+
+
+def test_unmarked_wasl_sidecar_parses_and_invalidates(reciter_dir):
+    _write(
+        reciter_dir,
+        "unmarked_wasl_v1.json",
+        {"_meta": {"kind": "unmarked_wasl"}, "by_uid": {"u3": {"next_uid": "u4", "gap_ms": 0}}},
+    )
+    assert load_unmarked_wasl(SLUG) == (
+        {"u3": {"next_uid": "u4", "gap_ms": 0}},
+        {"kind": "unmarked_wasl"},
+    )
+    cache.invalidate_seg_caches(SLUG)
+    assert cache.get_seg_unmarked_wasl(SLUG) is None
 
 
 def test_malformed_by_uid_degrades_to_empty(reciter_dir):

@@ -4,7 +4,7 @@ All data is loaded once and cached via ``services.cache``. Functions here never
 import Flask -- they return plain dicts/lists.
 
 Per-reciter reads (``load_seg_verses``, ``load_detailed``, ``load_probe_v2``,
-``load_hidden_pause``, ``load_false_split``)
+``load_hidden_pause``, ``load_false_split``, ``load_unmarked_wasl``)
 go through the storage backend via ``services.data_dir`` — no direct
 filesystem access to ``RECITATION_SEGMENTS_PATH``. Static reference data
 (qpc_hafs, surah_info, digital_khatt) still lives in the image at
@@ -297,6 +297,18 @@ def load_false_split(reciter: str) -> tuple[dict[str, dict], dict | None]:
         data_dir.read_false_split_doc,
         cache.get_seg_false_split,
         cache.set_seg_false_split,
+    )
+
+
+def load_unmarked_wasl(reciter: str) -> tuple[dict[str, dict], dict | None]:
+    """Load ``unmarked_wasl_v1.json`` — offline evidence that every arm read
+    through a verse-to-verse join the delivery never marked ``is_wasl``, keyed
+    by the left segment's ``segment_uid``. Never written by the Inspector."""
+    return _load_by_uid_sidecar(
+        reciter,
+        data_dir.read_unmarked_wasl_doc,
+        cache.get_seg_unmarked_wasl,
+        cache.set_seg_unmarked_wasl,
     )
 
 

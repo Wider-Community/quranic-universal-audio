@@ -189,6 +189,14 @@ def false_split_path(slug: str) -> str:
     return reciter_file(slug, "false_split_v1.json")
 
 
+def unmarked_wasl_path(slug: str) -> str:
+    """Boundary-review sidecar — per-seg evidence that every offline arm read
+    through a verse-to-verse join the delivery never marked ``is_wasl``. Keyed
+    by the left segment's ``segment_uid``; read by
+    ``services/data_loader.load_unmarked_wasl``."""
+    return reciter_file(slug, "unmarked_wasl_v1.json")
+
+
 def pipeline_meta_path(slug: str) -> str:
     """Per-reciter immutable extraction-time facts.
 
@@ -252,5 +260,6 @@ PER_RECITER_FILES: tuple[str, ...] = (
     "auto_split_v1.json",
     "hidden_pause_v1.json",
     "false_split_v1.json",
+    "unmarked_wasl_v1.json",
     "pipeline_meta.json",
 )

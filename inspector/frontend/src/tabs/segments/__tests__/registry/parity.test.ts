@@ -29,6 +29,7 @@ const PY_SNAPSHOT = {
   basmala_amin:      { canIgnore: true,  autoSuppress: true,  persistsIgnore: true,  scope: 'per_segment', cardType: 'generic',        severity: 'info',    accordionOrder: 13, displayTitle: 'Basmala + Amin' },
   hidden_pause:      { canIgnore: true,  autoSuppress: true,  persistsIgnore: true,  scope: 'per_segment', cardType: 'generic',        severity: 'info',    accordionOrder: 14, displayTitle: 'Hidden Pause (review)' },
   false_split:       { canIgnore: true,  autoSuppress: true,  persistsIgnore: true,  scope: 'per_segment', cardType: 'generic',        severity: 'info',    accordionOrder: 15, displayTitle: 'False Split (review)' },
+  unmarked_wasl:     { canIgnore: true,  autoSuppress: true,  persistsIgnore: true,  scope: 'per_segment', cardType: 'generic',        severity: 'info',    accordionOrder: 16, displayTitle: 'Unmarked Wasl (review)' },
 };
 
 describe('TS ↔ Python registry parity', () => {

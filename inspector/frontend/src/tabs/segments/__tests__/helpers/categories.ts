@@ -18,6 +18,7 @@ export const ALL_CATEGORIES = [
   'basmala_amin',
   'hidden_pause',
   'false_split',
+  'unmarked_wasl',
 ] as const;
 
 export type CategoryName = typeof ALL_CATEGORIES[number];
@@ -35,6 +36,7 @@ export const PER_SEGMENT_CATEGORIES: CategoryName[] = [
   'basmala_amin',
   'hidden_pause',
   'false_split',
+  'unmarked_wasl',
 ];
 
 export const CAN_IGNORE_CATEGORIES: CategoryName[] = [
@@ -46,6 +48,7 @@ export const CAN_IGNORE_CATEGORIES: CategoryName[] = [
   'basmala_amin',
   'hidden_pause',
   'false_split',
+  'unmarked_wasl',
 ];
 
 export const PERSISTS_IGNORE_CATEGORIES: CategoryName[] = [...CAN_IGNORE_CATEGORIES];
@@ -62,4 +65,5 @@ export const AUTO_SUPPRESS_CATEGORIES: CategoryName[] = [
   'basmala_amin',
   'hidden_pause',
   'false_split',
+  'unmarked_wasl',
 ];

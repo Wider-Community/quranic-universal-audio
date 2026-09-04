@@ -47,6 +47,7 @@ export type SegValAnyItem =
   | SegValLowConfidenceV2Item
   | SegValHiddenPauseItem
   | SegValFalseSplitItem
+  | SegValUnmarkedWaslItem
   | SegValBoundaryAdjItem
   | SegValCrossVerseItem
   | SegValAudioBleedingItem
@@ -1823,8 +1824,8 @@ export interface SegValFalseSplitItem {
   boundary: SegValFalseSplitBoundary;
 }
 /**
- * Sidecar payload on a ``false_split`` item: the merge target is
- * ``next_uid`` (the following segment).
+ * Sidecar payload on a ``false_split`` / ``unmarked_wasl`` item: the
+ * join under review is to ``next_uid`` (the following segment).
  */
 export interface SegValFalseSplitBoundary {
   next_uid?: string | null;
@@ -1838,6 +1839,19 @@ export interface SegValFalseSplitBoundary {
   evidence?: {
     [k: string]: unknown;
   };
+}
+/**
+ * ``unmarked_wasl`` — every offline re-segmentation arm read straight
+ * through this segment's verse-to-verse join, yet the delivery never marked
+ * it ``is_wasl``. Review-only (owner / maintainer capability).
+ */
+export interface SegValUnmarkedWaslItem {
+  ref: string;
+  chapter: number;
+  seg_index: number;
+  segment_uid?: string | null;
+  classified_issues?: string[];
+  boundary: SegValFalseSplitBoundary;
 }
 /**
  * ``boundary_adj`` — a segment whose boundary may need adjustment.
@@ -1935,10 +1949,10 @@ export interface SegValBasmalaAminItem {
  * (additive alias). ``category_counts`` mirrors the per-category lengths in
  * registry-declared order. ``split_group_index`` maps a root segment uid to
  * its transitive split-descendant uids. ``low_confidence_v2_meta`` /
- * ``hidden_pause_meta`` / ``false_split_meta`` are present only when the
- * sidecar carried a ``_meta`` block. ``hidden_pause`` / ``false_split`` (and
- * their metas) are omitted for viewers without
- * ``segments.view_boundary_review``. Each item carries a
+ * ``hidden_pause_meta`` / ``false_split_meta`` / ``unmarked_wasl_meta`` are
+ * present only when the sidecar carried a ``_meta`` block. ``hidden_pause``
+ * / ``false_split`` / ``unmarked_wasl`` (and their metas) are omitted for
+ * viewers without ``segments.view_boundary_review``. Each item carries a
  * ``classified_issues`` field.
  */
 export interface SegValidateResponse {
@@ -1951,6 +1965,7 @@ export interface SegValidateResponse {
   low_confidence_v2?: SegValLowConfidenceV2Item[];
   hidden_pause?: SegValHiddenPauseItem[] | null;
   false_split?: SegValFalseSplitItem[] | null;
+  unmarked_wasl?: SegValUnmarkedWaslItem[] | null;
   boundary_adj?: SegValBoundaryAdjItem[];
   cross_verse?: SegValCrossVerseItem[];
   audio_bleeding?: SegValAudioBleedingItem[];
@@ -1968,6 +1983,7 @@ export interface SegValidateResponse {
   low_confidence_v2_meta?: SegValProbeMeta | null;
   hidden_pause_meta?: SegValBoundaryMeta | null;
   false_split_meta?: SegValBoundaryMeta | null;
+  unmarked_wasl_meta?: SegValBoundaryMeta | null;
 }
 /**
  * ``stats`` — per-reciter structural segmentation statistics.
@@ -1997,9 +2013,10 @@ export interface SegValProbeMeta {
   [k: string]: unknown;
 }
 /**
- * ``hidden_pause_meta`` / ``false_split_meta`` — provenance of the offline
- * boundary-review sidecars (arms, segment counts, by-axes tallies). Open
- * shape: the ``_meta`` block is passed through verbatim.
+ * ``hidden_pause_meta`` / ``false_split_meta`` / ``unmarked_wasl_meta`` —
+ * provenance of the offline boundary-review sidecars (arms, segment counts,
+ * by-axes tallies). Open shape: the ``_meta`` block is passed through
+ * verbatim.
  */
 export interface SegValBoundaryMeta {
   [k: string]: unknown;

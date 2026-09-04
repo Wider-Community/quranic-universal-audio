@@ -240,6 +240,7 @@ from .wire.seg import (
     SegValRepetitionItem,
     SegValStats,
     SegValStructuralErrorItem,
+    SegValUnmarkedWaslItem,
 )
 from .wire.timestamps import (
     Letter,
@@ -296,6 +297,7 @@ __all__ = [
     "SegValHiddenPauseBoundary",
     "SegValHiddenPauseCut",
     "SegValHiddenPauseItem",
+    "SegValUnmarkedWaslItem",
     "SegValidateResponse",
     "SegValLowConfidenceItem",
     "SegValLowConfidenceV2Item",

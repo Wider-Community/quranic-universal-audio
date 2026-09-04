@@ -11,6 +11,7 @@ VALIDATION_CATEGORIES = (
     "low_confidence_v2",
     "hidden_pause",
     "false_split",
+    "unmarked_wasl",
     "boundary_adj",
     "cross_verse",
     "missing_words",

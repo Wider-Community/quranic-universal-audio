@@ -51,6 +51,25 @@ const falseSplitItem = {
     },
 };
 
+const unmarkedWaslItem = {
+    ref: '2:5:1-2:5:4',
+    chapter: 2,
+    seg_index: 5,
+    segment_uid: 'u4',
+    classified_issues: ['unmarked_wasl'],
+    boundary: {
+        next_uid: 'u5',
+        axes: ['trio', 'lite'],
+        gap_ms: 0,
+        score: 2000,
+        word: 'الرحيم',
+        final_class: 'nasal',
+        verse_end: true,
+        is_wasl: false,
+        evidence: {},
+    },
+};
+
 describe('BoundaryEvidence', () => {
     it('renders hidden-pause axes, cursor, gap, word, final class and score', () => {
         const { container, getByText } = render(BoundaryEvidence, {
@@ -87,6 +106,23 @@ describe('BoundaryEvidence', () => {
         expect(getByText('merge target: next segment')).toBeTruthy();
         expect(getByText('wasl')).toBeTruthy();
         expect(getByText('score 1040')).toBeTruthy();
+        expect(queryByText(/^cut /)).toBeNull();
+    });
+
+    it('renders unmarked-wasl evidence with the read-through caption and no merge note', () => {
+        const { container, getByText, queryByText } = render(BoundaryEvidence, {
+            category: 'unmarked_wasl',
+            item: unmarkedWaslItem as any,
+        });
+        const chips = Array.from(container.querySelectorAll('.bx-axis')).map((el) => el.textContent);
+        expect(chips).toEqual(['trio', 'lite']);
+        expect(getByText('gap 0 ms')).toBeTruthy();
+        expect(getByText('الرحيم')).toBeTruthy();
+        expect(getByText('verse end')).toBeTruthy();
+        expect(getByText('read through, no stop — mark waṣl')).toBeTruthy();
+        expect(getByText('score 2000')).toBeTruthy();
+        expect(queryByText('merge target: next segment')).toBeNull();
+        expect(queryByText('wasl')).toBeNull();
         expect(queryByText(/^cut /)).toBeNull();
     });
 });

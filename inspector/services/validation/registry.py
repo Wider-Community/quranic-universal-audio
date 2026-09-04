@@ -240,6 +240,18 @@ _REGISTRY: dict[str, IssueDefinition] = {
         display_title="False Split (review)",
         description="Re-segmentation heard continuous speech across this segment's end. Merge with the next segment if the cut is inside speech; ignore if the pause is real.",
     ),
+    "unmarked_wasl": IssueDefinition(
+        kind="unmarked_wasl",
+        card_type="generic",
+        severity="info",
+        accordion_order=16,
+        can_ignore=True,
+        auto_suppress=True,
+        persists_ignore=True,
+        scope="per_segment",
+        display_title="Unmarked Wasl (review)",
+        description="Every re-segmentation arm read straight through this verse-to-verse join with no stop, but the boundary is not marked wasl. Mark it wasl (or merge if it is one utterance); ignore if there is a real stop.",
+    ),
 }
 
 

@@ -232,6 +232,19 @@ export const IssueRegistry: Readonly<Record<string, IssueDefinition>> = Object.f
         description: "Re-segmentation heard continuous speech across this segment's end. Merge with the next segment if the cut is inside speech; ignore if the pause is real.",
         sorts: [{ kind: 'score', default: true }, { kind: 'quran_order' }],
     },
+    unmarked_wasl: {
+        kind: 'unmarked_wasl',
+        cardType: 'generic',
+        severity: 'info',
+        accordionOrder: 16,
+        canIgnore: true,
+        autoSuppress: true,
+        persistsIgnore: true,
+        scope: 'per_segment',
+        displayTitle: 'Unmarked Wasl (review)',
+        description: 'Every re-segmentation arm read straight through this verse-to-verse join with no stop, but the boundary is not marked wasl. Mark it wasl (or merge if it is one utterance); ignore if there is a real stop.',
+        sorts: [{ kind: 'score', default: true }, { kind: 'quran_order' }],
+    },
 });
 
 const _entries = Object.entries(IssueRegistry) as [string, IssueDefinition][];

@@ -133,6 +133,14 @@ EXPECTED_MATRIX = {
         "card_type": "generic",
         "severity": "info",
     },
+    "unmarked_wasl": {
+        "can_ignore": True,
+        "auto_suppress": True,
+        "persists_ignore": True,
+        "scope": "per_segment",
+        "card_type": "generic",
+        "severity": "info",
+    },
 }
 
 EXPECTED_CATEGORIES = set(EXPECTED_MATRIX.keys())

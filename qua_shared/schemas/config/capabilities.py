@@ -449,9 +449,9 @@ CAPABILITIES: tuple[Capability, ...] = (
         "segments.view_boundary_review",
         G_ADMIN,
         "View boundary-review flags",
-        "See the Hidden Pause and False Split accordions on the Segments tab "
-        "(offline re-segmentation evidence, keyed by segment). Review-only: "
-        "neither category blocks mark-ready.",
+        "See the Hidden Pause, False Split and Unmarked Wasl accordions on the "
+        "Segments tab (offline re-segmentation evidence, keyed by segment). "
+        "Review-only: none of these categories blocks mark-ready.",
         contributor=False,
         maintainer=True,
     ),

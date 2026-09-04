@@ -512,8 +512,8 @@ class SegValHiddenPauseItem(BaseModel):
 
 
 class SegValFalseSplitBoundary(BaseModel):
-    """Sidecar payload on a ``false_split`` item: the merge target is
-    ``next_uid`` (the following segment)."""
+    """Sidecar payload on a ``false_split`` / ``unmarked_wasl`` item: the
+    join under review is to ``next_uid`` (the following segment)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -531,6 +531,21 @@ class SegValFalseSplitBoundary(BaseModel):
 class SegValFalseSplitItem(BaseModel):
     """``false_split`` — offline re-segmentation heard continuous speech
     across this segment's end. Review-only (owner / maintainer capability)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ref: Ref
+    chapter: int
+    seg_index: int
+    segment_uid: str | None = None
+    classified_issues: list[str] = Field(default_factory=list)
+    boundary: SegValFalseSplitBoundary
+
+
+class SegValUnmarkedWaslItem(BaseModel):
+    """``unmarked_wasl`` — every offline re-segmentation arm read straight
+    through this segment's verse-to-verse join, yet the delivery never marked
+    it ``is_wasl``. Review-only (owner / maintainer capability)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -661,6 +676,7 @@ SegValAnyItemUnion = (
     | SegValLowConfidenceV2Item
     | SegValHiddenPauseItem
     | SegValFalseSplitItem
+    | SegValUnmarkedWaslItem
     | SegValBoundaryAdjItem
     | SegValCrossVerseItem
     | SegValAudioBleedingItem
@@ -688,9 +704,10 @@ class SegValProbeMeta(BaseModel):
 
 
 class SegValBoundaryMeta(BaseModel):
-    """``hidden_pause_meta`` / ``false_split_meta`` — provenance of the offline
-    boundary-review sidecars (arms, segment counts, by-axes tallies). Open
-    shape: the ``_meta`` block is passed through verbatim."""
+    """``hidden_pause_meta`` / ``false_split_meta`` / ``unmarked_wasl_meta`` —
+    provenance of the offline boundary-review sidecars (arms, segment counts,
+    by-axes tallies). Open shape: the ``_meta`` block is passed through
+    verbatim."""
 
     model_config = ConfigDict(extra="allow")
 
@@ -723,10 +740,10 @@ class SegValidateResponse(BaseModel):
     (additive alias). ``category_counts`` mirrors the per-category lengths in
     registry-declared order. ``split_group_index`` maps a root segment uid to
     its transitive split-descendant uids. ``low_confidence_v2_meta`` /
-    ``hidden_pause_meta`` / ``false_split_meta`` are present only when the
-    sidecar carried a ``_meta`` block. ``hidden_pause`` / ``false_split`` (and
-    their metas) are omitted for viewers without
-    ``segments.view_boundary_review``. Each item carries a
+    ``hidden_pause_meta`` / ``false_split_meta`` / ``unmarked_wasl_meta`` are
+    present only when the sidecar carried a ``_meta`` block. ``hidden_pause``
+    / ``false_split`` / ``unmarked_wasl`` (and their metas) are omitted for
+    viewers without ``segments.view_boundary_review``. Each item carries a
     ``classified_issues`` field.
     """
 
@@ -741,6 +758,7 @@ class SegValidateResponse(BaseModel):
     low_confidence_v2: list[SegValLowConfidenceV2Item] = Field(default_factory=list)
     hidden_pause: list[SegValHiddenPauseItem] | None = None
     false_split: list[SegValFalseSplitItem] | None = None
+    unmarked_wasl: list[SegValUnmarkedWaslItem] | None = None
     boundary_adj: list[SegValBoundaryAdjItem] = Field(default_factory=list)
     cross_verse: list[SegValCrossVerseItem] = Field(default_factory=list)
     audio_bleeding: list[SegValAudioBleedingItem] = Field(default_factory=list)
@@ -754,6 +772,7 @@ class SegValidateResponse(BaseModel):
     low_confidence_v2_meta: SegValProbeMeta | None = None
     hidden_pause_meta: SegValBoundaryMeta | None = None
     false_split_meta: SegValBoundaryMeta | None = None
+    unmarked_wasl_meta: SegValBoundaryMeta | None = None
 
 
 # ===========================================================================

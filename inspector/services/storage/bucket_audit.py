@@ -13,6 +13,7 @@ file we expect to find there:
 * ``auto_split_v1.json``       -> structural check (``by_uid`` dict of slim entries)
 * ``hidden_pause_v1.json``     -> structural check (``by_uid`` dict keyed by segment uid)
 * ``false_split_v1.json``      -> structural check (``by_uid`` dict keyed by segment uid)
+* ``unmarked_wasl_v1.json``    -> structural check (``by_uid`` dict keyed by segment uid)
 * ``pipeline_meta.json``       -> ``PipelineMeta`` (pydantic v2)
 * ``audio/_done.json``         -> sentinel parse
 * ``audio/<ch>.mp3``           -> existence + non-empty (3-chapter sample)
@@ -550,7 +551,8 @@ def _audit_peaks_slim(backend, path: str) -> FileResult:
 # ---------------------------------------------------------------------------
 # Top-level walker
 def _audit_by_uid_sidecar(backend, path: str) -> FileResult:
-    """Boundary-review sidecars (``hidden_pause_v1`` / ``false_split_v1``).
+    """Boundary-review sidecars (``hidden_pause_v1`` / ``false_split_v1`` /
+    ``unmarked_wasl_v1``).
 
     Expected shape:
         {"_meta": {...}, "by_uid": {uid: {"kind": str, "chapter": int, ...}}}
@@ -600,6 +602,7 @@ TOP_LEVEL_AUDITORS: list[tuple[str, Callable, bool]] = [
     ("auto_split_v1.json", _audit_auto_split_v1, False),
     ("hidden_pause_v1.json", _audit_by_uid_sidecar, False),
     ("false_split_v1.json", _audit_by_uid_sidecar, False),
+    ("unmarked_wasl_v1.json", _audit_by_uid_sidecar, False),
     # pipeline_meta.json is required: Inspector hard-fails on missing sidecar
     # to make backfill a deploy gate. Older reciters need
     # scripts/backfills/backfill_deleted_basmala.py.

@@ -1,10 +1,12 @@
 <script lang="ts">
     /**
-     * BoundaryEvidence — the evidence strip on a Hidden Pause / False Split
-     * card. Reads the item's `boundary` payload (offline sidecar pass-through)
-     * and renders: the agreeing axes as chips, the proposed cursor(s) as
-     * m:ss.mmm, the gap, the word and its final-letter class, and the score.
-     * A False Split row also states that the merge target is the next segment.
+     * BoundaryEvidence — the evidence strip on a Hidden Pause / False Split /
+     * Unmarked Wasl card. Reads the item's `boundary` payload (offline sidecar
+     * pass-through) and renders: the agreeing axes as chips, the proposed
+     * cursor(s) as m:ss.mmm, the gap, the word and its final-letter class, and
+     * the score. A False Split row also states that the merge target is the
+     * next segment; an Unmarked Wasl row states the join was read through and
+     * should be marked waṣl.
      */
     import { i18n } from '../../../../lib/i18n/locale.svelte';
     import * as m from '../../../../lib/paraglide/messages';
@@ -13,7 +15,11 @@
         SegValFalseSplitItem,
         SegValHiddenPauseCut,
         SegValHiddenPauseItem,
+        SegValUnmarkedWaslItem,
     } from '../../../../lib/types/generated/schemas';
+
+    /** false_split and unmarked_wasl carry the same next-join boundary payload. */
+    type NextJoinItem = SegValFalseSplitItem | SegValUnmarkedWaslItem;
 
     let { category, item }: { category: string; item: SegValAnyItem } = $props();
 
@@ -66,7 +72,7 @@
         }));
     }
 
-    function falseSplitLine(it: SegValFalseSplitItem): Line {
+    function nextJoinLine(it: NextJoinItem): Line {
         const b = it.boundary;
         return {
             key: 'end',
@@ -81,14 +87,17 @@
     }
 
     const isFalseSplit = $derived(category === 'false_split');
+    const isUnmarkedWasl = $derived(category === 'unmarked_wasl');
+    const isNextJoin = $derived(isFalseSplit || isUnmarkedWasl);
     const lines = $derived.by((): Line[] => {
-        if (isFalseSplit) return [falseSplitLine(item as SegValFalseSplitItem)];
+        if (isNextJoin) return [nextJoinLine(item as NextJoinItem)];
         return hiddenPauseLines(item as SegValHiddenPauseItem);
     });
     const totalScore = $derived((item as SegValHiddenPauseItem).boundary?.score ?? 0);
-    const isWasl = $derived(isFalseSplit && ((item as SegValFalseSplitItem).boundary?.is_wasl ?? false));
+    const isWasl = $derived(isNextJoin && ((item as NextJoinItem).boundary?.is_wasl ?? false));
     const scoreLabel = $derived((i18n.locale, m.segments_boundary_score({ score: String(totalScore) })));
     const mergeNextLabel = $derived((i18n.locale, m.segments_boundary_merge_next()));
+    const readThroughLabel = $derived((i18n.locale, m.segments_boundary_read_through()));
     const verseEndLabel = $derived((i18n.locale, m.segments_boundary_verse_end()));
     const waslLabel = $derived((i18n.locale, m.segments_boundary_wasl()));
 </script>
@@ -122,9 +131,11 @@
     <div class="bx-line bx-summary">
         {#if isFalseSplit}
             <span class="bx-fact">{mergeNextLabel}</span>
-            {#if isWasl}
-                <span class="bx-chip">{waslLabel}</span>
-            {/if}
+        {:else if isUnmarkedWasl}
+            <span class="bx-fact">{readThroughLabel}</span>
+        {/if}
+        {#if isWasl}
+            <span class="bx-chip">{waslLabel}</span>
         {/if}
         <span class="bx-fact bx-score">{scoreLabel}</span>
     </div>

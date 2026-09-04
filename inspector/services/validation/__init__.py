@@ -28,6 +28,7 @@ from services.storage.data_loader import (
     load_pipeline_meta,
     load_probe_v2,
     load_seg_verses,
+    load_unmarked_wasl,
 )
 from services.validation._missing import _build_missing_words
 from services.validation._structural import _check_structural_errors
@@ -94,7 +95,7 @@ def _read_deleted_basmala_chapters(reciter: str) -> set[int]:
     return set(meta.get("deleted_basmala_chapters") or [])
 
 
-BOUNDARY_REVIEW_CATEGORIES: tuple[str, ...] = ("hidden_pause", "false_split")
+BOUNDARY_REVIEW_CATEGORIES: tuple[str, ...] = ("hidden_pause", "false_split", "unmarked_wasl")
 
 
 def strip_boundary_review(result: dict) -> dict:
@@ -116,27 +117,30 @@ def validate_reciter_segments(reciter: str, *, include_boundary_review: bool = T
     reciter has no saved segments (callers surface this as a 404 / block).
 
     ``include_boundary_review=False`` omits the ``hidden_pause`` /
-    ``false_split`` arrays and metas and zeroes their counts (the viewer
-    lacks ``segments.view_boundary_review``). Neither category is in
-    ``BLOCKING_COUNT_KEYS``, so the mark-ready gate is unaffected either way.
+    ``false_split`` / ``unmarked_wasl`` arrays and metas and zeroes their
+    counts (the viewer lacks ``segments.view_boundary_review``). None of them
+    is in ``BLOCKING_COUNT_KEYS``, so the mark-ready gate is unaffected
+    either way.
     """
-    # Parallel I/O fan-out: six independent bucket reads. SSL recv releases
+    # Parallel I/O fan-out: seven independent bucket reads. SSL recv releases
     # the GIL, so threads cut the wall-clock cost from sum(serial) to
     # max(slowest). Each loader caches its own result via services/cache.py,
     # so the threads don't double-fetch. ``load_seg_verses`` populates the
     # cache that ``_check_structural_errors`` later reads.
-    with ThreadPoolExecutor(max_workers=6) as pool:
+    with ThreadPoolExecutor(max_workers=7) as pool:
         f_detailed = pool.submit(load_detailed, reciter)
         f_resolved = pool.submit(_load_resolved_idx_cached, reciter)
         f_probe = pool.submit(load_probe_v2, reciter)
         f_hidden = pool.submit(load_hidden_pause, reciter)
         f_false = pool.submit(load_false_split, reciter)
+        f_wasl = pool.submit(load_unmarked_wasl, reciter)
         f_verses = pool.submit(load_seg_verses, reciter)
         entries = f_detailed.result()
         resolved_idx = f_resolved.result()
         probe_failed_uids, probe_meta = f_probe.result()
         hidden_pause_map, hidden_pause_meta = f_hidden.result()
         false_split_map, false_split_meta = f_false.result()
+        unmarked_wasl_map, unmarked_wasl_meta = f_wasl.result()
         f_verses.result()  # prime the seg_verses cache before structural pass
 
     if not entries:
@@ -187,6 +191,7 @@ def validate_reciter_segments(reciter: str, *, include_boundary_review: bool = T
         deleted_basmala_chapters=deleted_basmala_chapters,
         hidden_pause_map=hidden_pause_map,
         false_split_map=false_split_map,
+        unmarked_wasl_map=unmarked_wasl_map,
     )
     missing_words = _build_missing_words(
         detail["verse_segments"], word_counts, detail["sequence_gaps"]
@@ -205,6 +210,7 @@ def validate_reciter_segments(reciter: str, *, include_boundary_review: bool = T
         "low_confidence_v2": len(detail["low_confidence_v2"]),
         "hidden_pause": len(detail["hidden_pause"]),
         "false_split": len(detail["false_split"]),
+        "unmarked_wasl": len(detail["unmarked_wasl"]),
         "repetitions": len(detail["repetitions"]),
         "audio_bleeding": len(detail["audio_bleeding"]),
         "boundary_adj": len(detail["boundary_adj"]),
@@ -224,6 +230,7 @@ def validate_reciter_segments(reciter: str, *, include_boundary_review: bool = T
         "low_confidence_v2": detail["low_confidence_v2"],
         "hidden_pause": detail["hidden_pause"],
         "false_split": detail["false_split"],
+        "unmarked_wasl": detail["unmarked_wasl"],
         "boundary_adj": detail["boundary_adj"],
         "cross_verse": detail["cross_verse"],
         "audio_bleeding": detail["audio_bleeding"],
@@ -244,6 +251,8 @@ def validate_reciter_segments(reciter: str, *, include_boundary_review: bool = T
         result["hidden_pause_meta"] = hidden_pause_meta
     if false_split_meta is not None:
         result["false_split_meta"] = false_split_meta
+    if unmarked_wasl_meta is not None:
+        result["unmarked_wasl_meta"] = unmarked_wasl_meta
     if not include_boundary_review:
         result = strip_boundary_review(result)
 
