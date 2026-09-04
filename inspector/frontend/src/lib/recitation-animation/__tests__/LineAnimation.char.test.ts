@@ -241,26 +241,26 @@ describe('LineAnimation char mode', () => {
         );
     });
 
-    it('keeps the repeated 21:88 small-waw token separate from its haa host', async () => {
+    it('uses the sounded wasl occurrence of repeated lahu instead of its silent waqf occurrence', async () => {
         const firstTake = [
-            { char: 'ل', start: 0, end: 1, tokenId: 0 },
-            { char: 'ه', start: 1, end: 2, tokenId: 1 },
-            { char: 'ۥ', start: 2, end: 3, tokenId: 2 },
+            { char: 'ل', start: 0, end: 1, tokenId: 59, silent: false },
+            { char: 'ه', start: 1, end: 2, tokenId: 61, silent: false },
+            { char: 'ۥ', start: 1, end: 2, tokenId: 63, silent: true },
         ];
         const secondTake = [
-            { char: 'ل', start: 10, end: 11, tokenId: 0 },
-            { char: 'ه', start: 11, end: 12, tokenId: 1 },
-            { char: 'ۥ', start: 12, end: 13, tokenId: 2 },
+            { char: 'ل', start: 10, end: 11, tokenId: 9, silent: false },
+            { char: 'ه', start: 11, end: 11.2, tokenId: 11, silent: false },
+            { char: 'ۥ', start: 11.2, end: 13, tokenId: 13, silent: false },
         ];
         const repeated: AnimUnit = {
-            ...unit('21:88:2', 'لَهُۥ', 0, 13, firstTake),
+            ...unit('19:49:7', 'لَهُۥ', 0, 13, firstTake),
             intervals: [{ start: 0, end: 3 }, { start: 10, end: 13 }],
             occurrenceLetters: [firstTake, secondTake],
         };
 
         for (const omitSilentHighlights of [false, true]) {
             const { container, unmount } = render(LineAnimation, {
-                units: [repeated], config: charConfig, getTimeMs: () => 12_500,
+                units: [repeated], config: charConfig, getTimeMs: () => 11_500,
                 playing: false, omitSilentHighlights,
             });
             await tick();
@@ -272,6 +272,68 @@ describe('LineAnimation char mode', () => {
             expect(tokens[2]?.classList.contains('active')).toBe(true);
             unmount();
         }
+    });
+
+    it('uses the silent wasl occurrence of repeated 19:58 sujjadan', async () => {
+        const stopped = [
+            { char: 'د', start: 0, end: 1, tokenId: 28, silent: false },
+            { char: 'ا', start: 1, end: 2, tokenId: 30, silent: false },
+        ];
+        const connected = [
+            { char: 'د', start: 10, end: 12, tokenId: 4, silent: false },
+            { char: 'ا', start: 10, end: 12, tokenId: 6, silent: true },
+        ];
+        const repeated: AnimUnit = {
+            ...unit('19:58:24', 'دًا', 0, 12, stopped),
+            intervals: [{ start: 0, end: 2 }, { start: 10, end: 12 }],
+            occurrenceLetters: [stopped, connected],
+        };
+
+        const normal = render(LineAnimation, {
+            units: [repeated], config: charConfig, getTimeMs: () => 11_000,
+            playing: false, omitSilentHighlights: false,
+        });
+        await tick();
+        expect([...normal.container.querySelectorAll('.ra-char')].map(
+            (token) => token.classList.contains('active'),
+        )).toEqual([true, true]);
+        normal.unmount();
+
+        const omitted = render(LineAnimation, {
+            units: [repeated], config: charConfig, getTimeMs: () => 11_000,
+            playing: false, omitSilentHighlights: true,
+        });
+        await tick();
+        expect([...omitted.container.querySelectorAll('.ra-char')].map(
+            (token) => token.classList.contains('active'),
+        )).toEqual([true, false]);
+    });
+
+    it('co-highlights both 19:98 merger meems on the repeated occurrence', async () => {
+        const firstLeft = [{ char: 'م', start: 1, end: 2, tokenId: 52, silent: false }];
+        const firstRight = [{ char: 'مّ', start: 1, end: 2, tokenId: 54, silent: false }];
+        const repeatLeft = [{ char: 'م', start: 11, end: 12, tokenId: 16, silent: false }];
+        const repeatRight = [{ char: 'مّ', start: 11, end: 12, tokenId: 18, silent: false }];
+        const left: AnimUnit = {
+            ...unit('19:98:4', 'م', 1, 12, firstLeft),
+            intervals: [{ start: 1, end: 2 }, { start: 11, end: 12 }],
+            occurrenceLetters: [firstLeft, repeatLeft],
+        };
+        const right: AnimUnit = {
+            ...unit('19:98:5', 'مّ', 1, 12, firstRight),
+            intervals: [{ start: 1, end: 2 }, { start: 11, end: 12 }],
+            occurrenceLetters: [firstRight, repeatRight],
+        };
+
+        const { container } = render(LineAnimation, {
+            units: [left, right], config: charConfig, getTimeMs: () => 11_500,
+            playing: false, omitSilentHighlights: true,
+        });
+        await tick();
+
+        expect([...container.querySelectorAll('.ra-char')].map(
+            (token) => token.classList.contains('active'),
+        )).toEqual([true, true]);
     });
 
     // Regression: cross-word co-timed letters must re-light on a loopback. The
@@ -487,6 +549,37 @@ describe('LineAnimation char mode', () => {
             expect(dagger?.classList.contains('active')).toBe(true);
             unmount();
         }
+    });
+
+    it('highlights a sounded dagger without its silent carrier in silent-omit mode', async () => {
+        const salah = unit('2:3:5', 'ٱلصَّلَوٰةَ', 0, 7, [
+            { char: 'ٱ', start: 0, end: 1, tokenId: 0, silent: true },
+            { char: 'ل', start: 0, end: 1, tokenId: 1, silent: true },
+            { char: 'صّ', start: 0, end: 1, tokenId: 2, silent: false },
+            { char: 'ل', start: 1, end: 2, tokenId: 3, silent: false },
+            { char: 'و', start: 2, end: 3, tokenId: 4, silent: true },
+            { char: 'ٰ', start: 2, end: 3, tokenId: 5, silent: false },
+            { char: 'ة', start: 3, end: 4, tokenId: 6, silent: false },
+        ]);
+
+        const normal = render(LineAnimation, {
+            units: [salah], config: charConfig, getTimeMs: () => 2500,
+            playing: false, omitSilentHighlights: false, shapedGlyphs,
+        });
+        await tick();
+        expect([...normal.container.querySelectorAll('.ra-shaped-token.active')].map(
+            (token) => token.getAttribute('data-token-text'),
+        )).toEqual(['و', 'ٰ']);
+        normal.unmount();
+
+        const omitted = render(LineAnimation, {
+            units: [salah], config: charConfig, getTimeMs: () => 2500,
+            playing: false, omitSilentHighlights: true, shapedGlyphs,
+        });
+        await tick();
+        expect([...omitted.container.querySelectorAll('.ra-shaped-token.active')].map(
+            (token) => token.getAttribute('data-token-text'),
+        )).toEqual(['ٰ']);
     });
 
     it('does not repaint the complete shaped base when a word finishes', async () => {

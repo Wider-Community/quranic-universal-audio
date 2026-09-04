@@ -276,15 +276,17 @@
             {/if}
             {#if $recitationOpen}
                 <div class="nr-ctrls" role="group" aria-label={m.common_player_recitation_display_group()}>
-                    <button
-                        type="button" class="nr-btn nr-btn--silent"
-                        aria-pressed={$recitationSilentOmit}
-                        aria-label={m.common_player_silent_omit_label()}
-                        title={$recitationSilentOmit
-                            ? m.common_player_silent_omit_on_title()
-                            : m.common_player_silent_omit_off_title()}
-                        onclick={toggleSilentOmit}
-                    ><ControlIcon name={$recitationSilentOmit ? 'silent-omit' : 'silent-cohighlight'} /></button>
+                    {#if config.granularity === 'char'}
+                        <button
+                            type="button" class="nr-btn nr-btn--silent"
+                            aria-pressed={$recitationSilentOmit}
+                            aria-label={m.common_player_silent_omit_label()}
+                            title={$recitationSilentOmit
+                                ? m.common_player_silent_omit_on_title()
+                                : m.common_player_silent_omit_off_title()}
+                            onclick={toggleSilentOmit}
+                        ><ControlIcon name={$recitationSilentOmit ? 'silent-omit' : 'silent-cohighlight'} /></button>
+                    {/if}
                     <button
                         type="button" class="nr-btn"
                         aria-label={m.common_player_granularity_toggle_label()}

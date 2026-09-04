@@ -155,38 +155,37 @@
             const u = pageUnits[wi];
             const occLetters = u?.occurrenceLetters;
             const chars = s[wi]!.chars;
-            if (!u || !occLetters || u.intervals.length < 2) continue; // single take → canonical is enough
+            if (!u || !occLetters) continue;
             const perChar: (TimeSpan | undefined)[][] = chars.map(() => []);
-            const directTokens = chars.length > 0
-                && chars.every((ch) => ch.tokenId !== undefined);
+            const perSilent: (boolean | undefined)[][] = chars.map(() => []);
             u.intervals.forEach((span, oi) => {
                 const lts = occLetters[oi];
                 let times: (TimeSpan | undefined)[] | null = null;
+                let sameFoundationTokens = false;
                 if (lts && lts.length) {
-                    if (directTokens) {
-                        // v13 already supplies foundation-level animation
-                        // tokens. Preserve those exact token intervals on every
-                        // repeated take; the legacy grapheme stamper folds a
-                        // combining token into its base (ه + ۥ in 21:88), which
-                        // incorrectly makes both tokens active together.
-                        const byToken = new Map(
-                            lts
-                                .filter((lt) => lt.tokenId !== undefined)
-                                .map((lt) => [lt.tokenId!, lt] as const),
-                        );
-                        times = chars.map((ch) => {
-                            const lt = byToken.get(ch.tokenId!);
-                            return lt?.start != null && lt.end != null
-                                ? { start: lt.start, end: lt.end }
-                                : undefined;
-                        });
+                    sameFoundationTokens = lts.length === chars.length
+                        && lts.every((lt, index) => lt.char === chars[index]?.text);
+                    if (sameFoundationTokens) {
+                        // Animation-token IDs are positional inside one native
+                        // reading, not stable across repeated readings. The
+                        // producer's within-word token order + exact text is the
+                        // stable identity shared by stop/wasl takes.
+                        times = lts.map((lt) => lt.start != null && lt.end != null
+                            ? { start: lt.start, end: lt.end }
+                            : undefined);
                     } else {
                         times = stampCharTimes(chars, lts, span.start, span.end);
                     }
                 }
-                chars.forEach((_, di) => perChar[di]!.push(times ? times[di] : undefined));
+                chars.forEach((_, di) => {
+                    perChar[di]!.push(times ? times[di] : undefined);
+                    perSilent[di]!.push(sameFoundationTokens ? lts?.[di]?.silent : undefined);
+                });
             });
-            chars.forEach((ch, di) => { ch.occIntervals = perChar[di]; });
+            chars.forEach((ch, di) => {
+                ch.occIntervals = perChar[di];
+                ch.occSilent = perSilent[di];
+            });
         }
         return s;
     });
@@ -386,7 +385,7 @@
      *  of the repeated word, so the whole word read `reached` and the active
      *  letter never travelled back. Instead we locate the active word's CURRENT
      *  occurrence and reveal letter-by-letter against THAT take's own letter
-     *  timings (`ch.occIntervals[occIdx]`, raw playback time) — so a re-recitation
+     *  timings (`ch.occIntervals`, raw playback time) — so a re-recitation
      *  tracks its own (often slower / melodic) pace. When a take carries no
      *  per-letter data we fall back to remapping `t` onto the canonical timeline.
      *
@@ -401,17 +400,12 @@
         const active = pageLocal(hit?.unitIdx ?? -1);
         const occStart = hit?.ivStart ?? 0;
         const occEnd = hit?.ivEnd ?? 0;
-        if (active >= 0) lastActive = active;
-
-        // Which take of the active word is being recited — its index in the unit's
-        // ascending `intervals`. Drives the per-occurrence letter timings, so a
-        // repeat reveals at ITS pace rather than a stretched take 1.
-        let occIdx = -1;
-        if (active >= 0 && hit) {
-            occIdx = pageUnits[active]!.intervals.findIndex(
+        const activeOccIdx = active >= 0 && hit
+            ? pageUnits[active]!.intervals.findIndex(
                 (iv) => iv.start === occStart && iv.end === occEnd,
-            );
-        }
+            )
+            : -1;
+        if (active >= 0) lastActive = active;
 
         // Remap playback time into the active word's canonical letter timeline —
         // the FALLBACK for a take with no per-letter data. The letters are anchored
@@ -448,17 +442,31 @@
                 let isActive = false;
                 let isReached = wordReached;
                 const ch = chars[k]!;
+                let silentForOccurrence = ch.silent;
+                const rawOccIdx = ch.occIntervals?.findIndex(
+                    (iv) => iv !== undefined && t >= iv.start && t < iv.end,
+                ) ?? -1;
+                const activeOccIv = wi === active && activeOccIdx >= 0
+                    ? ch.occIntervals?.[activeOccIdx]
+                    : undefined;
+                const hasRecordedOccurrences = ch.occIntervals?.some(
+                    (iv) => iv !== undefined,
+                ) ?? false;
                 // Prefer the active take's OWN letter timing (raw playback time);
                 // fall back to the canonical remap when that take lacks per-letter
                 // data (or the unit was built without `occurrenceLetters`).
-                const occIv = wi === active && occIdx >= 0 ? ch.occIntervals?.[occIdx] : undefined;
-                if (wi === active && occIv) {
-                    isActive = t >= occIv.start && t < occIv.end;
-                    isReached = !isActive && t >= occIv.end;
+                if (rawOccIdx >= 0) {
+                    isActive = true;
+                    isReached = false;
+                    silentForOccurrence = ch.occSilent?.[rawOccIdx] ?? ch.silent;
+                } else if (activeOccIv) {
+                    isReached = t >= activeOccIv.end;
+                    silentForOccurrence = ch.occSilent?.[activeOccIdx] ?? ch.silent;
                 } else if (wi === active && localT >= 0) {
                     isActive = localT >= ch.start && localT < ch.end;
                     isReached = !isActive && localT >= ch.end;
-                } else if (active >= 0 && localT >= 0 && sw && (ch.start !== sw.start || ch.end !== sw.end)) {
+                } else if (!hasRecordedOccurrences && active >= 0 && localT >= 0
+                    && sw && (ch.start !== sw.start || ch.end !== sw.end)) {
                     // Cross-word idgham/ghunnah: a real-timed letter in a
                     // NON-active word, co-timed with the active letter, lights
                     // with it. Compare against the SAME remapped `localT` the
@@ -475,7 +483,7 @@
                 if (ch.inert && isActive) { isActive = false; isReached = true; }
                 if (isActive) {
                     wordHasLiveChar = true;
-                    if (omitSilentHighlights && ch.silent) {
+                    if (omitSilentHighlights && silentForOccurrence) {
                         isActive = false;
                         // Dim/hidden modes need an opaque base-colour overlay so
                         // the borrower appears at its target's time. Full mode's

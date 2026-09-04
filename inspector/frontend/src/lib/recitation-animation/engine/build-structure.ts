@@ -50,6 +50,9 @@ export interface AnimChar {
      *  array) means that take had no per-letter data → fall back to the canonical
      *  `start`/`end` remap. */
     occIntervals?: (TimeSpan | undefined)[];
+    /** Silent ownership for each occurrence. Boundary context can make the same
+     * source token sound in one take and borrow timing in another. */
+    occSilent?: (boolean | undefined)[];
 }
 
 export interface AnimWord {
