@@ -3,8 +3,8 @@
 
 A reviewer split that crossed a verse boundary before the waṣl pill existed carries no
 ``is_wasl`` choice, so the pipeline treats the join as waqf. The boundary-review
-``false_split_v1.json`` sidecar lists the delivery boundaries every re-segmentation arm
-bridged; where such a boundary is one of those unannotated splits and the recorded gap
+``unmarked_wasl_v1.json`` sidecar lists the verse-to-verse boundaries every re-segmentation
+arm bridged; where such a boundary is one of those unannotated splits and the recorded gap
 is short, the join is waṣl. This script writes ``is_wasl: true`` on the left segment in
 ``detailed.json`` and appends a ``set_is_wasl`` batch to ``edit_history.jsonl`` so the
 replay in ``cross_verse_wasl.py`` agrees.
@@ -12,7 +12,7 @@ replay in ``cross_verse_wasl.py`` agrees.
 Dry run by default: prints the table and writes nothing. ``--apply`` writes, after
 saving the untouched ``detailed.json`` and ``edit_history.jsonl`` under ``--backup-dir``.
 
-  backfill_legacy_wasl.py --bucket prod --reciter <slug> --sidecar <false_split_v1.json>
+  backfill_legacy_wasl.py --bucket prod --reciter <slug> --sidecar <unmarked_wasl_v1.json>
   backfill_legacy_wasl.py --bucket prod --reciter <slug> --sidecar ... --apply --yes-prod
 """
 
@@ -97,7 +97,7 @@ def apply(detailed: dict, rows: list[dict], reason: str) -> dict:
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--reciter", required=True, help="reciter slug (exact)")
-    p.add_argument("--sidecar", required=True, help="false_split_v1.json from the boundary review")
+    p.add_argument("--sidecar", required=True, help="unmarked_wasl_v1.json from the boundary review")
     p.add_argument("--apply", action="store_true", help="write to the bucket (default: dry run)")
     p.add_argument("--backup-dir", default=".local/wasl_backfill", help="where the pre-write files go")
     bs.add_bucket_args(p)
