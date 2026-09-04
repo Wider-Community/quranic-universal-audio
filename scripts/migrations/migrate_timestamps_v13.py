@@ -22,6 +22,7 @@ import orjson
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
+from qua_sdk.integrations.native import analyse_native  # noqa: E402
 from qua_sdk.integrations.shard_audit import audit_v13_document as audit_sdk_v13  # noqa: E402
 from qua_sdk.integrations.shards import restamp_v12_shard  # noqa: E402
 
@@ -125,6 +126,7 @@ def migrate_tree(
     *,
     replace: bool = False,
     resume: bool = False,
+    chapter: int | None = None,
 ) -> dict:
     files = sorted(
         (path for path in source.rglob("*.json.br") if path.is_file()),
@@ -132,8 +134,11 @@ def migrate_tree(
         # equivalent readings from one chapter are migrated next to each other.
         key=lambda path: (int(path.name.removesuffix(".json.br")), str(path)),
     )
+    if chapter is not None:
+        files = [path for path in files if int(path.name.removesuffix(".json.br")) == chapter]
     if not files:
-        raise FileNotFoundError(f"no .json.br shards under {source}")
+        suffix = f" for chapter {chapter}" if chapter is not None else ""
+        raise FileNotFoundError(f"no .json.br shards under {source}{suffix}")
     totals = Counter(files=0, readings=0, tokens=0, v12_bytes=0, v13_bytes=0)
     chapters: Counter[int] = Counter()
     policies: Counter[str] = Counter()
@@ -143,10 +148,18 @@ def migrate_tree(
     sound_count_deltas: Counter[int] = Counter()
     sound_change_examples: list[dict] = []
     changed_cell_timing_readings = 0
+    active_chapter: int | None = None
     for file_number, path in enumerate(files, start=1):
         old = _load(path)
         if (old.get("_meta") or {}).get("schema_version") != 12:
             raise MigrationInvariantError(f"{path}: expected schema v12")
+        chapter = int(old["_meta"]["chapter"])
+        if active_chapter != chapter:
+            # All reciters for a chapter are adjacent. Retain those native
+            # projections across reciters, then release them before the next
+            # chapter so the full-corpus migration stays memory-bounded.
+            analyse_native.cache_clear()
+            active_chapter = chapter
         relative = path.relative_to(source)
         target = destination / relative
         if target.exists() and not (replace or resume):
@@ -187,7 +200,7 @@ def migrate_tree(
             for token in reading["render"]["a"]:
                 animation_texts.add(str(token[4]))
                 policies[_POLICIES[int(token[6])]] += 1
-        chapters[int(new["_meta"]["chapter"])] += 1
+        chapters[chapter] += 1
         if file_number % 25 == 0 or file_number == len(files):
             print(f"migrated {file_number}/{len(files)} shards", file=sys.stderr, flush=True)
     return {
@@ -219,6 +232,8 @@ def main() -> int:
     output_policy = parser.add_mutually_exclusive_group()
     output_policy.add_argument("--replace", action="store_true")
     output_policy.add_argument("--resume", action="store_true")
+    parser.add_argument("--chapter", type=int, choices=range(1, 115))
+    parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--report", type=Path)
     args = parser.parse_args()
     report = migrate_tree(
@@ -226,9 +241,11 @@ def main() -> int:
         args.destination,
         replace=args.replace,
         resume=args.resume,
+        chapter=args.chapter,
     )
     rendered = json.dumps(report, indent=2, sort_keys=True)
-    print(rendered)
+    if not args.quiet:
+        print(rendered)
     if args.report:
         args.report.parent.mkdir(parents=True, exist_ok=True)
         args.report.write_text(rendered + "\n", encoding="utf-8")

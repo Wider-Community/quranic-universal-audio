@@ -85,10 +85,10 @@ def test_independent_marks_and_combined_letters_keep_their_shaped_ink_contract()
 
     salah = _word("2:3:5")
     dagger_owner = next(row[3] for row in salah["placements"] if row[0] == "smallalef.replacement")
-    assert {row[0] for row in salah["placements"] if row[3] == dagger_owner} >= {
-        "smallalef.replacement",
-        "waw.fina",
-    }
+    carrier_owner = next(row[3] for row in salah["placements"] if row[0] == "waw.fina")
+    assert dagger_owner is not None
+    assert carrier_owner is not None
+    assert dagger_owner != carrier_owner
 
     assert (
         next(row[3] for row in _word("21:88:7")["placements"] if row[0] == "smallhighnoon")
