@@ -7,6 +7,10 @@ implementations MUST produce identical UIDs for the same
 
 Algorithm:
     uid = uuid5(NAMESPACE_INSPECTOR, f"{chapter}:{original_index}:{start_ms}")
+
+``original_index`` is the segment's position within its chapter, counted across
+every entry that shares the chapter in list order, so a chapter split over
+several entries never derives the same uid twice.
 """
 
 from __future__ import annotations
@@ -34,19 +38,19 @@ def derive_uid(chapter: int, original_index: int, start_ms: int) -> str:
     return str(uuid.uuid5(NAMESPACE_INSPECTOR, key))
 
 
-def backfill_entry_uids(entry: dict, chapter: int) -> None:
+def backfill_entry_uids(entry: dict, chapter: int, start_index: int = 0) -> None:
     """Mutate *entry* in place: assign ``segment_uid`` to any segment that lacks one.
 
-    Uses ``derive_uid(chapter, index, time_start)`` for each segment in
-    ``entry["segments"]`` that has no ``segment_uid`` set.  Segments that
-    already carry a uid are left untouched (MUST-4).
+    Uses ``derive_uid(chapter, start_index + position, time_start)`` for each
+    segment in ``entry["segments"]`` that has no ``segment_uid`` set.  Segments
+    that already carry a uid are left untouched (MUST-4).
     """
     for idx, seg in enumerate(entry.get("segments", [])):
         if seg.get("segment_uid"):
             continue
         seg["segment_uid"] = derive_uid(
             chapter=chapter,
-            original_index=idx,
+            original_index=start_index + idx,
             start_ms=int(seg.get("time_start", 0)),
         )
 
@@ -55,11 +59,16 @@ def backfill_entries_uids(entries: list[dict]) -> None:
     """Backfill uids across all entries in a detailed.json ``entries`` list.
 
     Chapter is parsed from ``entry["ref"]`` (e.g. ``"112"`` → 112).
-    Entries with non-integer refs are silently skipped.
+    Entries with non-integer refs are silently skipped.  The index runs on
+    per chapter across entries, so two entries with the same ref derive
+    distinct uids.
     """
+    next_index: dict[int, int] = {}
     for entry in entries:
         try:
             chapter = int(str(entry.get("ref", "0")).split(":")[0])
         except (ValueError, AttributeError):
             continue
-        backfill_entry_uids(entry, chapter)
+        start = next_index.get(chapter, 0)
+        backfill_entry_uids(entry, chapter, start)
+        next_index[chapter] = start + len(entry.get("segments", []))

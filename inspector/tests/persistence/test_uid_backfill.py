@@ -126,6 +126,47 @@ def test_uid_backfilled_for_legacy_fixture(tmp_reciter_dir):
         assert uid, "loader must backfill segment_uid for legacy fixtures"
 
 
+def test_uid_backfill_unique_across_split_chapter(tmp_reciter_dir):
+    """A chapter delivered as several uid-less entries derives one uid per segment.
+
+    The first entry's uids equal the single-entry derivation; later entries
+    continue the chapter index instead of restarting it, so segments that
+    share a ``time_start`` across entries never collide.
+    """
+    from domain.identity import derive_uid
+    from services.data_loader import load_detailed
+
+    reciter = "split_reciter"
+    path = tmp_reciter_dir.root / reciter / "detailed.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    def seg(start: int, verse: int) -> dict:
+        return {
+            "time_start": start,
+            "time_end": start + 1000,
+            "matched_ref": f"1:{verse}:1-1:{verse}:1",
+            "confidence": 1.0,
+        }
+
+    doc = {
+        "_meta": {"audio_source": "intake_ingest"},
+        "entries": [
+            {"ref": "1", "segments": [seg(300, 1), seg(2000, 2)]},
+            {"ref": "112", "segments": [seg(300, 1)]},
+            {"ref": "1", "segments": [seg(300, 3), seg(4000, 4)]},
+        ],
+    }
+    path.write_text(json.dumps(doc), encoding="utf-8")
+
+    entries = load_detailed(reciter)
+    uids = [s["segment_uid"] for e in entries for s in e["segments"]]
+    assert all(uids)
+    assert len(set(uids)) == len(uids)
+    assert entries[0]["segments"][0]["segment_uid"] == derive_uid(1, 0, 300)
+    assert entries[2]["segments"][0]["segment_uid"] == derive_uid(1, 2, 300)
+    assert entries[1]["segments"][0]["segment_uid"] == derive_uid(112, 0, 300)
+
+
 def test_uid_stable_across_load_save_load(tmp_reciter_dir, signed_in_client, load_fixture):
     """Load → save (without UIDs in payload) → load: UIDs persist (MUST-4).
 
