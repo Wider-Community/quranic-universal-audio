@@ -183,7 +183,9 @@ def _prior_release_members(conn: sqlite3.Connection) -> tuple[str | None, dict[s
 
 # ---------------------------------------------------------------------------
 # Tier-file projection — top-down (letter → word → verse).
-# Shared per-verse positions are byte-equal across tiers (CI assertion).
+# Every tier is an ordered occurrence timeline. V3 initially emits one
+# canonical occurrence per verse; later repeated/partial takes append rows
+# without changing the wire shape. Shared row prefixes are byte-equal.
 # ---------------------------------------------------------------------------
 
 
@@ -205,27 +207,24 @@ def _build_tier_files(
                "word_timestamps.json.gz":  bytes,
                "letter_timestamps.json.gz": bytes}``.
 
-    All times are source-relative milliseconds. ``layouts`` is the shared
-    ``build_verse_layouts`` output, so the per-verse bound is the padded clip
-    window ``[clip_start, clip_end]`` — IDENTICAL to the HF dataset's clip span
-    (a consumer slicing the source by this window gets the dataset's clip). The
-    words/letters are the same psil-filtered, byte-exact alignment the dataset
-    publishes; the GH release just keeps them source-relative and does not emit a
-    segment tier. Positional arrays for compactness; ``_meta`` describes layout.
+    All times are source-relative milliseconds. Occurrence ``start``/``end``
+    are the audible verse bounds; the verse tier additionally carries the gap
+    until the next occurrence as ``silence_after``. HF clip padding remains an
+    adapter concern and does not change this release timeline. The words/letters
+    are the same psil-filtered, byte-exact alignment the dataset publishes.
+    Positional arrays keep the public files compact; ``_meta`` describes layout.
     """
     sorted_keys = sorted(layouts.keys(), key=_verse_sort_key)
 
     letter_body: dict = {}
     word_body: dict = {}
-    verse_body: dict = {}
     for key in sorted_keys:
         layout = layouts[key]
         if not layout.get("words"):
             continue
-        # Verse bound = the padded clip window (consistent with the HF dataset),
-        # not the raw word-span. The true word-span is still recoverable from
-        # words[0].start / words[-1].end.
-        verse_pos = [int(layout["clip_start"]), int(layout["clip_end"])]
+        # Release occurrence bound = last-audible timeline span. The HF adapter
+        # separately uses the padded clip window from this same layout.
+        verse_pos = [int(layout["verse_start"]), int(layout["verse_end"])]
 
         word_array = [[int(w[0]), int(w[1]), int(w[2])] for w in layout["words"]]
         token_array = [
@@ -239,15 +238,36 @@ def _build_tier_files(
             for token in layout["tokens"]
         ]
 
-        verse_body[key] = verse_pos
-        word_body[key] = [verse_pos, word_array]
-        letter_body[key] = [verse_pos, layout["text"], word_array, token_array]
+        # The word row is the letter row's exact prefix. ``canonical`` is true
+        # because the current projection deliberately selects one complete take;
+        # all-occurrence projection can append false rows later.
+        word_row = [key, verse_pos[0], verse_pos[1], True, word_array]
+        word_body[key] = word_row
+        letter_body[key] = [*word_row, layout["text"], token_array]
+
+    # Verse-only silence after the occurrence. Chapter boundaries are separate
+    # audio timelines unless/until source duration is known, so their tail is 0.
+    emitted_keys = [key for key in sorted_keys if key in letter_body]
+    verse_rows: list[list] = []
+    for index, key in enumerate(emitted_keys):
+        _ref, start, end, canonical, _words, _text, _tokens = letter_body[key]
+        silence_after = 0
+        if index + 1 < len(emitted_keys):
+            next_key = emitted_keys[index + 1]
+            if next_key.split(":", 1)[0] == key.split(":", 1)[0]:
+                next_start = int(letter_body[next_key][1])
+                silence_after = max(0, next_start - int(end))
+        verse_rows.append([key, int(start), int(end), bool(canonical), silence_after])
+
+    word_rows = [word_body[key] for key in emitted_keys]
+    letter_rows = [letter_body[key] for key in emitted_keys]
 
     meta_common = {
         "schema_version": SCHEMA_VERSION,
         "slug": slug,
         "audio_category": delivery_meta.get("audio_category"),
-        "verse_count": len(verse_body),
+        "verse_count": len(verse_rows),
+        "occurrence_count": len(verse_rows),
         "script": DIGITAL_KHATT_SCRIPT_ID,
         "script_sha256": script_sha256,
         "unicode_indexing": UNICODE_INDEXING,
@@ -256,22 +276,29 @@ def _build_tier_files(
         "_meta": {
             **meta_common,
             "tier": "letter",
-            "layout": "[[start,end], text, words, tokens]; "
+            "layout": "rows=[[ref,start,end,canonical,words,text,tokens],...]; "
             "words=[[widx,start,end],...]; "
             "tokens=[[word_occurrence,start,end,owns_sound,paint],...]; "
             "paint=[[scalar_from,scalar_to],...]",
         },
-        **letter_body,
+        "rows": letter_rows,
     }
     word_doc = {
         "_meta": {
             **meta_common,
             "tier": "word",
-            "layout": "[[start,end], words]; words=[[widx,start,end],...]",
+            "layout": "rows=[[ref,start,end,canonical,words],...]; words=[[widx,start,end],...]",
         },
-        **word_body,
+        "rows": word_rows,
     }
-    verse_doc = {"_meta": {**meta_common, "tier": "verse", "layout": "[start,end]"}, **verse_body}
+    verse_doc = {
+        "_meta": {
+            **meta_common,
+            "tier": "verse",
+            "layout": "rows=[[ref,start,end,canonical,silence_after],...]",
+        },
+        "rows": verse_rows,
+    }
 
     VerseTimestampsDoc.model_validate(verse_doc)
     WordTimestampsDoc.model_validate(word_doc)
@@ -807,8 +834,9 @@ def main() -> int:
     job_id = os.environ.get("JOB_ID", "").strip() or "unknown"
     launched_by = os.environ.get("LAUNCHED_BY") or None
     version_override = os.environ.get("RELEASE_VERSION", "").strip() or None
-    # Clip-edge knobs — the SAME "Release settings" the HF publish reads, so the
-    # verse bounds the release ships match the dataset's clip windows.
+    # Clip-edge knobs remain shared with HF because layout construction and
+    # boundary validation use the same windows. Public GH rows expose the
+    # audible occurrence span and following silence separately.
     pads = pad_params_from_env()
 
     rc = _preflight()
@@ -887,10 +915,9 @@ def main() -> int:
                 dropped_incomplete,
             )
 
-        # Shared geometry: clip windows (padded, identical to the HF dataset's
-        # clip span) + byte-exact psil segments. The release publishes the verse/
-        # word/letter tiers from these; the dataset publishes the clip-relative
-        # view of the SAME layouts. One source of truth, no drift.
+        # Shared geometry: audible bounds, HF clip windows, and byte-exact psil
+        # segments are all derived once. Each adapter selects its public view of
+        # the SAME layout, so timing/token ownership cannot drift.
         layouts = build_verse_layouts(reshape_canonical(verses, digital_khatt_words), **pads)
 
         # Boundary validate the SAME invariants the dataset does, against the
@@ -921,7 +948,8 @@ def main() -> int:
                 validation_summary_total["by_kind"].get(k, 0) + c
             )
 
-        # Tier files (from the shared layouts: verse bound = padded clip window).
+        # Tier files: ordered canonical occurrence rows today, extensible with
+        # repeated/partial occurrence rows later without a wire-format change.
         tier_files = _build_tier_files(
             slug,
             layouts,

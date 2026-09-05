@@ -5,16 +5,16 @@ These models cover two surfaces:
 - public GitHub release assets produced by ``qua_jobs/cut_release.py``;
 - admin Releases-tab payloads code-generated to the Inspector frontend.
 
-Release files are consumer-facing, so artifact models use ``extra="forbid"``
-where keys are fixed. Timestamp tier docs use dynamic verse keys and validate
-those extra keys explicitly.
+Release files are consumer-facing, so artifact models use ``extra="forbid"``.
+Timestamp tiers use ordered occurrence rows: v3 initially emits one canonical
+row per verse, while the shape can later append repeated or partial takes.
 """
 
 from __future__ import annotations
 
 import re
 from enum import Enum
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel, model_serializer, model_validator
 
@@ -165,6 +165,7 @@ class TimestampMeta(BaseModel):
     slug: str
     audio_category: str | None = None
     verse_count: int = Field(..., ge=0)
+    occurrence_count: int = Field(..., ge=0)
     tier: TimestampTier
     layout: str
     script: Literal["digital_khatt_v2"]
@@ -173,59 +174,99 @@ class TimestampMeta(BaseModel):
 
 
 class _TimestampDoc(BaseModel):
-    model_config = ConfigDict(extra="allow", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     meta: TimestampMeta = Field(alias="_meta")
+    rows: list[list[Any]] = Field(default_factory=list)
+
+    expected_tier: ClassVar[TimestampTier]
 
     @model_validator(mode="after")
-    def _validate_verse_entries(self):
-        extras = self.model_extra or {}
-        for key, value in extras.items():
-            if key.startswith("_"):
-                continue
-            if not VERSE_KEY_RE.match(key):
-                raise ValueError(f"invalid verse key: {key!r}")
-            self._validate_value(value)
+    def _validate_rows(self):
+        if self.meta.tier != self.expected_tier:
+            raise ValueError(f"expected {self.expected_tier!r} tier, got {self.meta.tier!r}")
+        refs: set[str] = set()
+        canonical_by_ref: dict[str, int] = {}
+        for row in self.rows:
+            ref, canonical = self._validate_row(row)
+            refs.add(ref)
+            canonical_by_ref[ref] = canonical_by_ref.get(ref, 0) + int(canonical)
+        if self.meta.verse_count != len(refs):
+            raise ValueError("verse_count differs from unique occurrence refs")
+        if self.meta.occurrence_count != len(self.rows):
+            raise ValueError("occurrence_count differs from rows length")
+        if any(count != 1 for count in canonical_by_ref.values()):
+            raise ValueError("each verse ref must have exactly one canonical occurrence")
         return self
 
-    def _validate_value(self, value: Any) -> None:
+    def _validate_row(self, row: Any) -> tuple[str, bool]:
         raise NotImplementedError
 
 
 class VerseTimestampsDoc(_TimestampDoc):
-    def _validate_value(self, value: Any) -> None:
-        if not _is_ms_pair(value):
-            raise ValueError("verse timestamp must be [start_ms, end_ms]")
+    expected_tier: ClassVar[TimestampTier] = "verse"
+
+    def _validate_row(self, row: Any) -> tuple[str, bool]:
+        if not (
+            isinstance(row, list)
+            and len(row) == 5
+            and _is_ref(row[0])
+            and _is_int(row[1])
+            and _is_int(row[2])
+            and row[2] >= row[1]
+            and isinstance(row[3], bool)
+            and _is_int(row[4])
+            and row[4] >= 0
+        ):
+            raise ValueError(
+                "verse occurrence must be [ref,start_ms,end_ms,canonical,silence_after_ms]"
+            )
+        return row[0], row[3]
 
 
 class WordTimestampsDoc(_TimestampDoc):
-    def _validate_value(self, value: Any) -> None:
+    expected_tier: ClassVar[TimestampTier] = "word"
+
+    def _validate_row(self, row: Any) -> tuple[str, bool]:
         if not (
-            isinstance(value, list)
-            and len(value) == 2
-            and _is_ms_pair(value[0])
-            and isinstance(value[1], list)
-            and all(_is_word(w) for w in value[1])
+            isinstance(row, list)
+            and len(row) == 5
+            and _is_ref(row[0])
+            and _is_int(row[1])
+            and _is_int(row[2])
+            and row[2] >= row[1]
+            and isinstance(row[3], bool)
+            and isinstance(row[4], list)
+            and all(_is_word(w) for w in row[4])
         ):
-            raise ValueError("word timestamp must be [[start_ms,end_ms], words]")
+            raise ValueError("word occurrence must be [ref,start_ms,end_ms,canonical,words]")
+        return row[0], row[3]
 
 
 class LetterTimestampsDoc(_TimestampDoc):
-    def _validate_value(self, value: Any) -> None:
+    expected_tier: ClassVar[TimestampTier] = "letter"
+
+    def _validate_row(self, row: Any) -> tuple[str, bool]:
         valid_shape = (
-            isinstance(value, list)
-            and len(value) == 4
-            and _is_ms_pair(value[0])
-            and isinstance(value[1], str)
-            and isinstance(value[2], list)
-            and all(_is_word(w) for w in value[2])
-            and isinstance(value[3], list)
-            and all(_is_token(token, len(value[2]), len(value[1])) for token in value[3])
+            isinstance(row, list)
+            and len(row) == 7
+            and _is_ref(row[0])
+            and _is_int(row[1])
+            and _is_int(row[2])
+            and row[2] >= row[1]
+            and isinstance(row[3], bool)
+            and isinstance(row[4], list)
+            and all(_is_word(w) for w in row[4])
+            and isinstance(row[5], str)
+            and isinstance(row[6], list)
+            and all(_is_token(token, len(row[4]), len(row[5])) for token in row[6])
         )
         if not valid_shape:
-            raise ValueError("letter timestamp must be [[start_ms,end_ms], text, words, tokens]")
-        word_texts = value[1].split(" ") if value[1] else []
-        if len(word_texts) != len(value[2]):
+            raise ValueError(
+                "letter occurrence must be [ref,start_ms,end_ms,canonical,words,text,tokens]"
+            )
+        word_texts = row[5].split(" ") if row[5] else []
+        if len(word_texts) != len(row[4]):
             raise ValueError("DigitalKhatt word count differs from timing occurrences")
         word_ranges: list[tuple[int, int]] = []
         cursor = 0
@@ -233,7 +274,7 @@ class LetterTimestampsDoc(_TimestampDoc):
             word_ranges.append((cursor, cursor + len(text)))
             cursor += len(text) + 1
         painted: set[int] = set()
-        for token in value[3]:
+        for token in row[6]:
             if token[2] < token[1]:
                 raise ValueError("animation token end precedes start")
             word_from, word_to = word_ranges[token[0]]
@@ -244,6 +285,7 @@ class LetterTimestampsDoc(_TimestampDoc):
                 if painted & scalars:
                     raise ValueError("animation paint ranges overlap")
                 painted |= scalars
+        return row[0], row[3]
 
 
 class DigitalKhattWord(BaseModel):
@@ -272,8 +314,8 @@ def _is_int(v: Any) -> bool:
     return isinstance(v, int) and not isinstance(v, bool)
 
 
-def _is_ms_pair(v: Any) -> bool:
-    return isinstance(v, list) and len(v) == 2 and _is_int(v[0]) and _is_int(v[1])
+def _is_ref(v: Any) -> bool:
+    return isinstance(v, str) and bool(VERSE_KEY_RE.fullmatch(v))
 
 
 def _is_word(v: Any) -> bool:

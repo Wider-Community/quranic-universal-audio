@@ -2,14 +2,12 @@
 ``verse_start_ms == 0`` and keep its three fields consistent.
 
 A canonical verse can legitimately start at 0 ms while its first word's audio
-starts a few ms later (leading gap). The bounds the cut validates are now the
-shared layout's clip window (``build_verse_layouts``), and ``_verse_for_validate``
+starts a few ms later (leading gap). The bounds the cut validates are the shared
+layout's HF clip window (``build_verse_layouts``), and ``_verse_for_validate``
 derives ``duration_ms`` from those same bounds — so the three fields always
 agree (no phantom ``duration_arithmetic``, which once aborted the cut on
-``abu_bakr_al_shatri_tarteel`` 5:1). These tests run with zero pads so the clip
-window equals the word-span, isolating the consistency invariant. The release's
-tier bounds + letter mapping also come from the shared layout, so the GH release
-and the HF dataset reconstruct the same geometry.
+``abu_bakr_al_shatri_tarteel`` 5:1). GH occurrence bounds and HF clip bounds are
+different public views derived from the same underlying layout.
 """
 
 from __future__ import annotations
@@ -131,8 +129,7 @@ def test_release_timestamp_tiers_preserve_verse_order():
         "letter_timestamps.json.gz",
     ):
         doc = json.loads(gzip.decompress(files[name]).decode("utf-8"))
-        keys = [key for key in doc if key != "_meta"]
-        assert keys == ["1:1", "2:1", "10:1", "100:1"]
+        assert [row[0] for row in doc["rows"]] == ["1:1", "2:1", "10:1", "100:1"]
 
 
 def test_letter_tier_keeps_digital_khatt_text_and_scalar_paint_ranges():
@@ -156,8 +153,9 @@ def test_letter_tier_keeps_digital_khatt_text_and_scalar_paint_ranges():
     }
     files = _tiers(verses)
     doc = json.loads(gzip.decompress(files["letter_timestamps.json.gz"]).decode("utf-8"))
-    assert doc["19:1"][1] == "كٓهيعٓصٓ"
-    tokens = doc["19:1"][3]
+    row = doc["rows"][0]
+    assert row[5] == "كٓهيعٓصٓ"
+    tokens = row[6]
     assert tokens[0] == [0, 0, 100, True, [[0, 2]]]
     assert tokens[-1] == [0, 400, 500, True, [[6, 8]]]
 
@@ -165,14 +163,14 @@ def test_letter_tier_keeps_digital_khatt_text_and_scalar_paint_ranges():
 def test_letter_tier_preserves_combining_marks_without_a_vocab():
     verses = {"1:1": {"words": [[1, 0, 100, [["بَ", 0, 100]]]]}}
     doc = json.loads(gzip.decompress(_tiers(verses)["letter_timestamps.json.gz"]))
-    assert doc["1:1"][1] == "بَ"
-    assert doc["1:1"][3] == [[0, 0, 100, True, [[0, 2]]]]
+    assert doc["rows"][0][5] == "بَ"
+    assert doc["rows"][0][6] == [[0, 0, 100, True, [[0, 2]]]]
 
 
-def test_release_verse_bound_is_padded_clip_window():
-    # Consistency with the HF dataset: the release verse bound is the padded clip
-    # window [clip_start, clip_end], NOT the raw word-span. With a trailing
-    # neighbour the gap is ample, so the first verse takes the full pad_end tail.
+def test_release_verse_bound_is_audible_span_not_hf_clip_window():
+    # The GH occurrence timeline uses last-audible bounds and exposes following
+    # silence separately. HF remains free to cut its padded clip from the shared
+    # layout without changing this public release contract.
     verses = {
         "1:1": {"words": [[1, 100, 1000]], "verse_start_ms": 100, "verse_end_ms": 1000},
         "1:2": {"words": [[1, 5000, 6000]], "verse_start_ms": 5000, "verse_end_ms": 6000},
@@ -196,14 +194,29 @@ def test_release_verse_bound_is_padded_clip_window():
         script_sha256="0" * 64,
     )
     verse_doc = json.loads(gzip.decompress(files["verse_timestamps.json.gz"]).decode("utf-8"))
-    assert verse_doc["1:1"] == [
-        0,
-        1300,
-    ]  # clip window (word-span 100..1000 padded), not [100, 1000]
-    # The word tier keeps the true word times (source-relative), so the word-span
-    # is still recoverable from inside the padded clip.
+    assert verse_doc["rows"][0] == ["1:1", 100, 1000, True, 4000]
+    # The word tier keeps the true source-relative word times.
     word_doc = json.loads(gzip.decompress(files["word_timestamps.json.gz"]).decode("utf-8"))
-    assert word_doc["1:1"][1] == [[1, 100, 1000]]
+    assert word_doc["rows"][0][4] == [[1, 100, 1000]]
+
+
+def test_release_tiers_share_occurrence_prefix_and_compute_silence_after():
+    verses = {
+        "1:1": {"words": [[1, 100, 1000]], "verse_start_ms": 100, "verse_end_ms": 1000},
+        "1:2": {"words": [[1, 1500, 2000]], "verse_start_ms": 1500, "verse_end_ms": 2000},
+        "2:1": {"words": [[1, 0, 500]], "verse_start_ms": 0, "verse_end_ms": 500},
+    }
+    files = _tiers(verses)
+    verse = json.loads(gzip.decompress(files["verse_timestamps.json.gz"]))
+    word = json.loads(gzip.decompress(files["word_timestamps.json.gz"]))
+    letter = json.loads(gzip.decompress(files["letter_timestamps.json.gz"]))
+
+    assert word["rows"][0] == letter["rows"][0][:5]
+    assert verse["rows"] == [
+        ["1:1", 100, 1000, True, 500],
+        ["1:2", 1500, 2000, True, 0],
+        ["2:1", 0, 500, True, 0],
+    ]
 
 
 # ---------------------------------------------------------------------------

@@ -225,9 +225,9 @@ def build_rows(
     """
     chapter_urls = chapter_urls or {}
     chapter_offsets = chapter_offsets or {}
-    # Shared geometry: clip windows + byte-exact segments + words/letters, all
-    # source-relative. The GH release builds verse bounds from the SAME layouts,
-    # so the two channels agree by construction (qua_shared/verse_layout.py).
+    # Shared geometry: audible bounds, clip windows, byte-exact segments, and
+    # words/letters are all source-relative. HF publishes the padded clip view;
+    # GH publishes the audible occurrence view from this SAME layout.
     layouts = build_verse_layouts(
         timestamps,
         pad_start=pad_start,

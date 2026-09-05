@@ -26,13 +26,12 @@ running + historical, in one place: the **Jobs** tab — [admin-dashboard.md](ad
 
 Every adapter starts from the same bucket inputs. A native v13 chapter stores every recorded
 occasion as connected readings and ordered `parts` (see [shards.md](shards.md) and
-[timestamps-job.md](timestamps-job.md)); the single canonical take per verse is a pure timing
-projection (`qua_shared.timestamps_native.select_complete_verses`).
-Both release adapters call that one projection, so the TS-tab read path and the release/dataset
-adapters cannot drift at the dedup layer. The shared loader runs the strict v13
+[timestamps-job.md](timestamps-job.md)). V3 GitHub tiers use an occurrence-capable ordered-row
+envelope but initially emit the single canonical take per verse; HF remains one row per canonical
+ayah. Both are pure projections of the same native readings, so the TS-tab read path and the
+release/dataset adapters cannot drift at the identity layer. The shared loader runs the strict v13
 identity-closure audit before projection; malformed or mixed-version bucket shards block both
-adapters. Public schema 2 projects the producer's animation ownership onto exact DigitalKhatt V2
-text for both GitHub and HF.
+adapters. Public schema 2 projects the producer's animation ownership onto exact DigitalKhatt V2.
 
 ## Release ledger (SQLite — migration `0014_releases.sql`)
 
@@ -162,9 +161,9 @@ gh:releases/v{X.Y.Z}/
 Each `<slug>.zip` contains:
 
 ```
-verse_timestamps.json.gz   # tier 1: "surah:ayah": [start_ms, end_ms]
-word_timestamps.json.gz    # tier 2: + [[widx, start, end], ...]
-letter_timestamps.json.gz  # tier 3: exact DK text + timed scalar paint ranges
+verse_timestamps.json.gz   # tier 1: ordered occurrence rows + following silence
+word_timestamps.json.gz    # tier 2: verse-row prefix + words
+letter_timestamps.json.gz  # tier 3: word-row prefix + exact DK text + paint tokens
 catalog.json               # this reciter's catalog projection (carries audio chapter_urls)
 ```
 
@@ -173,17 +172,21 @@ per-zip `sha256`, and the in-zip `catalog.json` already self-identifies the reci
 the release-level `manifest.json` exists.
 
 Each tier self-contains the level below; all times are relative to the matching source audio in
-`catalog.json`; all ship the canonical (deduplicated) take. The three `.json.gz` layers keep storage,
-startup speed, and network transfer cheap: download verse, word, or letter detail independently.
+`catalog.json`. Rows are ordered occurrences and exactly one row per verse ref is marked canonical.
+V3 initially emits only that canonical row; later repeated and partial takes can be appended without
+changing the format. The three `.json.gz` layers keep storage, startup speed, and network transfer
+cheap: download verse, word, or letter detail independently.
 Use `shard.py` when an app prefers local per-surah files. There is no per-reciter `README.md`.
 
-**Letter-tier animation tokens.** Public tokens are producer-attributed timed paint units, not a
-character alphabet. Each verse carries its exact DigitalKhatt V2 text. A token contains its
+**Letter-tier animation tokens.** A letter occurrence row is exactly its corresponding word row
+plus `text` and `tokens`. Public tokens are producer-attributed timed paint units, not a character
+alphabet. Each occurrence carries its exact DigitalKhatt V2 text. A token contains its
 zero-based `word_occurrence`, resolved start/end, `owns_sound`, and one or more half-open Unicode
 scalar paint ranges into that text. The occurrence pointer disambiguates repeated word indices;
 the ownership boolean supports silent-omit highlighting. Ordinary combining marks travel with
 their attributed unit, while independently sounded marks can have their own range. Display-only
-stop signs remain visible in the text but have no timed paint owner.
+stop signs remain visible in the text but have no timed paint owner. The occurrence envelope is
+independent of this token representation: adding noncanonical takes does not change token shape.
 
 There is no letter-vocabulary asset. Consumers do not align QPC tokens against another Quran text,
 and the jobs do not strip Unicode marks into a closed alphabet. Both adapters use

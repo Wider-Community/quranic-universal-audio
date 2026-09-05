@@ -85,63 +85,75 @@ type AnimationToken = [
   paint: ScalarRange[],
 ];
 
-type VerseTimestamps = { _meta: Meta & { tier: "verse" }, [verse: VerseKey]: [Ms, Ms] };
-type WordTimestamps = { _meta: Meta & { tier: "word" }, [verse: VerseKey]: [[Ms, Ms], Word[]] };
+type VerseOccurrence = [
+  ref: VerseKey, start_ms: Ms, end_ms: Ms, canonical: boolean, silence_after_ms: Ms
+];
+type WordOccurrence = [
+  ref: VerseKey, start_ms: Ms, end_ms: Ms, canonical: boolean, words: Word[]
+];
+type LetterOccurrence = [
+  ...word: WordOccurrence,
+  text: string,
+  tokens: AnimationToken[],
+];
+
+type VerseTimestamps = { _meta: Meta & { tier: "verse" }, rows: VerseOccurrence[] };
+type WordTimestamps = { _meta: Meta & { tier: "word" }, rows: WordOccurrence[] };
 type LetterTimestamps = {
   _meta: Meta & { tier: "letter", script: "digital_khatt_v2", unicode_indexing: "scalar" },
-  [verse: VerseKey]: [[Ms, Ms], text: string, Word[], AnimationToken[]]
+  rows: LetterOccurrence[]
 };
 ```
 
-The three tiers describe the **same** verse at increasing detail: each tier embeds the one above it, and every number is milliseconds from the start of the source audio.
+The three tiers describe the same ordered occurrences at increasing detail. `WordOccurrence` shares the verse occurrence prefix through `canonical`; `LetterOccurrence` is exactly `WordOccurrence + [text, tokens]`. Every number is milliseconds from the start of the source audio. V3 initially contains one `canonical: true` row per verse; later releases may append repeated or partial rows with `canonical: false` without changing this schema.
 
-**Verse tier** — just the verse span (`[start_ms, end_ms]`):
+**Verse tier** — audible occurrence spans plus the gap until the next occurrence in the same chapter timeline:
 
 ```jsonc
 {
-  "_meta": { "schema_version": 2, "slug": "example_reciter", "tier": "verse", "verse_count": 6236, "script": "digital_khatt_v2", "script_sha256": "…", "unicode_indexing": "scalar" },
-  // "surah:ayah": [verse_start_ms, verse_end_ms]
-  "1:1": [0, 2831]
+  "_meta": { "schema_version": 2, "slug": "example_reciter", "tier": "verse", "verse_count": 6236, "occurrence_count": 6236, "script": "digital_khatt_v2", "script_sha256": "…", "unicode_indexing": "scalar" },
+  "rows": [
+    // [ref, start_ms, end_ms, canonical, silence_after_ms]
+    ["1:1", 70, 2790, true, 41]
+  ]
 }
 ```
 
-**Word tier** — the verse span, then one `[word_idx, start_ms, end_ms]` per recited word:
+**Word tier** — the same occurrence prefix, then one `[word_idx, start_ms, end_ms]` per recited word:
 
 ```jsonc
 {
-  "_meta": { "schema_version": 2, "slug": "example_reciter", "tier": "word", "verse_count": 6236, "script": "digital_khatt_v2", "script_sha256": "…", "unicode_indexing": "scalar" },
-  // "surah:ayah": [ [verse_start_ms, verse_end_ms], [ [word_idx, start_ms, end_ms], ... ] ]
-  "1:1": [
-    [0, 2831],
+  "_meta": { "schema_version": 2, "slug": "example_reciter", "tier": "word", "verse_count": 6236, "occurrence_count": 6236, "script": "digital_khatt_v2", "script_sha256": "…", "unicode_indexing": "scalar" },
+  "rows": [[
+    "1:1", 70, 2790, true,
     [
       [1,   70,  770],   // بِسْمِ
       [2,  770, 1280],   // ٱللَّهِ
       [3, 1280, 2050],   // ٱلرَّحْمَٰنِ
       [4, 2050, 2790]    // ٱلرَّحِيمِ
     ]
-  ]
+  ]]
 }
 ```
 
 `word_idx` is 1-based within the verse. When a reciter loops back or re-recites part of a verse, `word_idx` can repeat or step backwards.
 
-**Letter tier** — exact DigitalKhatt text plus a flat list of timed paint units. `word_occurrence` is a zero-based position in the adjacent `words` array, so repeated `word_idx` values stay unambiguous. `paint` contains half-open Unicode-scalar ranges into the verse `text`:
+**Letter tier** — the complete word row followed by exact DigitalKhatt text and a flat list of timed paint units. `word_occurrence` is a zero-based position in the adjacent `words` array, so repeated `word_idx` values stay unambiguous. `paint` contains half-open Unicode-scalar ranges into that occurrence's `text`:
 
 ```jsonc
 {
-  "_meta": { "schema_version": 2, "slug": "example_reciter", "tier": "letter", "verse_count": 6236, "script": "digital_khatt_v2", "script_sha256": "…", "unicode_indexing": "scalar" },
-  // "surah:ayah": [ [verse_start, verse_end], text, words[], tokens[] ]
-  "1:1": [
-    [0, 2831],
-    "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ",
+  "_meta": { "schema_version": 2, "slug": "example_reciter", "tier": "letter", "verse_count": 6236, "occurrence_count": 6236, "script": "digital_khatt_v2", "script_sha256": "…", "unicode_indexing": "scalar" },
+  "rows": [[
+    "1:1", 70, 2790, true,
     [ [1, 70, 770], [2, 770, 1280], [3, 1280, 2050], [4, 2050, 2790] ],
+    "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ",
     [
       [0,  70, 300, true, [[0, 2]]],
       [0, 300, 560, true, [[2, 4]]],
       [0, 560, 770, true, [[4, 6]]]
       // ... remaining timed paint units
     ]
-  ]
+  ]]
 }
 ```
 
