@@ -223,7 +223,7 @@ def _start_vite(env: dict[str, str], port: int, backend_port: int) -> subprocess
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    p = argparse.ArgumentParser(description=(__doc__ or "").split("\n\n")[0])
     p.add_argument("--root", required=True, type=Path, help="bucket-shaped directory")
     p.add_argument("--slug", required=True, help="reciter slug under <root>/reciters/")
     p.add_argument("--name", default=None, help="display name (default: from slug)")
