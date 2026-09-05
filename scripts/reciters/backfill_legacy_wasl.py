@@ -42,13 +42,20 @@ BATCH_TYPE = "wasl_backfill"
 def consecutive(left_ref: str, right_ref: str) -> bool:
     _, last = _vparts(left_ref)
     first, _ = _vparts(right_ref)
-    return bool(last and first) and first[0] == last[0] and first[1] == last[1] + 1
+    if last is None or first is None:
+        return False
+    return first[0] == last[0] and first[1] == last[1] + 1
 
 
 def select(detailed: dict, history_lines: list[str], sidecar: dict) -> list[dict]:
     """Boundaries to mark: unannotated cross-verse splits the arms bridge with a short gap."""
     uid_wasl, split_boundary = replay_is_wasl(history_lines)
-    segs = {s["segment_uid"]: s for e in detailed.get("entries", []) for s in e.get("segments", []) if s.get("segment_uid")}
+    segs = {
+        s["segment_uid"]: s
+        for e in detailed.get("entries", [])
+        for s in e.get("segments", [])
+        if s.get("segment_uid")
+    }
     rows = []
     for uid, hit in sidecar.get("by_uid", {}).items():
         seg = segs.get(uid)
@@ -58,16 +65,29 @@ def select(detailed: dict, history_lines: list[str], sidecar: dict) -> list[dict
             continue
         if not consecutive(hit["ref_before"], hit["ref_after"]):
             continue
-        rows.append({"uid": uid, "chapter": hit["chapter"], "gap_ms": hit["gap_ms"],
-                     "junction": f"{hit['ref_before']} → {hit['ref_after']}", "seg": seg})
+        rows.append(
+            {
+                "uid": uid,
+                "chapter": hit["chapter"],
+                "gap_ms": hit["gap_ms"],
+                "junction": f"{hit['ref_before']} → {hit['ref_after']}",
+                "seg": seg,
+            }
+        )
     return rows
 
 
 def snapshot(seg: dict, chapter: int, index: int) -> dict:
-    return {"segment_uid": seg["segment_uid"], "index_at_save": index, "audio_url": None,
-            "time_start": seg["time_start"], "time_end": seg["time_end"],
-            "matched_ref": seg.get("matched_ref", ""), "confidence": seg.get("confidence", 0),
-            "chapter": chapter}
+    return {
+        "segment_uid": seg["segment_uid"],
+        "index_at_save": index,
+        "audio_url": None,
+        "time_start": seg["time_start"],
+        "time_end": seg["time_end"],
+        "matched_ref": seg.get("matched_ref", ""),
+        "confidence": seg.get("confidence", 0),
+        "chapter": chapter,
+    }
 
 
 def apply(detailed: dict, rows: list[dict], reason: str) -> dict:
@@ -82,24 +102,48 @@ def apply(detailed: dict, rows: list[dict], reason: str) -> dict:
         seg, chapter, index = row["seg"], row["chapter"], index_of[row["uid"]]
         before = snapshot(seg, chapter, index)
         seg["is_wasl"] = True
-        ops.append({"op_id": str(uuid4()), "op_type": "set_is_wasl", "fix_kind": "auto_fix",
-                    "op_context_category": "false_split", "targets_before": [before],
-                    "targets_after": [{**snapshot(seg, chapter, index), "is_wasl": True}],
-                    "patch": {"before": [before], "after": [{**snapshot(seg, chapter, index), "is_wasl": True}]},
-                    "command": {"type": "set_is_wasl", "segment_uid": row["uid"], "is_wasl": True,
-                                "reason": reason}})
-    return {"schema_version": 1, "batch_id": str(uuid4()),
-            "saved_at_utc": datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
-            "chapters": sorted({r["chapter"] for r in rows}), "batch_type": BATCH_TYPE,
-            "operations": ops}
+        ops.append(
+            {
+                "op_id": str(uuid4()),
+                "op_type": "set_is_wasl",
+                "fix_kind": "auto_fix",
+                "op_context_category": "false_split",
+                "targets_before": [before],
+                "targets_after": [{**snapshot(seg, chapter, index), "is_wasl": True}],
+                "patch": {
+                    "before": [before],
+                    "after": [{**snapshot(seg, chapter, index), "is_wasl": True}],
+                },
+                "command": {
+                    "type": "set_is_wasl",
+                    "segment_uid": row["uid"],
+                    "is_wasl": True,
+                    "reason": reason,
+                },
+            }
+        )
+    return {
+        "schema_version": 1,
+        "batch_id": str(uuid4()),
+        "saved_at_utc": datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+        "chapters": sorted({r["chapter"] for r in rows}),
+        "batch_type": BATCH_TYPE,
+        "operations": ops,
+    }
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     p.add_argument("--reciter", required=True, help="reciter slug (exact)")
-    p.add_argument("--sidecar", required=True, help="unmarked_wasl_v1.json from the boundary review")
+    p.add_argument(
+        "--sidecar", required=True, help="unmarked_wasl_v1.json from the boundary review"
+    )
     p.add_argument("--apply", action="store_true", help="write to the bucket (default: dry run)")
-    p.add_argument("--backup-dir", default=".local/wasl_backfill", help="where the pre-write files go")
+    p.add_argument(
+        "--backup-dir", default=".local/wasl_backfill", help="where the pre-write files go"
+    )
     bs.add_bucket_args(p)
     a = p.parse_args()
     if a.apply:
@@ -113,7 +157,9 @@ def main() -> int:
     sidecar = json.loads(Path(a.sidecar).read_text(encoding="utf-8"))
 
     rows = select(detailed, history_raw.decode("utf-8", "replace").splitlines(), sidecar)
-    print(f"{a.reciter}: {len(rows)} boundary(ies) to mark waṣl of {len(sidecar.get('by_uid', {}))} bridged")
+    print(
+        f"{a.reciter}: {len(rows)} boundary(ies) to mark waṣl of {len(sidecar.get('by_uid', {}))} bridged"
+    )
     for r in rows:
         print(f"  {r['chapter']:>3}  gap {r['gap_ms']:>4} ms  {r['junction']}")
     if not rows or not a.apply:
@@ -124,15 +170,26 @@ def main() -> int:
     (backup / "detailed.json").write_bytes(detailed_raw)
     (backup / "edit_history.jsonl").write_bytes(history_raw)
 
-    batch = apply(detailed, rows, reason=f"legacy cross-verse split bridged by {sorted(REQUIRED_AXES)}, gap <= {MAX_GAP_MS} ms")
+    batch = apply(
+        detailed,
+        rows,
+        reason=f"legacy cross-verse split bridged by {sorted(REQUIRED_AXES)}, gap <= {MAX_GAP_MS} ms",
+    )
     EditHistoryBatch.model_validate(batch)  # the Inspector's history reader must parse it
     import orjson  # the Inspector's own serialiser, so the file keeps its shape
 
-    history_out = history_raw if history_raw.endswith(b"\n") or not history_raw else history_raw + b"\n"
-    bs.batch_write(bucket, {
-        f"reciters/{a.reciter}/detailed.json": orjson.dumps(detailed, option=orjson.OPT_INDENT_2),
-        f"reciters/{a.reciter}/edit_history.jsonl": history_out + orjson.dumps(batch) + b"\n",
-    })
+    history_out = (
+        history_raw if history_raw.endswith(b"\n") or not history_raw else history_raw + b"\n"
+    )
+    bs.batch_write(
+        bucket,
+        {
+            f"reciters/{a.reciter}/detailed.json": orjson.dumps(
+                detailed, option=orjson.OPT_INDENT_2
+            ),
+            f"reciters/{a.reciter}/edit_history.jsonl": history_out + orjson.dumps(batch) + b"\n",
+        },
+    )
     print(f"wrote {len(rows)} is_wasl mark(s); backup in {backup}")
     return 0
 

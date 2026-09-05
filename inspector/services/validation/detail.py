@@ -457,7 +457,7 @@ def _build_detail_lists(
                         "seg_index": i,
                         "segment_uid": seg_uid,
                         "classified_issues": classified,
-                        "boundary": hidden_pause_boundary((hidden_pause_map or {})[seg_uid]),
+                        "boundary": hidden_pause_boundary((hidden_pause_map or {})[str(seg_uid)]),
                     }
                 )
 
@@ -469,7 +469,7 @@ def _build_detail_lists(
                         "seg_index": i,
                         "segment_uid": seg_uid,
                         "classified_issues": classified,
-                        "boundary": false_split_boundary((false_split_map or {})[seg_uid]),
+                        "boundary": false_split_boundary((false_split_map or {})[str(seg_uid)]),
                     }
                 )
 
@@ -481,7 +481,7 @@ def _build_detail_lists(
                         "seg_index": i,
                         "segment_uid": seg_uid,
                         "classified_issues": classified,
-                        "boundary": false_split_boundary((unmarked_wasl_map or {})[seg_uid]),
+                        "boundary": false_split_boundary((unmarked_wasl_map or {})[str(seg_uid)]),
                     }
                 )
 

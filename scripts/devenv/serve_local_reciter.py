@@ -101,6 +101,7 @@ def _chapters_in_detailed(reciter_dir: Path) -> list[int]:
 
 def _seed_catalog(slug: str, name: str, chapter_count: int) -> None:
     from qua_shared.schemas import Channel, Delivery, ReciterEntry, Riwayah, Source, Style, Vocab
+    from qua_shared.schemas.bucket.catalog import AudioCategory
     from services.db import repo_catalog
     from services.db import sync as _sync
 
@@ -113,7 +114,9 @@ def _seed_catalog(slug: str, name: str, chapter_count: int) -> None:
     vocab = Vocab(
         riwayat=[Riwayah(slug=riwayah[0], short=riwayah[1], name=riwayah[2])],
         styles=[Style(slug=style[0], short=style[1], name=style[2])],
-        sources=[Source(slug=source[0], name=source[1], audio_categories=["by_surah"])],
+        sources=[
+            Source(slug=source[0], name=source[1], audio_categories=[AudioCategory("by_surah")])
+        ],
         channels=[Channel(slug=channel[0], short=channel[1], name=channel[2])],
     )
     with _sync.durable_transaction():
@@ -130,7 +133,7 @@ def _seed_catalog(slug: str, name: str, chapter_count: int) -> None:
                     style=style[0],
                     source=source[0],
                     channel=channel[0],
-                    audio_category="by_surah",
+                    audio_category=AudioCategory("by_surah"),
                     chapter_count=chapter_count,
                     added_at=datetime.now(UTC),
                     added_by_hf_id="serve_local_reciter",
