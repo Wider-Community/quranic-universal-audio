@@ -3,7 +3,8 @@
 All data is loaded once and cached via ``services.cache``. Functions here never
 import Flask -- they return plain dicts/lists.
 
-Per-reciter reads (``load_seg_verses``, ``load_detailed``, ``load_probe_v2``)
+Per-reciter reads (``load_seg_verses``, ``load_detailed``, ``load_probe_v2``,
+``load_hidden_pause``, ``load_false_split``, ``load_unmarked_wasl``)
 go through the storage backend via ``services.data_dir`` — no direct
 filesystem access to ``RECITATION_SEGMENTS_PATH``. Static reference data
 (qpc_hafs, surah_info, digital_khatt) still lives in the image at
@@ -252,6 +253,63 @@ def load_auto_split(reciter: str) -> tuple[dict[str, dict], dict | None]:
     result = (by_uid, meta)
     cache.set_seg_auto_split(reciter, result)
     return result
+
+
+def _load_by_uid_sidecar(
+    reciter: str,
+    read_doc,
+    get_cached,
+    set_cached,
+) -> tuple[dict[str, dict], dict | None]:
+    """Shared ``{"_meta", "by_uid"}`` sidecar loader with the per-reciter cache
+    pattern. Absent sidecar → ``({}, None)``, cached so lookups don't re-stat."""
+    cached = get_cached(reciter)
+    if cached is not None:
+        return cached
+    doc = read_doc(reciter)
+    by_uid = doc.get("by_uid") if doc else None
+    meta = doc.get("_meta") if doc else None
+    result: tuple[dict[str, dict], dict | None] = (
+        by_uid if isinstance(by_uid, dict) else {},
+        meta if isinstance(meta, dict) else None,
+    )
+    set_cached(reciter, result)
+    return result
+
+
+def load_hidden_pause(reciter: str) -> tuple[dict[str, dict], dict | None]:
+    """Load ``hidden_pause_v1.json`` — offline re-segmentation cuts inside a
+    segment, keyed by ``segment_uid``. Never written by the Inspector."""
+    return _load_by_uid_sidecar(
+        reciter,
+        data_dir.read_hidden_pause_doc,
+        cache.get_seg_hidden_pause,
+        cache.set_seg_hidden_pause,
+    )
+
+
+def load_false_split(reciter: str) -> tuple[dict[str, dict], dict | None]:
+    """Load ``false_split_v1.json`` — offline evidence of continuous speech
+    across a segment's end, keyed by ``segment_uid``. Never written by the
+    Inspector."""
+    return _load_by_uid_sidecar(
+        reciter,
+        data_dir.read_false_split_doc,
+        cache.get_seg_false_split,
+        cache.set_seg_false_split,
+    )
+
+
+def load_unmarked_wasl(reciter: str) -> tuple[dict[str, dict], dict | None]:
+    """Load ``unmarked_wasl_v1.json`` — offline evidence that every arm read
+    through a verse-to-verse join the delivery never marked ``is_wasl``, keyed
+    by the left segment's ``segment_uid``. Never written by the Inspector."""
+    return _load_by_uid_sidecar(
+        reciter,
+        data_dir.read_unmarked_wasl_doc,
+        cache.get_seg_unmarked_wasl,
+        cache.set_seg_unmarked_wasl,
+    )
 
 
 # Audio URL maps remain cached via `cache._audio_url`, but the only

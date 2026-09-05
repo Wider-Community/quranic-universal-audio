@@ -8,7 +8,8 @@
     "missing_words": "shown",
     "muqattaat": "hidden",
     "qalqala": "hidden",
-    "repetitions": "hidden"
+    "repetitions": "hidden",
+    "unmarked_wasl": "next_only"
   },
   "low_conf_default_threshold": 80,
   "muqattaat_verses": [
@@ -221,6 +222,9 @@
     "cross_verse",
     "qalqala",
     "muqattaat",
-    "basmala_amin"
+    "basmala_amin",
+    "hidden_pause",
+    "false_split",
+    "unmarked_wasl"
   ]
 }

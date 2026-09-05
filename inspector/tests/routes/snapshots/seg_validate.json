@@ -8,6 +8,8 @@
     "boundary_adj": 0,
     "cross_verse": 0,
     "failed": 0,
+    "false_split": 0,
+    "hidden_pause": 0,
     "low_confidence": 1,
     "low_confidence_v2": 0,
     "missing_verses": 0,
@@ -15,7 +17,8 @@
     "muqattaat": 0,
     "qalqala": 4,
     "repetitions": 0,
-    "structural_errors": 0
+    "structural_errors": 0,
+    "unmarked_wasl": 0
   },
   "cross_verse": [],
   "errors": [],

@@ -635,14 +635,16 @@ import type { Segment } from '../../../../lib/types/view-models';
         enterEditWithBuffer(seg, rowEl, 'trim', validationCategory, _mountId, rowChapter);
     }
 
-    /** Cross-verse + repetitions accordions show *Auto Split* on every
-     *  candidate row. Cursor positions come from an offline-precomputed sidecar
-     *  (`auto_split_v1.json`, keyed by segment_uid). The whole map is preloaded
-     *  once on accordion open (stores/auto-split.ts), so the click below is a
-     *  zero-network O(1) lookup; a miss (uid not in map) degrades to manual
-     *  split, same UX as a non-candidate row. */
+    /** Cross-verse, repetitions and hidden-pause accordions show *Auto Split*
+     *  on every candidate row. Cursor positions come from offline-precomputed
+     *  sidecars (`auto_split_v1.json` / `hidden_pause_v1.json`, keyed by
+     *  segment_uid). The whole map is preloaded once on accordion open
+     *  (stores/auto-split.ts), so the click below is a zero-network O(1)
+     *  lookup; a miss (uid not in map) degrades to manual split, same UX as a
+     *  non-candidate row. */
     $: isAutoSplitCandidate = (validationCategory === 'cross_verse' && isCrossVerse(seg.matched_ref))
-        || (validationCategory === 'repetitions' && !!(seg as any).wrap_word_ranges);
+        || (validationCategory === 'repetitions' && !!(seg as any).wrap_word_ranges)
+        || validationCategory === 'hidden_pause';
     $: isAutoSplit = isAutoSplitCandidate && !!seg.segment_uid;
 
     function onSplitClick(e: MouseEvent): void {

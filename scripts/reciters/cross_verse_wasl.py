@@ -88,16 +88,13 @@ def replay_is_wasl(edit_history_lines: list[str]):
     split_boundary: dict[str, tuple] = {}
     for _sa, op in rows:
         ot = op.get("op_type") or op.get("kind")
-        after = (op.get("patch") or {}).get("after") or []
-        if (
-            ot == "split_segment"
-            and op.get("op_context_category") == "cross_verse"
-            and len(after) >= 2
-        ):
+        # Splits made before the patch envelope existed only carry targets_after.
+        after = (op.get("patch") or {}).get("after") or op.get("targets_after") or []
+        if ot == "split_segment" and len(after) >= 2:
             (_, last0) = _vparts(after[0].get("matched_ref", ""))
             (first1, _) = _vparts(after[1].get("matched_ref", ""))
             uid0 = after[0].get("segment_uid")
-            if uid0 and last0 and first1:
+            if uid0 and last0 and first1 and first1 == (last0[0], last0[1] + 1):
                 split_boundary[uid0] = (last0, first1)
         for s in after:
             uid = s.get("segment_uid")

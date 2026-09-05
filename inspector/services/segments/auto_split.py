@@ -12,8 +12,13 @@ extension::
 
     {"cursors": list[int] | None,        # absolute ms cuts (N-1 entries)
      "refs":    list[str] | None,        # N per-section refs
-     "kind":    "cross_verse" | "repetition" | None,
+     "kind":    "cross_verse" | "repetition" | "hidden_pause" | None,
      "source":  "sidecar" | "miss"}
+
+``hidden_pause_v1.json`` entries that carry per-section ``refs`` are merged
+into the map with ``kind="hidden_pause"`` (an ``auto_split_v1`` entry for the
+same uid wins); entries without refs are omitted so the row falls back to
+plain Split.
 
 When the sidecar has no entry for ``segment_uid`` (offline alignment
 failed, or this is a post-edit descendant the offline pass never saw) the
@@ -27,7 +32,7 @@ from __future__ import annotations
 
 import logging
 
-from services.storage.data_loader import load_auto_split, load_detailed
+from services.storage.data_loader import load_auto_split, load_detailed, load_hidden_pause
 from utils.references import chapter_from_ref
 
 logger = logging.getLogger(__name__)
@@ -60,6 +65,18 @@ def _find_segment_kind(reciter: str, chapter: int, segment_uid: str) -> str | No
     return None
 
 
+def _merged_by_uid(reciter: str) -> dict[str, dict]:
+    """``auto_split_v1`` entries plus ``hidden_pause_v1`` entries that have refs."""
+    by_uid, _meta = load_auto_split(reciter)
+    hidden, _hmeta = load_hidden_pause(reciter)
+    merged = dict(by_uid)
+    for uid, hit in hidden.items():
+        if uid in merged or not isinstance(hit, dict) or not hit.get("refs"):
+            continue
+        merged[uid] = {"cursors": hit.get("cursors"), "refs": hit["refs"], "kind": "hidden_pause"}
+    return merged
+
+
 def compute_auto_split(reciter: str, chapter: int, segment_uid: str) -> dict:
     """Resolve the precomputed Auto Split cursors for a single segment.
 
@@ -67,8 +84,7 @@ def compute_auto_split(reciter: str, chapter: int, segment_uid: str) -> dict:
     are O(1) against the per-reciter in-memory ``load_auto_split`` cache.
     No MFA, no audio fetch, no ffmpeg — those moved offline.
     """
-    by_uid, _meta = load_auto_split(reciter)
-    hit = by_uid.get(segment_uid)
+    hit = _merged_by_uid(reciter).get(segment_uid)
     if hit is not None:
         cursors = hit.get("cursors") or None
         refs = hit.get("refs") or None
@@ -104,9 +120,8 @@ def load_auto_split_map(reciter: str) -> dict[str, dict]:
     than shipped half-shaped. Reads the O(1) in-memory ``load_auto_split``
     cache (one bucket read per reciter per process).
     """
-    by_uid, _meta = load_auto_split(reciter)
     out: dict[str, dict] = {}
-    for uid, hit in by_uid.items():
+    for uid, hit in _merged_by_uid(reciter).items():
         if not isinstance(hit, dict):
             continue
         cursors = hit.get("cursors") or None

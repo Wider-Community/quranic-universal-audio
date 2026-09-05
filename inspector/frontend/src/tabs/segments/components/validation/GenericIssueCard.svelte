@@ -26,6 +26,7 @@
     import { resolveIssueSeg } from '../../utils/validation/resolve-issue';
     import { getSplitGroupMembers } from '../../utils/validation/split-group';
     import SegmentRow from '../list/SegmentRow.svelte';
+    import BoundaryEvidence from './BoundaryEvidence.svelte';
     import WaslBoundary from './WaslBoundary.svelte';
 
     const dispatch = createEventDispatcher<{ contextchange: boolean }>();
@@ -45,6 +46,10 @@
 
     // ---- Derived ----
     $: issueMsg = (item as { msg?: string }).msg;
+    $: isBoundaryReview = category === 'hidden_pause' || category === 'false_split' || category === 'unmarked_wasl';
+    // Unmarked Wasl resolves with the WASL/WAQF picker on the join to the next
+    // segment, so the card renders it between the row and its next context.
+    $: showWaslPicker = category === 'unmarked_wasl';
 
     // Subscribe to segAllData so resolvedSeg re-derives after split/merge
     // mutates item.seg_index in place. _resolveIssue reads segAllData via
@@ -226,6 +231,9 @@
     {#if issueMsg}
         <div class="val-card-issue-label">{issueMsg}</div>
     {/if}
+    {#if isBoundaryReview}
+        <BoundaryEvidence {category} {item} />
+    {/if}
     {#if resolvedSeg}
         {#if prevSeg}
             <SegmentRow
@@ -255,6 +263,9 @@
                 {/if}
             {/if}
         {/each}
+        {#if showWaslPicker && lastMember && nextSeg}
+            <WaslBoundary leftSeg={lastMember} rightSeg={nextSeg} />
+        {/if}
         {#if nextSeg}
             <SegmentRow
                 seg={nextSeg}

@@ -93,6 +93,18 @@ def auto_split_path(slug: str) -> str:
     return storage_paths.auto_split_path(slug)
 
 
+def hidden_pause_path(slug: str) -> str:
+    return storage_paths.hidden_pause_path(slug)
+
+
+def false_split_path(slug: str) -> str:
+    return storage_paths.false_split_path(slug)
+
+
+def unmarked_wasl_path(slug: str) -> str:
+    return storage_paths.unmarked_wasl_path(slug)
+
+
 def pipeline_meta_path(slug: str) -> str:
     return storage_paths.pipeline_meta_path(slug)
 
@@ -152,6 +164,30 @@ def read_auto_split_doc(slug: str) -> dict | None:
     """Return the parsed ``auto_split_v1.json`` doc, or ``None`` if absent."""
     try:
         return get_backend().read_json(auto_split_path(slug))  # type: ignore[return-value]
+    except StorageNotFound:
+        return None
+
+
+def read_hidden_pause_doc(slug: str) -> dict | None:
+    """Return the parsed ``hidden_pause_v1.json`` doc, or ``None`` if absent."""
+    try:
+        return get_backend().read_json(hidden_pause_path(slug))  # type: ignore[return-value]
+    except StorageNotFound:
+        return None
+
+
+def read_false_split_doc(slug: str) -> dict | None:
+    """Return the parsed ``false_split_v1.json`` doc, or ``None`` if absent."""
+    try:
+        return get_backend().read_json(false_split_path(slug))  # type: ignore[return-value]
+    except StorageNotFound:
+        return None
+
+
+def read_unmarked_wasl_doc(slug: str) -> dict | None:
+    """Return the parsed ``unmarked_wasl_v1.json`` doc, or ``None`` if absent."""
+    try:
+        return get_backend().read_json(unmarked_wasl_path(slug))  # type: ignore[return-value]
     except StorageNotFound:
         return None
 

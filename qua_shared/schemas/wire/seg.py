@@ -31,7 +31,7 @@ codegen'd into ``inspector/frontend/src/lib/types/generated/schemas.ts``.
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel
 
@@ -465,6 +465,98 @@ class SegValLowConfidenceV2Item(BaseModel):
     classified_issues: list[str] = Field(default_factory=list)
 
 
+class SegValHiddenPauseCut(BaseModel):
+    """One proposed cut inside a segment (``hidden_pause_v1`` sidecar).
+
+    ``axes`` names the offline arms that agree on the cut (``trio`` = collar
+    boundary head, ``lite`` = lite student, ...). ``evidence`` is the
+    per-axis raw measurement block, passed through for the card."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    cursor_ms: int | None = None
+    axes: list[str] = Field(default_factory=list)
+    gap_ms: int | None = None
+    score: int | None = None
+    word: str | None = None
+    final_class: str | None = None
+    verse_end: bool = False
+    evidence: dict[str, Any] = Field(default_factory=dict)
+
+
+class SegValHiddenPauseBoundary(BaseModel):
+    """Sidecar payload on a ``hidden_pause`` item. ``refs`` is ``null`` when
+    the offline pass could not assign per-section refs (Auto Split falls back
+    to plain Split). ``score`` = agreeing axes × 1000 + min(gap_ms, 999)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    cursors: list[int] = Field(default_factory=list)
+    refs: list[str] | None = None
+    score: int = 0
+    cuts: list[SegValHiddenPauseCut] = Field(default_factory=list)
+
+
+class SegValHiddenPauseItem(BaseModel):
+    """``hidden_pause`` — offline re-segmentation heard a pause inside this
+    segment. Review-only (owner / maintainer capability)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ref: Ref
+    chapter: int
+    seg_index: int
+    segment_uid: str | None = None
+    classified_issues: list[str] = Field(default_factory=list)
+    boundary: SegValHiddenPauseBoundary
+
+
+class SegValFalseSplitBoundary(BaseModel):
+    """Sidecar payload on a ``false_split`` / ``unmarked_wasl`` item: the
+    join under review is to ``next_uid`` (the following segment)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    next_uid: str | None = None
+    axes: list[str] = Field(default_factory=list)
+    gap_ms: int | None = None
+    score: int = 0
+    word: str | None = None
+    final_class: str | None = None
+    verse_end: bool = False
+    is_wasl: bool = False
+    evidence: dict[str, Any] = Field(default_factory=dict)
+
+
+class SegValFalseSplitItem(BaseModel):
+    """``false_split`` — offline re-segmentation heard continuous speech
+    across this segment's end. Review-only (owner / maintainer capability)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ref: Ref
+    chapter: int
+    seg_index: int
+    segment_uid: str | None = None
+    classified_issues: list[str] = Field(default_factory=list)
+    boundary: SegValFalseSplitBoundary
+
+
+class SegValUnmarkedWaslItem(BaseModel):
+    """``unmarked_wasl`` — every offline re-segmentation arm read straight
+    through this segment's verse-to-verse join, yet the delivery never marked
+    it ``is_wasl``. Review-only (owner / maintainer capability)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ref: Ref
+    chapter: int
+    seg_index: int
+    segment_uid: str | None = None
+    classified_issues: list[str] = Field(default_factory=list)
+    boundary: SegValFalseSplitBoundary
+
+
 class SegValBoundaryAdjItem(BaseModel):
     """``boundary_adj`` — a segment whose boundary may need adjustment."""
 
@@ -582,6 +674,9 @@ SegValAnyItemUnion = (
     | SegValStructuralErrorItem
     | SegValLowConfidenceItem
     | SegValLowConfidenceV2Item
+    | SegValHiddenPauseItem
+    | SegValFalseSplitItem
+    | SegValUnmarkedWaslItem
     | SegValBoundaryAdjItem
     | SegValCrossVerseItem
     | SegValAudioBleedingItem
@@ -604,6 +699,15 @@ class SegValProbeMeta(BaseModel):
     """``low_confidence_v2_meta`` — provenance of the MFA tight-beam probe
     sidecar. Open shape: the ``_meta`` block of ``low_confidence_v2.json`` is
     passed through verbatim from the extraction stage."""
+
+    model_config = ConfigDict(extra="allow")
+
+
+class SegValBoundaryMeta(BaseModel):
+    """``hidden_pause_meta`` / ``false_split_meta`` / ``unmarked_wasl_meta`` —
+    provenance of the offline boundary-review sidecars (arms, segment counts,
+    by-axes tallies). Open shape: the ``_meta`` block is passed through
+    verbatim."""
 
     model_config = ConfigDict(extra="allow")
 
@@ -635,8 +739,11 @@ class SegValidateResponse(BaseModel):
     ``errors`` and ``structural_errors`` are the SAME list under two keys
     (additive alias). ``category_counts`` mirrors the per-category lengths in
     registry-declared order. ``split_group_index`` maps a root segment uid to
-    its transitive split-descendant uids. ``low_confidence_v2_meta`` is present
-    only when the probe sidecar carried a ``_meta`` block. Each item carries a
+    its transitive split-descendant uids. ``low_confidence_v2_meta`` /
+    ``hidden_pause_meta`` / ``false_split_meta`` / ``unmarked_wasl_meta`` are
+    present only when the sidecar carried a ``_meta`` block. ``hidden_pause``
+    / ``false_split`` / ``unmarked_wasl`` (and their metas) are omitted for
+    viewers without ``segments.view_boundary_review``. Each item carries a
     ``classified_issues`` field.
     """
 
@@ -649,6 +756,9 @@ class SegValidateResponse(BaseModel):
     failed: list[SegValFailedItem] = Field(default_factory=list)
     low_confidence: list[SegValLowConfidenceItem] = Field(default_factory=list)
     low_confidence_v2: list[SegValLowConfidenceV2Item] = Field(default_factory=list)
+    hidden_pause: list[SegValHiddenPauseItem] | None = None
+    false_split: list[SegValFalseSplitItem] | None = None
+    unmarked_wasl: list[SegValUnmarkedWaslItem] | None = None
     boundary_adj: list[SegValBoundaryAdjItem] = Field(default_factory=list)
     cross_verse: list[SegValCrossVerseItem] = Field(default_factory=list)
     audio_bleeding: list[SegValAudioBleedingItem] = Field(default_factory=list)
@@ -660,6 +770,9 @@ class SegValidateResponse(BaseModel):
     stats: SegValStats | None = None
     split_group_index: dict[str, list[str]] = Field(default_factory=dict)
     low_confidence_v2_meta: SegValProbeMeta | None = None
+    hidden_pause_meta: SegValBoundaryMeta | None = None
+    false_split_meta: SegValBoundaryMeta | None = None
+    unmarked_wasl_meta: SegValBoundaryMeta | None = None
 
 
 # ===========================================================================

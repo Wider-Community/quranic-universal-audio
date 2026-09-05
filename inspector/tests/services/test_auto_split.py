@@ -21,6 +21,13 @@ def _patch_sidecar(monkeypatch, by_uid: dict[str, object]) -> None:
         "load_auto_split",
         lambda _r: (by_uid, {"created_at": "2026-01-01T00:00:00Z"}),
     )
+    monkeypatch.setattr(auto_split, "load_hidden_pause", lambda _r: ({}, None))
+
+
+def _patch_hidden_pause(monkeypatch, by_uid: dict[str, object]) -> None:
+    monkeypatch.setattr(
+        auto_split, "load_hidden_pause", lambda _r: (by_uid, {"kind": "hidden_pause"})
+    )
 
 
 def _patch_detailed(monkeypatch, entries: list[dict]) -> None:
@@ -299,3 +306,42 @@ def test_load_auto_split_map_empty_sidecar(monkeypatch):
     """Absent / empty sidecar → empty map (FE treats every row as a miss)."""
     _patch_sidecar(monkeypatch, {})
     assert auto_split.load_auto_split_map("r") == {}
+
+
+# ---------------------------------------------------------------------------
+# hidden_pause_v1 merge
+# ---------------------------------------------------------------------------
+
+
+def test_hidden_pause_entries_with_refs_merge_as_hidden_pause_kind(monkeypatch):
+    _patch_sidecar(
+        monkeypatch, {"u_cv": {"cursors": [1], "refs": ["a", "b"], "kind": "cross_verse"}}
+    )
+    _patch_hidden_pause(
+        monkeypatch,
+        {
+            "u_hp": {"cursors": [5000], "refs": ["2:5:1-2:5:3", "2:5:4-2:5:6"], "score": 2450},
+            "u_norefs": {"cursors": [7000], "refs": None, "score": 1040},
+            "u_cv": {"cursors": [9], "refs": ["x", "y"], "score": 1},
+        },
+    )
+    out = auto_split.load_auto_split_map("r")
+    assert out["u_hp"] == {
+        "cursors": [5000],
+        "refs": ["2:5:1-2:5:3", "2:5:4-2:5:6"],
+        "kind": "hidden_pause",
+    }
+    assert "u_norefs" not in out
+    assert out["u_cv"]["kind"] == "cross_verse"
+
+
+def test_compute_auto_split_resolves_hidden_pause_hit(monkeypatch):
+    _patch_sidecar(monkeypatch, {})
+    _patch_hidden_pause(monkeypatch, {"u_hp": {"cursors": [5000], "refs": ["a", "b"]}})
+    out = auto_split.compute_auto_split("r", 2, "u_hp")
+    assert out == {
+        "cursors": [5000],
+        "refs": ["a", "b"],
+        "kind": "hidden_pause",
+        "source": "sidecar",
+    }

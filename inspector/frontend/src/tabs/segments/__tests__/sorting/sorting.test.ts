@@ -44,6 +44,11 @@ describe('keyFor — count kinds', () => {
         expect(keyFor('verse_count', item({ ref: '2:10:5-2:10:9' }))).toEqual([1]);
     });
 
+    it('score reads the boundary-review sidecar score', () => {
+        expect(keyFor('score', item({ boundary: { score: 2450 } }))).toEqual([2450]);
+        expect(keyFor('score', item({}))).toEqual([0]);
+    });
+
     it('rep_split_count reads refs.length from the auto-split map by uid', () => {
         const ctx = { autoSplitMap: { 'uid-1': { refs: ['a', 'b', 'c'] } } };
         expect(keyFor('rep_split_count', item({ segment_uid: 'uid-1' }), ctx)).toEqual([3]);

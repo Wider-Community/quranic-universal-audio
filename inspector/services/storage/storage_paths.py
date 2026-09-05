@@ -175,6 +175,28 @@ def auto_split_path(slug: str) -> str:
     return reciter_file(slug, "auto_split_v1.json")
 
 
+def hidden_pause_path(slug: str) -> str:
+    """Boundary-review sidecar — per-seg proposed cuts where offline
+    re-segmentation heard a pause inside the segment. Keyed by ``segment_uid``;
+    read by ``services/data_loader.load_hidden_pause``."""
+    return reciter_file(slug, "hidden_pause_v1.json")
+
+
+def false_split_path(slug: str) -> str:
+    """Boundary-review sidecar — per-seg evidence that offline re-segmentation
+    heard continuous speech across the segment's end. Keyed by ``segment_uid``;
+    read by ``services/data_loader.load_false_split``."""
+    return reciter_file(slug, "false_split_v1.json")
+
+
+def unmarked_wasl_path(slug: str) -> str:
+    """Boundary-review sidecar — per-seg evidence that every offline arm read
+    through a verse-to-verse join the delivery never marked ``is_wasl``. Keyed
+    by the left segment's ``segment_uid``; read by
+    ``services/data_loader.load_unmarked_wasl``."""
+    return reciter_file(slug, "unmarked_wasl_v1.json")
+
+
 def pipeline_meta_path(slug: str) -> str:
     """Per-reciter immutable extraction-time facts.
 
@@ -236,5 +258,8 @@ PER_RECITER_FILES: tuple[str, ...] = (
     "low_confidence_v2.json",
     "ts_validation.json",
     "auto_split_v1.json",
+    "hidden_pause_v1.json",
+    "false_split_v1.json",
+    "unmarked_wasl_v1.json",
     "pipeline_meta.json",
 )
