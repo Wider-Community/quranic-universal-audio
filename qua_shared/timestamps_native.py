@@ -25,12 +25,23 @@ def _reading_segments(reading: dict) -> list[dict]:
         for word_id in part["word_ids"]:
             word = words[int(word_id)]
             timing = word_times[int(word_id)]
+            word_tokens = tokens_by_word[int(word_id)]
+            source_offset = min(
+                int(value) for token in word_tokens for value in token["character_ids"]
+            )
             letters = []
-            for token in tokens_by_word[int(word_id)]:
+            for token in word_tokens:
                 letters.append(
                     {
                         "source_unit_ids": list(map(int, token["source_unit_ids"])),
                         "text": token["text"],
+                        "character_offsets": [
+                            int(value) - source_offset for value in token["character_ids"]
+                        ],
+                        "paint_character_offsets": [
+                            int(value) - source_offset for value in token["paint_character_ids"]
+                        ],
+                        "sound_ids": list(map(int, token["sound_ids"])),
                         "start_ms": token["start_ms"],
                         "end_ms": token["end_ms"],
                         "policy": token["policy"],
@@ -41,6 +52,7 @@ def _reading_segments(reading: dict) -> list[dict]:
                     "word_id": int(word_id),
                     "index": _index(word["ref"]),
                     "ref": word["ref"],
+                    "source_text": word["text"],
                     "start_ms": int(timing["start_ms"]),
                     "end_ms": int(timing["end_ms"]),
                     "letters": letters,

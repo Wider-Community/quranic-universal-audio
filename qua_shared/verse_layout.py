@@ -3,7 +3,7 @@ channels consume so they cannot drift.
 
 The HF dataset (``qua_jobs/publish_hf.py``) and the GitHub release
 (``qua_jobs/cut_release.py``) used to reconstruct verse geometry independently.
-They agree on the source (the canonical native-v12 timing projection) but had two copies of the loader, the
+They agree on the source (the canonical native-v13 timing projection) but had two copies of the loader, the
 projection→rows reshape, and the clip-window math — which is exactly where they
 drifted. This module owns all three so there is one source of truth.
 
@@ -21,7 +21,7 @@ drifted. This module owns all three so there is one source of truth.
     absorb the pad while every internal boundary stays byte-exact with a word.
     The HF dataset publishes these; the GH release uses them only to validate
     gaplessness (it does not publish a segment tier).
-  - ``words`` / ``letters`` — straight from the projection (psil-filtered).
+  - ``words`` / ``tokens`` — timing plus exact DigitalKhatt scalar paint ranges.
 
 The HF dataset rebases these to clip-relative and slices audio; the GH release
 keeps them source-relative. Neither re-derives the geometry.
@@ -37,7 +37,7 @@ from typing import TypedDict
 
 import brotli
 
-from qua_shared.letter_vocab import to_external_char
+from qua_shared.digital_khatt import project_word
 
 
 class PadParams(TypedDict):
@@ -52,11 +52,6 @@ class PadParams(TypedDict):
 #: Default clip-edge knobs (ms). pad_start before the first word, pad_end after
 #: the last word, min_gap minimum silence kept between adjacent verse clips.
 PAD_DEFAULTS: PadParams = {"pad_start": 100, "pad_end": 300, "min_gap": 100}
-_NONLETTER_MARKS = frozenset("ـّۣ۪ۜ۫۬")
-
-
-def _external_letter(text: str) -> str:
-    return to_external_char("".join(char for char in text if char not in _NONLETTER_MARKS))
 
 
 def pad_params_from_env() -> PadParams:
@@ -125,13 +120,14 @@ def load_canonical_verses(ts_dir: Path) -> dict[str, dict]:
     return out
 
 
-def reshape_canonical(canonical: dict) -> dict[str, dict]:
+def reshape_canonical(canonical: dict, digital_khatt_words: dict) -> dict[str, dict]:
     """Convert the canonical verse-map shape into ``build_verse_layouts`` input.
 
     ``canonical[ref]`` is the projection body
     (``{"words": [{"index", "start_ms", "end_ms", "letters"}, ...], "verse_start_ms",
     "verse_end_ms", "segments"}``). For each verse this returns
-    ``{"words": [[widx, s, e], ...], "letters": [(widx, letters), ...],
+    ``{"words": [[widx, s, e], ...], "word_texts": [...],
+    "tokens_by_word": [...],
     "verse_start_ms": int, "verse_end_ms": int, "seg_spans": [...] | None}``.
     """
     ts: dict[str, dict] = {}
@@ -142,7 +138,8 @@ def reshape_canonical(canonical: dict) -> dict[str, dict]:
         if not words:
             ts[ref] = {
                 "words": [],
-                "letters": [],
+                "word_texts": [],
+                "tokens_by_word": [],
                 "verse_start_ms": 0,
                 "verse_end_ms": 0,
                 "seg_spans": [],
@@ -153,10 +150,19 @@ def reshape_canonical(canonical: dict) -> dict[str, dict]:
         slim_words = [
             [int(word["index"]), int(word["start_ms"]), int(word["end_ms"])] for word in words
         ]
-        letters = [(int(word["index"]), word.get("letters") or []) for word in words]
+        word_texts: list[str] = []
+        tokens_by_word: list[list[dict]] = []
+        for word in words:
+            entry = digital_khatt_words.get(word["ref"])
+            if not isinstance(entry, dict) or not isinstance(entry.get("text"), str):
+                raise ValueError(f"DigitalKhatt word {word['ref']} is missing")
+            text, tokens = project_word(word, entry["text"])
+            word_texts.append(text)
+            tokens_by_word.append(tokens)
         ts[ref] = {
             "words": slim_words,
-            "letters": letters,
+            "word_texts": word_texts,
+            "tokens_by_word": tokens_by_word,
             "verse_start_ms": int(vs),
             "verse_end_ms": int(ve),
             "seg_spans": val.get("segments") or [],
@@ -274,23 +280,32 @@ def build_verse_layouts(
             segments[0][2] = clip_start
             segments[-1][3] = clip_end
 
-        # Letters: flatten (widx, char, start, end) — source-relative. Read via
-        # the named accessor; the shard's trailing ``silent`` flag isn't exposed.
-        verse_letters: list[tuple[int, str, int, int]] = []
-        for widx, letters in tdata.get("letters", []):
-            for letter in letters:
-                # The published letter tier can't encode an unplaced letter — fail
-                # loud if the aligner left a None timing (also narrows int | None).
-                if letter["start_ms"] is None or letter["end_ms"] is None:
-                    raise ValueError(f"letter {letter['text']!r} in {ref} has unplaced timing")
-                verse_letters.append(
+        word_texts = tdata.get("word_texts") or []
+        tokens_by_word = tdata.get("tokens_by_word") or []
+        if len(word_texts) != len(verse_words) or len(tokens_by_word) != len(verse_words):
+            raise ValueError(f"DigitalKhatt projection count differs from words in {ref}")
+        verse_text = " ".join(word_texts)
+        verse_tokens: list[tuple[int, int, int, bool, list[list[int]]]] = []
+        scalar_cursor = 0
+        for occurrence, (word_text, tokens) in enumerate(
+            zip(word_texts, tokens_by_word, strict=True)
+        ):
+            for token in tokens:
+                if token["start_ms"] is None or token["end_ms"] is None:
+                    raise ValueError(f"animation token in {ref} has unplaced timing")
+                verse_tokens.append(
                     (
-                        int(widx),
-                        _external_letter(letter["text"]),
-                        int(letter["start_ms"]),
-                        int(letter["end_ms"]),
+                        occurrence,
+                        int(token["start_ms"]),
+                        int(token["end_ms"]),
+                        bool(token["owns_sound"]),
+                        [
+                            [scalar_cursor + int(start), scalar_cursor + int(end)]
+                            for start, end in token["paint"]
+                        ],
                     )
                 )
+            scalar_cursor += len(word_text) + 1
 
         layouts[ref] = {
             "clip_start": clip_start,
@@ -299,6 +314,7 @@ def build_verse_layouts(
             "verse_end": verse_end,
             "segments": segments,
             "words": verse_words,
-            "letters": verse_letters,
+            "text": verse_text,
+            "tokens": verse_tokens,
         }
     return layouts

@@ -48,11 +48,16 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from qua_shared.letter_vocab import VOCAB_FILENAME, vocab_csv_bytes  # noqa: E402
+from qua_shared.digital_khatt import (  # noqa: E402
+    DIGITAL_KHATT_FONT_FILENAME,
+    DIGITAL_KHATT_SCRIPT_FILENAME,
+    DIGITAL_KHATT_SCRIPT_ID,
+    UNICODE_INDEXING,
+)
 from qua_shared.schemas import (  # noqa: E402
+    DigitalKhattDoc,
     FileDigest,
     LetterTimestampsDoc,
-    QpcHafsDoc,
     ReleaseCatalog,
     ReleaseCatalogAudio,
     ReleaseCoverage,
@@ -61,6 +66,10 @@ from qua_shared.schemas import (  # noqa: E402
     ReleaseRecitationCatalog,
     VerseTimestampsDoc,
     WordTimestampsDoc,
+)
+from qua_shared.schemas.wire.release import (  # noqa: E402
+    RELEASE_FORMAT_MAJOR,
+    SCHEMA_VERSION,
 )
 from qua_shared.verse_layout import (  # noqa: E402
     build_verse_layouts,
@@ -73,7 +82,6 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefm
 log = logging.getLogger("cut_release")
 
 
-SCHEMA_VERSION = 1
 GH_API = "https://api.github.com"
 
 
@@ -185,7 +193,11 @@ def _load_canonical_verses(slug: str) -> dict[str, dict]:
 
 
 def _build_tier_files(
-    slug: str, layouts: dict[str, dict], *, delivery_meta: dict
+    slug: str,
+    layouts: dict[str, dict],
+    *,
+    delivery_meta: dict,
+    script_sha256: str,
 ) -> dict[str, bytes]:
     """Build the three tier files (letter → word → verse, top-down projection).
 
@@ -216,25 +228,38 @@ def _build_tier_files(
         verse_pos = [int(layout["clip_start"]), int(layout["clip_end"])]
 
         word_array = [[int(w[0]), int(w[1]), int(w[2])] for w in layout["words"]]
-        letter_array = [[int(lt[0]), lt[1], int(lt[2]), int(lt[3])] for lt in layout["letters"]]
+        token_array = [
+            [
+                int(token[0]),
+                int(token[1]),
+                int(token[2]),
+                bool(token[3]),
+                [[int(span[0]), int(span[1])] for span in token[4]],
+            ]
+            for token in layout["tokens"]
+        ]
 
         verse_body[key] = verse_pos
         word_body[key] = [verse_pos, word_array]
-        letter_body[key] = [verse_pos, word_array, letter_array]
+        letter_body[key] = [verse_pos, layout["text"], word_array, token_array]
 
     meta_common = {
         "schema_version": SCHEMA_VERSION,
         "slug": slug,
         "audio_category": delivery_meta.get("audio_category"),
         "verse_count": len(verse_body),
+        "script": DIGITAL_KHATT_SCRIPT_ID,
+        "script_sha256": script_sha256,
+        "unicode_indexing": UNICODE_INDEXING,
     }
     letter_doc = {
         "_meta": {
             **meta_common,
             "tier": "letter",
-            "layout": "[[start,end], words, letters]; "
+            "layout": "[[start,end], text, words, tokens]; "
             "words=[[widx,start,end],...]; "
-            "letters=[[widx,char,start,end],...]",
+            "tokens=[[word_occurrence,start,end,owns_sound,paint],...]; "
+            "paint=[[scalar_from,scalar_to],...]",
         },
         **letter_body,
     }
@@ -449,19 +474,27 @@ def _classify_change_kind(rec: dict, prior_members: dict[str, dict], content_has
 def _compute_version(
     prior_version: str | None, members: list[dict], static_refs_changed: bool, override: str | None
 ) -> str:
-    """Auto-bump per plan §Versioning. Override always wins (operator declares MAJOR).
+    """Auto-bump per the public release contract; overrides cannot cross below its major.
     No-op (every member 'unchanged' AND static refs unchanged) raises.
     """
     if override:
-        return override
+        parts = override.removeprefix("v").split(".")
+        if len(parts) != 3 or any(not part.isdigit() for part in parts):
+            raise RuntimeError(f"invalid release version {override!r}; expected vX.Y.Z")
+        if int(parts[0]) < RELEASE_FORMAT_MAJOR:
+            raise RuntimeError(
+                f"schema {SCHEMA_VERSION} requires release v{RELEASE_FORMAT_MAJOR}.0.0 or newer"
+            )
+        return f"v{'.'.join(parts)}"
     if not prior_version:
-        # First release → MINOR over v0.0.0 when there's any content.
-        return "v0.1.0" if members else "v0.0.0"
+        return f"v{RELEASE_FORMAT_MAJOR}.0.0"
     parts = prior_version.lstrip("v").split(".")
     try:
         major, minor, patch = int(parts[0]), int(parts[1]), int(parts[2])
     except (ValueError, IndexError) as e:
         raise RuntimeError(f"unparseable prior version {prior_version!r}") from e
+    if major < RELEASE_FORMAT_MAJOR:
+        return f"v{RELEASE_FORMAT_MAJOR}.0.0"
     has_added = any(m["change_kind"] == "added" for m in members)
     has_refresh = any(m["change_kind"] == "refresh" for m in members)
     if has_added:
@@ -692,75 +725,33 @@ def _post_webhook(
 
 
 # ---------------------------------------------------------------------------
-# qpc_hafs byte resolution + static refs hash.
+# DigitalKhatt assets + static refs hash.
 # ---------------------------------------------------------------------------
-
-# Bucket-relative location of the canonical gzipped qpc_hafs (Xet-backed — no
-# LFS pointer problem, unlike the image-staged ``data/qpc_hafs.json.gz``).
-QPC_BUCKET_REL = "reference/qpc_hafs.json.gz"
-
-
-def _gunzip_or_none(raw: bytes) -> bytes | None:
-    """Decompress gzip bytes, or ``None`` if ``raw`` isn't valid gzip (e.g. an
-    LFS pointer ``version https://...`` masquerading as the file)."""
+def _load_digital_khatt_assets(code_root: Path) -> tuple[bytes, bytes]:
+    script = (code_root / "data" / DIGITAL_KHATT_SCRIPT_FILENAME).read_bytes()
+    font = (
+        code_root / "inspector" / "frontend" / "public" / "fonts" / DIGITAL_KHATT_FONT_FILENAME
+    ).read_bytes()
     try:
-        return gzip.decompress(raw)
-    except (OSError, gzip.BadGzipFile):
-        return None
-
-
-def _load_qpc_bytes(refs_dir: Path) -> bytes | None:
-    """Decompressed ``qpc_hafs.json`` bytes, resolved across runtimes.
-
-    HF auto-LFS-promotes ``*.gz`` **by extension**, so the job image's staged
-    ``data/qpc_hafs.json.gz`` is a git-lfs pointer (``version https://...``),
-    not gzip — ``gzip.decompress`` on it raises ``BadGzipFile``. Resolve the
-    real bytes: local uncompressed (dev checkout) → local valid gzip (CI
-    staging with real bytes) → bucket ``reference/qpc_hafs.json.gz`` (the job
-    case, where only the Xet-backed bucket carries real bytes). Returns
-    ``None`` if unavailable everywhere. Mirrors the Inspector's
-    ``services.storage.static_refs.load_qpc_bytes``.
-    """
-    plain = refs_dir / "qpc_hafs.json"
-    if plain.exists():
-        return plain.read_bytes()
-    gz = refs_dir / "qpc_hafs.json.gz"
-    if gz.exists():
-        dec = _gunzip_or_none(gz.read_bytes())
-        if dec is not None:
-            return dec
-        log.warning("staged %s is not gzip (LFS pointer?) — falling back to bucket", gz)
-    bucket_gz = _bucket_root() / QPC_BUCKET_REL
-    if bucket_gz.exists():
-        dec = _gunzip_or_none(bucket_gz.read_bytes())
-        if dec is not None:
-            return dec
-        log.error("bucket %s is not valid gzip", bucket_gz)
-    return None
-
-
-def _validate_qpc_bytes(qpc_bytes: bytes) -> None:
-    """Fail before upload if qpc_hafs.json is not real JSON in the expected shape."""
-    try:
-        QpcHafsDoc.model_validate(json.loads(qpc_bytes))
+        DigitalKhattDoc.model_validate(json.loads(script))
     except Exception as exc:
-        raise RuntimeError("qpc_hafs.json is not valid QPC JSON") from exc
+        raise RuntimeError(
+            f"{DIGITAL_KHATT_SCRIPT_FILENAME} is not valid DigitalKhatt JSON"
+        ) from exc
+    if not font:
+        raise RuntimeError(f"{DIGITAL_KHATT_FONT_FILENAME} is empty")
+    return script, font
 
 
-def _hash_static_refs(refs_dir: Path, qpc_bytes: bytes | None) -> dict[str, dict]:
-    """SHA-256 + byte size for each static ref. ``qpc_bytes`` is the already
-    resolved, *decompressed* qpc_hafs.json (see ``_load_qpc_bytes``); hashing
-    the decompressed bytes keeps the manifest hash stable across the
-    gzip-vs-plain transport choice and matches what a consumer who downloads
-    the .gz and decompresses sees.
-    """
+def _hash_static_refs(refs_dir: Path, digital_khatt_assets: dict[str, bytes]) -> dict[str, dict]:
+    """SHA-256 + byte size for every public static reference."""
     out: dict[str, dict] = {}
     plain = refs_dir / "surah_info.json"
     if plain.exists():
         body = plain.read_bytes()
         out["surah_info.json"] = {"sha256": _sha256_hex(body), "bytes": len(body)}
-    if qpc_bytes is not None:
-        out["qpc_hafs.json"] = {"sha256": _sha256_hex(qpc_bytes), "bytes": len(qpc_bytes)}
+    for name, body in digital_khatt_assets.items():
+        out[name] = {"sha256": _sha256_hex(body), "bytes": len(body)}
     return out
 
 
@@ -797,6 +788,8 @@ def _preflight() -> int:
     code_dir = _code_root()
     for rel in (
         "data/surah_info.json",
+        f"data/{DIGITAL_KHATT_SCRIPT_FILENAME}",
+        f"inspector/frontend/public/fonts/{DIGITAL_KHATT_FONT_FILENAME}",
         ".github/config/repo.yml",
         "docs/templates/release_body.md",
         "LICENSE",
@@ -807,11 +800,6 @@ def _preflight() -> int:
         if not (code_dir / rel).exists():
             log.error("staged file missing: %s", code_dir / rel)
             return 14
-    if not (
-        (code_dir / "data/qpc_hafs.json.gz").exists() or (code_dir / "data/qpc_hafs.json").exists()
-    ):
-        log.error("staged file missing: %s/data/qpc_hafs.json[.gz]", code_dir)
-        return 14
     return 0
 
 
@@ -853,23 +841,19 @@ def main() -> int:
     word_counts = word_counts_from_surah_info(surah_info)
     surah_verse_counts = verse_counts_from_surah_info(surah_info)
 
-    # qpc_hafs is a consumer-facing release asset. The staged image .gz is an
-    # LFS pointer (HF auto-LFS by extension), so resolve the real decompressed
-    # bytes via the bucket fallback and abort early if unavailable everywhere —
-    # never ship a release missing qpc_hafs.json / a stale manifest hash.
-    qpc_bytes = _load_qpc_bytes(refs_dir)
-    if qpc_bytes is None:
-        log.error(
-            "qpc_hafs.json unavailable (image .gz is an LFS pointer and "
-            "bucket %s missing/corrupt) — cannot cut release",
-            QPC_BUCKET_REL,
-        )
-        return 14
+    # The public projection is DigitalKhatt-only. Load and validate both assets
+    # before reading any reciter so a broken staged image cannot make a release.
     try:
-        _validate_qpc_bytes(qpc_bytes)
+        digital_khatt_script, digital_khatt_font = _load_digital_khatt_assets(_code_root())
     except RuntimeError as exc:
         log.error("%s", exc)
         return 14
+    digital_khatt_words = json.loads(digital_khatt_script)
+    digital_khatt_assets = {
+        DIGITAL_KHATT_SCRIPT_FILENAME: digital_khatt_script,
+        DIGITAL_KHATT_FONT_FILENAME: digital_khatt_font,
+    }
+    script_sha256 = _sha256_hex(digital_khatt_script)
     from qua_shared.dataset_validation import (
         fatal_violations,
         validate_dataset,
@@ -907,7 +891,7 @@ def main() -> int:
         # clip span) + byte-exact psil segments. The release publishes the verse/
         # word/letter tiers from these; the dataset publishes the clip-relative
         # view of the SAME layouts. One source of truth, no drift.
-        layouts = build_verse_layouts(reshape_canonical(verses), **pads)
+        layouts = build_verse_layouts(reshape_canonical(verses, digital_khatt_words), **pads)
 
         # Boundary validate the SAME invariants the dataset does, against the
         # byte-exact segments (gapless within a segment, gaps only across
@@ -938,7 +922,12 @@ def main() -> int:
             )
 
         # Tier files (from the shared layouts: verse bound = padded clip window).
-        tier_files = _build_tier_files(slug, layouts, delivery_meta=rec)
+        tier_files = _build_tier_files(
+            slug,
+            layouts,
+            delivery_meta=rec,
+            script_sha256=script_sha256,
+        )
 
         # catalog.json.
         audio_manifest_path = _bucket_root() / "catalog" / "audio_manifest" / f"{slug}.json"
@@ -1009,7 +998,7 @@ def main() -> int:
     prior_static = {}
     # Pull prior static_refs from prior dataset manifest. Simpler approach:
     # compare hashes against the live HEAD on GH releases. Best-effort.
-    static_refs = _hash_static_refs(refs_dir, qpc_bytes)
+    static_refs = _hash_static_refs(refs_dir, digital_khatt_assets)
     static_refs_changed_keys: list[str] = []
     if prior_version:
         try:
@@ -1071,20 +1060,17 @@ def main() -> int:
         hf_dataset,
     )
 
-    # 7. Read static refs + license + shard.py for upload. qpc_hafs lives
-    # gzipped on the bucket (HF Space LFS workaround) but the GH release asset
-    # is the consumer-facing decompressed JSON.
+    # 7. Read license + helpers for upload. DigitalKhatt assets were validated
+    # before reciter projection and are uploaded byte-for-byte.
     license_path = _code_root() / "LICENSE"
     license_bytes = license_path.read_bytes() if license_path.exists() else b""
     shard_py = (_code_root() / "qua_jobs" / "shard.py").read_bytes()
     check_updates_py = (_code_root() / "qua_jobs" / "check_updates.py").read_bytes()
     download_audio_py = (_code_root() / "qua_jobs" / "download_audio.py").read_bytes()
-    static_files: dict[str, bytes] = {}
+    static_files: dict[str, bytes] = dict(digital_khatt_assets)
     si_path = refs_dir / "surah_info.json"
     if si_path.exists():
         static_files["surah_info.json"] = si_path.read_bytes()
-    # qpc_bytes was resolved (and validated non-None) at the top of main().
-    static_files["qpc_hafs.json"] = qpc_bytes
 
     # 8. Create the GH release + upload all assets.
     log.info("creating GH release %s on %s/%s ...", version, owner, repo)
@@ -1103,12 +1089,9 @@ def main() -> int:
     uploads.append(("shard.py", shard_py, "text/x-python"))
     uploads.append(("check_updates.py", check_updates_py, "text/x-python"))
     uploads.append(("download_audio.py", download_audio_py, "text/x-python"))
-    # Letter-tier character vocabulary (the 42-token external alphabet that the
-    # letter_timestamps.json.gz `char` field draws from). Generated from the
-    # canonical mapping module so it can never drift from the emitted data.
-    uploads.append((VOCAB_FILENAME, vocab_csv_bytes(), "text/csv"))
     for name, body in static_files.items():
-        uploads.append((name, body, "application/json"))
+        content_type = "font/otf" if name.endswith(".otf") else "application/json"
+        uploads.append((name, body, content_type))
     for m in members:
         uploads.append((f"{m['slug']}.zip", m["_zip_bytes"], "application/zip"))
 

@@ -30,7 +30,6 @@ Env:
 
 from __future__ import annotations
 
-import gzip
 import json
 import logging
 import os
@@ -60,85 +59,9 @@ log = logging.getLogger("publish_hf")
 
 
 # ---------------------------------------------------------------------------
-# Static-ref loaders — qpc_hafs + surah_info are staged alongside the code by
+# Static-ref loaders — DigitalKhatt + surah_info are staged alongside the code by
 # ``base.stage_job_code`` and land at ``/aux/code/data/`` in the container.
 # ---------------------------------------------------------------------------
-
-_QURAN_MARKERS = set("ۖۗۘۙۚۛ۞۩")
-
-
-def _strip_quran_markers(text: str) -> str:
-    """Strip non-recited markers (waqf signs, hizb, sajdah) from Uthmani text."""
-    return "".join(ch for ch in text if ch not in _QURAN_MARKERS)
-
-
-def _text_for_ref(matched_ref: str, dk_words: dict, surah_info: dict) -> str:
-    """Derive Arabic text for a canonical ``surah:ayah:word-surah:ayah:word``
-    matched_ref from the Digital Khatt word map.
-
-    Mirror of the legacy dataset builder's text derivation. The extractor no
-    longer writes ``matched_text`` (Migration #5), so the dataset re-derives it
-    deterministically.
-    """
-    if not matched_ref or "-" not in matched_ref:
-        return ""
-    start, _, end = matched_ref.partition("-")
-    sp = start.split(":")
-    ep = end.split(":")
-    if len(sp) != 3 or len(ep) != 3:
-        return ""
-    try:
-        s_su, s_ay, s_w = int(sp[0]), int(sp[1]), int(sp[2])
-        e_su, e_ay, e_w = int(ep[0]), int(ep[1]), int(ep[2])
-    except ValueError:
-        return ""
-
-    su = s_su
-    surah_meta = surah_info.get(str(su))
-    if not surah_meta:
-        return ""
-    verses = surah_meta.get("verses", [])
-    words: list[str] = []
-    ay, w = s_ay, s_w
-    iters = 1000
-    while (su, ay, w) <= (e_su, e_ay, e_w) and iters > 0:
-        entry = dk_words.get(f"{su}:{ay}:{w}")
-        if entry:
-            text = entry.get("text") if isinstance(entry, dict) else entry
-            if text:
-                words.append(text)
-        w += 1
-        verse_idx = ay - 1
-        max_w = verses[verse_idx].get("num_words", 0) if 0 <= verse_idx < len(verses) else 0
-        if w > max_w:
-            w = 1
-            ay += 1
-        iters -= 1
-    return " ".join(words)
-
-
-def _cross_verse_text(
-    matched_ref: str, full_text: str, target_ayah: int, surah_info: dict, surah_num: str
-) -> str:
-    """Slice only target_ayah's words from a cross-verse segment's full text."""
-    parts = matched_ref.split("-")
-    if len(parts) != 2:
-        return full_text
-    try:
-        sp = parts[0].split(":")
-        ep = parts[1].split(":")
-        s_ayah, s_word = int(sp[1]), int(sp[2])
-        e_ayah, e_word = int(ep[1]), int(ep[2])
-    except (ValueError, IndexError):
-        return full_text
-    words = full_text.split()
-    if target_ayah == s_ayah:
-        total = surah_info[surah_num]["verses"][s_ayah - 1]["num_words"]
-        n = total - s_word + 1
-        return " ".join(words[:n])
-    if target_ayah == e_ayah:
-        return " ".join(words[-e_word:]) if e_word > 0 else ""
-    return full_text
 
 
 def _seg_word_range(
@@ -186,6 +109,10 @@ def _bucket_root() -> Path:
     return Path(os.environ.get("INSPECTOR_BUCKET_MOUNT", "/data"))
 
 
+def _code_root() -> Path:
+    return Path(os.environ.get("INSPECTOR_CODE_DIR", "/aux/code"))
+
+
 def _load_detailed(slug: str) -> dict:
     """Read ``reciters/<slug>/detailed.json``. Raises if missing."""
     path = _bucket_root() / "reciters" / slug / "detailed.json"
@@ -208,9 +135,9 @@ def _load_timestamps_shards(slug: str) -> dict[str, dict]:
     return load_canonical_verses(_bucket_root() / "reciters" / slug / "timestamps")
 
 
-def _reshape_timestamps_for_rows(canonical: dict) -> dict[str, dict]:
+def _reshape_timestamps_for_rows(canonical: dict, digital_khatt_words: dict) -> dict[str, dict]:
     """Projection → ``build_verse_layouts`` input (shared with the GH release)."""
-    return reshape_canonical(canonical)
+    return reshape_canonical(canonical, digital_khatt_words)
 
 
 # ---------------------------------------------------------------------------
@@ -277,7 +204,6 @@ def build_rows(
     timestamps: dict,
     detailed_by_ref: dict,
     surah_info: dict,
-    dk_words: dict,
     chapter_urls: dict[str, str] | None = None,
     *,
     chapter_offsets: dict[str, int] | None = None,
@@ -337,44 +263,14 @@ def build_rows(
             ]
             verse_letters = [
                 {
-                    "word_idx": lt[0],
-                    "char": lt[1],
-                    "start_ms": _i(lt[2] - clip_start),
-                    "end_ms": _i(lt[3] - clip_start),
+                    "word_occurrence": token[0],
+                    "start_ms": _i(token[1] - clip_start),
+                    "end_ms": _i(token[2] - clip_start),
+                    "owns_sound": token[3],
+                    "paint": token[4],
                 }
-                for lt in layout["letters"]
+                for token in layout["tokens"]
             ]
-
-            # text_uthmani from detailed.json matched_refs, restricted to the
-            # clip range; cross-verse segments use only this ayah's portion.
-            text_parts: list[str] = []
-            for det_seg in entry.get("segments", []) or []:
-                t_start = det_seg.get("time_start", 0)
-                t_end = det_seg.get("time_end", 0)
-                if t_end <= clip_start or t_start >= clip_end:
-                    continue
-                mref = det_seg.get("matched_ref", "")
-                seg_text = (
-                    _text_for_ref(mref, dk_words, surah_info)
-                    if dk_words
-                    else det_seg.get("matched_text", "")
-                )
-                if "-" in mref:
-                    rp = mref.split("-")
-                    if len(rp) == 2:
-                        sa = rp[0].split(":")
-                        ea = rp[1].split(":")
-                        if len(sa) >= 2 and len(ea) >= 2:
-                            s_ay = int(sa[1])
-                            e_ay = int(ea[1])
-                            if ayah < s_ay or ayah > e_ay:
-                                continue
-                            if s_ay != e_ay:
-                                seg_text = _cross_verse_text(
-                                    mref, seg_text, ayah, surah_info, surah_num
-                                )
-                text_parts.append(seg_text)
-            text = _strip_quran_markers(" ".join(text_parts))
 
             # Kept audio runs = the verse clip window minus any INTERIOR
             # no-match segment (empty matched_ref). A no-match segment stays in
@@ -401,7 +297,7 @@ def build_rows(
                     "surah": chapter,
                     "ayah": ayah,
                     "duration_ms": _i(clip_end - clip_start),
-                    "text_uthmani": text,
+                    "text_uthmani": layout["text"],
                     "segments": verse_segments,
                     "word_timestamps": verse_words,
                     "letter_timestamps": verse_letters,
@@ -633,10 +529,11 @@ def _push_to_hf(slug: str, riwayah: str, rows: list[dict], audio_bytes: list[byt
         lt = row["letter_timestamps"]
         data["letter_timestamps"].append(
             {
-                "word_idx": [x["word_idx"] for x in lt],
-                "char": [x["char"] for x in lt],
+                "word_occurrence": [x["word_occurrence"] for x in lt],
                 "start_ms": [x["start_ms"] for x in lt],
                 "end_ms": [x["end_ms"] for x in lt],
+                "owns_sound": [x["owns_sound"] for x in lt],
+                "paint": [x["paint"] for x in lt],
             }
         )
         src_url = row["source_url"]
@@ -667,10 +564,11 @@ def _push_to_hf(slug: str, riwayah: str, rows: list[dict], audio_bytes: list[byt
             # hub. Per-row value is fed in the transposed form below.
             "letter_timestamps": Sequence(
                 {
-                    "word_idx": Value("int32"),
-                    "char": Value("string"),
+                    "word_occurrence": Value("int32"),
                     "start_ms": Value("int32"),
                     "end_ms": Value("int32"),
+                    "owns_sound": Value("bool"),
+                    "paint": Sequence(Sequence(Value("int32"))),
                 }
             ),
             "source_url": Value("string"),
@@ -712,14 +610,17 @@ def _sync_dataset_catalog_and_card(repo_id: str) -> None:
     enumeration so they agree.
     """
     from qua_shared.config_loader import template_path
+    from qua_shared.digital_khatt import (
+        DIGITAL_KHATT_FONT_FILENAME,
+        DIGITAL_KHATT_SCRIPT_FILENAME,
+    )
     from qua_shared.hf_dataset_catalog import (
         hub_published_splits_by_config,
         push_catalog_dataset,
         render_dataset_card,
+        sync_dataset_assets,
         upload_dataset_card,
-        upload_vocab_file,
     )
-    from qua_shared.letter_vocab import VOCAB_FILENAME, vocab_csv_bytes
 
     db_path = _bucket_root() / "db" / "inspector.db"
     if not db_path.exists():
@@ -742,8 +643,24 @@ def _sync_dataset_catalog_and_card(repo_id: str) -> None:
         stats=stats,
     )
     upload_dataset_card(repo_id=repo_id, content=card, token=token)
-    upload_vocab_file(
-        repo_id=repo_id, filename=VOCAB_FILENAME, content=vocab_csv_bytes(), token=token
+    code_root = _code_root()
+    sync_dataset_assets(
+        repo_id=repo_id,
+        assets={
+            DIGITAL_KHATT_SCRIPT_FILENAME: (
+                code_root / "data" / DIGITAL_KHATT_SCRIPT_FILENAME
+            ).read_bytes(),
+            DIGITAL_KHATT_FONT_FILENAME: (
+                code_root
+                / "inspector"
+                / "frontend"
+                / "public"
+                / "fonts"
+                / DIGITAL_KHATT_FONT_FILENAME
+            ).read_bytes(),
+        },
+        remove=("letter_vocab_hafs_qpc.csv", "qpc_hafs.json"),
+        token=token,
     )
 
 
@@ -831,12 +748,12 @@ def _preflight(slug: str) -> int:
     if not detailed_path.exists():
         log.error("detailed.json missing at %s", detailed_path)
         return 13
-    refs_dir = Path("/aux/code/data")
+    refs_dir = _code_root() / "data"
     if not (refs_dir / "surah_info.json").exists():
         log.error("static ref surah_info.json missing at %s", refs_dir)
         return 14
-    if not ((refs_dir / "qpc_hafs.json.gz").exists() or (refs_dir / "qpc_hafs.json").exists()):
-        log.error("static ref qpc_hafs.json[.gz] missing at %s", refs_dir)
+    if not (refs_dir / "digital_khatt_v2_script.json").exists():
+        log.error("static ref digital_khatt_v2_script.json missing at %s", refs_dir)
         return 14
     return 0
 
@@ -899,25 +816,10 @@ def publish_slug(
     if not canonical:
         log.error("no timestamps shards on bucket for %s", slug)
         return _result(slug, "failed", error="no timestamps shards on bucket", exit_code=3)
-    timestamps = _reshape_timestamps_for_rows(canonical)
-
-    # 2. Load static refs from staged code dir. qpc_hafs: prefer the staged
-    # uncompressed json, then a VALID staged .gz; HF auto-LFS-promotes *.gz by
-    # extension so the staged .gz can be a git-lfs pointer (not gzip) — in that
-    # case the real bytes live in the bucket reference. Mirrors cut_release's
-    # _load_qpc_bytes.
-    refs_dir = Path("/aux/code/data")
+    # 2. Load the one public presentation and reference metadata.
+    refs_dir = _code_root() / "data"
     surah_info = json.loads((refs_dir / "surah_info.json").read_bytes())
-    plain = refs_dir / "qpc_hafs.json"
-    gz = refs_dir / "qpc_hafs.json.gz"
-    gz_raw = gz.read_bytes() if gz.exists() else b""
-    if plain.exists():
-        dk_words = json.loads(plain.read_bytes())
-    elif gz_raw and not gz_raw.startswith(b"version https://git-lfs"):
-        dk_words = json.loads(gzip.decompress(gz_raw))
-    else:
-        bucket_gz = _bucket_root() / "reference" / "qpc_hafs.json.gz"
-        dk_words = json.loads(gzip.decompress(bucket_gz.read_bytes()))
+    digital_khatt_words = json.loads((refs_dir / "digital_khatt_v2_script.json").read_bytes())
 
     # 2b. Gate incomplete verses: any verse missing a reference word index (never
     # recited) is dropped — no row, no audio slice. Coverage falls by that count.
@@ -925,8 +827,8 @@ def publish_slug(
     from qua_shared.surah_words import word_counts_from_surah_info
     from qua_shared.timestamps_native import select_complete_verses
 
-    timestamps, dropped_incomplete = select_complete_verses(
-        timestamps, word_counts_from_surah_info(surah_info)
+    canonical, dropped_incomplete = select_complete_verses(
+        canonical, word_counts_from_surah_info(surah_info)
     )
     if dropped_incomplete:
         log.info(
@@ -935,6 +837,7 @@ def publish_slug(
             slug,
             dropped_incomplete,
         )
+    timestamps = _reshape_timestamps_for_rows(canonical, digital_khatt_words)
 
     # 3. Build rows. source_url comes from the audio manifest's chapter URLs
     # (detailed.json carries no per-entry audio field). Prefer the manifest's
@@ -956,7 +859,6 @@ def publish_slug(
         timestamps,
         detailed_by_ref,
         surah_info,
-        dk_words,
         chapter_urls,
         chapter_offsets=chapter_offsets,
         pad_start=pad_start,

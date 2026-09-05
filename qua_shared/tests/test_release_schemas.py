@@ -6,8 +6,8 @@ import pytest
 from pydantic import ValidationError
 
 from qua_shared.schemas import (
+    DigitalKhattDoc,
     LetterTimestampsDoc,
-    QpcHafsDoc,
     ReleaseCatalog,
     ReleaseCatalogAudio,
     ReleaseCoverage,
@@ -19,12 +19,15 @@ from qua_shared.schemas import (
 
 def _meta(tier: str, layout: str) -> dict:
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "slug": "example_reciter",
         "audio_category": "by_surah",
         "verse_count": 1,
         "tier": tier,
         "layout": layout,
+        "script": "digital_khatt_v2",
+        "script_sha256": "0" * 64,
+        "unicode_indexing": "scalar",
     }
 
 
@@ -38,14 +41,22 @@ def test_timestamp_tier_shapes_validate():
     )
     LetterTimestampsDoc.model_validate(
         {
-            "_meta": _meta("letter", "[[start,end], words, letters]"),
+            "_meta": _meta("letter", "[[start,end], text, words, tokens]"),
             "100:1": [
                 [0, 2831],
+                "xy",
                 [[1, 70, 1550]],
-                [[1, "x", 70, 240], [1, "y", 240, 420]],
+                [[0, 70, 240, True, [[0, 1]]], [0, 240, 420, False, [[1, 2]]]],
             ],
         }
     )
+
+
+def test_public_release_schema_one_is_rejected():
+    meta = _meta("verse", "[start,end]")
+    meta["schema_version"] = 1
+    with pytest.raises(ValidationError):
+        VerseTimestampsDoc.model_validate({"_meta": meta, "1:1": [0, 1]})
 
 
 def test_timestamp_tier_rejects_bad_verse_key():
@@ -123,8 +134,8 @@ def test_legacy_coverage_without_missing_keys_validates():
     assert cov.missing_surahs == "" and cov.missing_verses == ""
 
 
-def test_qpc_hafs_doc_validates_location_keys():
-    doc = QpcHafsDoc.model_validate(
+def test_digital_khatt_doc_validates_location_keys():
+    doc = DigitalKhattDoc.model_validate(
         {
             "1:1:1": {
                 "id": 1,
@@ -139,7 +150,7 @@ def test_qpc_hafs_doc_validates_location_keys():
     assert doc.root["1:1:1"].location == "1:1:1"
 
     with pytest.raises(ValidationError):
-        QpcHafsDoc.model_validate(
+        DigitalKhattDoc.model_validate(
             {
                 "1:1:1": {
                     "surah": "1",

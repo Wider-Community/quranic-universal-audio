@@ -387,8 +387,6 @@ def read_record_bytes(kind: str, slug: str | None, job_id: str) -> bytes | None:
 # run. Loud preflight prevents silent skips when the deployed image is missing
 # something (e.g. a new entrypoint shipped but Dockerfile not updated).
 REQUIRED_ENTRYPOINTS = (
-    "qua_jobs/generate_timestamps.py",
-    "qua_jobs/run_generate_timestamps.py",
     "qua_jobs/publish_hf.py",
     "qua_jobs/publish_hf_batch.py",
     "qua_jobs/refresh_hf_catalog.py",
@@ -398,8 +396,9 @@ REQUIRED_ENTRYPOINTS = (
     "qua_jobs/download_audio.py",
 )
 REQUIRED_STATIC_FILES = (
-    "data/qpc_hafs.json",
+    "data/digital_khatt_v2_script.json",
     "data/surah_info.json",
+    "inspector/frontend/public/fonts/DigitalKhattV2.otf",
     ".github/config/repo.yml",
     "docs/templates/release_body.md",
     "docs/templates/hf_dataset_card.md",
@@ -427,31 +426,12 @@ def _is_lfs_pointer(p: Path) -> bool:
         return False
 
 
-def _resolve_required_static(rel: str) -> tuple[Path | None, bytes | None]:
-    """Resolve a REQUIRED_STATIC_FILES entry to either a local path or in-memory bytes.
-
-    For ``data/qpc_hafs.json``: prefer the uncompressed file on disk (dev +
-    image when shipped). Otherwise decompress the sibling ``.gz`` on the fly.
-    On a deployed Space the ``.gz`` can arrive as an LFS pointer (unsmudged);
-    in that case the real bytes live in the bucket at ``reference/qpc_hafs.json.gz``,
-    so fall back to reading them from there.
-    """
-    import gzip as _gzip
-
+def _resolve_required_static(rel: str) -> Path | None:
+    """Resolve one required staged file, rejecting LFS pointer stubs."""
     src = REPO_ROOT / rel
     if src.exists() and not _is_lfs_pointer(src):
-        return src, None
-    if rel == "data/qpc_hafs.json":
-        compressed = REPO_ROOT / "data" / "qpc_hafs.json.gz"
-        if compressed.exists():
-            if not _is_lfs_pointer(compressed):
-                return None, _gzip.decompress(compressed.read_bytes())
-            # .gz present but an LFS pointer (deployed image) → real bytes
-            # live in the bucket reference.
-            from services.storage.hf_bucket import get_backend
-
-            return None, _gzip.decompress(get_backend().read_bytes("reference/qpc_hafs.json.gz"))
-    return None, None
+        return src
+    return None
 
 
 def stage_job_code() -> None:
@@ -469,7 +449,6 @@ def stage_job_code() -> None:
 
     adds: list[tuple[str | Path | bytes, str]] = []
     seen_targets: set[str] = set()
-    tmp_files: list[Path] = []
 
     for sub in ("qua_shared", "qua_jobs"):
         base = REPO_ROOT / sub
@@ -482,39 +461,24 @@ def stage_job_code() -> None:
             adds.append((str(path), f"code/{rel}"))
             seen_targets.add(f"code/{rel}")
 
-    import tempfile as _tempfile
-
     for rel in REQUIRED_STATIC_FILES:
-        path, blob = _resolve_required_static(rel)
+        path = _resolve_required_static(rel)
         target = f"code/{rel}"
         if path is not None:
             adds.append((str(path), target))
-            seen_targets.add(target)
-        elif blob is not None:
-            fd, tmp_path = _tempfile.mkstemp(prefix="stagedref_", suffix=Path(rel).name)
-            os.write(fd, blob)
-            os.close(fd)
-            tmp_files.append(Path(tmp_path))
-            adds.append((tmp_path, target))
             seen_targets.add(target)
 
     expected = {f"code/{p}" for p in REQUIRED_ENTRYPOINTS + REQUIRED_STATIC_FILES}
     missing = sorted(expected - seen_targets)
     if missing:
-        for p in tmp_files:
-            p.unlink(missing_ok=True)
         raise JobStagingError(
             "stage_job_code: required files missing from the running image: "
             f"{missing}. Likely cause: inspector/Dockerfile doesn't COPY one "
             "of these paths. Fix the Dockerfile, redeploy the Space, then retry."
         )
 
-    try:
-        batch_bucket_files(ALIGNER_BUCKET, add=adds)
-        log.info("staged %d job-code files to %s/code/", len(adds), ALIGNER_BUCKET)
-    finally:
-        for p in tmp_files:
-            p.unlink(missing_ok=True)
+    batch_bucket_files(ALIGNER_BUCKET, add=adds)
+    log.info("staged %d job-code files to %s/code/", len(adds), ALIGNER_BUCKET)
 
 
 # ---------------------------------------------------------------------------

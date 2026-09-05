@@ -20,7 +20,8 @@ from pydantic import BaseModel, ConfigDict, Field, RootModel, model_serializer, 
 
 from qua_shared.schemas.bucket.release_settings import ReleaseSettings
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+RELEASE_FORMAT_MAJOR = 3
 VERSE_KEY_RE = re.compile(r"^[1-9]\d{0,2}:[1-9]\d{0,2}$")
 LOCATION_KEY_RE = re.compile(r"^[1-9]\d{0,2}:[1-9]\d{0,2}:[1-9]\d{0,2}$")
 
@@ -57,7 +58,7 @@ class ReleaseManifestRecitation(BaseModel):
 class ReleaseManifest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: int = SCHEMA_VERSION
+    schema_version: Literal[2] = SCHEMA_VERSION
     release_version: str
     created_at: str
     previous_version: str | None = None
@@ -123,7 +124,7 @@ class ReleaseCoverage(BaseModel):
 class ReleaseRecitationCatalog(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: int = SCHEMA_VERSION
+    schema_version: Literal[2] = SCHEMA_VERSION
     slug: str
     reciter_id: str | None = None
     name_en: str | None = None
@@ -143,14 +144,14 @@ class ReleaseRecitationCatalog(BaseModel):
 class ReleaseCatalog(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: int = SCHEMA_VERSION
+    schema_version: Literal[2] = SCHEMA_VERSION
     recitations: list[ReleaseRecitationCatalog] = Field(default_factory=list)
 
 
 class RecitationManifest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: int = SCHEMA_VERSION
+    schema_version: Literal[2] = SCHEMA_VERSION
     release_version: str
     slug: str
     created_at: str
@@ -160,12 +161,15 @@ class RecitationManifest(BaseModel):
 class TimestampMeta(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: int = SCHEMA_VERSION
+    schema_version: Literal[2] = SCHEMA_VERSION
     slug: str
     audio_category: str | None = None
     verse_count: int = Field(..., ge=0)
     tier: TimestampTier
     layout: str
+    script: Literal["digital_khatt_v2"]
+    script_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    unicode_indexing: Literal["scalar"] = "scalar"
 
 
 class _TimestampDoc(BaseModel):
@@ -208,19 +212,41 @@ class WordTimestampsDoc(_TimestampDoc):
 
 class LetterTimestampsDoc(_TimestampDoc):
     def _validate_value(self, value: Any) -> None:
-        if not (
+        valid_shape = (
             isinstance(value, list)
-            and len(value) == 3
+            and len(value) == 4
             and _is_ms_pair(value[0])
-            and isinstance(value[1], list)
-            and all(_is_word(w) for w in value[1])
+            and isinstance(value[1], str)
             and isinstance(value[2], list)
-            and all(_is_letter(letter) for letter in value[2])
-        ):
-            raise ValueError("letter timestamp must be [[start_ms,end_ms], words, letters]")
+            and all(_is_word(w) for w in value[2])
+            and isinstance(value[3], list)
+            and all(_is_token(token, len(value[2]), len(value[1])) for token in value[3])
+        )
+        if not valid_shape:
+            raise ValueError("letter timestamp must be [[start_ms,end_ms], text, words, tokens]")
+        word_texts = value[1].split(" ") if value[1] else []
+        if len(word_texts) != len(value[2]):
+            raise ValueError("DigitalKhatt word count differs from timing occurrences")
+        word_ranges: list[tuple[int, int]] = []
+        cursor = 0
+        for text in word_texts:
+            word_ranges.append((cursor, cursor + len(text)))
+            cursor += len(text) + 1
+        painted: set[int] = set()
+        for token in value[3]:
+            if token[2] < token[1]:
+                raise ValueError("animation token end precedes start")
+            word_from, word_to = word_ranges[token[0]]
+            for start, end in token[4]:
+                if start < word_from or end > word_to:
+                    raise ValueError("animation paint range crosses its word occurrence")
+                scalars = set(range(start, end))
+                if painted & scalars:
+                    raise ValueError("animation paint ranges overlap")
+                painted |= scalars
 
 
-class QpcHafsWord(BaseModel):
+class DigitalKhattWord(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     id: int | None = None
@@ -231,14 +257,14 @@ class QpcHafsWord(BaseModel):
     text: str
 
 
-class QpcHafsDoc(RootModel[dict[str, QpcHafsWord]]):
+class DigitalKhattDoc(RootModel[dict[str, DigitalKhattWord]]):
     @model_validator(mode="after")
     def _validate_locations(self):
         for key, word in self.root.items():
             if not LOCATION_KEY_RE.match(key):
-                raise ValueError(f"invalid QPC location key: {key!r}")
+                raise ValueError(f"invalid DigitalKhatt location key: {key!r}")
             if word.location != key:
-                raise ValueError(f"QPC location mismatch: {key!r} != {word.location!r}")
+                raise ValueError(f"DigitalKhatt location mismatch: {key!r} != {word.location!r}")
         return self
 
 
@@ -254,14 +280,25 @@ def _is_word(v: Any) -> bool:
     return isinstance(v, list) and len(v) == 3 and _is_int(v[0]) and _is_int(v[1]) and _is_int(v[2])
 
 
-def _is_letter(v: Any) -> bool:
+def _is_token(v: Any, word_count: int, text_length: int) -> bool:
     return (
         isinstance(v, list)
-        and len(v) == 4
+        and len(v) == 5
         and _is_int(v[0])
-        and isinstance(v[1], str)
+        and 0 <= v[0] < word_count
+        and _is_int(v[1])
         and _is_int(v[2])
-        and _is_int(v[3])
+        and isinstance(v[3], bool)
+        and isinstance(v[4], list)
+        and bool(v[4])
+        and all(
+            isinstance(span, list)
+            and len(span) == 2
+            and _is_int(span[0])
+            and _is_int(span[1])
+            and 0 <= span[0] < span[1] <= text_length
+            for span in v[4]
+        )
     )
 
 

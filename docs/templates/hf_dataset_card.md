@@ -34,7 +34,7 @@ size_categories:
 
 Qur'anic Universal Audio (QUA) is a project that unifies recitations on the internet and generates timing data using forced alignment — community-verified results and constantly expanding dataset.
 
-This dataset pairs ayah by ayah audio with word-level timestamps, letter timestamps, and waqf-aware segment data. Repeated words are preserved in `text_uthmani` and `word_timestamps`, so the row reflects what the reciter actually recited rather than a plain copy of canonical ayah text.
+This dataset pairs ayah by ayah audio with word-level timestamps, DigitalKhatt letter-animation timestamps, and waqf-aware segment data. Repeated words are preserved in `text_uthmani` and `word_timestamps`, so the row reflects what the reciter actually recited rather than a plain copy of canonical ayah text.
 
 > **Tip:** Click the three dots (···) at the top right and toggle **Notifications** to get updates whenever recitations are added or refreshed.
 
@@ -54,14 +54,18 @@ Each remaining subset is one published mushaf — a config named after the musha
 | `surah` | `int32` | Surah number, 1-114. |
 | `ayah` | `int32` | Ayah number within the surah. |
 | `duration_ms` | `int32` | Clip duration. |
-| `text_uthmani` | `string` | Recited Uthmani text (normalized) |
+| `text_uthmani` | `string` | Exact recited DigitalKhatt V2 text. |
 | `segments` | `[[int,int,int,int]]` | Waqf/pause-aware regions: `[word_from, word_to, start_ms, end_ms]`. |
 | `word_timestamps` | `[[int,int,int]]` | `[word_idx, start_ms, end_ms]`; word indices are 1-based. |
-| `letter_timestamps` | struct of lists | `word_idx`, `char`, `start_ms`, `end_ms`. `char` is one token from a fixed 42-token alphabet — see `letter_vocab_hafs_qpc.csv` in this repo. |
+| `letter_timestamps` | struct of lists | `word_occurrence`, `start_ms`, `end_ms`, `owns_sound`, `paint`. `paint` contains half-open Unicode-scalar ranges into `text_uthmani`. |
 | `source_url` | `string` | Original chapter or ayah audio URL. |
 | `source_offset_ms` | `int32` | Clip start inside `source_url`. |
 
 All row timestamps are relative to the ayah clip. Use `source_offset_ms + timestamp_ms` when mapping a row back to its source audio.
+
+`word_occurrence` is a zero-based position in `word_timestamps`, not a Quran word index, so loopbacks and repeated words remain unambiguous. Every animation token has resolved timing. For silent-omit highlighting, reveal it on schedule but apply the active colour only when `owns_sound` is true.
+
+There is no letter vocabulary: animation tokens are paint ranges over exact DigitalKhatt text, not members of a fixed alphabet. A range may cover a base with combining marks or isolate an independently sounded mark. Use Unicode scalar indexing (`Array.from(text)` in JavaScript). The repository root also contains `digital_khatt_v2_script.json` and the matching `DigitalKhattV2.otf` font.
 
 ## Catalog Schema
 

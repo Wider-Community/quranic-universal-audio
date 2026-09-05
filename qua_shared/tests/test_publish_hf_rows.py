@@ -17,7 +17,8 @@ SURAH = {"112": {"verses": [{"verse": 1}, {"verse": 2}]}}
 def _ts(verse_words):
     return {
         "words": [[w, s, e] for (w, s, e) in verse_words],
-        "letters": [(w, []) for (w, _, _) in verse_words],
+        "word_texts": ["x"] * len(verse_words),
+        "tokens_by_word": [[] for _ in verse_words],
         "verse_start_ms": verse_words[0][1],
         "verse_end_ms": max(e for *_, e in verse_words),
     }
@@ -44,9 +45,7 @@ def test_fit_boundary_ratio_and_min_gap():
 def _rows(v1_words, v2_words, v1_segs, v2_segs):
     timestamps = {"112:1": _ts(v1_words), "112:2": _ts(v2_words)}
     detailed = {"112:1": _detailed(v1_segs), "112:2": _detailed(v2_segs)}
-    return build_rows(
-        timestamps, detailed, SURAH, {}, None, pad_start=100, pad_end=300, min_gap=100
-    )
+    return build_rows(timestamps, detailed, SURAH, None, pad_start=100, pad_end=300, min_gap=100)
 
 
 def test_segments_byte_exact_and_outer_headroom():

@@ -49,7 +49,7 @@ def test_stage_job_code_uploads_every_required_path(stub_batch, monkeypatch, tmp
 
     Mirrors the other tests' tmp_path + REPO_ROOT monkeypatch isolation so
     the assertion no longer depends on the real ``qua_shared`` / ``qua_jobs``
-    trees on disk or on whether ``qpc_hafs.json`` exists in this checkout.
+    trees on disk.
     """
     (tmp_path / "qua_shared").mkdir(parents=True)
     (tmp_path / "qua_shared" / "__init__.py").write_text("")
@@ -59,7 +59,11 @@ def test_stage_job_code_uploads_every_required_path(stub_batch, monkeypatch, tmp
         (tmp_path / ep).write_text("# stub")
     (tmp_path / "data").mkdir()
     (tmp_path / "data" / "surah_info.json").write_text("{}")
-    (tmp_path / "data" / "qpc_hafs.json").write_text("{}")
+    (tmp_path / "data" / "digital_khatt_v2_script.json").write_text("{}")
+    (tmp_path / "inspector" / "frontend" / "public" / "fonts").mkdir(parents=True)
+    (tmp_path / "inspector" / "frontend" / "public" / "fonts" / "DigitalKhattV2.otf").write_bytes(
+        b"font"
+    )
     (tmp_path / ".github" / "config").mkdir(parents=True)
     (tmp_path / ".github" / "config" / "repo.yml").write_text("hf_dataset: foo/bar")
     (tmp_path / "docs" / "templates").mkdir(parents=True)
@@ -77,8 +81,14 @@ def test_stage_job_code_uploads_every_required_path(stub_batch, monkeypatch, tmp
         assert f"code/{rel}" in targets, f"missing static upload: {rel}"
 
 
-def test_stage_job_code_decompresses_qpc_when_only_gzip_present(stub_batch, monkeypatch, tmp_path):
-    """When only ``data/qpc_hafs.json.gz`` exists, stage plain JSON."""
+def test_runtime_image_copies_digital_khatt_release_assets():
+    dockerfile = (base.REPO_ROOT / "inspector" / "Dockerfile").read_text()
+    assert "data/digital_khatt_v2_script.json" in dockerfile
+    assert "inspector/frontend/public/fonts/DigitalKhattV2.otf" in dockerfile
+
+
+def test_stage_job_code_requires_digital_khatt_assets(stub_batch, monkeypatch, tmp_path):
+    """The v13 public projection cannot launch without its exact script and font."""
     (tmp_path / "qua_shared").mkdir(parents=True)
     (tmp_path / "qua_jobs").mkdir(parents=True)
     for ep in base.REQUIRED_ENTRYPOINTS:
@@ -86,11 +96,6 @@ def test_stage_job_code_decompresses_qpc_when_only_gzip_present(stub_batch, monk
         (tmp_path / ep).write_text("# stub")
     (tmp_path / "data").mkdir()
     (tmp_path / "data" / "surah_info.json").write_text("{}")
-    import gzip as _gzip
-
-    (tmp_path / "data" / "qpc_hafs.json.gz").write_bytes(
-        _gzip.compress(b'{"1:1:1": {"text": "x"}}')
-    )
     (tmp_path / ".github" / "config").mkdir(parents=True)
     (tmp_path / ".github" / "config" / "repo.yml").write_text("hf_dataset: foo/bar")
     (tmp_path / "docs" / "templates").mkdir(parents=True)
@@ -99,11 +104,13 @@ def test_stage_job_code_decompresses_qpc_when_only_gzip_present(stub_batch, monk
     (tmp_path / "LICENSE").write_text("MIT")
     monkeypatch.setattr(base, "REPO_ROOT", tmp_path)
 
-    base.stage_job_code()
+    with pytest.raises(base.JobStagingError) as exc:
+        base.stage_job_code()
 
-    assert len(stub_batch) == 1
-    by_target = {target: blob for _src, target, blob in stub_batch[0]["snapshot"]}
-    assert by_target["code/data/qpc_hafs.json"] == b'{"1:1:1": {"text": "x"}}'
+    message = str(exc.value)
+    assert "data/digital_khatt_v2_script.json" in message
+    assert "DigitalKhattV2.otf" in message
+    assert stub_batch == []
 
 
 def test_stage_job_code_raises_when_entrypoint_missing(stub_batch, monkeypatch, tmp_path):

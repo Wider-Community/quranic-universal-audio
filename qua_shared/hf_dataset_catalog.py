@@ -560,18 +560,28 @@ def upload_dataset_card(*, repo_id: str, content: str, token: str | None) -> Non
     )
 
 
-def upload_vocab_file(*, repo_id: str, filename: str, content: bytes, token: str | None) -> None:
-    """Commit the letter-tier vocab CSV to the dataset under ``filename``."""
-    from huggingface_hub import CommitOperationAdd, HfApi
+def sync_dataset_assets(
+    *,
+    repo_id: str,
+    assets: dict[str, bytes],
+    remove: tuple[str, ...] = (),
+    token: str | None,
+) -> None:
+    """Commit public presentation assets and remove superseded files."""
+    from huggingface_hub import CommitOperationAdd, CommitOperationDelete, HfApi
 
-    HfApi(token=token).create_commit(
+    api = HfApi(token=token)
+    existing = set(api.list_repo_files(repo_id=repo_id, repo_type="dataset"))
+    operations: list[CommitOperationAdd | CommitOperationDelete] = [
+        CommitOperationAdd(path_in_repo=filename, path_or_fileobj=content)
+        for filename, content in sorted(assets.items())
+    ]
+    operations.extend(
+        CommitOperationDelete(path_in_repo=filename) for filename in remove if filename in existing
+    )
+    api.create_commit(
         repo_id=repo_id,
         repo_type="dataset",
-        operations=[
-            CommitOperationAdd(
-                path_in_repo=filename,
-                path_or_fileobj=content,
-            ),
-        ],
-        commit_message="update letter vocab",
+        operations=operations,
+        commit_message="update DigitalKhatt release assets",
     )

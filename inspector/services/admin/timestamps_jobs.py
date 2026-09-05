@@ -2,7 +2,7 @@
 
 Flask-free. The Reviews tab triggers ``launch()`` for an under-review reciter;
 the whole-verse MFA producer runs on the batch timing Space (ADR 0002 slice B),
-which reads detailed.json + audio and writes v12 per-chapter shards +
+which reads detailed.json + audio and writes v13 per-chapter shards +
 ``ts_validation.json`` into the inspector bucket. The Space also writes a
 durable run-log record at ``reciters/<slug>/jobs/ts/<run_id>.json`` (settings +
 status + logs) — ``running`` at accept, then ``succeeded``/``failed`` when the
