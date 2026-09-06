@@ -21,10 +21,17 @@ RUN apk add --no-cache git openssh-client
 # Copy the full frontend before `npm ci`: the root `postinstall` hook runs
 # `paraglide:compile`, which needs `project.inlang/` + the message sources.
 COPY inspector/frontend ./
-# HF Spaces can leave the OTF itself as an unsmudged Git-LFS pointer in the
-# Docker context. The small deterministic gzip is stored as a normal Git blob;
-# expand it before Vite copies public/ into dist/.
-RUN gzip -dc public/fonts/DigitalKhattV2.otf.gz > public/fonts/DigitalKhattV2.otf
+# HF Spaces can leave the OTF itself as an unsmudged Git-LFS pointer. The small
+# transport object is committed as gzip, although the Space builder may expose
+# it already expanded while retaining the .gz name. Accept either representation
+# and require real OpenType bytes before Vite copies public/ into dist/.
+RUN if gzip -t public/fonts/DigitalKhattV2.otf.gz 2>/dev/null; then \
+      gzip -dc public/fonts/DigitalKhattV2.otf.gz > public/fonts/DigitalKhattV2.otf; \
+    elif [ "$(head -c 4 public/fonts/DigitalKhattV2.otf.gz)" = "OTTO" ]; then \
+      cp public/fonts/DigitalKhattV2.otf.gz public/fonts/DigitalKhattV2.otf; \
+    else \
+      echo "DigitalKhattV2 transport is neither gzip nor OpenType" >&2; exit 1; \
+    fi
 RUN --mount=type=ssh,required=false \
     --mount=type=secret,id=CELLS_DEPLOY_KEY,required=false \
     mkdir -p -m 700 /root/.ssh && \
@@ -180,11 +187,19 @@ COPY data/surah_info.json \
 # source path before launch. Keep it alongside the built frontend asset.
 COPY --chmod=0644 inspector/frontend/public/fonts/DigitalKhattV2.otf.gz \
      ./inspector/frontend/public/fonts/DigitalKhattV2.otf.gz
-# Expand the normal-Git transport copy and fail the image build if it is
-# missing or malformed. stage_job_code runs inside this final image and must
-# upload the real font bytes before an HF publish can launch.
-RUN gzip -d ./inspector/frontend/public/fonts/DigitalKhattV2.otf.gz && \
+# Expand the transport copy (or rename the Space builder's already-expanded
+# copy) and fail if it is missing/malformed. stage_job_code must upload the real
+# font bytes before an HF publish can launch.
+RUN if gzip -t ./inspector/frontend/public/fonts/DigitalKhattV2.otf.gz 2>/dev/null; then \
+      gzip -d ./inspector/frontend/public/fonts/DigitalKhattV2.otf.gz; \
+    elif [ "$(head -c 4 ./inspector/frontend/public/fonts/DigitalKhattV2.otf.gz)" = "OTTO" ]; then \
+      mv ./inspector/frontend/public/fonts/DigitalKhattV2.otf.gz \
+         ./inspector/frontend/public/fonts/DigitalKhattV2.otf; \
+    else \
+      echo "DigitalKhattV2 transport is neither gzip nor OpenType" >&2; exit 1; \
+    fi && \
     test -s ./inspector/frontend/public/fonts/DigitalKhattV2.otf && \
+    [ "$(head -c 4 ./inspector/frontend/public/fonts/DigitalKhattV2.otf)" = "OTTO" ] && \
     ! head -c 40 ./inspector/frontend/public/fonts/DigitalKhattV2.otf | grep -q "version https://git-lfs"
 COPY --from=frontend-build /app/dist ./inspector/frontend/dist
 # Cross-stage COPY preserves the source modes; cached Vite output can contain
