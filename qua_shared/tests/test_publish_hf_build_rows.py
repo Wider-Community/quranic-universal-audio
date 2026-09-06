@@ -25,7 +25,7 @@ from qua_shared.dataset_validation import fatal_violations, validate_dataset
 _SURAH_INFO = {"1": {"verses": [{"verse": 1, "num_words": 4}, {"verse": 2, "num_words": 3}]}}
 
 
-def test_hf_push_preserves_slug_config_and_train_split(monkeypatch):
+def test_hf_push_preserves_riwayah_directory_and_slug_filename(monkeypatch):
     pushed = {}
 
     class FakeDataset:
@@ -69,8 +69,8 @@ def test_hf_push_preserves_slug_config_and_train_split(monkeypatch):
     }
 
     assert publish_hf._push_to_hf("reciter_slug", "hafs_an_asim", [row], [b"mp3"]) == "revision"
-    assert pushed["config_name"] == "reciter_slug"
-    assert pushed["split"] == "train"
+    assert pushed["config_name"] == "hafs_an_asim"
+    assert pushed["split"] == "reciter_slug"
     assert "letter_timestamps" not in pushed["data"][0]
     assert "letter_timestamps" not in pushed["features"]
     assert pushed["from_generator"]["writer_batch_size"] == 64

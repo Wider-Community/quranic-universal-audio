@@ -3,7 +3,7 @@
 
 Reads the recitation's bucket artifacts (``detailed.json`` + per-chapter
 ``timestamps/<n>.json.br`` + Xing-master ``audio/<n>.mp3``) and pushes a
-parquet config to the public HF dataset under ``<slug>/train``. Audio
+Parquet split to the public HF dataset under ``<riwayah>/<slug>``. Audio
 clips are produced by in-process MP3 frame-index slicing
 (``qua_shared/mp3_frames.py``) — each chapter is read + indexed once, then
 every verse clip is a byte-exact frame-range copy with the start snapped to
@@ -536,11 +536,11 @@ def _push_to_hf(slug: str, riwayah: str, rows: list[dict], audio_bytes: list[byt
         fingerprint=os.environ.get("JOB_ID") or slug,
     )
 
-    log.info("pushing %d rows to %s/%s/train", len(ds), repo_id, slug)
+    log.info("pushing %d rows to %s/%s/%s", len(ds), repo_id, riwayah, slug)
     ds.push_to_hub(
         repo_id,
-        config_name=slug,
-        split="train",
+        config_name=riwayah,
+        split=slug,
         token=os.environ.get("HF_TOKEN"),
         max_shard_size="500MB",
         commit_message=f"publish {riwayah}/{slug}",
