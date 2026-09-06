@@ -31,6 +31,8 @@ def test_hf_push_preserves_slug_config_and_train_split(monkeypatch):
     class FakeDataset:
         @classmethod
         def from_dict(cls, data, features):
+            pushed["data"] = data
+            pushed["features"] = features
             return cls()
 
         def push_to_hub(self, repo_id, **kwargs):
@@ -58,7 +60,6 @@ def test_hf_push_preserves_slug_config_and_train_split(monkeypatch):
         "text_uthmani": "x",
         "segments": [],
         "word_timestamps": [],
-        "letter_timestamps": [],
         "source_url": "https://example.test/1.mp3",
         "clip_start": 0,
     }
@@ -66,6 +67,8 @@ def test_hf_push_preserves_slug_config_and_train_split(monkeypatch):
     assert publish_hf._push_to_hf("reciter_slug", "hafs_an_asim", [row], [b"mp3"]) == "revision"
     assert pushed["config_name"] == "reciter_slug"
     assert pushed["split"] == "train"
+    assert "letter_timestamps" not in pushed["data"]
+    assert "letter_timestamps" not in pushed["features"]
 
 
 def test_seg_word_range_single_ayah():
@@ -98,7 +101,20 @@ def test_build_rows_segments_and_source_url():
     timestamps = {
         "1:1": {
             "words": [[1, 0, 1000], [2, 1000, 2000], [3, 2000, 3000], [4, 3000, 4000]],
-            "letters": [],
+            "word_texts": ["a", "b", "c", "d"],
+            "tokens_by_word": [
+                [
+                    {
+                        "start_ms": 100,
+                        "end_ms": 200,
+                        "owns_sound": False,
+                        "paint": [[0, 1]],
+                    }
+                ],
+                [],
+                [],
+                [],
+            ],
             "verse_start_ms": 0,
             "verse_end_ms": 4000,
         }
@@ -107,7 +123,6 @@ def test_build_rows_segments_and_source_url():
         timestamps,
         _detailed_by_ref(detailed),
         _SURAH_INFO,
-        {},
         {"1": "https://cdn.example/001.mp3"},
     )
     assert len(rows) == 1
@@ -116,6 +131,8 @@ def test_build_rows_segments_and_source_url():
     # Word span 1->4 (basmala), NOT the collapsed [1, 1].
     assert row["segments"][0][0] == 1
     assert row["segments"][0][1] == 4
+    assert row["text_uthmani"] == "a b c d"
+    assert "letter_timestamps" not in row
 
 
 # ---------------------------------------------------------------------------
@@ -138,7 +155,13 @@ def test_subtract_spans_interior_and_overlapping():
 
 
 def _ts(words, start, end):
-    return {"words": words, "letters": [], "verse_start_ms": start, "verse_end_ms": end}
+    return {
+        "words": words,
+        "word_texts": ["x"] * len(words),
+        "tokens_by_word": [[] for _ in words],
+        "verse_start_ms": start,
+        "verse_end_ms": end,
+    }
 
 
 def test_build_rows_keep_runs_contiguous_single_run():
@@ -154,7 +177,7 @@ def test_build_rows_keep_runs_contiguous_single_run():
     timestamps = {
         "1:1": _ts([[1, 0, 1000], [2, 1000, 2000], [3, 2000, 3000], [4, 3000, 4000]], 0, 4000)
     }
-    rows = build_rows(timestamps, _detailed_by_ref(detailed), _SURAH_INFO, {}, {"1": "u"})
+    rows = build_rows(timestamps, _detailed_by_ref(detailed), _SURAH_INFO, {"1": "u"})
     # One run; the chapter-last verse takes the default pad_end (300ms) tail
     # headroom, so the run ends at verse_end + 300.
     assert rows[0]["keep_runs"] == [(0, 4300)]
@@ -178,7 +201,7 @@ def test_build_rows_keep_runs_interior_no_match_splits():
     timestamps = {
         "1:1": _ts([[1, 0, 1000], [2, 1000, 2000], [3, 3000, 3500], [4, 3500, 4000]], 0, 4000)
     }
-    rows = build_rows(timestamps, _detailed_by_ref(detailed), _SURAH_INFO, {}, {"1": "u"})
+    rows = build_rows(timestamps, _detailed_by_ref(detailed), _SURAH_INFO, {"1": "u"})
     assert len(rows) == 1
     # Interior no-match [2000,3000] excised; chapter-last verse takes the default
     # pad_end (300ms) tail, so the trailing run ends at verse_end + 300.
@@ -221,7 +244,8 @@ def test_build_rows_repeated_pivot_segments_no_overlap():
     timestamps = {
         "1:1": {
             "words": words,
-            "letters": [],
+            "word_texts": ["x"] * len(words),
+            "tokens_by_word": [[] for _ in words],
             "verse_start_ms": 100,
             "verse_end_ms": 9000,
             "seg_spans": [
@@ -246,7 +270,7 @@ def test_build_rows_repeated_pivot_segments_no_overlap():
             ],
         }
     }
-    rows = build_rows(timestamps, _detailed_by_ref(detailed), surah_info, {}, {"1": "u"})
+    rows = build_rows(timestamps, _detailed_by_ref(detailed), surah_info, {"1": "u"})
     assert len(rows) == 1
     segs = rows[0]["segments"]
     assert len(segs) == 2
@@ -273,7 +297,7 @@ def test_build_rows_full_verse_no_match_drops_row():
     timestamps = {
         "1:1": _ts([[1, 0, 1000], [2, 1000, 2000], [3, 2000, 3000], [4, 3000, 4000]], 0, 4000)
     }
-    rows = build_rows(timestamps, _detailed_by_ref(detailed), _SURAH_INFO, {}, {"1": "u"})
+    rows = build_rows(timestamps, _detailed_by_ref(detailed), _SURAH_INFO, {"1": "u"})
     assert [(r["surah"], r["ayah"]) for r in rows] == [(1, 1)]
 
 
@@ -288,7 +312,6 @@ def test_rebase_row_multi_excises_gap_gaplessly():
         "duration_ms": 4000,
         "word_timestamps": [[1, 0, 1000], [2, 1000, 2000], [3, 3000, 3500], [4, 3500, 4000]],
         "segments": [[1, 2, 0, 2000], [3, 4, 3000, 4000]],
-        "letter_timestamps": [{"word_idx": 3, "char": "x", "start_ms": 3000, "end_ms": 3100}],
     }
     # Runs: [0,2000) then [3000,4000) placed right after (cum_offset 2000).
     runs = [RunMap(0, 2000, 0), RunMap(3000, 4000, 2000)]
@@ -304,5 +327,3 @@ def test_rebase_row_multi_excises_gap_gaplessly():
         [4, 2500, 3000],
     ]
     assert row["segments"] == [[1, 2, 0, 2000], [3, 4, 2000, 3000]]
-    assert row["letter_timestamps"][0]["start_ms"] == 2000
-    assert row["letter_timestamps"][0]["end_ms"] == 2100

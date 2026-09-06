@@ -13,7 +13,8 @@ PADS: PadParams = {"pad_start": 100, "pad_end": 300, "min_gap": 100}
 def _ts(words, vs, ve, seg_spans=None):
     return {
         "words": words,
-        "letters": [(int(w[0]), []) for w in words],
+        "word_texts": ["x"] * len(words),
+        "tokens_by_word": [[] for _ in words],
         "verse_start_ms": vs,
         "verse_end_ms": ve,
         "seg_spans": seg_spans,

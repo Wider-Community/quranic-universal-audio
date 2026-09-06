@@ -65,9 +65,12 @@ def test_missing_tool_message_names_install_command():
 def test_load_verse_windows_groups_by_chapter_sorted(tmp_path):
     doc = {
         "_meta": {"tier": "verse"},
-        "1:2": [2831, 4000],
-        "1:1": [0, 2831],
-        "2:1": [0, 1500],
+        "rows": [
+            ["1:2", 2831, 4000, True, 0],
+            ["1:1", 0, 2831, True, 0],
+            ["2:1", 0, 1500, True, 0],
+            ["1:1", 5000, 5200, False, 0],
+        ],
     }
     path = tmp_path / "verse_timestamps.json.gz"
     path.write_bytes(gzip.compress(json.dumps(doc).encode()))
@@ -77,7 +80,7 @@ def test_load_verse_windows_groups_by_chapter_sorted(tmp_path):
     }
 
 
-def test_load_verse_windows_reads_plain_json(tmp_path):
+def test_load_verse_windows_reads_legacy_plain_json(tmp_path):
     path = tmp_path / "verse_timestamps.json"
     path.write_text(json.dumps({"_meta": {}, "1:1": [0, 10]}))
     assert da._load_verse_windows(path) == {"1": [(1, 0, 10)]}

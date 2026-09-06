@@ -2,14 +2,12 @@
 ``verse_start_ms == 0`` and keep its three fields consistent.
 
 A canonical verse can legitimately start at 0 ms while its first word's audio
-starts a few ms later (leading gap). The bounds the cut validates are now the
-shared layout's clip window (``build_verse_layouts``), and ``_verse_for_validate``
+starts a few ms later (leading gap). The bounds the cut validates are the shared
+layout's HF clip window (``build_verse_layouts``), and ``_verse_for_validate``
 derives ``duration_ms`` from those same bounds — so the three fields always
 agree (no phantom ``duration_arithmetic``, which once aborted the cut on
-``abu_bakr_al_shatri_tarteel`` 5:1). These tests run with zero pads so the clip
-window equals the word-span, isolating the consistency invariant. The release's
-tier bounds + letter mapping also come from the shared layout, so the GH release
-and the HF dataset reconstruct the same geometry.
+``abu_bakr_al_shatri_tarteel`` 5:1). GH occurrence bounds and HF clip bounds are
+different public views derived from the same underlying layout.
 """
 
 from __future__ import annotations
@@ -26,10 +24,6 @@ from qua_shared.dataset_validation import (
 )
 from qua_shared.verse_layout import PadParams, build_verse_layouts, reshape_canonical
 
-# An LFS pointer file — what HF auto-LFS ships for ``data/qpc_hafs.json.gz`` in
-# the job image (LFS'd by extension; the Space build can't smudge it).
-_LFS_POINTER = b"version https://git-lfs.github.com/spec/v1\noid sha256:deadbeef\nsize 1452433\n"
-
 # Zero pads → the clip window equals the word-span, so these tier/validate tests
 # read the same bounds the old word-span builder produced.
 _ZERO_PADS: PadParams = {"pad_start": 0, "pad_end": 0, "min_gap": 0}
@@ -41,13 +35,28 @@ def _native_projection(verses: dict) -> dict:
     for ref, body in verses.items():
         words = []
         for row in body["words"]:
-            letters = [
-                {"text": text, "start_ms": start, "end_ms": end}
-                for text, start, end in (row[3] if len(row) > 3 else [])
-            ]
+            specs = row[3] if len(row) > 3 else []
+            source_text = "".join(text for text, _start, _end in specs) or "x"
+            letters = []
+            cursor = 0
+            for sound_id, (text, start, end) in enumerate(specs):
+                offsets = list(range(cursor, cursor + len(text)))
+                letters.append(
+                    {
+                        "text": text,
+                        "character_offsets": offsets,
+                        "paint_character_offsets": offsets,
+                        "sound_ids": [sound_id],
+                        "start_ms": start,
+                        "end_ms": end,
+                    }
+                )
+                cursor += len(text)
             words.append(
                 {
                     "index": row[0],
+                    "ref": f"{ref}:{row[0]}",
+                    "source_text": source_text,
                     "start_ms": row[1],
                     "end_ms": row[2],
                     "letters": letters,
@@ -63,12 +72,21 @@ def _native_projection(verses: dict) -> dict:
 
 
 def _layouts(verses: dict) -> dict:
-    return build_verse_layouts(reshape_canonical(_native_projection(verses)), **_ZERO_PADS)
+    projected = _native_projection(verses)
+    digital_khatt = {
+        word["ref"]: {"text": word["source_text"]}
+        for verse in projected.values()
+        for word in verse["words"]
+    }
+    return build_verse_layouts(reshape_canonical(projected, digital_khatt), **_ZERO_PADS)
 
 
 def _tiers(verses: dict) -> dict:
     return cut_release._build_tier_files(
-        "example_reciter", _layouts(verses), delivery_meta={"audio_category": "by_surah"}
+        "example_reciter",
+        _layouts(verses),
+        delivery_meta={"audio_category": "by_surah"},
+        script_sha256="0" * 64,
     )
 
 
@@ -111,13 +129,10 @@ def test_release_timestamp_tiers_preserve_verse_order():
         "letter_timestamps.json.gz",
     ):
         doc = json.loads(gzip.decompress(files[name]).decode("utf-8"))
-        keys = [key for key in doc if key != "_meta"]
-        assert keys == ["1:1", "2:1", "10:1", "100:1"]
+        assert [row[0] for row in doc["rows"]] == ["1:1", "2:1", "10:1", "100:1"]
 
 
-def test_letter_tier_maps_internal_alphabet_to_external_42_set():
-    # 19:1 muqattaat كٓهيعٓصٓ — internal letters carry the maddah mark; the cut
-    # must emit the collapsed (maddah-free) external tokens, with timings intact.
+def test_letter_tier_keeps_digital_khatt_text_and_scalar_paint_ranges():
     verses = {
         "19:1": {
             "words": [
@@ -138,108 +153,119 @@ def test_letter_tier_maps_internal_alphabet_to_external_42_set():
     }
     files = _tiers(verses)
     doc = json.loads(gzip.decompress(files["letter_timestamps.json.gz"]).decode("utf-8"))
-    letters = doc["19:1"][2]  # [[widx, char, start, end], ...]
-    chars = [lt[1] for lt in letters]
-    assert chars == ["ك", "ه", "ي", "ع", "ص"]  # maddah dropped
-    assert all("ٓ" not in c for c in chars)
-    assert letters[0] == [1, "ك", 0, 100]  # timing preserved
+    row = doc["rows"][0]
+    assert row[5] == "كٓهيعٓصٓ"
+    tokens = row[6]
+    assert tokens[0] == [0, 0, 100, True, [[0, 2]]]
+    assert tokens[-1] == [0, 400, 500, True, [[6, 8]]]
 
 
-def test_letter_tier_fails_loud_on_unknown_token():
-    # A haraka-bearing letter is not in the external alphabet → the shared layout
-    # build (where the external mapping happens) aborts.
+def test_letter_tier_preserves_combining_marks_without_a_vocab():
     verses = {"1:1": {"words": [[1, 0, 100, [["بَ", 0, 100]]]]}}
-    with pytest.raises(ValueError):
-        _layouts(verses)
+    doc = json.loads(gzip.decompress(_tiers(verses)["letter_timestamps.json.gz"]))
+    assert doc["rows"][0][5] == "بَ"
+    assert doc["rows"][0][6] == [[0, 0, 100, True, [[0, 2]]]]
 
 
-def test_release_verse_bound_is_padded_clip_window():
-    # Consistency with the HF dataset: the release verse bound is the padded clip
-    # window [clip_start, clip_end], NOT the raw word-span. With a trailing
-    # neighbour the gap is ample, so the first verse takes the full pad_end tail.
+def test_release_verse_bound_is_audible_span_not_hf_clip_window():
+    # The GH occurrence timeline uses last-audible bounds and exposes following
+    # silence separately. HF remains free to cut its padded clip from the shared
+    # layout without changing this public release contract.
     verses = {
         "1:1": {"words": [[1, 100, 1000]], "verse_start_ms": 100, "verse_end_ms": 1000},
         "1:2": {"words": [[1, 5000, 6000]], "verse_start_ms": 5000, "verse_end_ms": 6000},
     }
+    projected = _native_projection(verses)
+    digital_khatt = {
+        word["ref"]: {"text": word["source_text"]}
+        for verse in projected.values()
+        for word in verse["words"]
+    }
     layouts = build_verse_layouts(
-        reshape_canonical(_native_projection(verses)),
+        reshape_canonical(projected, digital_khatt),
         pad_start=100,
         pad_end=300,
         min_gap=100,
     )
     files = cut_release._build_tier_files(
-        "example_reciter", layouts, delivery_meta={"audio_category": "by_surah"}
+        "example_reciter",
+        layouts,
+        delivery_meta={"audio_category": "by_surah"},
+        script_sha256="0" * 64,
     )
     verse_doc = json.loads(gzip.decompress(files["verse_timestamps.json.gz"]).decode("utf-8"))
-    assert verse_doc["1:1"] == [
-        0,
-        1300,
-    ]  # clip window (word-span 100..1000 padded), not [100, 1000]
-    # The word tier keeps the true word times (source-relative), so the word-span
-    # is still recoverable from inside the padded clip.
+    assert verse_doc["rows"][0] == ["1:1", 100, 1000, True, 4000]
+    # The word tier keeps the true source-relative word times.
     word_doc = json.loads(gzip.decompress(files["word_timestamps.json.gz"]).decode("utf-8"))
-    assert word_doc["1:1"][1] == [[1, 100, 1000]]
+    assert word_doc["rows"][0][4] == [[1, 100, 1000]]
+
+
+def test_release_tiers_share_occurrence_prefix_and_compute_silence_after():
+    verses = {
+        "1:1": {"words": [[1, 100, 1000]], "verse_start_ms": 100, "verse_end_ms": 1000},
+        "1:2": {"words": [[1, 1500, 2000]], "verse_start_ms": 1500, "verse_end_ms": 2000},
+        "2:1": {"words": [[1, 0, 500]], "verse_start_ms": 0, "verse_end_ms": 500},
+    }
+    files = _tiers(verses)
+    verse = json.loads(gzip.decompress(files["verse_timestamps.json.gz"]))
+    word = json.loads(gzip.decompress(files["word_timestamps.json.gz"]))
+    letter = json.loads(gzip.decompress(files["letter_timestamps.json.gz"]))
+
+    assert word["rows"][0] == letter["rows"][0][:5]
+    assert verse["rows"] == [
+        ["1:1", 100, 1000, True, 500],
+        ["1:2", 1500, 2000, True, 0],
+        ["2:1", 0, 500, True, 0],
+    ]
 
 
 # ---------------------------------------------------------------------------
-# qpc_hafs byte resolution: the staged image .gz is an LFS pointer (HF
-# auto-LFS by extension), so the real bytes must come from the bucket.
-# Regression for ``BadGzipFile: Not a gzipped file (b've')`` aborting the cut.
+# DigitalKhatt asset validation and manifest hashing.
 # ---------------------------------------------------------------------------
 
 
-def test_qpc_prefers_local_uncompressed(tmp_path):
-    (tmp_path / "qpc_hafs.json").write_bytes(b'{"1:1:1": "x"}')
-    assert cut_release._load_qpc_bytes(tmp_path) == b'{"1:1:1": "x"}'
-
-
-def test_qpc_local_valid_gz(tmp_path):
-    """CI / job staging with a real .gz and no uncompressed source."""
-    raw = b'{"1:1:1": "gz"}'
-    (tmp_path / "qpc_hafs.json.gz").write_bytes(gzip.compress(raw, mtime=0))
-    assert cut_release._load_qpc_bytes(tmp_path) == raw
-
-
-def test_qpc_lfs_pointer_gz_falls_back_to_bucket(tmp_path, monkeypatch):
-    """The deployed-job case: staged .gz is an LFS pointer (not gzip), so the
-    real bytes must come from the bucket's reference/qpc_hafs.json.gz."""
-    raw = b'{"1:1:1": "bucket"}'
-    (tmp_path / "qpc_hafs.json.gz").write_bytes(_LFS_POINTER)
-    bucket = tmp_path / "bucket"
-    (bucket / "reference").mkdir(parents=True)
-    (bucket / cut_release.QPC_BUCKET_REL).write_bytes(gzip.compress(raw, mtime=0))
-    monkeypatch.setattr(cut_release, "_bucket_root", lambda: bucket)
-
-    assert cut_release._load_qpc_bytes(tmp_path) == raw
-
-
-def test_qpc_none_when_unavailable_everywhere(tmp_path, monkeypatch):
-    (tmp_path / "qpc_hafs.json.gz").write_bytes(_LFS_POINTER)
-    monkeypatch.setattr(cut_release, "_bucket_root", lambda: tmp_path / "empty-bucket")
-
-    assert cut_release._load_qpc_bytes(tmp_path) is None
-
-
-def test_qpc_validation_rejects_pointer_bytes():
-    with pytest.raises(RuntimeError, match="not valid QPC JSON"):
-        cut_release._validate_qpc_bytes(_LFS_POINTER)
-
-
-def test_qpc_validation_accepts_real_shape():
-    cut_release._validate_qpc_bytes(
-        b'{"1:1:1":{"id":1,"surah":"1","ayah":"1","word":"1","location":"1:1:1","text":"bismi"}}'
-    )
-
-
-def test_hash_static_refs_uses_resolved_qpc(tmp_path):
-    """The manifest hashes the resolved *decompressed* qpc bytes, regardless of
-    whether the staged .gz was usable."""
+def test_digital_khatt_assets_validate_and_hash(tmp_path):
     (tmp_path / "surah_info.json").write_bytes(b'{"surahs": []}')
-    qpc = b'{"1:1:1": "y"}'
-    out = cut_release._hash_static_refs(tmp_path, qpc)
-    assert out["qpc_hafs.json"]["bytes"] == len(qpc)
-    assert out["qpc_hafs.json"]["sha256"] == cut_release._sha256_hex(qpc)
+    script = b'{"1:1:1":{"id":1,"surah":"1","ayah":"1","word":"1","location":"1:1:1","text":"x"}}'
+    script_dir = tmp_path / "data"
+    font_dir = tmp_path / "inspector" / "frontend" / "public" / "fonts"
+    script_dir.mkdir()
+    font_dir.mkdir(parents=True)
+    (script_dir / "digital_khatt_v2_script.json").write_bytes(script)
+    (font_dir / "DigitalKhattV2.otf").write_bytes(b"font")
+    loaded_script, loaded_font = cut_release._load_digital_khatt_assets(tmp_path)
+    out = cut_release._hash_static_refs(
+        tmp_path,
+        {
+            "digital_khatt_v2_script.json": loaded_script,
+            "DigitalKhattV2.otf": loaded_font,
+        },
+    )
+    assert out["digital_khatt_v2_script.json"]["sha256"] == cut_release._sha256_hex(script)
+    assert out["DigitalKhattV2.otf"]["bytes"] == 4
     assert "surah_info.json" in out
+
+
+def test_schema_two_cut_starts_release_format_v3():
+    unchanged = [{"change_kind": "unchanged"}]
+    assert cut_release._compute_version("v2.4.0", unchanged, False, None) == "v3.0.0"
+
+
+def test_release_format_v3_keeps_normal_bumps_and_rejects_old_override():
+    assert (
+        cut_release._compute_version("v3.0.0", [{"change_kind": "added"}], False, None) == "v3.1.0"
+    )
+    assert (
+        cut_release._compute_version("v3.1.0", [{"change_kind": "refresh"}], False, None)
+        == "v3.1.1"
+    )
+    with pytest.raises(RuntimeError, match="requires release v3"):
+        cut_release._compute_version("v2.4.0", [], False, "v2.5.0")
+
+
+def test_unchanged_v3_release_still_refuses_a_noop_cut():
+    with pytest.raises(RuntimeError, match="nothing changed"):
+        cut_release._compute_version("v3.0.0", [{"change_kind": "unchanged"}], False, None)
 
 
 def test_audio_urls_come_from_sidecar_chapters():

@@ -162,16 +162,20 @@ COPY LICENSE ./LICENSE
 # (state, catalog, audit, per-reciter reciters/) lives in the bucket
 # mounted at /data/inspector-bucket. INSPECTOR_QUA_DATA_PATH=/app/data tells
 # config.py to look here instead of the default sibling-project path.
-# qpc_hafs.json (~12 MB) ships gzipped because HF Spaces auto-LFS-promote
+# qpc_hafs.json (~12 MB) still serves the Inspector's internal Quran-data path
+# and ships gzipped because HF Spaces auto-LFS-promote
 # files >10 MB at push time and the Space build doesn't smudge LFS — the
 # uncompressed source would land as a 133-byte pointer. upload_inspector.py
-# pre-gzips at stage time; runtime readers (services/storage/data_loader,
-# qua_jobs/{publish_hf,cut_release}) gunzip on read.
+# pre-gzips at stage time; the runtime data loader gunzips it on read.
 COPY data/surah_info.json \
      data/qpc_hafs.json.gz \
      data/digital_khatt_v2_script.json \
      data/phoneme_sub_costs.json \
      ./data/
+# The release jobs publish this exact font and stage_job_code validates the
+# source path before launch. Keep it alongside the built frontend asset.
+COPY inspector/frontend/public/fonts/DigitalKhattV2.otf \
+     ./inspector/frontend/public/fonts/DigitalKhattV2.otf
 COPY --from=frontend-build /app/dist ./inspector/frontend/dist
 
 # Data volume is mounted here at runtime (see docker-compose.yml). Inside the

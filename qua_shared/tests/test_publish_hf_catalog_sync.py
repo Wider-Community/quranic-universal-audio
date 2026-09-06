@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from qua_jobs import publish_hf
 from qua_shared.hf_dataset_catalog import HfDatasetCatalogStats
@@ -13,7 +14,7 @@ def test_publish_hf_syncs_catalog_and_card_after_split(monkeypatch, tmp_path):
     db_path = db_dir / "inspector.db"
     db_path.write_bytes(b"sqlite placeholder")
 
-    called: dict[str, object] = {}
+    called: dict[str, Any] = {}
     stats = HfDatasetCatalogStats(
         timestamped_recitations=1,
         timestamped_riwayat=1,
@@ -43,10 +44,11 @@ def test_publish_hf_syncs_catalog_and_card_after_split(monkeypatch, tmp_path):
     def fake_upload_dataset_card(*, repo_id: str, content: str, token: str | None):
         called["upload"] = (repo_id, content, token)
 
-    def fake_upload_vocab_file(*, repo_id: str, filename: str, content: bytes, token: str | None):
-        called["vocab"] = (repo_id, filename, content, token)
+    def fake_sync_dataset_assets(*, repo_id, assets, remove=(), token):
+        called["assets"] = (repo_id, assets, remove, token)
 
     monkeypatch.setenv("INSPECTOR_BUCKET_MOUNT", str(bucket))
+    monkeypatch.setenv("INSPECTOR_CODE_DIR", str(publish_hf._REPO_ROOT))
     monkeypatch.setenv("HF_TOKEN", "hf_test")
     monkeypatch.setattr(
         "qua_shared.hf_dataset_catalog.hub_published_splits_by_config",
@@ -65,8 +67,8 @@ def test_publish_hf_syncs_catalog_and_card_after_split(monkeypatch, tmp_path):
         fake_upload_dataset_card,
     )
     monkeypatch.setattr(
-        "qua_shared.hf_dataset_catalog.upload_vocab_file",
-        fake_upload_vocab_file,
+        "qua_shared.hf_dataset_catalog.sync_dataset_assets",
+        fake_sync_dataset_assets,
     )
 
     publish_hf._sync_dataset_catalog_and_card("owner/dataset")
@@ -85,6 +87,16 @@ def test_publish_hf_syncs_catalog_and_card_after_split(monkeypatch, tmp_path):
     )
     assert called["upload"] == ("owner/dataset", "RENDERED CARD", "hf_test")
 
-    from qua_shared.letter_vocab import VOCAB_FILENAME, vocab_csv_bytes
-
-    assert called["vocab"] == ("owner/dataset", VOCAB_FILENAME, vocab_csv_bytes(), "hf_test")
+    repo_root = Path(publish_hf._REPO_ROOT)
+    repo_id, assets, remove, token = called["assets"]
+    assert repo_id == "owner/dataset"
+    assert assets == {
+        "digital_khatt_v2_script.json": (
+            repo_root / "data/digital_khatt_v2_script.json"
+        ).read_bytes(),
+        "DigitalKhattV2.otf": (
+            repo_root / "inspector/frontend/public/fonts/DigitalKhattV2.otf"
+        ).read_bytes(),
+    }
+    assert remove == ("letter_vocab_hafs_qpc.csv", "qpc_hafs.json")
+    assert token == "hf_test"

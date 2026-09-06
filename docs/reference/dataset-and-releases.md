@@ -24,16 +24,15 @@ running + historical, in one place: the **Jobs** tab — [admin-dashboard.md](ad
 | **GH release** | `gh:releases/v{X.Y.Z}` → `<slug>.zip` assets | Mobile apps, offline kiosks, archives | One version-pinned, fully-offline snapshot of all reciters |
 | **HF dataset** | `hetchyy/quranic-universal-ayahs` | ML researchers, training, analysis | Parquet-native, queryable, embedded audio |
 
-Every adapter starts from the same bucket inputs. A native v12 chapter stores every recorded
+Every adapter starts from the same bucket inputs. A native v13 chapter stores every recorded
 occasion as connected readings and ordered `parts` (see [shards.md](shards.md) and
-[timestamps-job.md](timestamps-job.md)); the single canonical take per verse is a pure timing
-projection (`qua_shared.timestamps_native.select_complete_verses`).
-Both release adapters call that one projection, so the TS-tab read path and the release/dataset
-adapters cannot drift at the dedup layer. The shared loader runs the strict v12
-identity-closure audit before projection; malformed bucket shards block both
-adapters. Shard schema 12 does not change either frozen publication contract:
-GitHub continues to emit release tier schema 1, while the HF dataset keeps its
-documented per-verse columns.
+[timestamps-job.md](timestamps-job.md)). V3 GitHub tiers use an occurrence-capable ordered-row
+envelope but initially emit the single canonical take per verse; HF remains one row per canonical
+ayah. Both are pure projections of the same native readings, so the TS-tab read path and the
+release/dataset adapters cannot drift at the identity layer. The shared loader runs the strict v13
+identity-closure audit before projection; malformed or mixed-version bucket shards block both
+adapters. GitHub schema 2 projects producer animation ownership onto exact DigitalKhatt V2; HF
+keeps the exact text and word alignment but omits rendering-specific letter paint data.
 
 ## Release ledger (SQLite — migration `0014_releases.sql`)
 
@@ -105,7 +104,7 @@ The same predicate drives the Releases-tab buckets and the cut job's member disc
 [qua_jobs/cut_release.py](../../qua_jobs/cut_release.py). The job:
 
 1. Reads the bucket DB read-only → eligible reciters + the prior release's membership.
-2. Per reciter: reads every compact native v12 `timestamps/<ch>.json.br` shard and projects the canonical
+2. Per reciter: reads every compact native v13 `timestamps/<ch>.json.br` shard and projects the canonical
    verse map (`_load_canonical_verses` → `select_complete_verses`, the earliest completing occasion),
    then drops incomplete verses via `select_complete_verses` (missing a reference word index)
    → builds the three
@@ -129,15 +128,16 @@ Global single-flight: only one cut in flight at a time; a publish landing mid-cu
 
 ### Versioning
 
-Auto-bump from the prior version (operator `RELEASE_VERSION` override always wins):
+Auto-bump from the prior version (an operator `RELEASE_VERSION` override must still use release
+format major 3 or newer):
 
 | Situation | Result |
 |---|---|
-| First release | `v0.1.0` |
-| Any `added` reciter | MINOR bump (`v0.N+1.0`) |
-| `refresh` and/or changed static refs only | PATCH bump (`v0.N.P+1`) |
+| First schema-2 release, or prior release below v3 | `v3.0.0` |
+| Any `added` reciter after v3 | MINOR bump (`v3.N+1.0`) |
+| `refresh` and/or changed static refs only | PATCH bump (`v3.N.P+1`) |
 | Nothing changed | error — set `RELEASE_VERSION` to force-cut |
-| MAJOR (schema / MFA model change) | manual only — operator supplies `vX.0.0` |
+| Later breaking release-format change | raise `RELEASE_FORMAT_MAJOR`; the cut starts at that major |
 
 ## GH release structure
 
@@ -154,17 +154,17 @@ gh:releases/v{X.Y.Z}/
 ├── check_updates.py      # consumer helper (per-reciter update check)
 ├── download_audio.py     # consumer helper (fetch source audio @ aligned CBR encode)
 ├── surah_info.json       # static reference
-├── qpc_hafs.json         # static reference (mushaf text)
-├── letter_vocab_hafs_qpc.csv  # letter-tier char alphabet (42 tokens): char,codepoint,name
+├── digital_khatt_v2_script.json # exact Hafs presentation text
+├── DigitalKhattV2.otf    # matching OFL-1.1 font
 └── LICENSE               # CC-BY-4.0
 ```
 
 Each `<slug>.zip` contains:
 
 ```
-verse_timestamps.json.gz   # tier 1: "surah:ayah": [start_ms, end_ms]
-word_timestamps.json.gz    # tier 2: + [[widx, start, end], ...]
-letter_timestamps.json.gz  # tier 3: + [[widx, char, start, end], ...]
+verse_timestamps.json.gz   # tier 1: ordered occurrence rows + following silence
+word_timestamps.json.gz    # tier 2: verse-row prefix + words
+letter_timestamps.json.gz  # tier 3: word-row prefix + exact DK text + paint tokens
 catalog.json               # this reciter's catalog projection (carries audio chapter_urls)
 ```
 
@@ -173,22 +173,26 @@ per-zip `sha256`, and the in-zip `catalog.json` already self-identifies the reci
 the release-level `manifest.json` exists.
 
 Each tier self-contains the level below; all times are relative to the matching source audio in
-`catalog.json`; all ship the canonical (deduplicated) take. The three `.json.gz` layers keep storage,
-startup speed, and network transfer cheap: download verse, word, or letter detail independently.
+`catalog.json`. Rows are ordered occurrences and exactly one row per verse ref is marked canonical.
+V3 initially emits only that canonical row; later repeated and partial takes can be appended without
+changing the format. The three `.json.gz` layers keep storage, startup speed, and network transfer
+cheap: download verse, word, or letter detail independently.
 Use `shard.py` when an app prefers local per-surah files. There is no per-reciter `README.md`.
 
-**Letter-tier `char` alphabet.** Internal shards (`reciters/<slug>/timestamps/<ch>.json.br`,
-[shards.md](shards.md)) carry a 57-token grapheme alphabet (haraka stripped upstream, but the maddah
-mark and madd composites retained). At publish time **both** `cut_release` and `publish_hf` map each `char`
-through `qua_shared/letter_vocab.to_external_char`, which drops the maddah mark (`U+0653`) to
-yield a stable **42-token** external alphabet — a non-lossy, prolongation-only collapse (no two
-distinct letters merge). The mapping is **fail-loud**: an unknown token aborts the cut so a new
-riwayah/orthography is caught rather than silently shipped. The alphabet is published as a flat
-`char,codepoint,name` CSV at `letter_vocab_hafs_qpc.csv` (release root + the HF dataset repo) —
-the riwayah/script are in the *filename* so a future riwayah adds its own file
-(`letter_vocab_warsh_qpc.csv`, …); the tokenization rule lives here + in the release notes.
-Generated from the same module so it cannot drift from the emitted data. Internal shards and the
-Inspector animation are unchanged. See `qua_shared/letter_vocab.py`.
+**Letter-tier animation tokens.** A letter occurrence row is exactly its corresponding word row
+plus `text` and `tokens`. Public tokens are producer-attributed timed paint units, not a character
+alphabet. Each occurrence carries its exact DigitalKhatt V2 text. A token contains its
+zero-based `word_occurrence`, resolved start/end, `owns_sound`, and one or more half-open Unicode
+scalar paint ranges into that text. The occurrence pointer disambiguates repeated word indices;
+the ownership boolean supports silent-omit highlighting. Ordinary combining marks travel with
+their attributed unit, while independently sounded marks can have their own range. Display-only
+stop signs remain visible in the text but have no timed paint owner. The occurrence envelope is
+independent of this token representation: adding noncanonical takes does not change token shape.
+
+There is no letter-vocabulary asset. Consumers do not align QPC tokens against another Quran text,
+and the jobs do not strip Unicode marks into a closed alphabet. Both adapters use
+`qua_shared.digital_khatt` and `qua_shared.verse_layout`; the release also ships the exact script
+JSON and matching font identified by the hash in every tier's `_meta`.
 
 ### Audio policy (as-built)
 
@@ -223,12 +227,12 @@ the other helpers (`base.REQUIRED_ENTRYPOINTS`) and uploaded by the cut.
 
 ```json
 {
-  "schema_version": 1,
-  "release_version": "v0.1.0",
+  "schema_version": 2,
+  "release_version": "v3.0.0",
   "created_at": "2026-06-03T10:00:00Z",
   "previous_version": null,
   "recitation_count": 9,
-  "static_refs": { "surah_info.json": {"sha256": "...", "bytes": 1234}, "qpc_hafs.json": {"...": "..."} },
+  "static_refs": { "surah_info.json": {"sha256": "...", "bytes": 1234}, "digital_khatt_v2_script.json": {"...": "..."}, "DigitalKhattV2.otf": {"...": "..."} },
   "recitations": {
     "<slug>": { "zip": "<slug>.zip", "zip_url": "...", "sha256": "...", "bytes": 123,
                  "coverage_ayahs": 6236, "content_hash": "...", "change_kind": "added",
@@ -329,15 +333,17 @@ Full UI map: [`admin-dashboard.md`](admin-dashboard.md).
 | `surah` | `int32` | 1–114 |
 | `ayah` | `int32` | Within surah |
 | `duration_ms` | `int32` | first-word-start → last-word-end |
-| `text_uthmani` | `string` | What was recited (incl. repetitions); waqf/hizb/sajdah stripped |
+| `text_uthmani` | `string` | Exact DigitalKhatt V2 text for what was recited, including repetitions |
 | `segments` | `[[int,int,int,int]]` | `[word_from, word_to, start_ms, end_ms]` |
 | `word_timestamps` | `[[int,int,int]]` | `[word_idx, start_ms, end_ms]` |
-| `letter_timestamps` | `[{word_idx,char,start_ms,end_ms}]` | Empty if unavailable |
 | `source_url` | `string` | Chapter/verse audio URL (or `bucket://` when embedded) |
 | `source_offset_ms` | `int32` | Offset within `source_url` where the verse starts |
 
 - Audio embedded as bytes (verse-trimmed); `word_idx` is 1-based, may repeat / go backward within a
-  verse; `text_uthmani` token count equals `word_timestamps` occurrence count.
+  verse; splitting `text_uthmani` on spaces equals the `word_timestamps` occurrence count.
+- Letter-animation ownership and Unicode paint geometry are intentionally absent from the
+  ML-oriented HF table. Consumers needing granular rendering use the matching GitHub release's
+  `letter_timestamps.json.gz` tier.
 - **Subset (config)** = delivery/mushaf slug (e.g. `khalifa_al_tunaiji_tarteel`), **split** =
   `train`. Parquet still lives under the riwayah folder `hafs_an_asim/<slug>-*`; only the config
   label differs (one config per mushaf — the HF viewer caps a config at 30 splits). Readability
@@ -386,7 +392,7 @@ kept runs stitched gaplessly (the no-match audio excised) — see
 
 ## Dedup semantics — what projection loses / preserves
 
-Bucket v12 stores every recorded occasion in native readings and parts. The native publishing
+Bucket v13 stores every recorded occasion in native readings and parts. The native publishing
 projection reduces each verse to its single canonical take; the Inspector itself keeps all parts.
 
 | Lost in projection | Preserved |
@@ -417,7 +423,7 @@ Per-verse, `project_segment_shard` keeps the canonical occasion (falling back to
 widest-coverage occasion if none reaches full coverage `{1..N}`). A **publish-time completeness
 gate** — `select_complete_verses` (`qua_shared/timestamps_dedup.py`), run by both adapters against
 the reference word counts from `surah_info` — then drops any verse whose canonical take is missing a
-reference word index. Completeness is by word **index** (`{1..N_ref}` ⊆ covered indices), mirroring
+reference word index. Completeness is by word **index** (`{1..N_ref}` subset of covered indices), mirroring
 the editor's missing-words check; verses with no known reference count are kept (fail-open). Two
 distinct drop cases:
 

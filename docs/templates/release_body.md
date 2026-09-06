@@ -11,8 +11,8 @@
 | `check_updates.py` | Optional helper that checks the latest release for updates to the reciters you use; add `--sync` to re-download them. |
 | `download_audio.py` | Optional helper that fetches a reciter's source audio (YouTube/Drive/CDN) re-encoded so the timestamps line up. |
 | `surah_info.json` | Surah names, ayah counts, and word counts. |
-| `qpc_hafs.json` | QPC Hafs word reference used by the word and letter indexes. |
-| `letter_vocab_hafs_qpc.csv` | Optional letter-tier character vocabulary (`char,codepoint,name`). |
+| `digital_khatt_v2_script.json` | Exact DigitalKhatt V2 Hafs word text used by the timestamp projection. |
+| `DigitalKhattV2.otf` | Matching DigitalKhatt V2 font (SIL Open Font License 1.1 in the font metadata). |
 | `LICENSE` | CC-BY-4.0 license text. |
 
 The release-level `manifest.json` and `catalog.json` index the whole release; each zip also carries its own `catalog.json` describing just that recitation.
@@ -50,7 +50,7 @@ The `ayah` layout needs the verse tier file; run it from the unzipped reciter zi
 |---|---|---|
 | `verse_timestamps.json.gz` | verse playback or verse clips | smallest download |
 | `word_timestamps.json.gz` | word highlighting | faster than loading letters when you only need words |
-| `letter_timestamps.json.gz` | fine-grained alignment | full detail for research and advanced UI |
+| `letter_timestamps.json.gz` | letter animation | exact DigitalKhatt text plus timed Unicode-scalar paint ranges |
 
 The files are split and gzipped for storage, speed, and network efficiency. Download only the level you need.
 
@@ -76,71 +76,92 @@ Each reciter zip contains `catalog.json` and three timestamp files.
 type VerseKey = "surah:ayah";
 type Ms = number;
 type Word = [word_idx: number, start_ms: Ms, end_ms: Ms];
-type Letter = [word_idx: number, char: string, start_ms: Ms, end_ms: Ms];
+type ScalarRange = [from: number, to: number]; // half-open [from,to)
+type AnimationToken = [
+  word_occurrence: number,
+  start_ms: Ms,
+  end_ms: Ms,
+  owns_sound: boolean,
+  paint: ScalarRange[],
+];
 
-type VerseTimestamps = { _meta: Meta & { tier: "verse" }, [verse: VerseKey]: [Ms, Ms] };
-type WordTimestamps = { _meta: Meta & { tier: "word" }, [verse: VerseKey]: [[Ms, Ms], Word[]] };
-type LetterTimestamps = { _meta: Meta & { tier: "letter" }, [verse: VerseKey]: [[Ms, Ms], Word[], Letter[]] };
+type VerseOccurrence = [
+  ref: VerseKey, start_ms: Ms, end_ms: Ms, canonical: boolean, silence_after_ms: Ms
+];
+type WordOccurrence = [
+  ref: VerseKey, start_ms: Ms, end_ms: Ms, canonical: boolean, words: Word[]
+];
+type LetterOccurrence = [
+  ...word: WordOccurrence,
+  text: string,
+  tokens: AnimationToken[],
+];
+
+type VerseTimestamps = { _meta: Meta & { tier: "verse" }, rows: VerseOccurrence[] };
+type WordTimestamps = { _meta: Meta & { tier: "word" }, rows: WordOccurrence[] };
+type LetterTimestamps = {
+  _meta: Meta & { tier: "letter", script: "digital_khatt_v2", unicode_indexing: "scalar" },
+  rows: LetterOccurrence[]
+};
 ```
 
-The three tiers describe the **same** verse at increasing detail: each tier embeds the one above it, and every number is milliseconds from the start of the source audio.
+The three tiers describe the same ordered occurrences at increasing detail. `WordOccurrence` shares the verse occurrence prefix through `canonical`; `LetterOccurrence` is exactly `WordOccurrence + [text, tokens]`. Every number is milliseconds from the start of the source audio. V3 initially contains one `canonical: true` row per verse; later releases may append repeated or partial rows with `canonical: false` without changing this schema.
 
-**Verse tier** — just the verse span (`[start_ms, end_ms]`):
+**Verse tier** — audible occurrence spans plus the gap until the next occurrence in the same chapter timeline:
 
 ```jsonc
 {
-  "_meta": { "schema_version": 1, "slug": "example_reciter", "tier": "verse", "verse_count": 6236 },
-  // "surah:ayah": [verse_start_ms, verse_end_ms]
-  "1:1": [0, 2831]
+  "_meta": { "schema_version": 2, "slug": "example_reciter", "tier": "verse", "verse_count": 6236, "occurrence_count": 6236, "script": "digital_khatt_v2", "script_sha256": "…", "unicode_indexing": "scalar" },
+  "rows": [
+    // [ref, start_ms, end_ms, canonical, silence_after_ms]
+    ["1:1", 70, 2790, true, 41]
+  ]
 }
 ```
 
-**Word tier** — the verse span, then one `[word_idx, start_ms, end_ms]` per recited word:
+**Word tier** — the same occurrence prefix, then one `[word_idx, start_ms, end_ms]` per recited word:
 
 ```jsonc
 {
-  "_meta": { "schema_version": 1, "slug": "example_reciter", "tier": "word", "verse_count": 6236 },
-  // "surah:ayah": [ [verse_start_ms, verse_end_ms], [ [word_idx, start_ms, end_ms], ... ] ]
-  "1:1": [
-    [0, 2831],
+  "_meta": { "schema_version": 2, "slug": "example_reciter", "tier": "word", "verse_count": 6236, "occurrence_count": 6236, "script": "digital_khatt_v2", "script_sha256": "…", "unicode_indexing": "scalar" },
+  "rows": [[
+    "1:1", 70, 2790, true,
     [
       [1,   70,  770],   // بِسْمِ
       [2,  770, 1280],   // ٱللَّهِ
       [3, 1280, 2050],   // ٱلرَّحْمَٰنِ
       [4, 2050, 2790]    // ٱلرَّحِيمِ
     ]
-  ]
+  ]]
 }
 ```
 
 `word_idx` is 1-based within the verse. When a reciter loops back or re-recites part of a verse, `word_idx` can repeat or step backwards.
 
-**Letter tier** — the word tier, plus a single flat list of letters, each tagged with the `word_idx` it belongs to (`[word_idx, char, start_ms, end_ms]`):
+**Letter tier** — the complete word row followed by exact DigitalKhatt text and a flat list of timed paint units. `word_occurrence` is a zero-based position in the adjacent `words` array, so repeated `word_idx` values stay unambiguous. `paint` contains half-open Unicode-scalar ranges into that occurrence's `text`:
 
 ```jsonc
 {
-  "_meta": { "schema_version": 1, "slug": "example_reciter", "tier": "letter", "verse_count": 6236 },
-  // "surah:ayah": [ [verse_start, verse_end], words[], [ [word_idx, char, start_ms, end_ms], ... ] ]
-  "1:1": [
-    [0, 2831],
+  "_meta": { "schema_version": 2, "slug": "example_reciter", "tier": "letter", "verse_count": 6236, "occurrence_count": 6236, "script": "digital_khatt_v2", "script_sha256": "…", "unicode_indexing": "scalar" },
+  "rows": [[
+    "1:1", 70, 2790, true,
     [ [1, 70, 770], [2, 770, 1280], [3, 1280, 2050], [4, 2050, 2790] ],
+    "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ",
     [
-      [1, "ب",  70, 300],   // word 1: بِسْمِ
-      [1, "س", 300, 560],
-      [1, "م", 560, 770],
-      [2, "ا", 770, 900],   // word 2: ٱللَّهِ
-      [2, "ل", 900, 1120],
-      [2, "ل", 900, 1120],
-      [2, "ه", 1120, 1280]
-      // ... words 3 and 4
+      [0,  70, 300, true, [[0, 2]]],
+      [0, 300, 560, true, [[2, 4]]],
+      [0, 560, 770, true, [[4, 6]]]
+      // ... remaining timed paint units
     ]
-  ]
+  ]]
 }
 ```
 
-Letters are one flat array for the whole verse (not nested inside each word) — read each letter's `word_idx` to know which word it falls in.
+The text itself is the vocabulary: there is no separate letter-vocabulary file. A token is a producer-attributed animation unit, not one Unicode character. Its paint ranges can cover a base with combining marks or only an independently sounded mark. Presentation-only signs remain in `text` without a timed paint owner.
 
-Each `char` is one token from a fixed 42-token alphabet where distinct letters are kept apart — including the silent/structural ones (the superscript "dagger" alef, alef-wasla, the small waw/yeh, and each hamza shape). The full token list (`char,codepoint,name`) ships as `letter_vocab_hafs_qpc.csv` in this release.
+Every token has resolved timing, including cohighlighted units. In ordinary mode, paint every active token. In silent-omit mode, reveal tokens on schedule but apply the active colour only when `owns_sound` is `true`. No policy graph or phoneme inventory is required for these two modes.
+
+Ranges use Unicode scalar indexes, not UTF-16 code units. In JavaScript, index `Array.from(text)` rather than indexing the string directly.
 
 </details>
 
@@ -152,7 +173,7 @@ Each `char` is one token from a fixed 42-token alphabet where distinct letters a
 
 ```ts
 type ReleaseManifest = {
-  schema_version: 1;
+  schema_version: 2;
   release_version: string;
   recitation_count: number;
   static_refs: Record<string, { sha256: string; bytes: number }>;
@@ -170,13 +191,13 @@ type ReleaseManifest = {
 
 ```jsonc
 {
-  "schema_version": 1,
-  "release_version": "v0.1.0",
+  "schema_version": 2,
+  "release_version": "v3.0.0",
   "recitation_count": 13,
   "recitations": {
     "example_reciter": {
       "zip": "example_reciter.zip",
-      "zip_url": "https://github.com/<owner>/<repo>/releases/download/v0.1.0/example_reciter.zip",
+      "zip_url": "https://github.com/<owner>/<repo>/releases/download/v3.0.0/example_reciter.zip",
       "sha256": "…", "bytes": 1234567,
       "coverage_ayahs": 6236,
       "change_kind": "added"
@@ -188,9 +209,9 @@ type ReleaseManifest = {
 **Release-level `catalog.json`** — reciter metadata plus the source audio URLs the timestamps refer to:
 
 ```ts
-type ReleaseCatalog = { schema_version: 1; recitations: ReciterCatalog[] };
+type ReleaseCatalog = { schema_version: 2; recitations: ReciterCatalog[] };
 type ReciterCatalog = {
-  schema_version: 1;
+  schema_version: 2;
   slug: string;
   name_en?: string; name_ar?: string;
   riwayah?: string; style?: string; channel?: string;
@@ -214,7 +235,7 @@ type ReciterCatalog = {
 
 ```jsonc
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "recitations": [
     {
       "slug": "example_reciter",
