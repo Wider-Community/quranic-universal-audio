@@ -116,8 +116,10 @@ def test_stage_job_code_requires_digital_khatt_assets(stub_batch, monkeypatch, t
 def test_runtime_dockerfile_validates_release_font_bytes():
     dockerfile = (base.REPO_ROOT / "inspector" / "Dockerfile").read_text(encoding="utf-8")
 
-    assert "gzip -dc public/fonts/DigitalKhattV2.otf.gz" in dockerfile
-    assert "gzip -d ./inspector/frontend/public/fonts/DigitalKhattV2.otf.gz" in dockerfile
+    assert "public/fonts/DigitalKhattV2.otf.gz.b64" in dockerfile
+    assert "base64 -d | gzip -dc > public/fonts/DigitalKhattV2.otf" in dockerfile
+    assert "base64 -d | gzip -dc > ./inspector/frontend/public/fonts/DigitalKhattV2.otf" in dockerfile
+    assert '[ "$(head -c 4 public/fonts/DigitalKhattV2.otf)" = "OTTO" ]' in dockerfile
     assert "test -s ./inspector/frontend/public/fonts/DigitalKhattV2.otf" in dockerfile
     assert 'grep -q "version https://git-lfs"' in dockerfile
     assert "chmod -R a+rX ./inspector/frontend" in dockerfile
