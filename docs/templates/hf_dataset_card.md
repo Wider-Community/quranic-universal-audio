@@ -62,8 +62,6 @@ Each remaining subset is one published mushaf — a config named after the musha
 
 All row timestamps are relative to the ayah clip. Use `source_offset_ms + timestamp_ms` when mapping a row back to its source audio.
 
-Letter-animation ownership and Unicode paint ranges are deliberately excluded from this ML-oriented dataset. Applications that need letter highlighting should use `letter_timestamps.json.gz` from the matching GitHub release. The repository root still contains `digital_khatt_v2_script.json` and the matching `DigitalKhattV2.otf` font for interpreting `text_uthmani` exactly.
-
 ## Catalog Schema
 
 One row per published mushaf.
