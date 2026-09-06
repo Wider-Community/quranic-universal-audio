@@ -467,6 +467,37 @@ def _verses_for_validation(rows: list[dict]) -> dict[str, dict]:
 # ---------------------------------------------------------------------------
 
 
+def _iter_hf_records(rows: list[dict], audio_bytes: list[bytes | None]):
+    """Yield encoded dataset rows without building one multi-GB Arrow array."""
+    for i, row in enumerate(rows):
+        if audio_bytes[i] is None:
+            continue
+        src_url = row["source_url"]
+        for prefix in ("https://", "http://"):
+            if src_url.startswith(prefix):
+                src_url = src_url[len(prefix) :]
+                break
+        yield {
+            "audio": {
+                "bytes": audio_bytes[i],
+                "path": f"{row['surah']:03d}{row['ayah']:03d}.mp3",
+            },
+            "surah": row["surah"],
+            "ayah": row["ayah"],
+            "duration_ms": row["duration_ms"],
+            "text_uthmani": row["text_uthmani"],
+            "segments": row["segments"],
+            "word_timestamps": row["word_timestamps"],
+            "source_url": src_url,
+            # Add the chapter's offset within its source file (combined-file
+            # intakes) so the persisted offset is absolute within the original
+            # source; 0 for normal chapters whose audio == the whole source.
+            "source_offset_ms": _i(
+                row["clip_start"] + row.get("source_offset_base_ms", 0)
+            ),
+        }
+
+
 def _push_to_hf(slug: str, riwayah: str, rows: list[dict], audio_bytes: list[bytes | None]) -> str:
     """Build the parquet split and push to HF. Returns the dataset commit SHA."""
     from datasets import Audio, Dataset, Features, Sequence, Value
@@ -475,46 +506,6 @@ def _push_to_hf(slug: str, riwayah: str, rows: list[dict], audio_bytes: list[byt
     repo_id = _resolve_dataset_repo_id()
     api = HfApi(token=os.environ.get("HF_TOKEN"))
     api.create_repo(repo_id=repo_id, repo_type="dataset", exist_ok=True)
-
-    data = {
-        k: []
-        for k in [
-            "audio",
-            "surah",
-            "ayah",
-            "duration_ms",
-            "text_uthmani",
-            "segments",
-            "word_timestamps",
-            "source_url",
-            "source_offset_ms",
-        ]
-    }
-    for i, row in enumerate(rows):
-        if audio_bytes[i] is None:
-            continue
-        data["audio"].append(
-            {
-                "bytes": audio_bytes[i],
-                "path": f"{row['surah']:03d}{row['ayah']:03d}.mp3",
-            }
-        )
-        data["surah"].append(row["surah"])
-        data["ayah"].append(row["ayah"])
-        data["duration_ms"].append(row["duration_ms"])
-        data["text_uthmani"].append(row["text_uthmani"])
-        data["segments"].append(row["segments"])
-        data["word_timestamps"].append(row["word_timestamps"])
-        src_url = row["source_url"]
-        for prefix in ("https://", "http://"):
-            if src_url.startswith(prefix):
-                src_url = src_url[len(prefix) :]
-                break
-        data["source_url"].append(src_url)
-        # Add the chapter's offset within its source file (combined-file
-        # intakes) so the persisted offset is absolute within the original
-        # source; 0 for normal chapters whose audio == the whole source.
-        data["source_offset_ms"].append(_i(row["clip_start"] + row.get("source_offset_base_ms", 0)))
 
     # Audio(decode=True) matches the existing splits on the hub (consumers
     # expect ``ds[i]["audio"]["array"]``). Torch + torchcodec are installed
@@ -532,15 +523,26 @@ def _push_to_hf(slug: str, riwayah: str, rows: list[dict], audio_bytes: list[byt
             "source_offset_ms": Value("int32"),
         }
     )
-    ds = Dataset.from_dict(data, features=features)
+    # Dataset.from_dict constructs each column as one Arrow array. Embedded
+    # audio for a full mushaf can exceed Arrow binary's 32-bit offset ceiling
+    # before push_to_hub gets a chance to shard it. Build disk-backed record
+    # batches instead so each binary array stays comfortably below 2 GiB.
+    ds = Dataset.from_generator(
+        _iter_hf_records,
+        features=features,
+        gen_kwargs={"rows": rows, "audio_bytes": audio_bytes},
+        keep_in_memory=False,
+        writer_batch_size=64,
+        fingerprint=os.environ.get("JOB_ID") or slug,
+    )
 
-    log.info("pushing %d rows to %s/%s/train", len(data["audio"]), repo_id, slug)
+    log.info("pushing %d rows to %s/%s/train", len(ds), repo_id, slug)
     ds.push_to_hub(
         repo_id,
         config_name=slug,
         split="train",
         token=os.environ.get("HF_TOKEN"),
-        max_shard_size="10GB",
+        max_shard_size="500MB",
         commit_message=f"publish {riwayah}/{slug}",
     )
     # Resolve the dataset's HEAD commit sha — the version the row landed at.
