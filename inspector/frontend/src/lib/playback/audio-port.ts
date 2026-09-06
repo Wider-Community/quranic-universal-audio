@@ -188,6 +188,15 @@ export class AudioPort {
         }
         this.el = el;
         if (el) {
+            // Kill-switch ports route the element through Web Audio's
+            // `MediaElementAudioSourceNode`, which outputs SILENCE for a
+            // cross-origin src unless the element is CORS-enabled. Chapter
+            // MP3s now load straight from CORS-capable CDNs (play-url.ts),
+            // so the attribute must be on before any src is assigned.
+            // Non-kill-switch ports (dashboard) skip it: some dashboard
+            // sources are raw cross-origin links without ACAO, and a
+            // `crossorigin` element refuses to load those at all.
+            if (this.killSwitchEnabled && !el.crossOrigin) el.crossOrigin = 'anonymous';
             el.playbackRate = this.desiredPlaybackRate;
             this._attachDomListeners(el);
         }
