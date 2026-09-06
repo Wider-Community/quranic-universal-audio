@@ -84,7 +84,7 @@ def test_stage_job_code_uploads_every_required_path(stub_batch, monkeypatch, tmp
 def test_runtime_image_copies_digital_khatt_release_assets():
     dockerfile = (base.REPO_ROOT / "inspector" / "Dockerfile").read_text()
     assert "data/digital_khatt_v2_script.json" in dockerfile
-    assert "inspector/frontend/public/fonts/DigitalKhattV2.otf" in dockerfile
+    assert "COPY --chmod=0644 inspector/frontend/public/fonts/DigitalKhattV2.otf.gz" in dockerfile
 
 
 def test_stage_job_code_requires_digital_khatt_assets(stub_batch, monkeypatch, tmp_path):
@@ -111,6 +111,16 @@ def test_stage_job_code_requires_digital_khatt_assets(stub_batch, monkeypatch, t
     assert "data/digital_khatt_v2_script.json" in message
     assert "DigitalKhattV2.otf" in message
     assert stub_batch == []
+
+
+def test_runtime_dockerfile_validates_release_font_bytes():
+    dockerfile = (base.REPO_ROOT / "inspector" / "Dockerfile").read_text(encoding="utf-8")
+
+    assert "gzip -dc public/fonts/DigitalKhattV2.otf.gz" in dockerfile
+    assert "gzip -d ./inspector/frontend/public/fonts/DigitalKhattV2.otf.gz" in dockerfile
+    assert "test -s ./inspector/frontend/public/fonts/DigitalKhattV2.otf" in dockerfile
+    assert 'grep -q "version https://git-lfs"' in dockerfile
+    assert "chmod -R a+rX ./inspector/frontend" in dockerfile
 
 
 def test_stage_job_code_raises_when_entrypoint_missing(stub_batch, monkeypatch, tmp_path):
