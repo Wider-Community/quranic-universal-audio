@@ -4,7 +4,7 @@ Single GET route. Lookup order:
 
 1. **Bucket-resident audio** — ``reciters/<slug>/audio/<chapter>.mp3`` written
    by the katana extraction pipeline (`.local/extraction/upload_to_bucket.py`).
-   Served via ``send_file`` (uses OS sendfile, honours Range + 304). The
+   Served via ``range_file.send_range_file`` (1 MB reads, Range + 304). The
    ``-c:a copy -f mp3`` step in ``audio_persist.py`` injects an Xing/Info
    header so the browser computes ``<audio>.duration`` correctly.
 2. **CDN stream-through** — for slugs the extraction pipeline hasn't
@@ -41,6 +41,8 @@ from flask import Blueprint, Response, jsonify, request, send_file, stream_with_
 
 from config import AUDIO_CACHE_MAX_AGE, AUDIO_MIME_TYPES
 from services import audio_source
+
+from .range_file import send_range_file
 
 logger = logging.getLogger(__name__)
 
@@ -137,12 +139,12 @@ def _stream_cdn(url: str, disposition: str | None = None) -> Response:
 def seg_audio_proxy(reciter):
     """Proxy/serve a chapter MP3 via the shared audio-source resolver.
 
-    Priority: mount/disk path (streamed via send_file with Range + ETag/304)
+    Priority: mount/disk path (streamed in 1 MB reads with Range + ETag/304)
     → in-memory bytes (local-dev fallback, still served with Range via a
     seekable BytesIO) → CDN stream-through (legacy reciters without
     bucket-cached audio). Browser issues partial-content requests once the
     first response advertises ``Accept-Ranges``; subsequent seeks are
-    byte-range fetches handled by Werkzeug's conditional path (local) or
+    byte-range fetches handled by ``send_range_file`` (local) or
     re-streamed through ``_stream_cdn`` with a fresh ``Range`` header.
     """
     url = request.args.get("url", "").strip()
@@ -163,15 +165,11 @@ def seg_audio_proxy(reciter):
     immutable = f"public, max-age={AUDIO_CACHE_MAX_AGE}, immutable"
 
     if src.path is not None:
+        # NOT send_file: its Range path reads the mount in 8 KB pieces, which
+        # over the Space's NFS bucket mount throttles to ~100-200 KB/s per
+        # stream (see range_file.py). Stream 1 MB reads instead.
         mime = AUDIO_MIME_TYPES.get(src.path.suffix.lower(), "audio/mpeg")
-        resp = send_file(
-            src.path,
-            mimetype=mime,
-            conditional=True,
-            etag=True,
-            last_modified=src.path.stat().st_mtime,
-            max_age=AUDIO_CACHE_MAX_AGE,
-        )
+        resp = send_range_file(request, src.path, mime)
         resp.headers["Cache-Control"] = immutable
         resp.headers["Accept-Ranges"] = "bytes"
         resp.headers["Access-Control-Allow-Origin"] = "*"
