@@ -116,8 +116,10 @@ def test_stage_job_code_requires_digital_khatt_assets(stub_batch, monkeypatch, t
 def test_runtime_dockerfile_validates_release_font_bytes():
     dockerfile = (base.REPO_ROOT / "inspector" / "Dockerfile").read_text(encoding="utf-8")
 
-    assert "gzip -dc public/fonts/DigitalKhattV2.otf.gz" in dockerfile
-    assert "gzip -d ./inspector/frontend/public/fonts/DigitalKhattV2.otf.gz" in dockerfile
+    assert "public/fonts/DigitalKhattV2.otf.gz.b64" in dockerfile
+    assert "base64 -d | gzip -dc > public/fonts/DigitalKhattV2.otf" in dockerfile
+    assert "base64 -d | gzip -dc > ./inspector/frontend/public/fonts/DigitalKhattV2.otf" in dockerfile
+    assert '[ "$(head -c 4 public/fonts/DigitalKhattV2.otf)" = "OTTO" ]' in dockerfile
     assert "test -s ./inspector/frontend/public/fonts/DigitalKhattV2.otf" in dockerfile
     assert 'grep -q "version https://git-lfs"' in dockerfile
     assert "chmod -R a+rX ./inspector/frontend" in dockerfile
@@ -222,6 +224,36 @@ def test_poll_skips_already_completed_job_on_second_tick(monkeypatch):
         base._poll_terminal_jobs()
         base._poll_terminal_jobs()
         assert dispatched == [("foo_slug", "jid-hf-1")]
+    finally:
+        base._HANDLERS.clear()
+        base._HANDLERS.update(saved)
+        base._completed_jobs.clear()
+
+
+def test_poll_dispatches_terminal_timestamp_space_run(monkeypatch):
+    """A terminal bucket record completes without an open admin job drawer."""
+    from services.admin import timestamps_jobs
+
+    hub = sys.modules.get("huggingface_hub")
+    if hub is None:
+        hub = types.ModuleType("huggingface_hub")
+        monkeypatch.setitem(sys.modules, "huggingface_hub", hub)
+    monkeypatch.setattr(hub, "list_jobs", lambda: [], raising=False)
+    monkeypatch.setattr(
+        timestamps_jobs,
+        "terminal_success_runs",
+        lambda: [("foo_slug", "space-run-1")],
+    )
+
+    dispatched: list[tuple[str | None, str]] = []
+    saved = dict(base._HANDLERS)
+    base._HANDLERS.clear()
+    base._completed_jobs.clear()
+    try:
+        base.register_handler("timestamps", lambda slug, jid: dispatched.append((slug, jid)))
+        base._poll_terminal_jobs()
+        base._poll_terminal_jobs()
+        assert dispatched == [("foo_slug", "space-run-1")]
     finally:
         base._HANDLERS.clear()
         base._HANDLERS.update(saved)

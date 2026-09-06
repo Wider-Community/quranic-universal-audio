@@ -71,6 +71,7 @@ The image bakes the **dev** bucket as default (`INSPECTOR_BUCKET_REPO=hetchyy/qu
 | `INSPECTOR_AUTOMATIONS` | off; `1` (image) | Release-automation reconciler daemon (per-automation enable lives in the owner's config blob; the daemon no-ops while all are off). See [automation.md](automation.md). |
 | `INSPECTOR_AUTOMATIONS_INTERVAL_S` | `60` | Tick cadence for the automation reconciler. |
 | `INSPECTOR_PUBLIC_BASE_URL` | empty | Public https root the daemon threads into job completion webhooks (no `request.url_root` in a thread). Required for automated GH cuts — the cut job is webhook-only. Set as a Space variable per environment. |
+| `INSPECTOR_TS_SPACE_URL` | `https://hetchyy-qua-batch-timing-prod.hf.space` | Persistent production timing Space used for timestamp generation. Override only for an isolated environment. |
 
 ### Auth / identity / secrets
 

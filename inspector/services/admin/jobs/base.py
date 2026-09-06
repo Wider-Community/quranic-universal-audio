@@ -485,9 +485,8 @@ def stage_job_code() -> None:
 # Poll-fallback worker registry + driver.
 #
 # Each kind registers a (TERMINAL_SUCCESS, complete()) handler; the worker
-# loops over live HF Jobs every 120s and dispatches terminal completions to
-# the right handler. Both this path AND the webhook receiver call the same
-# complete() — idempotent on the table's UNIQUE(kind, slug, version) index.
+# polls both live HF Jobs and the timestamp Space's bucket run records every
+# 120s, then dispatches terminal completions to the right handler.
 # ---------------------------------------------------------------------------
 
 PollHandler = Callable[[str | None, str], None]
@@ -537,15 +536,41 @@ _completed_jobs: set[tuple[str, str]] = set()
 
 
 def _poll_terminal_jobs() -> None:
-    """Single tick: scan running HF jobs, dispatch any newly terminal to its handler."""
+    """Scan Space runs and HF Jobs, dispatching newly terminal successes."""
+    terminal_seen: set[tuple[str, str]] = set()
+
+    # Timestamp generation moved from ephemeral HF Jobs to a persistent Space.
+    # Its bucket run record is the process-independent completion signal.
+    try:
+        from services.admin import timestamps_jobs
+
+        timestamp_runs = timestamps_jobs.terminal_success_runs()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("poll worker timestamp Space scan failed: %s", exc)
+        timestamp_runs = []
+    for slug, jid in timestamp_runs:
+        key = ("timestamps", jid)
+        terminal_seen.add(key)
+        if key in _completed_jobs:
+            continue
+        handler = _HANDLERS.get("timestamps")
+        if handler is None:
+            continue
+        try:
+            handler(slug, jid)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("poll handler timestamps(%s, %s) failed: %s", slug, jid, exc)
+        else:
+            _completed_jobs.add(key)
+
     from huggingface_hub import list_jobs
 
     try:
         jobs = list(list_jobs())
     except Exception as exc:
         log.warning("poll worker list_jobs failed: %s", exc)
+        _completed_jobs.intersection_update(terminal_seen)
         return
-    terminal_seen: set[tuple[str, str]] = set()
     for job in jobs:
         labels = getattr(job, "labels", {}) or {}
         kind = labels.get("task")

@@ -21,10 +21,13 @@ RUN apk add --no-cache git openssh-client
 # Copy the full frontend before `npm ci`: the root `postinstall` hook runs
 # `paraglide:compile`, which needs `project.inlang/` + the message sources.
 COPY inspector/frontend ./
-# HF Spaces can leave the OTF itself as an unsmudged Git-LFS pointer in the
-# Docker context. The small deterministic gzip is stored as a normal Git blob;
-# expand it before Vite copies public/ into dist/.
-RUN gzip -dc public/fonts/DigitalKhattV2.otf.gz > public/fonts/DigitalKhattV2.otf
+# HF Spaces leaves binary font transports as unsmudged Git-LFS pointers in the
+# Docker context. The compressed font is therefore committed as base64 text.
+# Strip certutil's two envelope lines, decode, and require real OpenType bytes
+# before Vite copies public/ into dist/.
+RUN sed '1d;$d' public/fonts/DigitalKhattV2.otf.gz.b64 | \
+      base64 -d | gzip -dc > public/fonts/DigitalKhattV2.otf && \
+    [ "$(head -c 4 public/fonts/DigitalKhattV2.otf)" = "OTTO" ]
 RUN --mount=type=ssh,required=false \
     --mount=type=secret,id=CELLS_DEPLOY_KEY,required=false \
     mkdir -p -m 700 /root/.ssh && \
@@ -178,13 +181,15 @@ COPY data/surah_info.json \
      ./data/
 # The release jobs publish this exact font and stage_job_code validates the
 # source path before launch. Keep it alongside the built frontend asset.
-COPY --chmod=0644 inspector/frontend/public/fonts/DigitalKhattV2.otf.gz \
-     ./inspector/frontend/public/fonts/DigitalKhattV2.otf.gz
-# Expand the normal-Git transport copy and fail the image build if it is
-# missing or malformed. stage_job_code runs inside this final image and must
-# upload the real font bytes before an HF publish can launch.
-RUN gzip -d ./inspector/frontend/public/fonts/DigitalKhattV2.otf.gz && \
+COPY --chmod=0644 inspector/frontend/public/fonts/DigitalKhattV2.otf.gz.b64 \
+     ./inspector/frontend/public/fonts/DigitalKhattV2.otf.gz.b64
+# Decode the text transport and fail if it is missing/malformed. stage_job_code
+# must upload the real font bytes before an HF publish can launch.
+RUN sed '1d;$d' ./inspector/frontend/public/fonts/DigitalKhattV2.otf.gz.b64 | \
+      base64 -d | gzip -dc > ./inspector/frontend/public/fonts/DigitalKhattV2.otf && \
+    rm ./inspector/frontend/public/fonts/DigitalKhattV2.otf.gz.b64 && \
     test -s ./inspector/frontend/public/fonts/DigitalKhattV2.otf && \
+    [ "$(head -c 4 ./inspector/frontend/public/fonts/DigitalKhattV2.otf)" = "OTTO" ] && \
     ! head -c 40 ./inspector/frontend/public/fonts/DigitalKhattV2.otf | grep -q "version https://git-lfs"
 COPY --from=frontend-build /app/dist ./inspector/frontend/dist
 # Cross-stage COPY preserves the source modes; cached Vite output can contain
