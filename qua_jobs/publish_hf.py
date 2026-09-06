@@ -225,9 +225,9 @@ def build_rows(
     """
     chapter_urls = chapter_urls or {}
     chapter_offsets = chapter_offsets or {}
-    # Shared geometry: audible bounds, clip windows, byte-exact segments, and
-    # words/letters are all source-relative. HF publishes the padded clip view;
-    # GH publishes the audible occurrence view from this SAME layout.
+    # Shared geometry: audible bounds, clip windows, byte-exact segments, words,
+    # and animation tokens are all source-relative. HF publishes the padded
+    # verse/segment/word view; GH publishes the occurrence + animation view.
     layouts = build_verse_layouts(
         timestamps,
         pad_start=pad_start,
@@ -261,17 +261,6 @@ def build_rows(
             verse_words = [
                 [w[0], _i(w[1] - clip_start), _i(w[2] - clip_start)] for w in layout["words"]
             ]
-            verse_letters = [
-                {
-                    "word_occurrence": token[0],
-                    "start_ms": _i(token[1] - clip_start),
-                    "end_ms": _i(token[2] - clip_start),
-                    "owns_sound": token[3],
-                    "paint": token[4],
-                }
-                for token in layout["tokens"]
-            ]
-
             # Kept audio runs = the verse clip window minus any INTERIOR
             # no-match segment (empty matched_ref). A no-match segment stays in
             # detailed.json with its time window but contributes no ref/text/
@@ -300,7 +289,6 @@ def build_rows(
                     "text_uthmani": layout["text"],
                     "segments": verse_segments,
                     "word_timestamps": verse_words,
-                    "letter_timestamps": verse_letters,
                     "source_url": chapter_urls.get(str(chapter), ""),
                     "chapter": chapter,
                     "clip_start": clip_start,
@@ -390,7 +378,7 @@ def _slice_workers() -> int:
 
 
 def _rebase_row(row: dict, actual_start_ms: int) -> None:
-    """Re-base clip-relative word/letter/segment times to the snapped boundary.
+    """Re-base clip-relative word/segment times to the snapped boundary.
 
     ``actual_start_ms`` is the snapped source-ms the slice actually starts at
     (≤ ``row['clip_start']``). The delta is added to every clip-relative offset
@@ -408,9 +396,6 @@ def _rebase_row(row: dict, actual_start_ms: int) -> None:
     row["clip_end"] = actual_start_ms + row["duration_ms"]
     row["word_timestamps"] = [[w[0], w[1] + delta, w[2] + delta] for w in row["word_timestamps"]]
     row["segments"] = [[s[0], s[1], s[2] + delta, s[3] + delta] for s in row["segments"]]
-    for lt in row["letter_timestamps"]:
-        lt["start_ms"] += delta
-        lt["end_ms"] += delta
 
 
 def _rebase_row_multi(row: dict, runs: list) -> None:
@@ -421,7 +406,7 @@ def _rebase_row_multi(row: dict, runs: list) -> None:
     ``clip_start``) is re-anchored by finding the run its source time
     ``t + clip_start`` falls in and mapping it to ``(t_src - run.actual_start_ms)
     + run.cum_offset_ms`` — so the gap audio between runs is removed and the
-    surviving words/letters/segments play back-to-back. Sets ``duration_ms`` to
+    surviving words/segments play back-to-back. Sets ``duration_ms`` to
     the stitched length and ``clip_start`` to the first run's snapped boundary
     (the source offset of the clip's byte 0).
     """
@@ -446,9 +431,6 @@ def _rebase_row_multi(row: dict, runs: list) -> None:
     total = sum(r.actual_end_ms - r.actual_start_ms for r in runs)
     row["word_timestamps"] = [[w[0], _map(w[1]), _map(w[2])] for w in row["word_timestamps"]]
     row["segments"] = [[s[0], s[1], _map(s[2]), _map(s[3])] for s in row["segments"]]
-    for lt in row["letter_timestamps"]:
-        lt["start_ms"] = _map(lt["start_ms"])
-        lt["end_ms"] = _map(lt["end_ms"])
     row["clip_start"] = runs[0].actual_start_ms
     row["duration_ms"] = total
     row["clip_end"] = runs[0].actual_start_ms + total
@@ -504,7 +486,6 @@ def _push_to_hf(slug: str, riwayah: str, rows: list[dict], audio_bytes: list[byt
             "text_uthmani",
             "segments",
             "word_timestamps",
-            "letter_timestamps",
             "source_url",
             "source_offset_ms",
         ]
@@ -524,18 +505,6 @@ def _push_to_hf(slug: str, riwayah: str, rows: list[dict], audio_bytes: list[byt
         data["text_uthmani"].append(row["text_uthmani"])
         data["segments"].append(row["segments"])
         data["word_timestamps"].append(row["word_timestamps"])
-        # Transpose list-of-struct (build shape) to struct-of-lists
-        # (Sequence({...}) on-disk shape, matches prior hub splits).
-        lt = row["letter_timestamps"]
-        data["letter_timestamps"].append(
-            {
-                "word_occurrence": [x["word_occurrence"] for x in lt],
-                "start_ms": [x["start_ms"] for x in lt],
-                "end_ms": [x["end_ms"] for x in lt],
-                "owns_sound": [x["owns_sound"] for x in lt],
-                "paint": [x["paint"] for x in lt],
-            }
-        )
         src_url = row["source_url"]
         for prefix in ("https://", "http://"):
             if src_url.startswith(prefix):
@@ -559,18 +528,6 @@ def _push_to_hf(slug: str, riwayah: str, rows: list[dict], audio_bytes: list[byt
             "text_uthmani": Value("string"),
             "segments": Sequence(Sequence(Value("int32"))),
             "word_timestamps": Sequence(Sequence(Value("int32"))),
-            # ``Sequence({...})`` encodes to struct-of-lists (legacy datasets
-            # behavior) — kept to stay byte-compatible with prior splits on the
-            # hub. Per-row value is fed in the transposed form below.
-            "letter_timestamps": Sequence(
-                {
-                    "word_occurrence": Value("int32"),
-                    "start_ms": Value("int32"),
-                    "end_ms": Value("int32"),
-                    "owns_sound": Value("bool"),
-                    "paint": Sequence(Sequence(Value("int32"))),
-                }
-            ),
             "source_url": Value("string"),
             "source_offset_ms": Value("int32"),
         }
@@ -942,7 +899,7 @@ def publish_slug(
                 produced.append((i, clip_bytes))
             else:
                 # Interior no-match gap(s): stitch the kept runs, drop the gap
-                # audio, rebase word/letter/segment times gaplessly.
+                # audio, rebase word/segment times gaplessly.
                 ms: MultiFrameSlice | None = slice_frames_multi(data, index, keep_runs)
                 if ms is None:
                     failures.append(f"{row['surah']}:{row['ayah']}")

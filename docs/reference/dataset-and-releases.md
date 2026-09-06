@@ -31,7 +31,8 @@ envelope but initially emit the single canonical take per verse; HF remains one 
 ayah. Both are pure projections of the same native readings, so the TS-tab read path and the
 release/dataset adapters cannot drift at the identity layer. The shared loader runs the strict v13
 identity-closure audit before projection; malformed or mixed-version bucket shards block both
-adapters. Public schema 2 projects the producer's animation ownership onto exact DigitalKhatt V2.
+adapters. GitHub schema 2 projects producer animation ownership onto exact DigitalKhatt V2; HF
+keeps the exact text and word alignment but omits rendering-specific letter paint data.
 
 ## Release ledger (SQLite — migration `0014_releases.sql`)
 
@@ -335,13 +336,14 @@ Full UI map: [`admin-dashboard.md`](admin-dashboard.md).
 | `text_uthmani` | `string` | Exact DigitalKhatt V2 text for what was recited, including repetitions |
 | `segments` | `[[int,int,int,int]]` | `[word_from, word_to, start_ms, end_ms]` |
 | `word_timestamps` | `[[int,int,int]]` | `[word_idx, start_ms, end_ms]` |
-| `letter_timestamps` | struct of lists | `word_occurrence`, `start_ms`, `end_ms`, `owns_sound`, `paint` scalar ranges |
 | `source_url` | `string` | Chapter/verse audio URL (or `bucket://` when embedded) |
 | `source_offset_ms` | `int32` | Offset within `source_url` where the verse starts |
 
 - Audio embedded as bytes (verse-trimmed); `word_idx` is 1-based, may repeat / go backward within a
   verse; splitting `text_uthmani` on spaces equals the `word_timestamps` occurrence count.
-  `letter_timestamps.word_occurrence` is a zero-based position in that array.
+- Letter-animation ownership and Unicode paint geometry are intentionally absent from the
+  ML-oriented HF table. Consumers needing granular rendering use the matching GitHub release's
+  `letter_timestamps.json.gz` tier.
 - **Subset (config)** = delivery/mushaf slug (e.g. `khalifa_al_tunaiji_tarteel`), **split** =
   `train`. Parquet still lives under the riwayah folder `hafs_an_asim/<slug>-*`; only the config
   label differs (one config per mushaf — the HF viewer caps a config at 30 splits). Readability

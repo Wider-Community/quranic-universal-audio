@@ -60,15 +60,6 @@ def test_hf_push_preserves_slug_config_and_train_split(monkeypatch):
         "text_uthmani": "x",
         "segments": [],
         "word_timestamps": [],
-        "letter_timestamps": [
-            {
-                "word_occurrence": 0,
-                "start_ms": 1,
-                "end_ms": 2,
-                "owns_sound": True,
-                "paint": [[0, 1]],
-            }
-        ],
         "source_url": "https://example.test/1.mp3",
         "clip_start": 0,
     }
@@ -76,15 +67,8 @@ def test_hf_push_preserves_slug_config_and_train_split(monkeypatch):
     assert publish_hf._push_to_hf("reciter_slug", "hafs_an_asim", [row], [b"mp3"]) == "revision"
     assert pushed["config_name"] == "reciter_slug"
     assert pushed["split"] == "train"
-    assert pushed["data"]["letter_timestamps"] == [
-        {
-            "word_occurrence": [0],
-            "start_ms": [1],
-            "end_ms": [2],
-            "owns_sound": [True],
-            "paint": [[[0, 1]]],
-        }
-    ]
+    assert "letter_timestamps" not in pushed["data"]
+    assert "letter_timestamps" not in pushed["features"]
 
 
 def test_seg_word_range_single_ayah():
@@ -148,15 +132,7 @@ def test_build_rows_segments_and_source_url():
     assert row["segments"][0][0] == 1
     assert row["segments"][0][1] == 4
     assert row["text_uthmani"] == "a b c d"
-    assert row["letter_timestamps"] == [
-        {
-            "word_occurrence": 0,
-            "start_ms": 100,
-            "end_ms": 200,
-            "owns_sound": False,
-            "paint": [[0, 1]],
-        }
-    ]
+    assert "letter_timestamps" not in row
 
 
 # ---------------------------------------------------------------------------
@@ -336,7 +312,6 @@ def test_rebase_row_multi_excises_gap_gaplessly():
         "duration_ms": 4000,
         "word_timestamps": [[1, 0, 1000], [2, 1000, 2000], [3, 3000, 3500], [4, 3500, 4000]],
         "segments": [[1, 2, 0, 2000], [3, 4, 3000, 4000]],
-        "letter_timestamps": [{"word_idx": 3, "char": "x", "start_ms": 3000, "end_ms": 3100}],
     }
     # Runs: [0,2000) then [3000,4000) placed right after (cum_offset 2000).
     runs = [RunMap(0, 2000, 0), RunMap(3000, 4000, 2000)]
@@ -352,5 +327,3 @@ def test_rebase_row_multi_excises_gap_gaplessly():
         [4, 2500, 3000],
     ]
     assert row["segments"] == [[1, 2, 0, 2000], [3, 4, 2000, 3000]]
-    assert row["letter_timestamps"][0]["start_ms"] == 2000
-    assert row["letter_timestamps"][0]["end_ms"] == 2100
