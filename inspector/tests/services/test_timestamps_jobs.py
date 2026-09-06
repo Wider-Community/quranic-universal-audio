@@ -12,6 +12,13 @@ from datetime import UTC
 from services.admin import timestamps_jobs
 
 
+def test_timestamp_space_defaults_to_production(monkeypatch):
+    from services.admin import ts_space_client
+
+    monkeypatch.delenv("INSPECTOR_TS_SPACE_URL", raising=False)
+    assert ts_space_client.space_url() == "https://hetchyy-qua-batch-timing-prod.hf.space"
+
+
 def test_job_status_reads_record_and_fires_success(monkeypatch):
     rec = {
         "job_id": "j1",
@@ -76,6 +83,21 @@ def test_launch_posts_space_and_links_run(monkeypatch):
     assert out == {"job_id": "run-xyz", "url": None}
     assert posted == {"slug": "r", "chapters": [108], "beams": [50, 5]}
     assert linked == [("r", "run-xyz")]
+
+
+def test_terminal_success_runs_reads_latest_linked_record(monkeypatch):
+    class Row:
+        slug = "r"
+        timestamps_job_ids = ["old", "latest"]
+
+    monkeypatch.setattr(timestamps_jobs.state_service, "all_rows", lambda: [Row()])
+    monkeypatch.setattr(
+        timestamps_jobs,
+        "read_job_record",
+        lambda slug, jid: {"status": "succeeded"} if jid == "latest" else {"status": "failed"},
+    )
+
+    assert timestamps_jobs.terminal_success_runs() == [("r", "latest")]
 
 
 # ---------------------------------------------------------------------------

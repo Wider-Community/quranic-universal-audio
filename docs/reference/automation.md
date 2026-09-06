@@ -99,7 +99,8 @@ owner-only under `ReleasesSummaryCard`); API in `lib/api/admin-releases.ts`.
   cut/batch/refresh globals.
 - **Relaunch watermark (one job per edit-burst).** TS staleness / mark-ready is a
   *computed* signal that clears only when a regen's async completion advances the
-  `ts` release `produced_at` (webhook, or the 120 s poll) — which lags the 60 s
+  `ts` release `produced_at` (the 120 s Space-run poll or an interactive status
+  poll) — which lags the 60 s
   tick. So `auto_gen_ts` + `stale_ts_regen` additionally skip a slug whose newest
   timestamps job (`timestamps_jobs.latest_job_started_by_slug`) started at/after
   the staleness/readiness watermark (`last_edit_at` / `marked_ready_at`): a regen

@@ -29,7 +29,7 @@ _ROUTE = "/internal/v1/timestamps"
 _PROFILE_ID = "timing.timestamps@v1"
 _SECRET_VERSION = "v1"
 
-DEFAULT_SPACE_URL = "https://hetchyy-qua-batch-timing-dev.hf.space"
+DEFAULT_SPACE_URL = "https://hetchyy-qua-batch-timing-prod.hf.space"
 
 
 class TsSpaceError(RuntimeError):

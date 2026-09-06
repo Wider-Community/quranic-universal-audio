@@ -141,6 +141,27 @@ def latest_job_started_by_slug() -> dict[str, datetime.datetime]:
     return out
 
 
+def terminal_success_runs() -> list[tuple[str, str]]:
+    """Return newest linked Space runs that completed successfully.
+
+    Timestamp runs live in a persistent Space and never appear in
+    ``huggingface_hub.list_jobs()``. The shared release poller consumes this
+    durable bucket signal so completion does not depend on an open job drawer.
+    """
+
+    out: list[tuple[str, str]] = []
+    for row in state_service.all_rows():
+        slug = getattr(row, "slug", "")
+        ids = list(getattr(row, "timestamps_job_ids", []) or [])
+        if not slug or not ids:
+            continue
+        job_id = ids[-1]
+        rec = read_job_record(slug, job_id)
+        if rec and str(rec.get("status") or "").lower() in _TERMINAL_SUCCESS:
+            out.append((slug, job_id))
+    return out
+
+
 def in_flight_runs() -> list[dict]:
     """Every reciter with a currently-``running`` ts run, as in-flight records
     (``{kind, slug, job_id, started_at, url}``) for ``jobs_base``'s shared

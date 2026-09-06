@@ -228,6 +228,36 @@ def test_poll_skips_already_completed_job_on_second_tick(monkeypatch):
         base._completed_jobs.clear()
 
 
+def test_poll_dispatches_terminal_timestamp_space_run(monkeypatch):
+    """A terminal bucket record completes without an open admin job drawer."""
+    from services.admin import timestamps_jobs
+
+    hub = sys.modules.get("huggingface_hub")
+    if hub is None:
+        hub = types.ModuleType("huggingface_hub")
+        monkeypatch.setitem(sys.modules, "huggingface_hub", hub)
+    monkeypatch.setattr(hub, "list_jobs", lambda: [], raising=False)
+    monkeypatch.setattr(
+        timestamps_jobs,
+        "terminal_success_runs",
+        lambda: [("foo_slug", "space-run-1")],
+    )
+
+    dispatched: list[tuple[str | None, str]] = []
+    saved = dict(base._HANDLERS)
+    base._HANDLERS.clear()
+    base._completed_jobs.clear()
+    try:
+        base.register_handler("timestamps", lambda slug, jid: dispatched.append((slug, jid)))
+        base._poll_terminal_jobs()
+        base._poll_terminal_jobs()
+        assert dispatched == [("foo_slug", "space-run-1")]
+    finally:
+        base._HANDLERS.clear()
+        base._HANDLERS.update(saved)
+        base._completed_jobs.clear()
+
+
 def test_poll_re_fires_handler_that_raised(monkeypatch):
     """A handler that raises is NOT memoized, so the next tick retries it — the
     memo only suppresses re-fires after a clean completion."""
