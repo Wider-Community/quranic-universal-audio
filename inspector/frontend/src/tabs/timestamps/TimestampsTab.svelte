@@ -27,6 +27,8 @@
     import { signalDashSeekIntent } from '../../lib/playback/dash-buffering';
     import { ensureDashCovering, ensureDashCoveringRange } from '../../lib/playback/dash-covering';
     import { dashPort } from '../../lib/playback/dash-port';
+    import { dashProxyUrl } from '../../lib/playback/dash-prewarm';
+    import { probeDirectPlayable } from '../../lib/playback/play-url';
     import { recycleAsShadow } from '../../lib/playback/shadow-audio';
     import {
         clearShuffle,
@@ -752,9 +754,10 @@
         const vbrChapters = await loadVbrChapters(target.reciter);
         if (vbrChapters.includes(target.chapter)) return;
         const rawUrl = u.url;
-        const proxyUrl = rawUrl.startsWith('/api/')
-            ? rawUrl
-            : `/api/seg/audio-proxy/${target.reciter}?url=${encodeURIComponent(rawUrl)}`;
+        // Direct CDN when the host passes the CORS + Range probe, else proxy —
+        // MUST match what BottomPlayer builds (`dashProxyUrl`) for the adopt.
+        await probeDirectPlayable(rawUrl);
+        const proxyUrl = dashProxyUrl(target.reciter, rawUrl);
         // Verse start (chapter-absolute seconds) → warm-seek position.
         let seekSec = 0;
         try {

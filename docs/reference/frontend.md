@@ -72,6 +72,7 @@ The **Dashboard tab** is the entry view: public reciter browse/search/filter/pla
 | `audio-graph.ts` | Web Audio kill-switch — sample-accurate gain ramp (`cutAudio`/`uncutAudio`) to flush OS-queued tail |
 | `audio-range.ts` | `AudioRange` — one-rAF-loop `[startMs,endMs]` playback with pluggable boundary policy (stop/loop/advance) |
 | `dash-port.ts` | Dashboard-tab `AudioPort` instance (`dashPort`) |
+| `play-url.ts` | **Play-URL resolver** — the one place deciding direct-CDN vs `/api/seg/audio-proxy` src for a chapter MP3: one cached CORS+Range probe per host (`probeDirectPlayable`), sync `playUrl()` at `setSource` time (unknown host ⇒ proxy, never silence). Every src builder (`segments/…/source.ts::wrapCbrSrcIfBySurah`, `dash-prewarm.ts::dashProxyUrl`, warmup, TS shuffle) goes through it. Motivation: far-from-US clients get ~300–500 KB/s from the Space, and a whole-chapter stream through it starves every other request on the HTTP/2 connection |
 | `shadow-audio.ts` | Hidden `<audio>` for cross-chapter prewarm (validation accordion) without disturbing `segPort` |
 | `constants.ts` | Playback constants (coverage padding, etc.) shared across port/range consumers |
 
