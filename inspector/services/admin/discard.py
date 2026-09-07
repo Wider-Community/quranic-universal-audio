@@ -81,6 +81,16 @@ def _hf_repo_id() -> str:
     return repo_id
 
 
+def _require_hf_catalog_runtime() -> None:
+    """Fail before state mutation if the synchronous catalog writer is absent."""
+    try:
+        from datasets import Dataset, Features, Value  # noqa: F401
+    except ImportError as exc:
+        raise CleanupFailed(
+            "HF catalog cleanup runtime is unavailable: install the datasets package"
+        ) from exc
+
+
 def _matching_hf_files(*, repo_id: str, riwayah: str, slug: str, token: str | None) -> list[str]:
     from huggingface_hub import HfApi
 
@@ -105,6 +115,7 @@ def _preflight_hf(slug: str, riwayah: str) -> tuple[str | None, str | None, list
     for every destructive discard. This keeps an orphaned subset from being
     silently left behind.
     """
+    _require_hf_catalog_runtime()
     repo_id = _hf_repo_id()
     token = _hf_token()
     if token is None:

@@ -2,11 +2,34 @@
 
 from __future__ import annotations
 
+import sys
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
 from qua_shared.schemas import Actor, ReciterState, Role
+
+
+def test_inspector_runtime_installs_hf_catalog_writer_dependency():
+    requirements = (Path(__file__).resolve().parents[2] / "requirements.txt").read_text(
+        encoding="utf-8"
+    )
+    installed = {
+        line.split("#", 1)[0].strip().split(">", 1)[0].split("=", 1)[0]
+        for line in requirements.splitlines()
+    }
+
+    assert "datasets" in installed
+
+
+def test_hf_catalog_runtime_preflight_reports_missing_datasets(monkeypatch):
+    from services.admin import discard as discard_service
+
+    monkeypatch.setitem(sys.modules, "datasets", None)
+
+    with pytest.raises(discard_service.CleanupFailed, match="datasets package"):
+        discard_service._require_hf_catalog_runtime()
 
 
 @pytest.fixture
@@ -119,6 +142,31 @@ def test_discard_service_closes_request_and_is_retryable(discard_env, seed_state
     cleanup = repo_discard_cleanup.get("test_reciter")
     assert cleanup is not None
     assert cleanup["status"] == "completed"
+
+
+def test_discard_preflight_failure_does_not_mutate_state(discard_env, seed_state, monkeypatch):
+    from services import state as state_service
+    from services.admin import discard as discard_service
+    from services.db import repo_discard_cleanup
+
+    seed_state("test_reciter", state=ReciterState.AWAITING_REVIEW.value)
+    monkeypatch.setattr(discard_service, "_check_job_locks", lambda slug: None)
+
+    def fail_preflight(slug, riwayah):
+        raise discard_service.CleanupFailed("datasets runtime unavailable")
+
+    monkeypatch.setattr(discard_service, "_preflight_hf", fail_preflight)
+
+    with pytest.raises(discard_service.CleanupFailed, match="datasets runtime unavailable"):
+        discard_service.discard(
+            "test_reciter", actor=_owner(), reason="remove this recording permanently"
+        )
+
+    row = state_service.get_row("test_reciter")
+    assert row is not None
+    assert row.state == ReciterState.AWAITING_REVIEW
+    assert row.visibility.value == "public"
+    assert repo_discard_cleanup.get("test_reciter") is None
 
 
 def test_undiscard_does_not_restore_content_while_cleanup_is_incomplete(discard_env, seed_state):
