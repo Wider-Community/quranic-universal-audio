@@ -221,13 +221,23 @@ def project_catalog_rows(
     hf_releases = hf_releases or {}
 
     rows: list[dict[str, Any]] = []
+    # ``None`` means "derive the set from the database/current projection";
+    # an explicit empty set means that the hub currently has no verse splits.
+    # Keep those cases distinct so deleting the final HF subset cannot fall
+    # back to stale release rows and repopulate ``mushafs/all``.
     matched_published = (
-        _catalog_slugs_for_published_splits(catalog, published_slugs) if published_slugs else set()
+        _catalog_slugs_for_published_splits(catalog, published_slugs)
+        if published_slugs is not None
+        else set()
     )
-    delivered_slugs = matched_published or set(hf_releases) or set(ts_releases)
+    delivered_slugs = (
+        matched_published if published_slugs is not None else set(hf_releases) or set(ts_releases)
+    )
 
     for delivery in sorted(catalog.deliveries, key=lambda d: d.slug):
-        if delivered_slugs and delivery.slug not in delivered_slugs:
+        if (
+            published_slugs is not None or delivered_slugs
+        ) and delivery.slug not in delivered_slugs:
             continue
         reciter = reciters.get(delivery.reciter_id)
         channel = channels.get(delivery.channel)

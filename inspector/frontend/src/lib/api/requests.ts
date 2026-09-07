@@ -3,7 +3,7 @@
  *
  * Backed by ``/api/reciter/<slug>/request`` (contributor+),
  * ``/api/admin/request/<slug>/...`` (maintainer+), and
- * ``/api/admin/reciter/<slug>/undiscard`` (owner-only) —
+ * ``/api/admin/reciter/<slug>/{discard,undiscard}`` (owner-only) —
  * see ``inspector/routes/requests.py``.
  */
 
@@ -102,4 +102,11 @@ export async function undiscardReciter(
     reason: string,
 ): Promise<void> {
     await _postJson(`/api/admin/reciter/${slug}/undiscard`, { reason });
+}
+
+export async function discardReciter(
+    slug: string,
+    reason: string,
+): Promise<void> {
+    await _postJson(`/api/admin/reciter/${slug}/discard`, { reason });
 }

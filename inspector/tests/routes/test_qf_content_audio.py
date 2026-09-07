@@ -107,6 +107,7 @@ def _stub_route(monkeypatch, *, reciter_id, style, api_urls=None, raise_err=Fals
     from services.quran_foundation import content as qf_content
     from services.storage import cache
 
+    monkeypatch.setattr(metadata.state_service, "has_content_access", lambda slug: True)
     cache._audio_url.clear()
     cache._qf_chapter_urls.clear()
 
@@ -192,6 +193,7 @@ def _stub_null_duration_manifest(monkeypatch, *, peaks_durations):
 
     from services.storage import cache
 
+    monkeypatch.setattr(metadata.state_service, "has_content_access", lambda slug: True)
     cache._audio_url.clear()
 
     backend = types.SimpleNamespace(
@@ -230,6 +232,7 @@ def test_route_keeps_manifest_duration_when_present(flask_client, monkeypatch):
 
     from services.storage import cache
 
+    monkeypatch.setattr(metadata.state_service, "has_content_access", lambda slug: True)
     cache._audio_url.clear()
     backend = types.SimpleNamespace(
         read_json=lambda path: {

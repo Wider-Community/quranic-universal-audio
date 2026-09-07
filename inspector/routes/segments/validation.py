@@ -5,6 +5,7 @@ from flask import Blueprint, jsonify
 from qua_shared.schemas.wire._envelopes import ErrorEnvelope
 from qua_shared.schemas.wire.seg import SegValidateResponse
 from services import cache
+from services import state as state_service
 from services.auth import capabilities
 from services.auth.auth import current_user
 from services.history_query import load_edit_history
@@ -53,6 +54,8 @@ def _viewer_payload(payload: dict) -> dict:
 @seg_val_bp.route("/validate/<reciter>")
 def seg_validate(reciter):
     """Validate all chapters for a reciter (cached; invalidated on save)."""
+    if not state_service.has_content_access(reciter):
+        return jsonify(ErrorEnvelope(error="Reciter not found").model_dump(exclude_none=True)), 404
     cached = cache.get_seg_validate_cache(reciter)
     if cached is not None:
         return orjson_cached_response(_viewer_payload(cached))
@@ -67,6 +70,8 @@ def seg_validate(reciter):
 @seg_val_bp.route("/stats/<reciter>")
 def seg_stats(reciter):
     """Return segmentation statistics and histogram distributions (cached)."""
+    if not state_service.has_content_access(reciter):
+        return jsonify(ErrorEnvelope(error="Reciter not found").model_dump(exclude_none=True)), 404
     cached = cache.get_seg_stats_cache(reciter)
     if cached is not None:
         return orjson_cached_response(cached)
@@ -90,6 +95,8 @@ def seg_edit_history(reciter):
     blob — so the heavy edit-history parse stays cached while the boundary list
     stays current after a regeneration without an explicit cache bust.
     """
+    if not state_service.has_content_access(reciter):
+        return jsonify(ErrorEnvelope(error="Reciter not found").model_dump(exclude_none=True)), 404
     history = load_edit_history(reciter)
     payload = {**history, "generations": generation_timeline(reciter)}
     return orjson_cached_response(payload)

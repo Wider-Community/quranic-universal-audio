@@ -113,7 +113,11 @@ def _published_reciter_slugs() -> list[str]:
     is what guarantees these slugs have timestamps published; we don't re-verify
     by walking the bucket dir.
     """
-    return [row.slug for row in state_service.all_rows() if row.state.value == "released"]
+    return [
+        row.slug
+        for row in state_service.all_rows()
+        if row.state.value == "released" and row.visibility.value == "public"
+    ]
 
 
 def _ts_chapters_for(slug: str, delivery) -> list[int]:
@@ -290,6 +294,9 @@ def shard_bytes(
     allow_unreleased: bool = False,
 ) -> bytes | None:
     _ensure_built()
+    row = state_service.get_row(reciter)
+    if row is None or row.visibility.value != "public":
+        return None
     # Only serve shards for reciters the manifest advertises (released + has
     # chapters). Folder-level isolation is gone post-unification, so enforce the
     # released gate here too — don't leak a non-released reciter's timestamps.
@@ -315,6 +322,9 @@ def ts_validation_doc(
     re-runs — reading the small doc directly avoids a stale cache.
     """
     _ensure_built()
+    row = state_service.get_row(reciter)
+    if row is None or row.visibility.value != "public":
+        return None
     if reciter not in _served_slugs and not allow_unreleased:
         return None  # not viewable → route returns 404
     # Viewable but never run with probe beams → empty doc (not a 404) so the

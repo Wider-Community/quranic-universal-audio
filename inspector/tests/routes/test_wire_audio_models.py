@@ -36,6 +36,9 @@ def test_model_validates_live_audio_surahs_response(flask_client, tmp_reciter_di
     """
     cache._audio_url.clear()
     slug = "wire_audio_fixture"
+    from tests.conftest import _seed_state
+
+    _seed_state(slug, state="awaiting_review")
     _install_manifest(
         tmp_reciter_dir.backend,
         slug,

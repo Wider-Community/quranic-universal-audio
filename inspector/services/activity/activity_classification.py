@@ -74,6 +74,7 @@ HIDDEN_EVENTS: frozenset[str] = frozenset(
         "reciter.ts_refreshed",
         "reciter.unpublished",
         "reciter.discarded",
+        "reciter.content_discarded",
         "reciter.undiscarded",
         "claim.force_released",
         "claim.reassigned",

@@ -188,6 +188,10 @@ def test_ts_vbr_model_validates_live_response(flask_client, monkeypatch):
     """The model parses the live VBR body and reproduces its key set."""
     from routes.timestamps import timestamps as ts_routes
 
+    from tests.conftest import _seed_state
+
+    _seed_state("rec_a", state="released")
+
     monkeypatch.setattr(
         ts_routes,
         "vbr_chapters_for_reciter",

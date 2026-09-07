@@ -158,8 +158,11 @@ def _eligible_recitations(conn: sqlite3.Connection) -> list[dict]:
         JOIN styles st    ON st.slug = d.style
         JOIN channels ch  ON ch.slug = d.channel
         JOIN reciters r   ON r.reciter_id = d.reciter_id
+        JOIN delivery_states ds ON ds.slug = d.slug
         WHERE prr.track = 'ts'
           AND prr.superseded_at IS NULL
+          AND ds.state = 'released'
+          AND ds.visibility = 'public'
         ORDER BY prr.slug
     """).fetchall()
     return [dict(r) for r in rows]

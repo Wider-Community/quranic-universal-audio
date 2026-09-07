@@ -19,11 +19,13 @@ Owner-only:
   to CATALOGUED. Reason ≥10 chars required.
 - ``POST /api/admin/request/<slug>/reject-hard`` — discard; row goes back
   to CATALOGUED + visibility=DISCARDED. Reason ≥10 chars required.
+- ``POST /api/admin/reciter/<slug>/discard`` — destructively discard a
+  reviewable or published delivery and enqueue its bucket/HF cleanup.
 - ``POST /api/admin/reciter/<slug>/undiscard`` — restore a discarded
-  row to visibility=PUBLIC. Reason ≥10 chars required.
+  row to visibility=PUBLIC (destructive discards restore requestability only).
 
 All POST routes stack ``@require_same_origin`` for CSRF defense on top
-of ``@require_role`` for the tier check.
+of the capability check for the tier check.
 """
 
 from __future__ import annotations
@@ -39,6 +41,7 @@ from services import auth as auth_service
 from services import pending_requests as pending_requests_service
 from services import permissions
 from services import state as state_service
+from services.admin import discard as discard_service
 from services.admin import intake as intake_service
 from services.admin import requests as admin_requests_service
 from services.auth import capabilities as cap_service
@@ -392,8 +395,33 @@ def _resolve_intake(user, rid: str, status: str):
 
 
 # ---------------------------------------------------------------------------
-# Owner: undiscard
+# Owner: destructive discard + undiscard
 # ---------------------------------------------------------------------------
+
+
+@requests_bp.route("/admin/reciter/<slug>/discard", methods=["POST"])
+@require_same_origin
+@require_capability("reciter.discard_content")
+def discard(user, slug: str):
+    body = request.get_json(silent=True) or {}
+    reason, err = validate_reason(body)
+    if err is not None:
+        return err
+    try:
+        result = discard_service.discard(slug, actor=actor_for(user), reason=reason or "")
+    except discard_service.DiscardBusy as exc:
+        return jsonify({"error": str(exc), "kind": exc.kind, "job_id": exc.job_id}), 409
+    except discard_service.DiscardConflict as exc:
+        return jsonify({"error": str(exc)}), 409
+    except discard_service.CleanupFailed as exc:
+        return jsonify({"error": str(exc), "cleanup_status": "failed", "retryable": True}), 503
+    except state_service.UnknownReciter:
+        return jsonify({"error": "unknown reciter"}), 404
+    except state_service.NotAuthorizedForTransition as exc:
+        return jsonify({"error": str(exc)}), 403
+    except state_service.InvalidTransition as exc:
+        return jsonify({"error": str(exc)}), 409
+    return jsonify(result)
 
 
 @requests_bp.route("/admin/reciter/<slug>/undiscard", methods=["POST"])
@@ -405,12 +433,9 @@ def undiscard(user, slug: str):
     if err is not None:
         return err
     try:
-        new_row = state_service.transition(
-            slug,
-            "reciter.undiscarded",
-            actor=actor_for(user),
-            reason=reason,
-        )
+        new_row = discard_service.undiscard(slug, actor=actor_for(user), reason=reason)
+    except discard_service.CleanupPending as exc:
+        return jsonify({"error": str(exc), "cleanup_status": "pending"}), 409
     except state_service.UnknownReciter:
         return jsonify({"error": "unknown reciter"}), 404
     except state_service.NotAuthorizedForTransition as e:

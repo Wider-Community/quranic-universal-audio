@@ -8,6 +8,10 @@ from __future__ import annotations
 def test_edit_history_merges_generations(flask_client, monkeypatch):
     from routes.segments import validation
 
+    from tests.conftest import _seed_state
+
+    _seed_state("ar_some", state="awaiting_review")
+
     monkeypatch.setattr(
         validation, "load_edit_history", lambda _r: {"batches": [], "summary": None}
     )
@@ -24,7 +28,7 @@ def test_edit_history_merges_generations(flask_client, monkeypatch):
         ],
     )
 
-    resp = flask_client.get("/api/seg/edit-history/ar.some")
+    resp = flask_client.get("/api/seg/edit-history/ar_some")
     assert resp.status_code == 200, resp.get_data(as_text=True)
     body = resp.get_json()
     assert body["batches"] == []
