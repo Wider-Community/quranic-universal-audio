@@ -493,6 +493,14 @@ def set_audio_url_cache(key: str, urls: dict) -> None:
     _audio_url.set(key, urls)
 
 
+def pop_audio_url_cache(slug: str) -> None:
+    """Evict every serialized audio-URL projection for one exact slug."""
+    suffix = f"/{slug}"
+    for key in _audio_url.all():
+        if key.endswith(suffix):
+            _audio_url.pop(key)
+
+
 # Quran.Foundation Content API. Token is a single client_credentials grant
 # shared process-wide ({access_token, expires_at}); chapter-URL maps are keyed
 # by the QF chapter-reciter id (stringified). Content is immutable, so the

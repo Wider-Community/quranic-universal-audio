@@ -35,6 +35,7 @@ from qua_shared.schemas.wire.seg import (
     SegSegmentPeaksResponse,
 )
 from services import audio_fetch, cache
+from services import state as state_service
 from services.audio.audio_meta import chapter_urls
 from services.data_loader import load_detailed
 from services.history_query import edit_history_op_ids
@@ -71,6 +72,8 @@ def seg_peaks(reciter):
     or backfill not yet run) simply drop out of the response — FE falls
     through to ``/segment-peaks`` POST per-card as a single fallback tier.
     """
+    if not state_service.has_content_access(reciter):
+        return jsonify(ErrorEnvelope(error="Reciter not found").model_dump(exclude_none=True)), 404
     entries = load_detailed(reciter)
     if not entries:
         return jsonify(ErrorEnvelope(error="Reciter not found").model_dump(exclude_none=True)), 404
@@ -165,6 +168,8 @@ def seg_segment_peaks(reciter):
     with nested ``PeakBucket[]`` floats at HD 30 bps. ``pad_ms`` widens the
     decoded range symmetrically for split/scrubber UIs.
     """
+    if not state_service.has_content_access(reciter):
+        return jsonify(ErrorEnvelope(error="Reciter not found").model_dump(exclude_none=True)), 404
     # Validate per-item so one malformed slice is skipped, not the whole
     # batch — a bad item shouldn't drop the fallback render for its siblings.
     raw = request.get_json(silent=True) or {}
@@ -222,6 +227,8 @@ def seg_history_peaks_get(reciter):
     the JSONL is appended (save invalidation + write-back). ``no-store`` on the
     wire so a stale browser copy never masks a freshly-persisted op.
     """
+    if not state_service.has_content_access(reciter):
+        return jsonify(ErrorEnvelope(error="Reciter not found").model_dump(exclude_none=True)), 404
     cached = cache.get_seg_history_peaks_response(reciter)
     if cached is None:
         cached = orjson.dumps({"records": load_peaks_records(reciter)})
@@ -248,6 +255,8 @@ def seg_history_peaks_post(reciter):
       - ``append_peaks_records`` dedups by op_id (one record per op),
       - record count + ``peaks_b64`` size are bounded.
     """
+    if not state_service.has_content_access(reciter):
+        return jsonify(ErrorEnvelope(error="Reciter not found").model_dump(exclude_none=True)), 404
     body = request.get_json(silent=True) or {}
     records = body.get("records", [])
     if not isinstance(records, list):

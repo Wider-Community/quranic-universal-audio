@@ -141,6 +141,7 @@ export interface AdminDiscardedDelivery {
   ts_refresh_dates?: string[] | null;
   visibility: "public" | "discarded";
   visibility_reason?: string | null;
+  cleanup_status?: ("pending" | "failed" | "completed" | "restored") | null;
 }
 export interface AdminGhReleaseMember {
   change_kind: "added" | "refresh" | "unchanged";

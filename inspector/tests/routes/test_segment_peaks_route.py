@@ -26,6 +26,9 @@ def test_segment_peaks_skips_only_the_malformed_item(flask_client, monkeypatch):
     rejected by the ``extra="forbid"`` item model) returns the valid slice's
     peaks — the bad item is dropped, not the whole batch."""
     monkeypatch.setattr(peaks_route, "compute_segment_peaks", _fake_compute)
+    from tests.conftest import _seed_state
+
+    _seed_state("some_reciter", state="awaiting_review")
 
     body = {
         "segments": [
@@ -46,6 +49,9 @@ def test_segment_peaks_empty_batch_returns_empty(flask_client, monkeypatch):
     """An all-malformed batch returns 200 with no peaks (graceful fallback),
     never a 500."""
     monkeypatch.setattr(peaks_route, "compute_segment_peaks", _fake_compute)
+    from tests.conftest import _seed_state
+
+    _seed_state("some_reciter", state="awaiting_review")
 
     resp = flask_client.post(
         "/api/seg/segment-peaks/some_reciter",

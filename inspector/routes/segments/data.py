@@ -104,6 +104,7 @@ def seg_reciters():
                 "visibility": row.visibility.value,
             }
             for row in sorted(state_service.all_rows(), key=lambda r: r.slug)
+            if state_service.has_content_access(row.slug)
         ]
     )
     # no-store: this list carries live lifecycle state (state/visibility per
@@ -115,6 +116,8 @@ def seg_reciters():
 @seg_data_bp.route("/chapters/<reciter>")
 def seg_chapters(reciter):
     """Return list of chapter numbers available for a reciter."""
+    if not state_service.has_content_access(reciter):
+        return jsonify(ErrorEnvelope(error="Reciter not found").model_dump(exclude_none=True)), 404
     entries = load_detailed(reciter)
     if not entries:
         return jsonify(ErrorEnvelope(error="Reciter not found").model_dump(exclude_none=True)), 404
@@ -130,6 +133,8 @@ def seg_data(reciter, chapter):
     we ride ETag + ``must-revalidate``: the browser always asks the server,
     and the server returns 304 when the encoded body hasn't changed.
     """
+    if not state_service.has_content_access(reciter):
+        return jsonify(ErrorEnvelope(error="Chapter not found").model_dump(exclude_none=True)), 404
     verse_filter = request.args.get("verse")
     result = get_chapter_data(reciter, chapter, verse_filter)
     if result is None:
@@ -152,6 +157,8 @@ def seg_auto_split_map(reciter):
     session (the sidecar is offline-computed; edits only mint new uids that are
     legitimate misses), so ETag revalidation returns 304 on repeat.
     """
+    if not state_service.has_content_access(reciter):
+        return jsonify(ErrorEnvelope(error="Reciter not found").model_dump(exclude_none=True)), 404
     from services.auto_split import load_auto_split_map
 
     return orjson_cached_response({"by_uid": load_auto_split_map(reciter)})
@@ -166,6 +173,8 @@ def seg_all(reciter):
     ``segments.see_flagger_identity``, and each comment carries a ``mine``
     marker so the flagger can edit their own root comment.
     """
+    if not state_service.has_content_access(reciter):
+        return jsonify(ErrorEnvelope(error="Reciter not found").model_dump(exclude_none=True)), 404
     entries = load_detailed(reciter)
     if not entries:
         return jsonify(ErrorEnvelope(error="Reciter not found").model_dump(exclude_none=True)), 404
