@@ -22,6 +22,7 @@ from config import (
 )
 from qua_shared.schemas import ErrorEnvelope, TsConfigResponse, TsVbrResponse
 from services import auth as auth_service
+from services import state as state_service
 from services import timestamps as ts_serve
 from services.audio_meta import vbr_chapters_for_reciter
 from services.auth import capabilities as _capabilities
@@ -138,5 +139,8 @@ def ts_resource(name):
 @ts_bp.route("/vbr/<reciter>")
 def ts_vbr(reciter):
     """Return VBR chapters for timestamp clients reading older HF manifests."""
+    row = state_service.get_row(reciter)
+    if row is None or row.state.value != "released" or row.visibility.value != "public":
+        return jsonify(ErrorEnvelope(error="Reciter not found").model_dump(exclude_none=True)), 404
     vbr = TsVbrResponse(vbr_chapters=vbr_chapters_for_reciter(reciter))
     return jsonify(vbr.model_dump(mode="json", exclude_none=True, by_alias=True))

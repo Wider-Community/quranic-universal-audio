@@ -57,6 +57,7 @@ ReciterCoverageKind = Literal["full", "partial", "mixed"]
 
 # Per-combo visibility flag (orthogonal to the lifecycle bucket).
 Visibility = Literal["public", "discarded"]
+DiscardCleanupStatus = Literal["pending", "failed", "completed", "restored"]
 
 
 class PublicDelivery(BaseModel):
@@ -106,6 +107,7 @@ class AdminDiscardedDelivery(PublicDelivery):
 
     visibility: Visibility
     visibility_reason: str | None = None
+    cleanup_status: DiscardCleanupStatus | None = None
 
 
 class PublicReciter(BaseModel):

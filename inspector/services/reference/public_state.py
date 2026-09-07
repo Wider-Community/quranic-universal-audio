@@ -423,6 +423,7 @@ class AdminViewDelivery(PublicDelivery):
 
     visibility: str  # "public" | "discarded"
     visibility_reason: str | None
+    cleanup_status: str | None
 
 
 class AdminViewReciter(TypedDict):
@@ -464,7 +465,17 @@ def _to_admin_discarded_delivery(
         **base,
         visibility=row.visibility.value,
         visibility_reason=row.visibility_reason,
+        cleanup_status=_discard_cleanup_status(row.slug),
     )
+
+
+def _discard_cleanup_status(slug: str) -> str | None:
+    from services.db import repo_discard_cleanup
+
+    cleanup = repo_discard_cleanup.get(slug)
+    if cleanup is None:
+        return None
+    return cleanup.get("status")
 
 
 def admin_view_reciter(reciter_id: str) -> AdminViewReciter | None:

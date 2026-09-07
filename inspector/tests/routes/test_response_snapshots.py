@@ -241,6 +241,10 @@ def test_ts_vbr_snapshot(flask_client, monkeypatch):
     fixture reciter has no baked VBR chapters)."""
     from routes.timestamps import timestamps as ts_routes
 
+    from tests.conftest import _seed_state
+
+    _seed_state("rec_a", state="released")
+
     monkeypatch.setattr(
         ts_routes,
         "vbr_chapters_for_reciter",
@@ -286,9 +290,11 @@ def test_audio_surahs_snapshot(flask_client, tmp_reciter_dir):
     """Install a 2-chapter audio_manifest sidecar (one with duration, one
     without) and snapshot the derived ``{url, duration_ms}`` map."""
     from services import cache, storage_paths
+    from tests.conftest import _seed_state
 
     cache._audio_url.clear()
     slug = "wire_audio_fixture"
+    _seed_state(slug, state="awaiting_review")
     tmp_reciter_dir.backend.write_bytes_atomic(
         storage_paths.audio_manifest_path(slug),
         json.dumps(

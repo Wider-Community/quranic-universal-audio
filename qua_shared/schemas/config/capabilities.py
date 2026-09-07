@@ -221,6 +221,14 @@ CAPABILITIES: tuple[Capability, ...] = (
         maintainer=True,
     ),
     _c(
+        "reciter.discard_content",
+        G_LIFECYCLE,
+        "Permanently discard recitation content",
+        "Delete a recitation's bucket content and active published projections; owner only.",
+        contributor=False,
+        maintainer=False,
+    ),
+    _c(
         "reciter.discard",
         G_LIFECYCLE,
         "Discard a recitation",

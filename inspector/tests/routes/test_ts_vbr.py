@@ -6,6 +6,10 @@ from __future__ import annotations
 def test_ts_vbr_route_returns_chapters(flask_client, monkeypatch):
     from routes.timestamps import timestamps as ts_routes
 
+    from tests.conftest import _seed_state
+
+    _seed_state("reciter_a", state="released")
+
     monkeypatch.setattr(
         ts_routes,
         "vbr_chapters_for_reciter",

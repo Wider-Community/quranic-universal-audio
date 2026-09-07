@@ -29,6 +29,7 @@ def _fake_source(chapter_key: str | None = "2"):
 def _patch_resolve(monkeypatch):
     from routes.audio import proxy as proxy_mod
 
+    monkeypatch.setattr(proxy_mod.state_service, "has_content_access", lambda slug: True)
     monkeypatch.setattr(proxy_mod.audio_source, "resolve", lambda *a, **k: _fake_source())
 
 

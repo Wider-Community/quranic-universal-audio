@@ -28,6 +28,7 @@ def mp3_path(tmp_path):
 
 @pytest.fixture
 def client(flask_client, monkeypatch, mp3_path):
+    monkeypatch.setattr(proxy_mod.state_service, "has_content_access", lambda slug: True)
     src = AudioSource(
         cdn_url="https://cdn.local/002.mp3",
         data=None,

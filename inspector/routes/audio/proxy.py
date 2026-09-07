@@ -41,6 +41,7 @@ from flask import Blueprint, Response, jsonify, request, send_file, stream_with_
 
 from config import AUDIO_CACHE_MAX_AGE, AUDIO_MIME_TYPES
 from services import audio_source
+from services import state as state_service
 
 from .range_file import send_range_file
 
@@ -147,6 +148,8 @@ def seg_audio_proxy(reciter):
     byte-range fetches handled by ``send_range_file`` (local) or
     re-streamed through ``_stream_cdn`` with a fresh ``Range`` header.
     """
+    if not state_service.has_content_access(reciter):
+        return jsonify({"error": "Reciter not found"}), 404
     url = request.args.get("url", "").strip()
     if not url:
         return jsonify({"error": "No url provided"}), 400

@@ -3,6 +3,8 @@
 - ``reciter.requested`` — user submits a request; CATALOGUED → AWAITING_ALIGNMENT
 - ``reciter.request_rejected_soft`` — admin sends back; AWAITING_ALIGNMENT → CATALOGUED
 - ``reciter.request_rejected_hard`` — admin discards; AWAITING_ALIGNMENT → CATALOGUED + visibility=DISCARDED
+- ``reciter.content_discarded`` — owner purges reviewable/published content;
+  any supported state → CATALOGUED + visibility=DISCARDED
 - ``reciter.alignment_completed`` — auto-detect or admin accepts; AWAITING_ALIGNMENT → AWAITING_REVIEW
   (applies any pending catalog edits in the same handler)
 """

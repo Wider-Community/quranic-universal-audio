@@ -276,6 +276,14 @@ class FilesystemBackend:
         elif p.exists():
             p.unlink()
 
+    def delete_strict(self, path: str) -> None:
+        """Delete ``path`` while preserving filesystem failures."""
+        p = self._resolve(path)
+        if p.is_dir():
+            shutil.rmtree(p)
+        elif p.exists():
+            p.unlink()
+
     def local_path(self, path: str) -> Path | None:
         p = self._resolve(path)
         return p if p.exists() else None
@@ -523,6 +531,23 @@ class BucketBackend:
             logger.warning("BucketBackend.exists(%s) errored: %s", path, e)
             return False
 
+    def exists_strict(self, path: str) -> bool:
+        """Like :meth:`exists`, but do not turn API failures into absence."""
+        _ensure_posix(path)
+        if self._mount is not None:
+            mp = self._mount / PurePosixPath(path)
+            if mp.exists():
+                return True
+        from huggingface_hub import get_bucket_file_metadata  # type: ignore[import-not-found]
+
+        try:
+            get_bucket_file_metadata(self._bucket_id, path, token=self._token)
+            return True
+        except Exception as e:
+            if self._is_not_found(e):
+                return False
+            raise
+
     def list_dir(self, path: str) -> list[str]:
         _ensure_posix(path, allow_empty=True)
         if self._mount is not None:
@@ -553,6 +578,37 @@ class BucketBackend:
             if not tail:
                 continue
             names.add(tail.split("/", 1)[0])
+        return sorted(names)
+
+    def list_dir_strict(self, path: str) -> list[str]:
+        """Like :meth:`list_dir`, but do not turn API failures into an empty list."""
+        _ensure_posix(path, allow_empty=True)
+        if self._mount is not None:
+            mp = self._mount if path == "" else self._mount / PurePosixPath(path)
+            if mp.is_dir():
+                return sorted(child.name for child in mp.iterdir())
+
+        from huggingface_hub import list_bucket_tree  # type: ignore[import-not-found]
+
+        try:
+            kwargs = {"recursive": False, "token": self._token}
+            if path:
+                kwargs["prefix"] = path.rstrip("/")
+            items = list_bucket_tree(self._bucket_id, **kwargs)
+        except Exception as e:
+            if self._is_not_found(e):
+                return []
+            raise
+
+        prefix = (path.rstrip("/") + "/") if path else ""
+        names: set[str] = set()
+        for it in items:
+            p = it.path
+            if prefix and not p.startswith(prefix):
+                continue
+            tail = p[len(prefix) :] if prefix else p
+            if tail:
+                names.add(tail.split("/", 1)[0])
         return sorted(names)
 
     def copy(self, src: str, dst: str) -> None:
@@ -610,6 +666,50 @@ class BucketBackend:
             if not self._is_not_found(e):
                 logger.warning("BucketBackend.delete(%s) errored: %s", path, e)
 
+    def delete_strict(self, path: str) -> None:
+        """Delete one object and propagate non-not-found API failures."""
+        _ensure_posix(path)
+        if self._mount is not None:
+            mp = self._mount / PurePosixPath(path)
+            if mp.is_dir():
+                shutil.rmtree(mp)
+            elif mp.exists():
+                mp.unlink()
+        from huggingface_hub import batch_bucket_files  # type: ignore[import-not-found]
+
+        try:
+            batch_bucket_files(self._bucket_id, delete=[path], token=self._token)
+        except Exception as e:
+            if not self._is_not_found(e):
+                raise
+
+
+def delete_tree_verified(backend: StorageBackend, path: str) -> None:
+    """Delete one exact bucket tree and verify that it is gone.
+
+    ``StorageBackend.delete`` is intentionally a primitive and historically
+    accepted a directory-like path. Destructive recitation discard needs a
+    stronger contract: walk the exact prefix, delete every child, then verify
+    both the root and its immediate listing. The path is validated by each
+    backend, and no string-prefix sibling (for example ``foo`` vs ``foobar``)
+    is ever treated as a child.
+    """
+    _ensure_posix(path)
+
+    list_dir = getattr(backend, "list_dir_strict", backend.list_dir)
+    exists = getattr(backend, "exists_strict", backend.exists)
+    delete = getattr(backend, "delete_strict", backend.delete)
+
+    for name in list_dir(path):
+        child = f"{path.rstrip('/')}/{name}"
+        delete_tree_verified(backend, child)
+
+    if exists(path):
+        delete(path)
+
+    if exists(path) or list_dir(path):
+        raise RuntimeError(f"bucket path still exists after deletion: {path}")
+
 
 # ----------------------------------------------------------------------
 # Read-only wrapper
@@ -637,6 +737,7 @@ class ReadOnlyBackend:
         "copy",
         "move",
         "delete",
+        "delete_strict",
     )
 
     def __init__(self, inner: StorageBackend) -> None:

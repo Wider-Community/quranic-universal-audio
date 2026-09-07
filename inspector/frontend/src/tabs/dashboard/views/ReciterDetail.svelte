@@ -12,7 +12,7 @@
     import { onDestroy } from 'svelte';
 
     import { fetchPublicReciter } from '../../../lib/api/public-reciter-detail';
-    import { undiscardReciter } from '../../../lib/api/requests';
+    import { discardReciter, undiscardReciter } from '../../../lib/api/requests';
     import { localizeDigits } from '../../../lib/i18n/format';
     import { localeStore, tr } from '../../../lib/i18n/locale-store';
     import { vocabLabel } from '../../../lib/i18n/vocab';
@@ -41,6 +41,7 @@
     import { compareDeliveries } from '../../../lib/utils/delivery-sort';
     import { gotoSegments } from '../../../lib/utils/goto-segments';
     import RequestForm from '../components/RequestForm.svelte';
+    import DeliveryStatusCell from './DeliveryStatusCell.svelte';
     import StateTimeline from '../components/StateTimeline.svelte';
     import { loadCatalog } from '../stores/catalog-data';
     import { closeDetail, dashboardState } from '../stores/dashboard-state';
@@ -52,6 +53,7 @@
     let inflight: AbortController | null = null;
     let lastFetched: string | null = null;
     let selectedSlug: string | null = null;
+    let discardingSlug: string | null = null;
 
     /** Open request form, in either user-create or admin-review mode. */
     let formState: {
@@ -123,6 +125,9 @@
     }
 
     async function onUndiscard(d: AdminDiscardedDelivery): Promise<void> {
+        if (d.cleanup_status === 'pending' || d.cleanup_status === 'failed') {
+            return;
+        }
         const reason = window.prompt(
             m.dashboard_detail_undiscard_prompt(),
             '',
@@ -138,6 +143,29 @@
             await onFormResolved();
         } catch (e) {
             window.alert(m.dashboard_detail_undiscard_failed({ message: (e as Error).message }));
+        }
+    }
+
+    async function onDiscard(d: PublicDelivery): Promise<void> {
+        if (discardingSlug !== null) return;
+        if (!window.confirm(m.dashboard_detail_discard_confirm())) return;
+        const reason = window.prompt(m.dashboard_detail_discard_prompt(), '');
+        if (reason === null) return;
+        const trimmed = reason.trim();
+        if (trimmed.length < 10) {
+            window.alert(m.dashboard_detail_reason_too_short());
+            return;
+        }
+        discardingSlug = d.slug;
+        try {
+            await discardReciter(d.slug, trimmed);
+            await onFormResolved();
+        } catch (e) {
+            window.alert(m.dashboard_detail_discard_failed({ message: (e as Error).message }));
+            lastFetched = null;
+            if (detailId !== null) await maybeReload(detailId);
+        } finally {
+            discardingSlug = null;
         }
     }
 
@@ -312,6 +340,11 @@
     $: discardedNoteVisibility = tr(lang, m.dashboard_detail_discarded_note_visibility());
     $: discardedNoteOwner = tr(lang, m.dashboard_detail_discarded_note_owner());
     $: undiscardButtonLabel = tr(lang, m.dashboard_detail_undiscard_button());
+    $: discardButtonLabel = tr(lang, m.dashboard_detail_discard_button());
+    $: discardTitle = tr(lang, m.dashboard_detail_discard_title());
+    $: cleanupPendingLabel = tr(lang, m.dashboard_detail_cleanup_pending());
+    $: cleanupFailedLabel = tr(lang, m.dashboard_detail_cleanup_failed());
+    $: retryDiscardLabel = tr(lang, m.dashboard_detail_retry_discard());
 </script>
 
 <Modal {open} title={null} on:close={closeDetail}>
@@ -385,31 +418,7 @@
                                         {#each visibleCols as col (col.key)}
                                             <td class={`cell cell-${col.key}`}>{#if col.key === 'channel' && d.source_url}<a class="source-link" href={d.source_url} target="_blank" rel="noopener noreferrer" title={openSourceTitle} on:click|stopPropagation>{col.value(d)}</a>{:else}{col.value(d)}{/if}</td>
                                         {/each}
-                                        <td class="col-state">
-                                            {#if d.bucket === 'available_for_request'}
-                                                <button
-                                                    type="button"
-                                                    class="request-btn"
-                                                    on:click|stopPropagation={() => openRequest(d)}
-                                                >{requestButtonLabel}</button>
-                                            {:else if d.bucket === 'requested' && $isAdmin}
-                                                <button
-                                                    type="button"
-                                                    class="pill-as-btn"
-                                                    title={reviewRequestTitle}
-                                                    on:click|stopPropagation={() => openReview(d)}
-                                                ><StatePill state={d.bucket} size="sm" /></button>
-                                            {:else if d.bucket === 'available_for_review'}
-                                                <button
-                                                    type="button"
-                                                    class="request-btn"
-                                                    title={claimReviewTitle}
-                                                    on:click|stopPropagation={() => claimReview(d)}
-                                                >{claimReviewButtonLabel}</button>
-                                            {:else}
-                                                <StatePill state={d.bucket} size="sm" />
-                                            {/if}
-                                        </td>
+                                        <td class="col-state"><DeliveryStatusCell delivery={d} isAdmin={$isAdmin} isOwner={$isOwner} busy={discardingSlug === d.slug} requestLabel={requestButtonLabel} reviewRequestTitle={reviewRequestTitle} claimReviewTitle={claimReviewTitle} claimReviewButtonLabel={claimReviewButtonLabel} discardLabel={discardButtonLabel} discardTitle={discardTitle} onRequest={openRequest} onReview={openReview} onClaimReview={claimReview} onDiscard={onDiscard} /></td>
                                     </tr>
                                 {/each}
                             </tbody>
@@ -440,9 +449,7 @@
                                             {#each visibleCols as col (col.key)}
                                                 <td class={`cell cell-${col.key}`}>{#if col.key === 'channel' && d.source_url}<a class="source-link" href={d.source_url} target="_blank" rel="noopener noreferrer" title={openSourceTitle} on:click|stopPropagation>{col.value(d)}</a>{:else}{col.value(d)}{/if}</td>
                                             {/each}
-                                            <td class="col-state">
-                                                <StatePill state={d.bucket} size="sm" />
-                                            </td>
+                                            <td class="col-state"><DeliveryStatusCell delivery={d} isAdmin={$isAdmin} isOwner={$isOwner} busy={discardingSlug === d.slug} requestLabel={requestButtonLabel} reviewRequestTitle={reviewRequestTitle} claimReviewTitle={claimReviewTitle} claimReviewButtonLabel={claimReviewButtonLabel} discardLabel={discardButtonLabel} discardTitle={discardTitle} onRequest={openRequest} onReview={openReview} onClaimReview={claimReview} onDiscard={onDiscard} /></td>
                                         </tr>
                                     {/each}
                                 </tbody>
@@ -468,31 +475,7 @@
                                         {#each visibleCols as col (col.key)}
                                             <td class={`cell cell-${col.key}`}>{#if col.key === 'channel' && d.source_url}<a class="source-link" href={d.source_url} target="_blank" rel="noopener noreferrer" title={openSourceTitle} on:click|stopPropagation>{col.value(d)}</a>{:else}{col.value(d)}{/if}</td>
                                         {/each}
-                                        <td class="col-state">
-                                            {#if d.bucket === 'available_for_request'}
-                                                <button
-                                                    type="button"
-                                                    class="request-btn"
-                                                    on:click|stopPropagation={() => openRequest(d)}
-                                                >{requestButtonLabel}</button>
-                                            {:else if d.bucket === 'requested' && $isAdmin}
-                                                <button
-                                                    type="button"
-                                                    class="pill-as-btn"
-                                                    title={reviewRequestTitle}
-                                                    on:click|stopPropagation={() => openReview(d)}
-                                                ><StatePill state={d.bucket} size="sm" /></button>
-                                            {:else if d.bucket === 'available_for_review'}
-                                                <button
-                                                    type="button"
-                                                    class="request-btn"
-                                                    title={claimReviewTitle}
-                                                    on:click|stopPropagation={() => claimReview(d)}
-                                                >{claimReviewButtonLabel}</button>
-                                            {:else}
-                                                <StatePill state={d.bucket} size="sm" />
-                                            {/if}
-                                        </td>
+                                        <td class="col-state"><DeliveryStatusCell delivery={d} isAdmin={$isAdmin} isOwner={$isOwner} busy={discardingSlug === d.slug} requestLabel={requestButtonLabel} reviewRequestTitle={reviewRequestTitle} claimReviewTitle={claimReviewTitle} claimReviewButtonLabel={claimReviewButtonLabel} discardLabel={discardButtonLabel} discardTitle={discardTitle} onRequest={openRequest} onReview={openReview} onClaimReview={claimReview} onDiscard={onDiscard} /></td>
                                     </tr>
                                 {/each}
                             </tbody>
@@ -525,10 +508,24 @@
                                 {#if d.visibility_reason}
                                     <p class="d-reason">{d.visibility_reason}</p>
                                 {/if}
+                                {#if d.cleanup_status === 'pending'}
+                                    <p class="d-cleanup">{cleanupPendingLabel}</p>
+                                {:else if d.cleanup_status === 'failed'}
+                                    <p class="d-cleanup error">{cleanupFailedLabel}</p>
+                                    {#if $isOwner}
+                                        <button
+                                            type="button"
+                                            class="undiscard-btn"
+                                            disabled={discardingSlug === d.slug}
+                                            on:click={() => onDiscard(d)}
+                                        >{retryDiscardLabel}</button>
+                                    {/if}
+                                {/if}
                                 {#if $isOwner}
                                     <button
                                         type="button"
                                         class="undiscard-btn"
+                                        disabled={d.cleanup_status === 'pending' || d.cleanup_status === 'failed'}
                                         on:click={() => onUndiscard(d)}
                                     >{undiscardButtonLabel}</button>
                                 {/if}
@@ -793,6 +790,12 @@
         color: var(--text-muted);
         font-style: italic;
     }
+    .d-cleanup {
+        margin: var(--s-1) 0 0;
+        font-size: var(--fs-meta);
+        color: var(--text-muted);
+    }
+    .d-cleanup.error { color: var(--state-error-fg); }
     .undiscard-btn {
         margin-top: var(--s-2);
         background: transparent;
@@ -806,6 +809,10 @@
     .undiscard-btn:hover {
         color: var(--text-primary);
         border-color: var(--accent);
+    }
+    .undiscard-btn:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
     }
 
     /* Inner sub-modal hosting the RequestForm. Must sit above the reciter

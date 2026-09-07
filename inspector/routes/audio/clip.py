@@ -18,6 +18,7 @@ from flask import Blueprint, Response, jsonify, request, stream_with_context
 
 from config import AUDIO_CACHE_MAX_AGE, FFMPEG_FULL_TIMEOUT
 from services import audio_source
+from services import state as state_service
 from services.audio import audio_meta
 
 logger = logging.getLogger(__name__)
@@ -55,6 +56,8 @@ def seg_segment_clip(reciter):
     with CORS so the existing WebAudio kill-switch (``MediaElementAudioSourceNode``
     needs CORS, see ``inspector/app.py:serve_audio``) keeps emitting samples.
     """
+    if not state_service.has_content_access(reciter):
+        return jsonify({"error": "Reciter not found"}), 404
     url = request.args.get("url", "").strip()
     try:
         start_ms = int(request.args.get("start_ms", ""))
