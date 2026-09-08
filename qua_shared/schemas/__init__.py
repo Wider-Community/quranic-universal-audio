@@ -150,6 +150,7 @@ from .wire.mark_ready import (
     MarkReadySubmission,
 )
 from .wire.public import (
+    AdminDelivery,
     AdminDiscardedDelivery,
     AdminViewReciter,
     BucketCounts,

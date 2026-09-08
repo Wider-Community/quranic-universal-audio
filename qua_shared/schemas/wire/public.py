@@ -95,6 +95,21 @@ class PublicDelivery(BaseModel):
     ts_refresh_dates: list[str] | None = None
 
 
+class AdminDelivery(PublicDelivery):
+    """Full delivery metadata exposed only in the admin reciter modal."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    variant_label: str | None = None
+    codec: str
+    container: str
+    sample_rate_hz: int | None = None
+    channels: int | None = None
+    visibility: Visibility = "public"
+    visibility_reason: str | None = None
+    cleanup_status: DiscardCleanupStatus | None = None
+
+
 class AdminDiscardedDelivery(PublicDelivery):
     """A discarded combo surfaced in the admin reciter view.
 
@@ -104,6 +119,12 @@ class AdminDiscardedDelivery(PublicDelivery):
     """
 
     model_config = ConfigDict(extra="forbid")
+
+    variant_label: str | None = None
+    codec: str
+    container: str
+    sample_rate_hz: int | None = None
+    channels: int | None = None
 
     visibility: Visibility
     visibility_reason: str | None = None
@@ -150,7 +171,9 @@ class AdminViewReciter(PublicReciter):
 
     model_config = ConfigDict(extra="forbid")
 
-    discarded_deliveries: list[AdminDiscardedDelivery]
+    notes: str | None = None
+    deliveries: list[AdminDelivery]
+    discarded_deliveries: list[AdminDelivery]
     fully_discarded: bool
 
 

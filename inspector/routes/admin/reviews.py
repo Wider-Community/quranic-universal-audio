@@ -18,6 +18,7 @@ from pydantic import ValidationError
 
 from qua_shared.schemas import TsJobSettings
 from routes._admin_helpers import require_capability_or_403
+from services import permissions
 from services.admin import aligner_models as aligner_models_service
 from services.admin import reviews as reviews_service
 from services.admin import timestamps_jobs as ts_jobs
@@ -30,13 +31,19 @@ admin_reviews_bp = Blueprint("admin_reviews", __name__, url_prefix="/api/admin")
 @admin_reviews_bp.route("/reviews/list")
 @require_capability("reviews.view")
 def list_reviews(user):
-    return jsonify(reviews_service.list_reviews())
+    return jsonify(
+        reviews_service.list_reviews(
+            include_everyayah=user is not None and permissions.is_owner(user)
+        )
+    )
 
 
 @admin_reviews_bp.route("/reviews/<slug>")
 @require_capability("reviews.view")
 def review_detail(user, slug):
-    detail = reviews_service.get_review_detail(slug)
+    detail = reviews_service.get_review_detail(
+        slug, include_everyayah=user is not None and permissions.is_owner(user)
+    )
     if detail is None:
         return jsonify({"error": "unknown slug"}), 404
     return jsonify(detail)
@@ -75,6 +82,8 @@ def generate_timestamps(user, slug):
     the reciter at launch; the launched job id is linked via
     ``timestamps_job_ids``. Returns 202 with ``{job_id, url}``.
     """
+    if not state_service.is_delivery_visible(slug, user):
+        return jsonify({"error": "unknown slug"}), 404
     row = state_service.get_row(slug)
     if row is None:
         return jsonify({"error": "unknown slug"}), 404
@@ -163,6 +172,8 @@ def job_status(user, slug, job_id):
 
     Reciter-scoped: the durable record lives at ``reciters/<slug>/jobs/ts/`` so
     the slug is needed to read/backstop it (the drawer always has it)."""
+    if not state_service.is_delivery_visible(slug, user):
+        return jsonify({"error": "unknown slug"}), 404
     try:
         return jsonify(ts_jobs.job_status(slug, job_id))
     except Exception as exc:
@@ -179,7 +190,7 @@ def cancel_job(user, slug, job_id):
     start a job can stop it. Returns 200 on success with the reconciled
     status, 404 if the slug is unknown, 502 if the HF API call failed (the
     job stays in whatever state HF reports — caller can retry)."""
-    if state_service.get_row(slug) is None:
+    if not state_service.is_delivery_visible(slug, user) or state_service.get_row(slug) is None:
         return jsonify({"error": "unknown slug"}), 404
     try:
         result = ts_jobs.cancel_job(slug, job_id)
@@ -194,6 +205,8 @@ def cancel_job(user, slug, job_id):
 @require_capability("reviews.generate_timestamps")
 def job_record(user, slug, job_id):
     """Persisted record (settings + status + full logs) for one past job."""
+    if not state_service.is_delivery_visible(slug, user):
+        return jsonify({"error": "no record for job"}), 404
     rec = ts_jobs.read_job_record(slug, job_id)
     if rec is None:
         return jsonify({"error": "no record for job"}), 404
@@ -204,6 +217,6 @@ def job_record(user, slug, job_id):
 @require_capability("reviews.generate_timestamps")
 def reciter_ts_jobs(user, slug):
     """Persisted timestamps-job records for ``slug`` (newest first)."""
-    if state_service.get_row(slug) is None:
+    if not state_service.is_delivery_visible(slug, user) or state_service.get_row(slug) is None:
         return jsonify({"error": "unknown slug"}), 404
     return jsonify({"jobs": ts_jobs.list_job_records(slug)})

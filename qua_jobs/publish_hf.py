@@ -33,6 +33,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -40,6 +41,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from qua_shared.catalog_visibility import is_everyayah_channel  # noqa: E402
 from qua_shared.mp3_frames import (  # noqa: E402
     FrameIndex,
     MultiFrameSlice,
@@ -492,9 +494,7 @@ def _iter_hf_records(rows: list[dict], audio_bytes: list[bytes | None]):
             # Add the chapter's offset within its source file (combined-file
             # intakes) so the persisted offset is absolute within the original
             # source; 0 for normal chapters whose audio == the whole source.
-            "source_offset_ms": _i(
-                row["clip_start"] + row.get("source_offset_base_ms", 0)
-            ),
+            "source_offset_ms": _i(row["clip_start"] + row.get("source_offset_base_ms", 0)),
         }
 
 
@@ -744,6 +744,22 @@ def _result(
     }
 
 
+def _is_everyayah_delivery(slug: str) -> bool:
+    """Fail closed for the owner-only Inspector source at the public boundary."""
+    db_path = _bucket_root() / "db" / "inspector.db"
+    if not db_path.exists():
+        return False
+    try:
+        conn = sqlite3.connect(db_path)
+        try:
+            row = conn.execute("SELECT channel FROM deliveries WHERE slug = ?", (slug,)).fetchone()
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return False
+    return row is not None and is_everyayah_channel(row[0])
+
+
 def publish_slug(
     slug: str,
     job_id: str,
@@ -764,6 +780,13 @@ def publish_slug(
     validation_summary, error, exit_code}``. ``exit_code`` lets the single
     entrypoint preserve its operator-facing process codes.
     """
+    if _is_everyayah_delivery(slug):
+        return _result(
+            slug,
+            "failed",
+            error="EveryAyah deliveries are Inspector-owner-only and cannot be published to HF",
+            exit_code=4,
+        )
     rc = _preflight(slug)
     if rc != 0:
         return _result(slug, "failed", error=f"preflight failed (rc={rc})", exit_code=rc)

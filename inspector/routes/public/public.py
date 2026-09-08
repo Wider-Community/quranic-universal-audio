@@ -87,7 +87,11 @@ def version(user):
 @require_capability("view.catalog")
 def stats(user):
     """Counts per public bucket. Mutually exclusive at the reciter level."""
-    counts = BucketCounts.model_validate(public_state_service.stats())
+    counts = BucketCounts.model_validate(
+        public_state_service.stats(
+            include_everyayah=user is not None and permissions.is_owner(user)
+        )
+    )
     return _with_cache(counts.model_dump(), _LIST_CACHE)
 
 
@@ -120,6 +124,7 @@ def activity(user):
         cursor=cursor,
         limit=limit,
         include_identity=include_identity,
+        include_everyayah=user is not None and permissions.is_owner(user),
     )
     resp = jsonify(payload)
     resp.headers["Cache-Control"] = "no-store"
@@ -149,7 +154,10 @@ def reciter_detail(user, reciter_id: str):
     is_admin = caller is not None and permissions.is_maintainer(caller)
 
     if is_admin:
-        admin_payload = public_state_service.admin_view_reciter(reciter_id)
+        admin_payload = public_state_service.admin_view_reciter(
+            reciter_id,
+            include_everyayah=caller is not None and permissions.is_owner(caller),
+        )
         if admin_payload is None:
             return jsonify(
                 ErrorEnvelope(error="reciter not found").model_dump(exclude_none=True)
@@ -221,7 +229,9 @@ def reciters(user):
             ErrorEnvelope(error="limit must be between 1 and 500").model_dump(exclude_none=True)
         ), 400
 
-    rows = public_state_service.all_public_reciters()
+    rows = public_state_service.all_public_reciters(
+        include_everyayah=user is not None and permissions.is_owner(user)
+    )
 
     if buckets:
         rows = [r for r in rows if r["primary_bucket"] in buckets]

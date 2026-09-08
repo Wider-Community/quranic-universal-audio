@@ -24,6 +24,7 @@ from collections.abc import Iterable
 from datetime import UTC, datetime
 from typing import TypedDict
 
+from qua_shared.catalog_visibility import is_everyayah_channel
 from services.db import _serde, repo_activity, repo_transitions
 from services.state import catalog as catalog_service
 
@@ -88,6 +89,7 @@ def _to_card(
     record: dict,
     *,
     include_actor: bool,
+    include_everyayah: bool = False,
 ) -> PublicActivityCard | None:
     kind = activity_classification.public_kind_for(record)
     if kind is None:
@@ -99,6 +101,13 @@ def _to_card(
     if not isinstance(ts, str):
         return None
     descriptor = _delivery_descriptor(slug)
+    delivery = catalog_service.find_delivery(slug)
+    if (
+        delivery is not None
+        and not include_everyayah
+        and is_everyayah_channel(getattr(delivery, "channel", None))
+    ):
+        return None
     if descriptor is not None:
         name, name_ar, riwayah, style = descriptor
     else:
@@ -137,6 +146,7 @@ def all_public_cards(
     months: int = 2,
     *,
     include_identity: bool = False,
+    include_everyayah: bool = False,
 ) -> list[PublicActivityCard]:
     """Read + filter + transform audit log into the public feed.
 
@@ -153,7 +163,11 @@ def all_public_cards(
     for record in _iter_partitions(months):
         if record.get("result") != "ok":
             continue
-        card = _to_card(record, include_actor=include_actor)
+        card = _to_card(
+            record,
+            include_actor=include_actor,
+            include_everyayah=include_everyayah,
+        )
         if card is None:
             continue
         if card.get("audit_id") in deleted_ids:
@@ -168,9 +182,13 @@ def feed(
     limit: int = 50,
     *,
     include_identity: bool = False,
+    include_everyayah: bool = False,
 ) -> dict:
     """Return one page of the feed plus a next cursor."""
-    cards = all_public_cards(include_identity=include_identity)
+    cards = all_public_cards(
+        include_identity=include_identity,
+        include_everyayah=include_everyayah,
+    )
     total = len(cards)
     page = cards[cursor : cursor + limit]
     next_cursor = cursor + limit if cursor + limit < total else None

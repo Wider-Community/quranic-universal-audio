@@ -20,6 +20,7 @@ def register_blueprints(app):
     from routes.admin.actions import admin_actions_bp
     from routes.admin.activity import public_activity_admin_bp
     from routes.admin.announcements import admin_announcements_bp
+    from routes.admin.catalog import catalog_admin_bp
     from routes.admin.internal import admin_internal_bp
     from routes.admin.jobs import admin_jobs_bp
     from routes.admin.permissions import admin_permissions_bp
@@ -61,6 +62,7 @@ def register_blueprints(app):
     app.register_blueprint(public_bp)
     app.register_blueprint(access_admin_bp)
     app.register_blueprint(admin_actions_bp)
+    app.register_blueprint(catalog_admin_bp)
     app.register_blueprint(public_activity_admin_bp)
     app.register_blueprint(admin_permissions_bp)
     app.register_blueprint(admin_releases_bp)

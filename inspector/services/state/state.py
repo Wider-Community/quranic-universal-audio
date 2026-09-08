@@ -24,6 +24,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, TypedDict
 
+from qua_shared.catalog_visibility import is_everyayah_channel
 from qua_shared.schemas import (
     Actor,
     ReciterRow,
@@ -173,11 +174,32 @@ def get_row(slug: str) -> ReciterRow | None:
     return repo_state.get_row(slug)
 
 
+def is_delivery_visible(slug: str, viewer=None) -> bool:
+    """Whether a delivery slug may be addressed by this Inspector viewer.
+
+    EveryAyah remains in the canonical database for owner operations, but it
+    is not a visible delivery for anonymous, contributor, or maintainer
+    callers—even when they already know the slug.
+    """
+    if slug.startswith("sample--"):
+        return True
+    if viewer is None:
+        from services import auth as _auth
+
+        viewer = _auth.current_user()
+    from services.state import catalog as _catalog
+
+    delivery = _catalog.find_delivery(slug)
+    if delivery is None or not is_everyayah_channel(delivery.channel):
+        return True
+    return viewer is not None and permissions.is_owner(viewer)
+
+
 def all_rows() -> list[ReciterRow]:
     return repo_state.all_rows()
 
 
-def has_content_access(slug: str) -> bool:
+def has_content_access(slug: str, viewer=None) -> bool:
     """Whether a delivery is public and currently backed by reviewable data.
 
     Maintainer-uploaded ``sample--`` slugs are an isolated Segments-only
@@ -186,6 +208,12 @@ def has_content_access(slug: str) -> bool:
     """
     if slug.startswith("sample--"):
         return True
+    if viewer is None:
+        from services import auth as _auth
+
+        viewer = _auth.current_user()
+    if not is_delivery_visible(slug, viewer):
+        return False
     row = get_row(slug)
     return bool(
         row is not None
