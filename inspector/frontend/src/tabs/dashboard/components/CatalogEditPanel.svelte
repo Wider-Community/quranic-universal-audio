@@ -1,9 +1,14 @@
 <script lang="ts">
     import { onMount, untrack } from 'svelte';
+    import { get } from 'svelte/store';
 
     import { editDeliveryCatalog, editReciterCatalog } from '../../../lib/api/admin-catalog';
+    import CountryPicker from '../../../lib/components/CountryPicker.svelte';
+    import { localeStore } from '../../../lib/i18n/locale-store';
     import * as m from '../../../lib/paraglide/messages';
     import type { AdminDelivery, AdminViewReciter } from '../../../lib/types/generated/schemas';
+    import { countryName as countryLabel } from '../../../lib/utils/delivery-label';
+    import { countryByCode, countryByName, normalizeCountry } from '../../../lib/utils/countries';
 
     interface Props {
         mode: 'reciter' | 'delivery';
@@ -35,8 +40,12 @@
 
     let nameEn = $state(untrack(() => reciter.name));
     let nameAr = $state(untrack(() => reciter.name_ar ?? ''));
-    let country = $state(untrack(() => reciter.country ?? ''));
+    let countryInput = $state(untrack(() => countryDisplayValue(reciter.country)));
     let notes = $state(untrack(() => reciter.notes ?? ''));
+
+    const lang = $derived($localeStore);
+    const countryCode = $derived(countryByName(countryInput, lang)?.code ?? normalizeCountry(countryInput));
+    const invalidCountry = $derived(!!countryInput.trim() && !countryByCode(countryCode));
 
     let riwayah = $state(untrack(() => delivery?.riwayah ?? ''));
     let style = $state(untrack(() => delivery?.style ?? ''));
@@ -70,6 +79,12 @@
         return normalized === '' ? null : Number(normalized);
     }
 
+    function countryDisplayValue(raw: string | null | undefined): string {
+        const code = normalizeCountry(raw);
+        const known = countryByCode(code);
+        return known ? countryLabel(known.code, get(localeStore)) : (raw ?? '');
+    }
+
     onMount(() => {
         if (mode !== 'delivery') return;
         fetch('/api/static/catalog.json')
@@ -96,10 +111,14 @@
         error = null;
         try {
             if (mode === 'reciter') {
+                if (invalidCountry) {
+                    error = m.dashboard_request_country_invalid();
+                    return;
+                }
                 await editReciterCatalog(reciter.reciter_id, {
                     name_en: nameEn.trim(),
                     name_ar: optionalText(nameAr),
-                    country: optionalText(country),
+                    country: countryCode || null,
                     notes: optionalText(notes),
                 });
             } else if (delivery) {
@@ -151,7 +170,21 @@
             <div class="fields identity-fields">
                 <label>{m.dashboard_catalog_edit_name_en()}<input bind:value={nameEn} required /></label>
                 <label>{m.dashboard_catalog_edit_name_ar()}<input bind:value={nameAr} dir="rtl" /></label>
-                <label>{m.dashboard_catalog_edit_country()}<input bind:value={country} maxlength="2" /></label>
+                <label class="country-field">
+                    <span>
+                        {m.dashboard_catalog_edit_country()}
+                        {#if countryCode && !invalidCountry}
+                            <span class="label-meta">({countryCode})</span>
+                        {:else if countryInput}
+                            <span class="label-meta warn">{m.dashboard_request_country_unknown()}</span>
+                        {/if}
+                    </span>
+                    <CountryPicker
+                        bind:value={countryInput}
+                        locale={lang}
+                        placeholder={m.dashboard_request_country_placeholder()}
+                    />
+                </label>
                 <label class="wide">{m.dashboard_catalog_edit_notes()}<textarea bind:value={notes} maxlength="500"></textarea></label>
             </div>
         {:else if delivery}
@@ -197,6 +230,9 @@
     .identity-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     label { display: flex; flex-direction: column; gap: var(--s-1); color: var(--text-muted); font-size: var(--fs-meta); }
     .wide { grid-column: 1 / -1; }
+    .country-field > span { display: inline-flex; align-items: baseline; gap: var(--s-1); }
+    .label-meta { color: var(--text-faint); font-family: var(--font-mono); font-size: var(--fs-meta); }
+    .label-meta.warn { color: var(--state-warning-fg); font-family: inherit; }
     input, select, textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--border-default); border-radius: var(--r-1); background: var(--canvas); color: var(--text-primary); padding: var(--s-2); font: inherit; }
     textarea { min-height: 64px; resize: vertical; }
     .actions { justify-content: flex-end; margin-top: var(--s-4); }
