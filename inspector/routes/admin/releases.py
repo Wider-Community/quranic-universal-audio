@@ -36,6 +36,7 @@ from flask import Blueprint, jsonify, request
 from pydantic import ValidationError
 
 from qua_shared import release_staleness
+from qua_shared.catalog_visibility import is_everyayah_channel
 from qua_shared.schemas import (
     AdminCutReleaseRequest,
     AdminLaunchResponse,
@@ -46,6 +47,7 @@ from qua_shared.schemas import (
     TsGenerationDefaults,
 )
 from routes._admin_helpers import actor_for, require_capability_or_403
+from services import permissions
 from services.admin.automation import config as automation_config
 from services.admin.automation import schedule as automation_schedule
 from services.admin.jobs import base as jobs_base
@@ -56,6 +58,7 @@ from services.admin.jobs import refresh_catalog as refresh_catalog_jobs
 from services.admin.release_preview import build_release_preview, current_auto_version
 from services.db import _serde, get_conn, repo_automation, repo_releases
 from services.segments import ts_staleness
+from services.state import catalog as catalog_service
 from services.state import state as state_service
 from utils.decorators import require_capability, require_same_origin
 
@@ -71,6 +74,17 @@ _CANCEL_CAPS = {
 log = logging.getLogger("inspector")
 
 admin_releases_bp = Blueprint("admin_releases", __name__, url_prefix="/api/admin")
+
+
+def _non_owner_job_visible(slug: str | None) -> bool:
+    """Keep unknown/malformed external job slugs visible; hide only known EA."""
+    if not slug:
+        return True
+    try:
+        delivery = catalog_service.find_delivery(slug)
+    except Exception:  # diagnostic job payloads must not break the status route
+        return True
+    return delivery is None or not is_everyayah_channel(delivery.channel)
 
 
 # ---------------------------------------------------------------------------
@@ -96,6 +110,9 @@ def publish_hf(user, slug: str):
     """
     if state_service.get_row(slug) is None:
         return jsonify({"error": "unknown slug"}), 404
+    delivery = catalog_service.find_delivery(slug)
+    if delivery is not None and is_everyayah_channel(delivery.channel):
+        return jsonify({"error": "EveryAyah deliveries are not public HF releases"}), 409
     ts_row = repo_releases.current_release("ts", slug)
     if ts_row is None:
         return jsonify(
@@ -186,6 +203,9 @@ def publish_hf_batch(user):
     for slug in slugs:
         if state_service.get_row(slug) is None:
             return jsonify({"error": f"unknown slug: {slug}"}), 404
+        delivery = catalog_service.find_delivery(slug)
+        if delivery is not None and is_everyayah_channel(delivery.channel):
+            return jsonify({"error": f"{slug} is not eligible for public HF releases"}), 409
         if repo_releases.current_release("ts", slug) is None:
             return jsonify(
                 {"error": f"{slug} has no current TS release — generate timestamps first"}
@@ -451,10 +471,13 @@ def releases_status(user):
     # ``block=False``: stale-while-revalidate so the grid never waits on the
     # rate-limited HF ``list_jobs()`` network call (refreshed in the background;
     # the 30 s FE poll catches up). The reconciler keeps the blocking read.
+    include_everyayah = user is not None and permissions.is_owner(user)
     in_flight = jobs_base.list_in_flight_jobs(
         ("hf_publish", "hf_publish_batch", "cut_release", "timestamps", "refresh_catalog"),
         block=False,
     )
+    if not include_everyayah:
+        in_flight = [job for job in in_flight if _non_owner_job_visible(job.get("slug"))]
 
     # Most-recent batch publish outcome — drives the "Failed to publish" bucket
     # (per-row ``publish_error``) and the dismissable summary banner
@@ -474,6 +497,8 @@ def releases_status(user):
                 continue
             slug = (m.get("slug") or "").strip()
             if not slug:
+                continue
+            if not include_everyayah and not _non_owner_job_visible(slug):
                 continue
             # Cleared if a current HF release landed at/after this batch.
             hf_row = repo_releases.current_release("hf", slug)
@@ -497,7 +522,8 @@ def releases_status(user):
                 "failed_count": failed_count,
             }
 
-    deliveries = conn.execute("""
+    deliveries = conn.execute(
+        """
         SELECT d.slug, d.riwayah, d.style, d.channel,
                r.name_en, r.name_ar,
                ds.state,
@@ -506,8 +532,11 @@ def releases_status(user):
         JOIN reciters        r  ON r.reciter_id = d.reciter_id
         LEFT JOIN delivery_states ds ON ds.slug = d.slug
         LEFT JOIN claims c ON c.slug = d.slug AND c.released_at IS NULL
+        WHERE (? OR d.channel <> 'everyayah')
         ORDER BY d.slug
-    """).fetchall()
+    """,
+        (1 if include_everyayah else 0,),
+    ).fetchall()
 
     in_flight_slugs = {j["slug"] for j in in_flight if j.get("slug")}
 

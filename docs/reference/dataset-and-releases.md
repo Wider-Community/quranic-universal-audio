@@ -54,10 +54,12 @@ separate from publish status. Publish status lives in three tables, all written 
   the *first* stale time). Two triggers:
   - **`ts_regen`** — TS regenerated (`timestamps_jobs.complete_timestamps_job` /
     `_regenerate_timestamps_on_released`). Needs a full HF republish / GH cut.
-  - **`catalog_edit`** — a public-projection catalog field changed (`services/state/catalog.py::edit_delivery`
-    / `edit_reciter`, gated on `PUBLIC_DELIVERY_FIELDS` / `PUBLIC_RECITER_FIELDS`; reciter edits fan
-    out to every delivery of the reciter). Cheap to fix on HF (catalog refresh below); GH reflects it
-    on the next cut.
+  - **`catalog_edit`** — a public-projection catalog field changed (`services/state/catalog.py::edit_delivery_fields`
+    / `edit_reciter_fields`, gated on `PUBLIC_DELIVERY_FIELDS` / `PUBLIC_RECITER_FIELDS`; reciter edits fan
+    out to every delivery of the reciter). The complete delivery metadata projection is covered, including
+    provenance/source, channel, encoding, coverage, and duration fields. Cheap to fix on HF (catalog refresh
+    below); GH reflects it on the next cut. Inspector's catalog snapshot and viewer-specific projections
+    update immediately from SQLite after the durable edit.
 
   A third reason — **`segments_edited`** — lives on the **`ts`** track and is **computed, never
   stamped** (`services/segments/ts_staleness.py::ts_stale_info`, called from the status route). The
@@ -88,8 +90,10 @@ Repository: [services/db/repo_releases.py](../../inspector/services/db/repo_rele
 
 ## Eligibility gate
 
-A reciter is GH-release-eligible iff its channel has `gh_release_eligible = 1` **and** it has a
-current `per_recitation_releases(track='ts')` row. This is a pure DB query (no `git ls-files`).
+A reciter is GH-release-eligible iff its channel has `gh_release_eligible = 1`, it is not the
+`everyayah` owner-only channel, **and** it has a current `per_recitation_releases(track='ts')` row.
+This is a pure DB query (no `git ls-files`). EveryAyah is excluded as a second, explicit public
+release boundary even if its channel vocabulary row remains GH-eligible for historical compatibility.
 The same predicate drives the Releases-tab buckets and the cut job's member discovery.
 
 | Action | Eligibility |

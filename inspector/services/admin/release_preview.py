@@ -31,6 +31,7 @@ def build_release_preview() -> AdminReleasePreviewResponse:
         JOIN reciters r   ON r.reciter_id = d.reciter_id
         WHERE prr.track = 'ts'
           AND prr.superseded_at IS NULL
+          AND d.channel <> 'everyayah'
         ORDER BY prr.slug
     """).fetchall()
 

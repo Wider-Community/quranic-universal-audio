@@ -22,6 +22,7 @@ from config import (
 )
 from qua_shared.schemas import ErrorEnvelope, TsConfigResponse, TsVbrResponse
 from services import auth as auth_service
+from services import permissions
 from services import state as state_service
 from services import timestamps as ts_serve
 from services.audio_meta import vbr_chapters_for_reciter
@@ -80,14 +81,15 @@ _SHARD_HEADERS = {
 # invalidates the process cache), so a short client TTL is what bounds how long
 # a stale published-set lingers in the browser. 10 min trades a tiny re-fetch
 # (a few hundred gzipped bytes) for prompt propagation of publish changes.
-_MANIFEST_HEADERS = {"Cache-Control": "public, max-age=600"}
+_MANIFEST_HEADERS = {"Cache-Control": "private, no-store", "Vary": "Cookie"}
 
 
 @ts_bp.route("/manifest")
 def ts_manifest():
     """Serve the pre-built gzipped manifest (local or bucket source)."""
+    include_everyayah = _is_owner()
     return Response(
-        ts_serve.manifest_bytes(),
+        ts_serve.manifest_bytes(include_everyayah=include_everyayah),
         mimetype="application/octet-stream",
         headers=_MANIFEST_HEADERS,
     )
@@ -98,8 +100,14 @@ def ts_shard(reciter, chapter):
     """Serve a per-chapter Brotli compact v13 shard (byte pass-through)."""
     # Owner preview: holders of ``timestamps.view_unreleased`` may read shards
     # for generated-but-unreleased reciters; everyone else stays released-only.
-    allow_unreleased = _capabilities.can(auth_service.current_user(), "timestamps.view_unreleased")
-    body = ts_serve.shard_bytes(reciter, chapter, allow_unreleased=allow_unreleased)
+    user = auth_service.current_user()
+    allow_unreleased = _capabilities.can(user, "timestamps.view_unreleased")
+    body = ts_serve.shard_bytes(
+        reciter,
+        chapter,
+        allow_unreleased=allow_unreleased,
+        include_everyayah=user is not None and permissions.is_owner(user),
+    )
     if body is None:
         return jsonify(ErrorEnvelope(error="Shard not found").model_dump(exclude_none=True)), 404
     return Response(body, mimetype="application/json", headers=_SHARD_HEADERS)
@@ -121,7 +129,11 @@ def ts_validation(user, reciter):
     unreleased existence).
     """
     allow_unreleased = _capabilities.can(user, "timestamps.view_unreleased")
-    doc = ts_serve.ts_validation_doc(reciter, allow_unreleased=allow_unreleased)
+    doc = ts_serve.ts_validation_doc(
+        reciter,
+        allow_unreleased=allow_unreleased,
+        include_everyayah=user is not None and permissions.is_owner(user),
+    )
     if doc is None:
         return jsonify(ErrorEnvelope(error="Not found").model_dump(exclude_none=True)), 404
     return orjson_response(doc)
@@ -140,7 +152,17 @@ def ts_resource(name):
 def ts_vbr(reciter):
     """Return VBR chapters for timestamp clients reading older HF manifests."""
     row = state_service.get_row(reciter)
-    if row is None or row.state.value != "released" or row.visibility.value != "public":
+    if (
+        row is None
+        or row.state.value != "released"
+        or row.visibility.value != "public"
+        or not state_service.has_content_access(reciter)
+    ):
         return jsonify(ErrorEnvelope(error="Reciter not found").model_dump(exclude_none=True)), 404
     vbr = TsVbrResponse(vbr_chapters=vbr_chapters_for_reciter(reciter))
     return jsonify(vbr.model_dump(mode="json", exclude_none=True, by_alias=True))
+
+
+def _is_owner() -> bool:
+    user = auth_service.current_user()
+    return user is not None and permissions.is_owner(user)

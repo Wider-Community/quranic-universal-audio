@@ -192,7 +192,7 @@ CAPABILITIES: tuple[Capability, ...] = (
         "catalog.edit",
         G_LIFECYCLE,
         "Edit catalog metadata",
-        "Change a reciter's catalog fields (names, riwayah, style, country).",
+        "Change reciter identity and delivery metadata.",
         contributor=False,
         maintainer=True,
     ),

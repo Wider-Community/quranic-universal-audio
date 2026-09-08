@@ -202,7 +202,9 @@ def find_delivery(slug: str) -> Delivery | None:
 
 
 def edit_reciter(reciter_id: str, **fields) -> ReciterEntry | None:
-    cols = {k: v for k, v in fields.items() if k in _RECITER_WRITABLE and v is not None}
+    # Presence, rather than non-None-ness, is significant: the edit modal uses
+    # null to intentionally clear optional metadata.
+    cols = {k: v for k, v in fields.items() if k in _RECITER_WRITABLE}
     if cols:
         sets = ", ".join(f"{k} = ?" for k in cols)
         get_conn().execute(
@@ -215,7 +217,7 @@ def edit_reciter(reciter_id: str, **fields) -> ReciterEntry | None:
 def edit_delivery(slug: str, **fields) -> Delivery | None:
     cols: dict[str, Any] = {}
     for k, v in fields.items():
-        if k in _DELIVERY_WRITABLE and v is not None:
+        if k in _DELIVERY_WRITABLE:
             cols[k] = _DELIVERY_WRITABLE[k](v)
     if cols:
         sets = ", ".join(f"{k} = ?" for k in cols)
