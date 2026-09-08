@@ -202,3 +202,77 @@ def test_public_detail_still_filters_discarded(public_state_env):
     public = svc.detail("rec_a")
     assert public is not None
     assert {d["slug"] for d in public["deliveries"]} == {"rec_a_hafs"}
+
+
+def test_everyayah_is_owner_only_and_excluded_from_rollups(tmp_path):
+    from services import public_state as public_state_service
+    from tests.conftest import _seed_catalog, _seed_state
+
+    _seed_catalog(
+        vocab=Vocab(
+            riwayat=[Riwayah(slug="hafs", short="H", name="Hafs")],
+            styles=[Style(slug="murattal", short="M", name="Murattal")],
+            sources=[Source(slug="src1", name="Source One")],
+            channels=[
+                Channel(slug="ch1", short="c1", name="Channel One"),
+                Channel(slug="everyayah", short="ea", name="EveryAyah"),
+            ],
+        ),
+        reciters=[
+            ReciterEntry(reciter_id="rec_visible", name_en="Visible"),
+            ReciterEntry(reciter_id="rec_hidden", name_en="Hidden"),
+        ],
+        deliveries=[
+            Delivery(
+                slug="rec_visible_ch1",
+                reciter_id="rec_visible",
+                riwayah="hafs",
+                style="murattal",
+                source="src1",
+                channel="ch1",
+                audio_category=AudioCategory.BY_SURAH,
+                chapter_count=114,
+                added_at=datetime.now(UTC),
+                added_by_hf_id="seed",
+            ),
+            Delivery(
+                slug="rec_visible_everyayah",
+                reciter_id="rec_visible",
+                riwayah="hafs",
+                style="murattal",
+                source="src1",
+                channel="everyayah",
+                audio_category=AudioCategory.BY_SURAH,
+                chapter_count=114,
+                added_at=datetime.now(UTC),
+                added_by_hf_id="seed",
+            ),
+            Delivery(
+                slug="rec_hidden_everyayah",
+                reciter_id="rec_hidden",
+                riwayah="hafs",
+                style="murattal",
+                source="src1",
+                channel="everyayah",
+                audio_category=AudioCategory.BY_SURAH,
+                chapter_count=114,
+                added_at=datetime.now(UTC),
+                added_by_hf_id="seed",
+            ),
+        ],
+    )
+    _seed_state("rec_visible_ch1", state="catalogued")
+    _seed_state("rec_visible_everyayah", state="catalogued")
+    _seed_state("rec_hidden_everyayah", state="catalogued")
+
+    public = public_state_service.all_public_reciters()
+    assert [r["reciter_id"] for r in public] == ["rec_visible"]
+    assert [d["channel"] for d in public[0]["deliveries"]] == ["ch1"]
+    assert public_state_service.admin_view_reciter("rec_hidden") is None
+    assert public_state_service.stats()["available_for_request"] == 1
+
+    owner = public_state_service.all_public_reciters(include_everyayah=True)
+    assert {r["reciter_id"] for r in owner} == {"rec_visible", "rec_hidden"}
+    owner_detail = public_state_service.admin_view_reciter("rec_hidden", include_everyayah=True)
+    assert owner_detail is not None
+    assert owner_detail["deliveries"][0]["channel"] == "everyayah"

@@ -45,6 +45,7 @@ _SQL = (
     "JOIN reciters r ON r.reciter_id = d.reciter_id "
     "LEFT JOIN claims c ON c.slug = ds.slug AND c.released_at IS NULL "
     f"WHERE ds.state IN ({','.join(['?'] * len(_BUCKET_STATES))}) "
+    "AND (? OR d.channel <> 'everyayah') "
     "ORDER BY ds.slug"
 )
 
@@ -78,10 +79,11 @@ def _build_submission(row) -> MarkReadySubmission | None:
     )
 
 
-def list_reviews() -> dict:
+def list_reviews(*, include_everyayah: bool = False) -> dict:
     """Assembled Reviews-tab payload (``AdminReviewsResponse`` dump)."""
     rows: list[AdminReviewRow] = []
-    for r in get_conn().execute(_SQL, _BUCKET_STATES).fetchall():
+    params = (*_BUCKET_STATES, 1 if include_everyayah else 0)
+    for r in get_conn().execute(_SQL, params).fetchall():
         open_claim: AdminReviewOpenClaim | None = None
         if r["assignee_id"] is not None:
             open_claim = AdminReviewOpenClaim(
@@ -112,7 +114,7 @@ def list_reviews() -> dict:
 # ---- detail drawer ----
 
 
-def get_review_detail(slug: str) -> dict | None:
+def get_review_detail(slug: str, *, include_everyayah: bool = False) -> dict | None:
     """Per-slug payload for the General drawer.
 
     Returns ``None`` when the slug isn't in ``delivery_states`` (caller maps
@@ -129,8 +131,8 @@ def get_review_detail(slug: str) -> dict | None:
         "FROM delivery_states ds "
         "JOIN deliveries d ON d.slug = ds.slug "
         "JOIN reciters r ON r.reciter_id = d.reciter_id "
-        "WHERE ds.slug = ?",
-        (slug,),
+        "WHERE ds.slug = ? AND (? OR d.channel <> 'everyayah')",
+        (slug, 1 if include_everyayah else 0),
     ).fetchone()
     if base is None:
         return None

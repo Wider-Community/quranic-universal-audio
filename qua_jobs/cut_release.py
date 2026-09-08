@@ -121,7 +121,8 @@ def _open_inspector_db_readonly() -> sqlite3.Connection:
 def _eligible_recitations(conn: sqlite3.Connection) -> list[dict]:
     """Return ``[{slug, ts_version, delivery_meta, channel_meta, reciter_meta}, ...]``
     for every recitation eligible for GH release: a current
-    ``per_recitation_releases(track='ts')`` row. Every channel is releasable.
+    ``per_recitation_releases(track='ts')`` row. EveryAyah is excluded from
+    this public projection even when it has a timestamp row.
 
     Selects both the FK slugs (``riwayah``/``style``/``channel`` — kept so
     ``catalog.json`` keeps its stable consumer schema) AND the vocab display names
@@ -163,6 +164,7 @@ def _eligible_recitations(conn: sqlite3.Connection) -> list[dict]:
           AND prr.superseded_at IS NULL
           AND ds.state = 'released'
           AND ds.visibility = 'public'
+          AND d.channel <> 'everyayah'
         ORDER BY prr.slug
     """).fetchall()
     return [dict(r) for r in rows]

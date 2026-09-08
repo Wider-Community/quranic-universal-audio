@@ -83,7 +83,9 @@ def submit_request(user, slug: str):
     # keeps random slugs out of the state file.
     from services import catalog as catalog_service
 
-    if catalog_service.find_delivery(slug) is None:
+    if catalog_service.find_delivery(slug) is None or not state_service.is_delivery_visible(
+        slug, user
+    ):
         return jsonify({"error": "unknown reciter"}), 404
 
     # Reject up front (HTTP 409) when a pending entry exists, so the
@@ -193,6 +195,8 @@ def _pending_to_payload(pending, *, owner: bool) -> dict:
 @requests_bp.route("/admin/request/<slug>", methods=["GET"])
 @require_capability("request.review")
 def get_pending(user, slug: str):
+    if not state_service.is_delivery_visible(slug, user):
+        return jsonify({"error": "no pending request for this reciter"}), 404
     pending = pending_requests_service.get(slug)
     if pending is None:
         return jsonify({"error": "no pending request for this reciter"}), 404
@@ -209,6 +213,8 @@ def get_pending(user, slug: str):
 
 
 def _reject(user, slug: str, event: str):
+    if not state_service.is_delivery_visible(slug, user):
+        return jsonify({"error": "unknown reciter"}), 404
     body = request.get_json(silent=True) or {}
     reason, err = validate_reason(body)
     if err is not None:
@@ -261,7 +267,7 @@ def list_requests(user):
         return jsonify({"error": "invalid status"}), 400
     payload = admin_requests_service.list_requests(
         status=status,
-        caller_is_owner=cap_service.can(user, "identity.see_actor"),
+        caller_is_owner=permissions.is_owner(user),
         caller_hf_id=user.hf_user_id,
     )
     resp = jsonify(payload)

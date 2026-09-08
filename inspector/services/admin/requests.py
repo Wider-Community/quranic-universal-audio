@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from typing import cast
 
+from qua_shared.catalog_visibility import is_everyayah_channel
 from services.db import _serde, repo_requests
 from services.db.connection import current_db_seq
 from services.state import catalog as catalog_service
@@ -59,9 +60,18 @@ def list_requests(*, status: str, caller_is_owner: bool, caller_hf_id: str) -> d
         base = _build_base_rows(db_status)
         cache.set_admin_requests_cache(db_seq, db_status, base)
 
-    rows = [_serialize(r, owner=caller_is_owner) for r in base]
+    visible_base = [row for row in base if caller_is_owner or not row.get("_everyayah", False)]
+    rows = [_serialize(r, owner=caller_is_owner) for r in visible_base]
 
-    counts = repo_requests.counts_by_status()
+    counts: dict[str, int] = {}
+    for db_key in _STATUS_DB.values():
+        status_base = cast("list[dict] | None", cache.get_admin_requests_cache(db_seq, db_key))
+        if status_base is None:
+            status_base = _build_base_rows(db_key)
+            cache.set_admin_requests_cache(db_seq, db_key, status_base)
+        counts[db_key] = sum(
+            1 for row in status_base if caller_is_owner or not row.get("_everyayah", False)
+        )
     return {
         "rows": rows,
         "counts": {
@@ -146,6 +156,7 @@ def _build_base_rows(db_status: str) -> list[dict]:
                 "probe": payload.get("probe") if is_intake else None,
                 "_requester": payload.get("requester") or {},
                 "_transitioned_by": payload.get("transitioned_by") or {},
+                "_everyayah": delivery is not None and is_everyayah_channel(delivery.channel),
             }
         )
     return out

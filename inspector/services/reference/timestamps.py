@@ -24,6 +24,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from config import DK_SCRIPT_PATH
+from qua_shared.catalog_visibility import is_everyayah_channel
 from qua_shared.schemas import ReciterCatalog, TsManifestResponse
 from qua_shared.timestamps_shards import MANIFEST_SCHEMA_VERSION
 from services.audio.audio_meta import chapter_numbers, vbr_chapters_for_reciter
@@ -52,12 +53,15 @@ _built = False
 # forces a rebuild (boot / explicit invalidate).
 _built_seq: int | None = None
 _manifest_bytes: bytes | None = None
+_built_seq_by_visibility: dict[bool, int | None] = {False: None, True: None}
+_manifest_bytes_by_visibility: dict[bool, bytes | None] = {False: None, True: None}
 _resource_bytes: dict[str, bytes] = {}
 # Slugs the manifest advertises (released + chapter-derivable). The shard route
 # gates on this so a guessed ``/shard/<slug>/<ch>`` URL can't serve a
 # non-released reciter's timestamps — the unified ``reciters/`` prefix no longer
 # isolates WIP timestamps by folder, so the released invariant is enforced here.
 _served_slugs: set[str] = set()
+_served_slugs_by_visibility: dict[bool, set[str]] = {False: set(), True: set()}
 
 _SHARD_LRU_CAP = 256
 _shard_lru: OrderedDict[tuple[str, int], bytes] = OrderedDict()
@@ -105,7 +109,7 @@ def _build_resource_bytes() -> dict[str, bytes]:
     return out
 
 
-def _published_reciter_slugs() -> list[str]:
+def _published_reciter_slugs(*, include_everyayah: bool = False) -> list[str]:
     """Return slugs of reciters in the ``released`` lifecycle state.
 
     State alone — no bucket I/O. The lifecycle gate
@@ -113,10 +117,17 @@ def _published_reciter_slugs() -> list[str]:
     is what guarantees these slugs have timestamps published; we don't re-verify
     by walking the bucket dir.
     """
+    catalog = catalog_service.snapshot()
+    delivery_by_slug = {d.slug: d for d in catalog.deliveries}
     return [
         row.slug
         for row in state_service.all_rows()
-        if row.state.value == "released" and row.visibility.value == "public"
+        if row.state.value == "released"
+        and row.visibility.value == "public"
+        and (
+            include_everyayah
+            or not is_everyayah_channel(getattr(delivery_by_slug.get(row.slug), "channel", None))
+        )
     ]
 
 
@@ -186,7 +197,7 @@ def _bucket_reciter_block(
     }
 
 
-def _ensure_built() -> None:
+def _ensure_built(*, include_everyayah: bool = False) -> None:
     """Lazy boot — build manifest from state + catalog + bucket listing.
 
     Idempotent and thread-safe. Shards are NOT eagerly loaded — see
@@ -197,15 +208,15 @@ def _ensure_built() -> None:
     from services import db as _db
 
     seq = _db.current_db_seq()
-    if _built and _built_seq == seq:
+    if _built_seq_by_visibility[include_everyayah] == seq:
         return
     with _lock:
         # Re-check inside the lock; another thread may have just rebuilt at seq.
-        if _built and _built_seq == seq:
+        if _built_seq_by_visibility[include_everyayah] == seq:
             return
         catalog = catalog_service.snapshot()
         reciters_block: dict[str, dict] = {}
-        for slug in _published_reciter_slugs():
+        for slug in _published_reciter_slugs(include_everyayah=include_everyayah):
             delivery = catalog.find_delivery(slug)
             chapters = _ts_chapters_for(slug, delivery)
             if not chapters:
@@ -222,18 +233,25 @@ def _ensure_built() -> None:
             if block is not None:
                 reciters_block[slug] = block
 
-        _served_slugs = set(reciters_block)
+        served = set(reciters_block)
         manifest = _build_manifest_dict(reciters_block)
-        _manifest_bytes = gzip.compress(
+        body = gzip.compress(
             json.dumps(manifest, ensure_ascii=False).encode("utf-8"),
             compresslevel=6,
             mtime=0,
         )
+        _served_slugs_by_visibility[include_everyayah] = served
+        _manifest_bytes_by_visibility[include_everyayah] = body
         _shard_lru.clear()
         _resource_bytes.clear()
         _resource_bytes.update(_build_resource_bytes())
-        _built = True
-        _built_seq = seq
+        _built_seq_by_visibility[include_everyayah] = seq
+        if not include_everyayah:
+            # Preserve these names for existing diagnostics/tests and callers.
+            _built = True
+            _built_seq = seq
+            _manifest_bytes = body
+            _served_slugs = served
         log.info(
             "timestamps: built manifest (%d reciters, %d resources)",
             len(reciters_block),
@@ -282,20 +300,25 @@ def _load_bucket_shard(reciter: str, chapter: int) -> bytes | None:
     return body
 
 
-def manifest_bytes() -> bytes:
-    _ensure_built()
-    assert _manifest_bytes is not None
-    return _manifest_bytes
+def manifest_bytes(*, include_everyayah: bool = False) -> bytes:
+    _ensure_built(include_everyayah=include_everyayah)
+    body = _manifest_bytes_by_visibility[include_everyayah]
+    assert body is not None
+    return body
 
 
 def shard_bytes(
     reciter: str,
     chapter: int,
     allow_unreleased: bool = False,
+    include_everyayah: bool = False,
 ) -> bytes | None:
-    _ensure_built()
+    _ensure_built(include_everyayah=include_everyayah)
     row = state_service.get_row(reciter)
     if row is None or row.visibility.value != "public":
+        return None
+    delivery = catalog_service.find_delivery(reciter)
+    if delivery is not None and is_everyayah_channel(delivery.channel) and not include_everyayah:
         return None
     # Only serve shards for reciters the manifest advertises (released + has
     # chapters). Folder-level isolation is gone post-unification, so enforce the
@@ -304,7 +327,7 @@ def shard_bytes(
     # the caller holds ``timestamps.view_unreleased`` (capability check lives in
     # the route — this service stays Flask-free), letting an owner read a
     # generated-but-unreleased reciter's shards.
-    if reciter not in _served_slugs and not allow_unreleased:
+    if reciter not in _served_slugs_by_visibility[include_everyayah] and not allow_unreleased:
         return None
     return _load_bucket_shard(reciter, chapter)
 
@@ -312,6 +335,7 @@ def shard_bytes(
 def ts_validation_doc(
     reciter: str,
     allow_unreleased: bool = False,
+    include_everyayah: bool = False,
 ) -> dict | None:
     """Verse-level ``ts_validation.json`` for a reciter, or ``None``.
 
@@ -321,11 +345,14 @@ def ts_validation_doc(
     owner-preview-only traffic, and the file is re-written whenever a job
     re-runs — reading the small doc directly avoids a stale cache.
     """
-    _ensure_built()
+    _ensure_built(include_everyayah=include_everyayah)
     row = state_service.get_row(reciter)
     if row is None or row.visibility.value != "public":
         return None
-    if reciter not in _served_slugs and not allow_unreleased:
+    delivery = catalog_service.find_delivery(reciter)
+    if delivery is not None and is_everyayah_channel(delivery.channel) and not include_everyayah:
+        return None
+    if reciter not in _served_slugs_by_visibility[include_everyayah] and not allow_unreleased:
         return None  # not viewable → route returns 404
     # Viewable but never run with probe beams → empty doc (not a 404) so the
     # FE can render an empty panel.
@@ -351,6 +378,11 @@ def invalidate() -> None:
         _built = False
         _built_seq = None
         _manifest_bytes = None
+        for visibility in (False, True):
+            _built_seq_by_visibility[visibility] = None
+            _manifest_bytes_by_visibility[visibility] = None
+            _served_slugs_by_visibility[visibility].clear()
+        _served_slugs.clear()
         _shard_lru.clear()
         _resource_bytes.clear()
     # Outside the lock — different module's cache, no ordering dependency.

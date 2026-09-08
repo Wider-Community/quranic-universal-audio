@@ -19,17 +19,16 @@ from pathlib import Path
 import orjson
 from flask import Blueprint, Response, abort, jsonify, send_file
 
+from services import auth as auth_service
 from services import catalog as catalog_service
-from services import db as db_service
+from services import permissions
 from services import quran_refs as quran_refs_service
-from services.storage import cache
 
 static_bp = Blueprint("static_data", __name__, url_prefix="/api/static")
 
 
-# Catalog is updated infrequently (maintainer admin actions); 5 minutes is
-# long enough to absorb most repeat reads within a session and short enough
-# that catalog edits show up without manual cache-busting.
+# The catalog projection differs for owners (who may inspect EveryAyah), so it
+# must not be shared through a public browser/proxy cache.
 _CATALOG_CACHE_CONTROL = "public, max-age=300"
 
 # Quran-refs payload is content-hashed; immutable means the browser never
@@ -46,17 +45,16 @@ def catalog_json() -> Response:
     reads ``reciters[]`` + ``deliveries[]`` to build the Timestamps tab
     reciter dropdown.
     """
-    # Byte-cache keyed on db_seq: the snapshot model is already db_seq-cached,
-    # but the model_dump + serialize ran per request. Hand back cached bytes on
-    # a warm hit; rebuild only when a committed write has bumped db_seq.
-    seq = db_service.current_db_seq()
-    body = cache.get_catalog_json_bytes_cache(seq)
-    if body is None:
-        snapshot = catalog_service.snapshot()
-        body = orjson.dumps(snapshot.model_dump(mode="json", by_alias=True))
-        cache.set_catalog_json_bytes_cache(seq, body)
+    user = auth_service.current_user()
+    snapshot = catalog_service.for_viewer(
+        include_everyayah=user is not None and permissions.is_owner(user)
+    )
+    body = orjson.dumps(snapshot.model_dump(mode="json", by_alias=True))
     response = Response(body, mimetype="application/json")
-    response.headers["Cache-Control"] = _CATALOG_CACHE_CONTROL
+    response.headers["Cache-Control"] = (
+        "private, no-store" if user is not None else _CATALOG_CACHE_CONTROL
+    )
+    response.headers["Vary"] = "Cookie"
     return response
 
 

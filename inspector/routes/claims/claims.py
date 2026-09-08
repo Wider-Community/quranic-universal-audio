@@ -51,6 +51,8 @@ def claim(slug: str):
     if err is not None:
         return err
     assert user is not None  # err is None ⟺ user is non-None (helper invariant)
+    if not state_service.is_delivery_visible(slug, user):
+        return jsonify({"error": "unknown reciter"}), 404
 
     # One-claim-per-user policy (application-level; state.py doesn't enforce).
     # Owners are exempt — they may hold multiple simultaneous claims.
@@ -89,6 +91,8 @@ def release(slug: str):
     user, err = _require_user_or_401()
     if err is not None:
         return err
+    if not state_service.is_delivery_visible(slug, user):
+        return jsonify({"error": "unknown reciter"}), 404
     new_row = state_service.transition(
         slug,
         "reciter.released",
@@ -118,6 +122,8 @@ def mark_ready(slug: str):
     user, err = _require_user_or_401()
     if err is not None:
         return err
+    if not state_service.is_delivery_visible(slug, user):
+        return jsonify({"error": "unknown reciter"}), 404
 
     raw = request.get_json(silent=True) or {}
     bypass = capabilities_service.can(user, "claim.mark_ready_skip_gates")
@@ -157,6 +163,8 @@ def unmark_ready(slug: str):
     user, err = _require_user_or_401()
     if err is not None:
         return err
+    if not state_service.is_delivery_visible(slug, user):
+        return jsonify({"error": "unknown reciter"}), 404
     new_row = state_service.transition(
         slug,
         "reciter.unmarked_ready",
@@ -169,6 +177,8 @@ def unmark_ready(slug: str):
 def reciter_task(slug: str):
     """Full row + per-user predicates. Anonymous gets predicates all false."""
     user = auth_service.current_user()
+    if not state_service.is_delivery_visible(slug, user):
+        return jsonify({"error": "unknown reciter"}), 404
     row = state_service.get_row(slug)
     if row is None:
         return jsonify({"error": "unknown reciter"}), 404

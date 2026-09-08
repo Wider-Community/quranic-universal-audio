@@ -16,6 +16,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from qua_shared.catalog_visibility import is_everyayah_channel
 from qua_shared.schemas.bucket.catalog import ReciterCatalog
 
 CATALOG_CONFIG_NAME = "mushafs"
@@ -235,6 +236,10 @@ def project_catalog_rows(
     )
 
     for delivery in sorted(catalog.deliveries, key=lambda d: d.slug):
+        # EveryAyah remains available in the Inspector owner projection only;
+        # it is never part of the public HF catalog.
+        if is_everyayah_channel(delivery.channel):
+            continue
         if (
             published_slugs is not None or delivered_slugs
         ) and delivery.slug not in delivered_slugs:
@@ -300,6 +305,7 @@ def _catalog_slugs_for_published_splits(
         delivery.slug
         for split in published_slugs
         if (delivery := _delivery_for_published_split(catalog, split)) is not None
+        and not is_everyayah_channel(delivery.channel)
     }
 
 
@@ -328,11 +334,12 @@ def _delivery_for_published_split(catalog: ReciterCatalog, split: str):
 
 
 def _preferred_delivery(deliveries: list[Any]):
-    candidates = [d for d in deliveries if d.total_duration_sec and d.chapter_count >= 100]
+    public_deliveries = [d for d in deliveries if not is_everyayah_channel(d.channel)]
+    candidates = [d for d in public_deliveries if d.total_duration_sec and d.chapter_count >= 100]
     if not candidates:
-        candidates = [d for d in deliveries if d.total_duration_sec]
+        candidates = [d for d in public_deliveries if d.total_duration_sec]
     if not candidates:
-        return deliveries[0] if deliveries else None
+        return public_deliveries[0] if public_deliveries else None
 
     def score(delivery: Any) -> tuple[int, int, str]:
         style_penalty = 1 if delivery.style in {"muallim", "mujawwad"} else 0
@@ -347,14 +354,16 @@ def _stats_from_published_splits(
 ) -> HfDatasetCatalogStats:
     riwayat: set[str] = set()
     seconds = 0
+    published_count = 0
     for split in published_slugs:
         delivery = _delivery_for_published_split(catalog, split)
-        if delivery is None:
+        if delivery is None or is_everyayah_channel(delivery.channel):
             continue
+        published_count += 1
         riwayat.add(delivery.riwayah)
         seconds += int(delivery.total_duration_sec or 0)
     return HfDatasetCatalogStats(
-        timestamped_recitations=len(published_slugs),
+        timestamped_recitations=published_count,
         timestamped_riwayat=len(riwayat),
         timestamped_seconds=seconds,
     )

@@ -22,10 +22,11 @@
     import { SIGN_IN_MESSAGES } from '../../../lib/sign-in-messages';
     import { openClaimConfirm } from '../../../lib/stores/claim-confirm-modal';
     import { currentUser, isAdmin, isOwner, isSignedIn } from '../../../lib/stores/current-user';
+    import { can } from '../../../lib/stores/capabilities';
     import { playerContext } from '../../../lib/stores/player-context';
     import { openSignInModal } from '../../../lib/stores/sign-in-modal';
     import {
-        type AdminDiscardedDelivery,
+        type AdminDelivery,
         type AdminViewReciter,
         type PublicDelivery,
         type PublicReciter,
@@ -41,6 +42,7 @@
     import { compareDeliveries } from '../../../lib/utils/delivery-sort';
     import { gotoSegments } from '../../../lib/utils/goto-segments';
     import RequestForm from '../components/RequestForm.svelte';
+    import CatalogEditPanel from '../components/CatalogEditPanel.svelte';
     import DeliveryStatusCell from './DeliveryStatusCell.svelte';
     import StateTimeline from '../components/StateTimeline.svelte';
     import { loadCatalog } from '../stores/catalog-data';
@@ -54,6 +56,9 @@
     let lastFetched: string | null = null;
     let selectedSlug: string | null = null;
     let discardingSlug: string | null = null;
+    let editingDelivery: AdminDelivery | null = null;
+    let editingMode: 'reciter' | 'delivery' | null = null;
+    const canCatalogEdit = can('catalog.edit');
 
     /** Open request form, in either user-create or admin-review mode. */
     let formState: {
@@ -124,7 +129,32 @@
         void loadCatalog(true);
     }
 
-    async function onUndiscard(d: AdminDiscardedDelivery): Promise<void> {
+    function closeCatalogEditor(): void {
+        editingMode = null;
+        editingDelivery = null;
+    }
+
+    async function onCatalogSaved(): Promise<void> {
+        closeCatalogEditor();
+        lastFetched = null;
+        if (detailId !== null) await maybeReload(detailId);
+        void loadCatalog(true);
+    }
+
+    function openReciterEditor(): void {
+        if (!$canCatalogEdit || !reciter) return;
+        editingMode = 'reciter';
+        editingDelivery = null;
+    }
+
+    function openDeliveryEditor(d: PublicDelivery | AdminDelivery, ev?: Event): void {
+        ev?.stopPropagation();
+        if (!$canCatalogEdit) return;
+        editingMode = 'delivery';
+        editingDelivery = d as AdminDelivery;
+    }
+
+    async function onUndiscard(d: AdminDelivery): Promise<void> {
         if (d.cleanup_status === 'pending' || d.cleanup_status === 'failed') {
             return;
         }
@@ -371,11 +401,24 @@
                 {#if reciter.country}
                     <div class="country">{countryName(reciter.country, lang)}</div>
                 {/if}
+                {#if $canCatalogEdit}
+                    <button type="button" class="edit-button" title={m.dashboard_catalog_edit_reciter()} on:click={openReciterEditor}>{m.dashboard_catalog_edit_reciter()}</button>
+                {/if}
             </header>
 
             <div class="timeline-pin">
                 <StateTimeline delivery={selectedDelivery} />
             </div>
+
+            {#if editingMode && $canCatalogEdit}
+                <CatalogEditPanel
+                    mode={editingMode}
+                    reciter={reciter as AdminViewReciter}
+                    delivery={editingDelivery}
+                    onSaved={onCatalogSaved}
+                    onClose={closeCatalogEditor}
+                />
+            {/if}
 
             {#if reciter.deliveries.length === 0}
                 <div class="state">{noCombinationsLabel}</div>
@@ -389,12 +432,13 @@
                                     <th>{tr(lang, col.label())}</th>
                                 {/each}
                                 <th class="col-state">{stateColLabel}</th>
+                                {#if $canCatalogEdit}<th class="col-edit">{m.dashboard_catalog_edit_delivery()}</th>{/if}
                             </tr>
                         </thead>
                         {#if hasFacetFilters && partition.matching.length > 0}
                             <tbody>
                                 <tr class="group-head">
-                                    <td colspan={visibleCols.length + 2}>
+                                    <td colspan={visibleCols.length + 2 + ($canCatalogEdit ? 1 : 0)}>
                                         {groupMatchingLabel}
                                         <span class="group-count">{tr(lang, localizeDigits(partition.matching.length))}</span>
                                     </td>
@@ -419,6 +463,7 @@
                                             <td class={`cell cell-${col.key}`}>{#if col.key === 'channel' && d.source_url}<a class="source-link" href={d.source_url} target="_blank" rel="noopener noreferrer" title={openSourceTitle} on:click|stopPropagation>{col.value(d)}</a>{:else}{col.value(d)}{/if}</td>
                                         {/each}
                                         <td class="col-state"><DeliveryStatusCell delivery={d} isAdmin={$isAdmin} isOwner={$isOwner} busy={discardingSlug === d.slug} requestLabel={requestButtonLabel} reviewRequestTitle={reviewRequestTitle} claimReviewTitle={claimReviewTitle} claimReviewButtonLabel={claimReviewButtonLabel} discardLabel={discardButtonLabel} discardTitle={discardTitle} onRequest={openRequest} onReview={openReview} onClaimReview={claimReview} onDiscard={onDiscard} /></td>
+                                        {#if $canCatalogEdit}<td class="col-edit"><button type="button" class="edit-icon" title={m.dashboard_catalog_edit_delivery()} on:click={(e) => openDeliveryEditor(d, e)}>✎</button></td>{/if}
                                     </tr>
                                 {/each}
                             </tbody>
@@ -450,6 +495,7 @@
                                                 <td class={`cell cell-${col.key}`}>{#if col.key === 'channel' && d.source_url}<a class="source-link" href={d.source_url} target="_blank" rel="noopener noreferrer" title={openSourceTitle} on:click|stopPropagation>{col.value(d)}</a>{:else}{col.value(d)}{/if}</td>
                                             {/each}
                                             <td class="col-state"><DeliveryStatusCell delivery={d} isAdmin={$isAdmin} isOwner={$isOwner} busy={discardingSlug === d.slug} requestLabel={requestButtonLabel} reviewRequestTitle={reviewRequestTitle} claimReviewTitle={claimReviewTitle} claimReviewButtonLabel={claimReviewButtonLabel} discardLabel={discardButtonLabel} discardTitle={discardTitle} onRequest={openRequest} onReview={openReview} onClaimReview={claimReview} onDiscard={onDiscard} /></td>
+                                            {#if $canCatalogEdit}<td class="col-edit"><button type="button" class="edit-icon" title={m.dashboard_catalog_edit_delivery()} on:click={(e) => openDeliveryEditor(d, e)}>✎</button></td>{/if}
                                         </tr>
                                     {/each}
                                 </tbody>
@@ -476,6 +522,7 @@
                                             <td class={`cell cell-${col.key}`}>{#if col.key === 'channel' && d.source_url}<a class="source-link" href={d.source_url} target="_blank" rel="noopener noreferrer" title={openSourceTitle} on:click|stopPropagation>{col.value(d)}</a>{:else}{col.value(d)}{/if}</td>
                                         {/each}
                                         <td class="col-state"><DeliveryStatusCell delivery={d} isAdmin={$isAdmin} isOwner={$isOwner} busy={discardingSlug === d.slug} requestLabel={requestButtonLabel} reviewRequestTitle={reviewRequestTitle} claimReviewTitle={claimReviewTitle} claimReviewButtonLabel={claimReviewButtonLabel} discardLabel={discardButtonLabel} discardTitle={discardTitle} onRequest={openRequest} onReview={openReview} onClaimReview={claimReview} onDiscard={onDiscard} /></td>
+                                        {#if $canCatalogEdit}<td class="col-edit"><button type="button" class="edit-icon" title={m.dashboard_catalog_edit_delivery()} on:click={(e) => openDeliveryEditor(d, e)}>✎</button></td>{/if}
                                     </tr>
                                 {/each}
                             </tbody>
@@ -504,6 +551,7 @@
                                         {#if d.recording_year}· {d.recording_year}{/if}
                                     </span>
                                     <StatePill state={'discarded'} size="sm" />
+                                    {#if $canCatalogEdit}<button type="button" class="edit-icon" title={m.dashboard_catalog_edit_delivery()} on:click={(e) => openDeliveryEditor(d, e)}>✎</button>{/if}
                                 </div>
                                 {#if d.visibility_reason}
                                     <p class="d-reason">{d.visibility_reason}</p>
@@ -613,6 +661,21 @@
         font-size: var(--fs-meta);
         color: var(--text-muted);
     }
+    .edit-button {
+        align-self: flex-start;
+        border: 1px solid var(--border-default);
+        border-radius: var(--r-1);
+        padding: var(--s-2) var(--s-3);
+        background: transparent;
+        color: var(--text-secondary);
+        cursor: pointer;
+        font: inherit;
+        font-size: var(--fs-meta);
+    }
+    .edit-button:hover, .edit-icon:hover {
+        color: var(--accent);
+        border-color: var(--accent);
+    }
 
     /* Pin the timeline to the modal scroll container so the table can
        scroll under it. The closest scrolling ancestor is `.modal-body`. */
@@ -679,6 +742,17 @@
     }
     .col-play { width: 36px; }
     .col-state { text-align: start; }
+    .col-edit { width: 30px; text-align: center; }
+    .edit-icon {
+        width: 26px;
+        height: 26px;
+        border: 1px solid var(--border-default);
+        border-radius: 50%;
+        background: transparent;
+        color: var(--text-muted);
+        cursor: pointer;
+        line-height: 1;
+    }
     .cell-coverage,
     .cell-bitrate,
     .cell-hours,
