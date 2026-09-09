@@ -135,6 +135,31 @@ class TsManifestReciter(BaseModel):
     vbr_chapters: list[int] = Field(default_factory=list)
 
 
+class TsEditionAsset(BaseModel):
+    """One non-Hafs edition's display assets, advertised in the manifest.
+
+    The Timestamps tab needs the font + the reference bundle before it can
+    render a word-profile shard, and it learns both from here rather than
+    hardcoding a URL shape. Hafs is absent: its font is inlined in the frontend
+    bundle and its refs bundle is the unparameterised default.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: SDK slug (``warsh`` / ``qalun`` / ``shuba``).
+    riwayah: str
+    #: ``qua_domain`` edition id, e.g. ``warsh-v21+sdk-words-v1``.
+    edition_id: str
+    #: sha256 of the edition's word list — the same digest a word-profile shard
+    #: records, so a shard built against a different script is detectable.
+    words_sha256: str
+    font_url: str
+    font_family: str
+    font_sha256: str
+    refs_url: str
+    refs_version: str
+
+
 class TsManifestResponse(BaseModel):
     """Decompressed body of ``GET /api/ts/manifest``.
 
@@ -142,6 +167,7 @@ class TsManifestResponse(BaseModel):
     Inspector (resources resolve as absolute Flask paths); ``commit`` is ``""``.
     ``resources`` maps a purpose key (``qpc_hafs`` / ``digital_khatt`` / …) to
     a ``/api/ts/resource/<key>`` URL. ``reciters`` is keyed by delivery slug.
+    ``editions`` carries the non-Hafs display assets, keyed by riwayah slug.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -153,6 +179,10 @@ class TsManifestResponse(BaseModel):
     shard_url_template: str
     resources: dict[str, str] = Field(default_factory=dict)
     reciters: dict[str, TsManifestReciter] = Field(default_factory=dict)
+    #: Keyed by INSPECTOR riwayah slug (what a reciter block's ``riwayah``
+    #: carries). Empty on a Hafs-only runtime — the FE must treat an absent
+    #: entry as "cannot render this edition", never as "use Hafs".
+    editions: dict[str, TsEditionAsset] = Field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------

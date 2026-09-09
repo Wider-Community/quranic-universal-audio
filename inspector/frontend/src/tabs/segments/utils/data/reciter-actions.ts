@@ -11,6 +11,7 @@ import { get } from 'svelte/store';
 
 import { fetchJson } from '../../../../lib/api';
 import { loadQuranRefs, quranRefs } from '../../../../lib/refs/quran-refs';
+import { deliveryRiwayah } from '../../../dashboard/stores/catalog-data';
 import type { SegAllResponse, SegValidateResponse } from '../../../../lib/types/generated/schemas';
 import { preconnectOrigins } from '../../../../lib/utils/preconnect';
 import type { SegAllState } from '../../stores/chapter';
@@ -98,9 +99,15 @@ export async function reloadCurrentReciter(): Promise<void> {
     // Kick off the refs load in parallel; hydration tolerates a null
     // ``quranRefs`` (matched_text stays empty for those segs and consumer
     // fallbacks via dkTextForRef at render time fill the gap).
+    //
+    // The bundle is edition-specific, so it is keyed on THIS delivery's
+    // riwayah. A delivery in an unsupported riwayah loads no bundle at all
+    // rather than the Hafs one: every ref the tab then renders would be
+    // against the wrong verse geometry.
+    const riwayah = deliveryRiwayah(reciter);
     const allPromise = Promise.all([
         fetchJson<SegAllResponse>(`/api/seg/all/${reciter}`),
-        loadQuranRefs(),
+        riwayah ? loadQuranRefs(riwayah) : Promise.resolve(),
     ])
         .then(([all]) => {
             if (get(selectedReciter) !== reciter) return;

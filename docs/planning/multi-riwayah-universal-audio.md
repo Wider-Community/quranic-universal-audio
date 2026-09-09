@@ -459,9 +459,11 @@ Measured outputs, verified against the packaged assets:
 
 | Table | hafs | shuba | warsh | qalun |
 |---|---|---|---|---|
-| `muqattaat_words` | 30 | 30 (identity) | **29** — Hafs `(42,1,1)`+`(42,2,1)` collapse into Warsh `42:1:1`+`42:1:2` | 29 |
+| `muqattaat_words` | 30 | 30 (identity) | **30** — Hafs `(42,1,1)`+`(42,2,1)` collapse into Warsh `42:1:1`+`42:1:2`, still two words | 30 |
+| `muqattaat_verses` | 30 | 30 (identity) | **29** — the same merge, counted verse-wise | 29 |
 | `standalone_refs` | 10 | 10 (identity) | 10, **4 shift**: `43:35:1`->`43:34:1`, `44:37:9`->`44:35:9`, `46:35:22`->`46:34:22`, `44:28:1`->`44:27:1` | same 4 |
-| `standalone_words` (skeletons) | 8 | 8 (identity) | 8, **1 changes** (the `bi-al-layl` skeleton loses its alif-wasla form) | same |
+| `standalone_words` (skeletons) | 8 | 8 (identity) | 8, **1 changes** — `وبٱليل` -> `وباليل` (confirmed) | same |
+| — derivation | — | — | NOT a projection of `standalone_refs` (an unrelated *ref* allow-list): scan the 633 Hafs words whose skeleton is in the set, project each, take target spellings | same |
 | `single_word_verses` | **28** | 28 (identity) | **3** (`55:63`, `89:1`, `93:1`) | 3 |
 | Fatiha ayah count / word counts | 7 / `(4,4,2,3,4,3,9)` | 7 / same | 7 / `(4,2,3,4,3,4,5)` | 7 / same |
 | `1:1:1` projection kind | `mapped` | `mapped` | `opening_basmala` | `opening_basmala` |
@@ -473,10 +475,10 @@ WAS: the `single_word_verses` collapse from 28 to 3 is *why* verse-granularity p
 
 | Site | Today | After |
 |---|---|---|
-| `classifier.py:131` | `if (surah, s_ayah) in MUQATTAAT_VERSES` | `if (surah, s_ayah, s_word) in muqattaat_words(riw)` — equivalent for Hafs (every Hafs muqattaat verse has exactly one word, and this branch only runs when `s_ayah == e_ayah`) |
+| `classifier.py:131` | `if (surah, s_ayah) in MUQATTAAT_VERSES` | `if (surah, s_ayah) in muqattaat_verses(riw)` — **CORRECTED during implementation.** The plan proposed narrowing this to `muqattaat_words`, on the premise that every Hafs muqattaat verse is one word long. Measured: false — 13:1 opens with the letters and runs on for eight more words, and `{word_counts[v] for v in MUQATTAAT_VERSES}` is `{1, 3, 4, 5, 6, 10, ...}`. Narrowing would newly flag one-word segments deep inside those verses across the 37 published Hafs reciters. The exemption stays verse-keyed; `edition_tables` therefore exposes **both** tables |
 | `classifier.py:136` | `(surah, s_ayah, s_word) not in STANDALONE_REFS` | `... not in standalone_refs(riw)` |
 | `classifier.py:138` | `strip_quran_deco(text) not in STANDALONE_WORDS` | `... not in standalone_words(riw)` |
-| `classifier.py:312` | `s_word == 1 and (surah, s_ayah) in MUQATTAAT_VERSES` | `(surah, s_ayah, s_word) in muqattaat_words(riw)` |
+| `classifier.py:312` | `s_word == 1 and (surah, s_ayah) in MUQATTAAT_VERSES` | `(surah, s_ayah, s_word) in muqattaat_words(riw)` — word-keyed is right *here*: Hafs-identical by construction, and Warsh's merged 42:1 carries a second opening at word 2 |
 | `data_loader.get_single_word_verses()` | Hafs-derived singleton | `single_word_verses(riw)` |
 | `routes/segments/data.py:68-71` (`/api/seg/config`) | global Hafs tables | `?riwayah=<slug>` query param, default `hafs_an_asim`; the default response is byte-identical (snapshot-pinned) |
 | `data_loader.word_has_stop` -> `constants.STOP_SIGNS` | 4 fixed glyphs | `editions.stop_signs(riw)` — Warsh/Qalun have only U+06D6 (9,948 occurrences, semantics `optional_stop`); Hafs/Shuba keep the 6-sign inventory |

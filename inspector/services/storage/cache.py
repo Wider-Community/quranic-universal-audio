@@ -1035,6 +1035,11 @@ _edition_word_counts: _KeyedCache[dict[tuple[int, int], int]] = _KeyedCache()
 _edition_projection: _KeyedCache[object] = _KeyedCache()
 _edition_font: _KeyedCache[tuple[bytes, object]] = _KeyedCache()
 _edition_tables: _KeyedCache[dict[str, object]] = _KeyedCache()
+#: Serialised ``/api/static/quran-refs.json`` body + its 12-char digest, per
+#: edition. Built from the caches above, but kept separately because the digest
+#: is the asset's ETag and cache-buster — recomputing it would change nothing
+#: yet cost a 3 MB serialise per request.
+_edition_refs_payload: _KeyedCache[tuple[bytes, str]] = _KeyedCache()
 
 
 def get_edition_word_map(riwayah: str) -> dict[str, str] | None:
@@ -1077,6 +1082,20 @@ def set_edition_tables(riwayah: str, value: dict[str, object]) -> None:
     _edition_tables.set(riwayah, value)
 
 
+def get_edition_refs_payload(riwayah: str) -> tuple[bytes, str] | None:
+    return _edition_refs_payload.get(riwayah)
+
+
+def set_edition_refs_payload(riwayah: str, value: tuple[bytes, str]) -> None:
+    _edition_refs_payload.set(riwayah, value)
+
+
+def clear_edition_refs_payloads() -> None:
+    """Drop only the serialised refs bundles, keeping the maps they were built
+    from. Used by the test-only ``quran_refs.reset_cache``."""
+    _edition_refs_payload.clear()
+
+
 def clear_edition_caches() -> None:
     """Drop every edition-derived cache (tests that swap the accessor)."""
     _edition_word_map.clear()
@@ -1084,3 +1103,4 @@ def clear_edition_caches() -> None:
     _edition_projection.clear()
     _edition_font.clear()
     _edition_tables.clear()
+    _edition_refs_payload.clear()

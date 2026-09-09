@@ -25,9 +25,16 @@ from pathlib import Path
 
 from config import DK_SCRIPT_PATH
 from qua_shared.catalog_visibility import is_everyayah_channel
+from qua_shared.riwayat import (
+    DEFAULT_RIWAYAH,
+    DEFAULT_SDK_RIWAYAH,
+    UnsupportedRiwayah,
+    resolve_sdk_slug,
+)
 from qua_shared.schemas import ReciterCatalog, TsManifestResponse
 from qua_shared.timestamps_shards import MANIFEST_SCHEMA_VERSION
 from services.audio.audio_meta import chapter_numbers, vbr_chapters_for_reciter
+from services.reference.editions import EditionsUnavailable
 from services.state import catalog as catalog_service
 from services.state import state as state_service
 from services.storage import data_dir, static_refs
@@ -86,9 +93,54 @@ def _build_manifest_dict(reciters_block: dict[str, dict]) -> dict:
             "shard_url_template": "/api/ts/shard/{reciter}/{chapter}",
             "resources": {key: f"/api/ts/resource/{key}" for key in _RESOURCE_KEYS},
             "reciters": reciters_block,
+            "editions": _edition_blocks(reciters_block),
         }
     )
     return manifest.model_dump(mode="json", by_alias=True)
+
+
+def _edition_blocks(reciters_block: dict[str, dict]) -> dict[str, dict]:
+    """Display assets for every non-Hafs edition an advertised reciter uses.
+
+    Built from the reciters actually in the manifest rather than from the four
+    supported slugs, so a Hafs-only deployment emits ``{}`` and the FE never
+    fetches a 0.9 MB font it has no use for.
+
+    A riwayah the runtime cannot serve is SKIPPED with a warning, not defaulted
+    to Hafs: the FE treats an absent entry as "cannot render this edition",
+    which surfaces as a clear failure instead of an edition rendered under the
+    wrong script.
+    """
+    from services.reference import editions as editions_service
+    from services.reference import quran_refs as quran_refs_service
+
+    blocks: dict[str, dict] = {}
+    for block in reciters_block.values():
+        slug = block.get("riwayah")
+        if not slug or slug in blocks:
+            continue
+        try:
+            # Accepts either vocabulary: the field is a plain catalog string and
+            # older rows / fixtures can carry the short SDK form.
+            sdk_slug = resolve_sdk_slug(slug)
+            if sdk_slug == DEFAULT_SDK_RIWAYAH:
+                continue
+            metadata = editions_service.metadata(sdk_slug)
+            _, asset = editions_service.font(sdk_slug)
+        except (UnsupportedRiwayah, EditionsUnavailable) as exc:
+            log.warning("ts manifest: riwayah %s cannot be served (%s)", slug, exc)
+            continue
+        blocks[slug] = {
+            "riwayah": sdk_slug,
+            "edition_id": metadata.edition_id,
+            "words_sha256": metadata.words_sha256,
+            "font_url": f"/api/static/edition/{slug}/font",
+            "font_family": metadata.font_family,
+            "font_sha256": asset.sha256,
+            "refs_url": f"/api/static/quran-refs.json?riwayah={slug}",
+            "refs_version": quran_refs_service.payload_hash(sdk_slug),
+        }
+    return blocks
 
 
 def _build_resource_bytes() -> dict[str, bytes]:
@@ -180,7 +232,7 @@ def _bucket_reciter_block(
 
     name_en = reciter.name_en if reciter is not None else slug_to_name(slug)
     name_ar = reciter.name_ar if reciter is not None else None
-    riwayah = delivery.riwayah if delivery is not None else "hafs_an_asim"
+    riwayah = delivery.riwayah if delivery is not None else DEFAULT_RIWAYAH
     style = delivery.style if delivery is not None else "murattal"
     source = delivery.source if delivery is not None else ""
     audio_category = delivery.audio_category.value if delivery is not None else "by_surah"

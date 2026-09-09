@@ -24,7 +24,7 @@
     import { LS_KEYS } from '../../lib/utils/constants';
     import { pendingSegmentsDeepLink, type SegmentsDeepLink } from '../../lib/utils/goto-segments';
     import { surahInfoReady } from '../../lib/utils/surah-info';
-    import { catalogData, loadCatalog, startCatalogPolling } from '../dashboard/stores/catalog-data';
+    import { catalogData, deliveryRiwayah, loadCatalog, startCatalogPolling } from '../dashboard/stores/catalog-data';
     import EditOverlay from './components/edit/EditOverlay.svelte';
     import FiltersBar from './components/filters/FiltersBar.svelte';
     import SegmentsFooter from './components/footer/SegmentsFooter.svelte';
@@ -420,11 +420,12 @@
     }
 
     onMount(async () => {
-        // Fire-and-forget the 2.4 MB quran-refs bundle that only Segments
+        // Fire-and-forget the ~2.4 MB quran-refs bundle that only Segments
         // consumers (SegmentRow, ReferenceEditor, split/merge/auto-fix) need.
         // Idempotent — reciter-actions awaits this same promise before
-        // hydrating per-segment matched_text.
-        void loadQuranRefs();
+        // hydrating per-segment matched_text, and supersedes it with the
+        // selected delivery's own edition once the catalog resolves.
+        void loadQuranRefs(deliveryRiwayah($selectedReciter) ?? undefined);
         await surahInfoReady;
         const cfg = await loadSegConfig();
         cssFontSize = cfg.fontSize;

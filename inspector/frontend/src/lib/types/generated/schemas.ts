@@ -2158,6 +2158,7 @@ export interface TsJobRecord {
  * Inspector (resources resolve as absolute Flask paths); ``commit`` is ``""``.
  * ``resources`` maps a purpose key (``qpc_hafs`` / ``digital_khatt`` / …) to
  * a ``/api/ts/resource/<key>`` URL. ``reciters`` is keyed by delivery slug.
+ * ``editions`` carries the non-Hafs display assets, keyed by riwayah slug.
  */
 export interface TsManifestResponse {
   schema_version: number;
@@ -2170,6 +2171,9 @@ export interface TsManifestResponse {
   };
   reciters?: {
     [k: string]: TsManifestReciter;
+  };
+  editions?: {
+    [k: string]: TsEditionAsset;
   };
 }
 /**
@@ -2192,6 +2196,24 @@ export interface TsManifestReciter {
   audio_category: AudioCategory;
   ts_chapters?: number[];
   vbr_chapters?: number[];
+}
+/**
+ * One non-Hafs edition's display assets, advertised in the manifest.
+ *
+ * The Timestamps tab needs the font + the reference bundle before it can
+ * render a word-profile shard, and it learns both from here rather than
+ * hardcoding a URL shape. Hafs is absent: its font is inlined in the frontend
+ * bundle and its refs bundle is the unparameterised default.
+ */
+export interface TsEditionAsset {
+  riwayah: string;
+  edition_id: string;
+  words_sha256: string;
+  font_url: string;
+  font_family: string;
+  font_sha256: string;
+  refs_url: string;
+  refs_version: string;
 }
 export interface TsNativeProfile {
   riwayah: string;

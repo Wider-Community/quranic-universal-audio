@@ -8,6 +8,13 @@ picks its own cache discipline:
   fixed across users / reciters / sessions and only changes on a rebuild.
 - ``/quran-refs/version`` — tiny version probe, no-cache; FE polls once at
   app boot to learn the current hash and cache-bust the payload URL.
+- ``/edition/<riwayah>/font.<ext>`` — immutable + digest-ETagged; the paired
+  font for a non-Hafs edition, served out of the packaged ``qua_domain`` asset.
+
+The two ``quran-refs`` routes take an optional ``?riwayah=`` (an **Inspector**
+slug, the vocabulary the catalog stores on a delivery). Omitted, they serve
+Hafs, so the FE's existing request is unchanged. Neither is capability-gated:
+the payload is the published Quranic text, identical for every viewer.
 """
 
 from __future__ import annotations
@@ -17,12 +24,14 @@ from io import BytesIO
 from pathlib import Path
 
 import orjson
-from flask import Blueprint, Response, abort, jsonify, send_file
+from flask import Blueprint, Response, abort, jsonify, request, send_file
 
+from qua_shared.riwayat import DEFAULT_RIWAYAH, UnsupportedRiwayah, to_sdk_slug
 from services import auth as auth_service
 from services import catalog as catalog_service
 from services import permissions
 from services import quran_refs as quran_refs_service
+from services.reference import editions as editions_service
 
 static_bp = Blueprint("static_data", __name__, url_prefix="/api/static")
 
@@ -35,6 +44,24 @@ _CATALOG_CACHE_CONTROL = "public, max-age=300"
 # revalidates within the cache lifetime, and the FE busts via ``?v=<hash>``
 # on the rare deploy that rebuilds Digital Khatt or surah metadata.
 _QURAN_REFS_CACHE_CONTROL = "public, max-age=31536000, immutable"
+
+# Edition fonts are ~0.9 MB and keyed by a content digest, so they cache the
+# same way. The extension is fixed by the packaged asset, not the request.
+_EDITION_FONT_CACHE_CONTROL = "public, max-age=31536000, immutable"
+
+
+def _sdk_riwayah(value: str | None) -> str:
+    """Resolve an Inspector riwayah slug to its SDK slug, or 400.
+
+    An absent param means Hafs, which keeps the FE's existing unparameterised
+    request working. An unrecognised one is a 400 rather than a silent Hafs
+    fallback — serving Hafs coordinates under another edition's name would let
+    the Segments tab render, and a reviewer save, the wrong refs.
+    """
+    try:
+        return to_sdk_slug(value or DEFAULT_RIWAYAH)
+    except UnsupportedRiwayah as exc:
+        abort(400, str(exc))
 
 
 @static_bp.route("/catalog.json")
@@ -61,24 +88,52 @@ def catalog_json() -> Response:
 @static_bp.route("/quran-refs/version")
 def quran_refs_version() -> Response:
     """Return the current Quran-refs payload hash for cache busting."""
-    response = jsonify({"version": quran_refs_service.payload_hash()})
+    riwayah = _sdk_riwayah(request.args.get("riwayah"))
+    response = jsonify({"version": quran_refs_service.payload_hash(riwayah)})
     response.headers["Cache-Control"] = "no-cache, must-revalidate"
     return response
 
 
 @static_bp.route("/quran-refs.json")
 def quran_refs_json() -> Response:
-    """Serve the dk_words + verse_word_counts bundle.
+    """Serve one edition's word map + verse word counts + verse-marker prefix.
 
-    Bytes are computed once at module scope (see
-    ``services/quran_refs.py``); each request just hands them back with
-    immutable cache headers + an ETag matching the version endpoint.
+    Bytes are built once per edition and memoised (see
+    ``services/reference/quran_refs.py``); each request just hands them back
+    with immutable cache headers + an ETag matching the version endpoint.
     """
-    body = quran_refs_service.build_payload()
-    digest = quran_refs_service.payload_hash()
+    riwayah = _sdk_riwayah(request.args.get("riwayah"))
+    body = quran_refs_service.build_payload(riwayah)
+    digest = quran_refs_service.payload_hash(riwayah)
     response = Response(body, mimetype="application/json")
     response.headers["Cache-Control"] = _QURAN_REFS_CACHE_CONTROL
     response.headers["ETag"] = f'"{digest}"'
+    return response
+
+
+@static_bp.route("/edition/<riwayah>/font")
+def edition_font(riwayah: str) -> Response:
+    """Serve a non-Hafs edition's paired font.
+
+    Hafs is deliberately absent: its Digital Khatt font ships with the frontend
+    bundle as an inlined data URI (HF Spaces do not smudge LFS at build time),
+    and the ``qua_domain`` Hafs font pairs with a different glyph variant.
+
+    503, never a substitute font, when the edition package is missing — a
+    fallback font would render the edition's script with the wrong ligatures
+    and stop marks.
+    """
+    slug = _sdk_riwayah(riwayah)
+    try:
+        payload, asset = editions_service.font(slug)
+    except editions_service.HafsNotRoutedHere:
+        abort(404, "Hafs ships its font with the frontend bundle")
+    except editions_service.EditionsUnavailable as exc:
+        abort(503, str(exc))
+    response = Response(payload, mimetype=asset.media_type)
+    response.headers["Cache-Control"] = _EDITION_FONT_CACHE_CONTROL
+    response.headers["ETag"] = f'"{asset.sha256}"'
+    response.headers["Content-Disposition"] = f'inline; filename="{asset.filename}"'
     return response
 
 

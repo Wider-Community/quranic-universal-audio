@@ -76,6 +76,20 @@ def from_sdk_slug(sdk_slug: str | None) -> str:
         raise UnsupportedRiwayah(f"unsupported SDK riwayah: {sdk_slug!r}") from None
 
 
+def resolve_sdk_slug(value: str | None) -> str:
+    """Map EITHER vocabulary's slug to the SDK slug.
+
+    The manifest's ``riwayah`` field is a plain string carrying whatever the
+    catalog row holds, and fixtures/older rows can hold the short SDK form. A
+    reader that must not care which vocabulary it was handed uses this; a
+    *writer*, and any HTTP boundary, should stay strict with
+    :func:`to_sdk_slug` so the vocabularies do not quietly interleave.
+    """
+    if value in _SDK_TO_INSPECTOR:
+        return value  # type: ignore[return-value]
+    return to_sdk_slug(value)
+
+
 def is_supported(inspector_slug: str | None) -> bool:
     """True iff ``inspector_slug`` is one of the four supported riwayat."""
     return inspector_slug in SUPPORTED_RIWAYAT
