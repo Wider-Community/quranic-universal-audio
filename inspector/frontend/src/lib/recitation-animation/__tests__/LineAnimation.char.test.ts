@@ -2,10 +2,20 @@ import { render } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { describe, expect, it } from 'vitest';
 
+import chapterTwoShapedJson from '../../../../public/generated/shaped-glyphs-v13/2.json?raw';
+import shapedPathsJson from '../../../../public/generated/shaped-glyphs-v13/paths.json?raw';
+
 import { ZWSP } from '../../utils/arabic-text';
 import { DEFAULT_RECITATION_CONFIG } from '../config';
+import lineAnimationSource from '../LineAnimation.svelte?raw';
 import LineAnimation from '../LineAnimation.svelte';
+import type { ShapedGlyphFixture } from '../shaped-glyphs';
 import type { AnimUnit } from '../types';
+
+const shapedGlyphs = {
+    ...JSON.parse(chapterTwoShapedJson),
+    paths: JSON.parse(shapedPathsJson).paths,
+} as ShapedGlyphFixture;
 
 const charConfig = {
     ...DEFAULT_RECITATION_CONFIG,
@@ -75,6 +85,255 @@ describe('LineAnimation char mode', () => {
         expect(chars[2]?.classList.contains('active')).toBe(true);
         expect(words[0]?.classList.contains('active')).toBe(true);
         expect(words[1]?.classList.contains('active')).toBe(true);
+    });
+
+    it('reveals a silent timing borrower without giving it the active colour', async () => {
+        const units = [
+            unit('1:1:1', 'ab', 0, 1, [
+                { char: 'a', start: 0, end: 1, tokenId: 0, silent: false },
+                { char: 'b', start: 0, end: 1, tokenId: 1, silent: true },
+            ]),
+        ];
+
+        const normal = render(LineAnimation, {
+            units,
+            config: charConfig,
+            getTimeMs: () => 500,
+            playing: false,
+            omitSilentHighlights: false,
+        });
+        await tick();
+        expect([...normal.container.querySelectorAll('.ra-char')].map((char) => ({
+            active: char.classList.contains('active'),
+            reached: char.classList.contains('reached'),
+        }))).toEqual([
+            { active: true, reached: false },
+            { active: true, reached: false },
+        ]);
+        normal.unmount();
+
+        const omitted = render(LineAnimation, {
+            units,
+            config: charConfig,
+            getTimeMs: () => 500,
+            playing: false,
+            omitSilentHighlights: true,
+        });
+        await tick();
+        expect([...omitted.container.querySelectorAll('.ra-char')].map((char) => ({
+            active: char.classList.contains('active'),
+            reached: char.classList.contains('reached'),
+        }))).toEqual([
+            { active: true, reached: false },
+            { active: false, reached: true },
+        ]);
+        expect(omitted.container.querySelector('.ra-word')?.classList.contains('active')).toBe(true);
+        omitted.unmount();
+
+        const full = render(LineAnimation, {
+            units,
+            config: { ...charConfig, unreachedOpacity: 1 },
+            getTimeMs: () => 500,
+            playing: false,
+            omitSilentHighlights: true,
+        });
+        await tick();
+        expect([...full.container.querySelectorAll('.ra-char')].map((char) => ({
+            active: char.classList.contains('active'),
+            reached: char.classList.contains('reached'),
+        }))).toEqual([
+            { active: true, reached: false },
+            { active: false, reached: false },
+        ]);
+    });
+
+    it('paints an iqlab mini-meem without repainting its silent noon host', async () => {
+        const iqlab = unit('104:4:2', 'لَيُنۢبَذَنَّ', 0, 1, [
+            { char: 'ن', start: 0, end: 1, tokenId: 0, silent: false },
+        ]);
+        const iqlabGlyphs: ShapedGlyphFixture = {
+            upem: 1000,
+            paths: { meemiqlab: '', onedotup: '', 'behshape.medi.beforeseen': '' },
+            words: {
+                'لَيُنۢبَذَنَّ': {
+                    baseText: 'لَيُنۢبَذَنَّ',
+                    advance: 1000,
+                    tokenCount: 1,
+                    placements: [
+                        ['meemiqlab', 0, 0, 0, null],
+                        ['onedotup', 0, 0, 0, 'silent_companion'],
+                        ['behshape.medi.beforeseen', 0, 0, 0, 'silent_companion'],
+                    ],
+                },
+            },
+        };
+
+        const normal = render(LineAnimation, {
+            units: [iqlab],
+            config: charConfig,
+            getTimeMs: () => 500,
+            playing: false,
+            omitSilentHighlights: false,
+            shapedGlyphs: iqlabGlyphs,
+        });
+        await tick();
+        expect(normal.container.querySelector('.ra-line')?.classList.contains('ra-omit-silent')).toBe(false);
+        expect(normal.container.querySelectorAll('.ra-shaped-token.active path')).toHaveLength(3);
+        normal.unmount();
+
+        const { container } = render(LineAnimation, {
+            units: [iqlab],
+            config: charConfig,
+            getTimeMs: () => 500,
+            playing: false,
+            omitSilentHighlights: true,
+            shapedGlyphs: iqlabGlyphs,
+        });
+        await tick();
+
+        const line = container.querySelector('.ra-line');
+        const active = container.querySelector('.ra-shaped-token.active');
+        expect(line?.classList.contains('ra-omit-silent')).toBe(true);
+        expect(line?.classList.contains('ra-full-opacity')).toBe(false);
+        expect(active?.querySelectorAll('path:not(.ra-silent-companion)')).toHaveLength(1);
+        expect(active?.querySelectorAll('path.ra-silent-companion')).toHaveLength(2);
+        expect(lineAnimationSource).toMatch(
+            /\.ra-line\.ra-omit-silent[^}]*\.ra-silent-companion\s*\{[^}]*fill:\s*var\(--ra-base-color\)/,
+        );
+        expect(lineAnimationSource).toMatch(
+            /\.ra-line\.ra-full-opacity\.ra-omit-silent[^}]*\.ra-silent-companion\s*\{[^}]*display:\s*none/,
+        );
+    });
+
+    it('keeps the 21:88 small waw active independently without glow spill onto haa', async () => {
+        const lahu = unit('21:88:2', 'لَهُۥ', 0, 3, [
+            { char: 'ل', start: 0, end: 1, tokenId: 0 },
+            { char: 'ه', start: 1, end: 2, tokenId: 1 },
+            { char: 'ۥ', start: 2, end: 3, tokenId: 2 },
+        ]);
+        const lahuGlyphs: ShapedGlyphFixture = {
+            upem: 1000,
+            paths: { lam: '', haa: '', smallwaw: '' },
+            words: {
+                'لَهُۥ': {
+                    baseText: 'لَهُۥ', advance: 1000, tokenCount: 3,
+                    placements: [
+                        ['lam', 0, 0, 0, null],
+                        ['haa', 0, 0, 1, null],
+                        ['smallwaw', 0, 0, 2, null],
+                    ],
+                },
+            },
+        };
+        const { container } = render(LineAnimation, {
+            units: [lahu], config: charConfig, getTimeMs: () => 2500,
+            playing: false, shapedGlyphs: lahuGlyphs,
+        });
+        await tick();
+
+        const haa = container.querySelector('.ra-shaped-token[data-token-text="ه"]');
+        const waw = container.querySelector('.ra-shaped-token[data-token-text="ۥ"]');
+        expect(haa?.classList.contains('active')).toBe(false);
+        expect(waw?.classList.contains('active')).toBe(true);
+        expect(waw?.getAttribute('data-mark-only')).toBe('true');
+        expect(lineAnimationSource).toMatch(
+            /\.ra-shaped-token\[data-mark-only="true"\]:global\(\.active\)\s*\{[^}]*filter:\s*none/,
+        );
+    });
+
+    it('uses the sounded wasl occurrence of repeated lahu instead of its silent waqf occurrence', async () => {
+        const firstTake = [
+            { char: 'ل', start: 0, end: 1, tokenId: 59, silent: false },
+            { char: 'ه', start: 1, end: 2, tokenId: 61, silent: false },
+            { char: 'ۥ', start: 1, end: 2, tokenId: 63, silent: true },
+        ];
+        const secondTake = [
+            { char: 'ل', start: 10, end: 11, tokenId: 9, silent: false },
+            { char: 'ه', start: 11, end: 11.2, tokenId: 11, silent: false },
+            { char: 'ۥ', start: 11.2, end: 13, tokenId: 13, silent: false },
+        ];
+        const repeated: AnimUnit = {
+            ...unit('19:49:7', 'لَهُۥ', 0, 13, firstTake),
+            intervals: [{ start: 0, end: 3 }, { start: 10, end: 13 }],
+            occurrenceLetters: [firstTake, secondTake],
+        };
+
+        for (const omitSilentHighlights of [false, true]) {
+            const { container, unmount } = render(LineAnimation, {
+                units: [repeated], config: charConfig, getTimeMs: () => 11_500,
+                playing: false, omitSilentHighlights,
+            });
+            await tick();
+
+            const tokens = container.querySelectorAll('.ra-char');
+            expect(tokens[1]?.textContent).toBe('ه');
+            expect(tokens[2]?.textContent).toBe('ۥ');
+            expect(tokens[1]?.classList.contains('active')).toBe(false);
+            expect(tokens[2]?.classList.contains('active')).toBe(true);
+            unmount();
+        }
+    });
+
+    it('uses the silent wasl occurrence of repeated 19:58 sujjadan', async () => {
+        const stopped = [
+            { char: 'د', start: 0, end: 1, tokenId: 28, silent: false },
+            { char: 'ا', start: 1, end: 2, tokenId: 30, silent: false },
+        ];
+        const connected = [
+            { char: 'د', start: 10, end: 12, tokenId: 4, silent: false },
+            { char: 'ا', start: 10, end: 12, tokenId: 6, silent: true },
+        ];
+        const repeated: AnimUnit = {
+            ...unit('19:58:24', 'دًا', 0, 12, stopped),
+            intervals: [{ start: 0, end: 2 }, { start: 10, end: 12 }],
+            occurrenceLetters: [stopped, connected],
+        };
+
+        const normal = render(LineAnimation, {
+            units: [repeated], config: charConfig, getTimeMs: () => 11_000,
+            playing: false, omitSilentHighlights: false,
+        });
+        await tick();
+        expect([...normal.container.querySelectorAll('.ra-char')].map(
+            (token) => token.classList.contains('active'),
+        )).toEqual([true, true]);
+        normal.unmount();
+
+        const omitted = render(LineAnimation, {
+            units: [repeated], config: charConfig, getTimeMs: () => 11_000,
+            playing: false, omitSilentHighlights: true,
+        });
+        await tick();
+        expect([...omitted.container.querySelectorAll('.ra-char')].map(
+            (token) => token.classList.contains('active'),
+        )).toEqual([true, false]);
+    });
+
+    it('co-highlights both 19:98 merger meems on the repeated occurrence', async () => {
+        const firstLeft = [{ char: 'م', start: 1, end: 2, tokenId: 52, silent: false }];
+        const firstRight = [{ char: 'مّ', start: 1, end: 2, tokenId: 54, silent: false }];
+        const repeatLeft = [{ char: 'م', start: 11, end: 12, tokenId: 16, silent: false }];
+        const repeatRight = [{ char: 'مّ', start: 11, end: 12, tokenId: 18, silent: false }];
+        const left: AnimUnit = {
+            ...unit('19:98:4', 'م', 1, 12, firstLeft),
+            intervals: [{ start: 1, end: 2 }, { start: 11, end: 12 }],
+            occurrenceLetters: [firstLeft, repeatLeft],
+        };
+        const right: AnimUnit = {
+            ...unit('19:98:5', 'مّ', 1, 12, firstRight),
+            intervals: [{ start: 1, end: 2 }, { start: 11, end: 12 }],
+            occurrenceLetters: [firstRight, repeatRight],
+        };
+
+        const { container } = render(LineAnimation, {
+            units: [left, right], config: charConfig, getTimeMs: () => 11_500,
+            playing: false, omitSilentHighlights: true,
+        });
+        await tick();
+
+        expect([...container.querySelectorAll('.ra-char')].map(
+            (token) => token.classList.contains('active'),
+        )).toEqual([true, true]);
     });
 
     // Regression: cross-word co-timed letters must re-light on a loopback. The
@@ -176,6 +435,284 @@ describe('LineAnimation char mode', () => {
         // old take-1-proportion remap would have lit).
         expect(chars[0]?.classList.contains('active')).toBe(true);
         expect(chars[1]?.classList.contains('active')).toBe(false);
+    });
+
+    it('keeps one SVG paint source before, during, and after a shaped word is active', async () => {
+        const shaped = unit('2:2:1', 'ذَٰلِكَ', 0, 4, [
+            { char: 'ذ', start: 0, end: 1 },
+            { char: 'ٰ', start: 1, end: 2 },
+            { char: 'ل', start: 2, end: 3 },
+            { char: 'ك', start: 3, end: 4 },
+        ]);
+        const trailing = unit('2:2:2', 'ٱلْكِتَٰبُ', 4, 5, [
+            { char: 'ٱ', start: 4, end: 5 },
+        ]);
+        const fullConfig = { ...charConfig, unreachedOpacity: 1 };
+
+        async function paintAt(ms: number): Promise<{ ruler: string; tokens: number }> {
+            const { container, unmount } = render(LineAnimation, {
+                units: [shaped, trailing],
+                config: fullConfig,
+                getTimeMs: () => ms,
+                playing: false,
+                shapedGlyphs,
+            });
+            await tick();
+            const word = container.querySelector<HTMLElement>('.ra-word[data-start="0"]');
+            const ruler = word?.querySelector<HTMLElement>('.ra-shaped-base-text');
+            const tokens = [...(word?.querySelectorAll<SVGElement>('.ra-shaped-token') ?? [])];
+            const result = {
+                ruler: ruler?.style.visibility ?? 'missing',
+                tokens: tokens.length,
+            };
+            unmount();
+            return result;
+        }
+
+        const future = await paintAt(-100);
+        const active = await paintAt(1500);
+        const reached = await paintAt(4500);
+
+        // The native text is a permanently invisible layout ruler. Every glyph
+        // is always painted by the SVG, so entering/leaving activity cannot swap
+        // rasterizers, baselines, or apparent weight.
+        expect([future.ruler, active.ruler, reached.ruler]).toEqual(['hidden', 'hidden', 'hidden']);
+        expect([future.tokens, active.tokens, reached.tokens]).toEqual([4, 4, 4]);
+    });
+
+    it('keeps one joined dim silhouette underneath an active shaped word', async () => {
+        const shaped = unit('2:2:1', 'ذَٰلِكَ', 0, 4, [
+            { char: 'ذ', start: 0, end: 1 },
+            { char: 'ٰ', start: 1, end: 2 },
+            { char: 'ل', start: 2, end: 3 },
+            { char: 'ك', start: 3, end: 4 },
+        ]);
+
+        const { container } = render(LineAnimation, {
+            units: [shaped],
+            config: { ...charConfig, unreachedOpacity: 0.2 },
+            getTimeMs: () => 1500,
+            playing: false,
+            shapedGlyphs,
+        });
+        await tick();
+
+        const word = container.querySelector<HTMLElement>('.ra-word');
+        const base = word?.querySelector<SVGGElement>('.ra-shaped-base-layer');
+        const tokens = [...(word?.querySelectorAll<SVGGElement>('.ra-shaped-token') ?? [])];
+
+        expect(word?.classList.contains('active')).toBe(true);
+        expect(base).not.toBeNull();
+        expect(base?.querySelectorAll('path').length).toBeGreaterThan(0);
+        expect(tokens.some((token) => !token.classList.contains('reached')
+            && !token.classList.contains('active'))).toBe(true);
+    });
+
+    it('uses independently paintable dagger glyphs in the reported 2:5 and 2:9 words', async () => {
+        const cases = [
+            unit('2:5:1', 'أُو۟لَٰٓئِكَ', 0, 6, [
+                { char: 'أ', start: 0, end: 1, tokenId: 0 },
+                { char: 'و۟', start: 1, end: 2, tokenId: 1 },
+                { char: 'ل', start: 2, end: 3, tokenId: 2 },
+                { char: 'ٰٓ', start: 3, end: 4, tokenId: 3 },
+                { char: 'ئ', start: 4, end: 5, tokenId: 4 },
+                { char: 'ك', start: 5, end: 6, tokenId: 5 },
+            ]),
+            unit('2:9:1', 'يُخَٰدِعُونَ', 0, 7, [
+                { char: 'ي', start: 0, end: 1, tokenId: 0 },
+                { char: 'خ', start: 1, end: 2, tokenId: 1 },
+                { char: 'ٰ', start: 2, end: 3, tokenId: 2 },
+                { char: 'د', start: 3, end: 4, tokenId: 3 },
+                { char: 'ع', start: 4, end: 5, tokenId: 4 },
+                { char: 'و', start: 5, end: 6, tokenId: 5 },
+                { char: 'ن', start: 6, end: 7, tokenId: 6 },
+            ]),
+        ];
+
+        for (const shaped of cases) {
+            const daggerIndex = shaped.letters.findIndex((letter) => letter.char.startsWith('ٰ'));
+            const { container, unmount } = render(LineAnimation, {
+                units: [shaped],
+                config: charConfig,
+                getTimeMs: () => (daggerIndex + 0.5) * 1000,
+                playing: false,
+                shapedGlyphs,
+            });
+            await tick();
+
+            const word = container.querySelector<HTMLElement>('.ra-word');
+            const dagger = word?.querySelector<SVGGElement>(
+                `.ra-shaped-token[data-token-id="${daggerIndex}"]`,
+            );
+            expect(word?.querySelector('.ra-shaped-svg')).not.toBeNull();
+            expect(dagger?.querySelectorAll('path').length).toBeGreaterThan(0);
+            expect(dagger?.classList.contains('active')).toBe(true);
+            unmount();
+        }
+    });
+
+    it('highlights a sounded dagger without its silent carrier in silent-omit mode', async () => {
+        const salah = unit('2:3:5', 'ٱلصَّلَوٰةَ', 0, 7, [
+            { char: 'ٱ', start: 0, end: 1, tokenId: 0, silent: true },
+            { char: 'ل', start: 0, end: 1, tokenId: 1, silent: true },
+            { char: 'صّ', start: 0, end: 1, tokenId: 2, silent: false },
+            { char: 'ل', start: 1, end: 2, tokenId: 3, silent: false },
+            { char: 'و', start: 2, end: 3, tokenId: 4, silent: true },
+            { char: 'ٰ', start: 2, end: 3, tokenId: 5, silent: false },
+            { char: 'ة', start: 3, end: 4, tokenId: 6, silent: false },
+        ]);
+
+        const normal = render(LineAnimation, {
+            units: [salah], config: charConfig, getTimeMs: () => 2500,
+            playing: false, omitSilentHighlights: false, shapedGlyphs,
+        });
+        await tick();
+        expect([...normal.container.querySelectorAll('.ra-shaped-token.active')].map(
+            (token) => token.getAttribute('data-token-text'),
+        )).toEqual(['و', 'ٰ']);
+        normal.unmount();
+
+        const omitted = render(LineAnimation, {
+            units: [salah], config: charConfig, getTimeMs: () => 2500,
+            playing: false, omitSilentHighlights: true, shapedGlyphs,
+        });
+        await tick();
+        expect([...omitted.container.querySelectorAll('.ra-shaped-token.active')].map(
+            (token) => token.getAttribute('data-token-text'),
+        )).toEqual(['ٰ']);
+    });
+
+    it('does not repaint the complete shaped base when a word finishes', async () => {
+        const shaped = unit('2:2:1', 'ذَٰلِكَ', 0, 4, [
+            { char: 'ذ', start: 0, end: 1 },
+            { char: 'ٰ', start: 1, end: 2 },
+            { char: 'ل', start: 2, end: 3 },
+            { char: 'ك', start: 3, end: 4 },
+        ]);
+        const trailing = unit('2:2:2', 'ٱلْكِتَٰبُ', 4, 5, [
+            { char: 'ٱ', start: 4, end: 5 },
+        ]);
+        const { container } = render(LineAnimation, {
+            units: [shaped, trailing],
+            config: { ...charConfig, unreachedOpacity: 0.2 },
+            getTimeMs: () => 4500,
+            playing: false,
+            shapedGlyphs,
+        });
+        await tick();
+
+        const word = container.querySelector<HTMLElement>('.ra-word[data-start="0"]');
+        const tokens = [...(word?.querySelectorAll<SVGGElement>('.ra-shaped-token') ?? [])];
+        expect(word?.classList.contains('reached')).toBe(true);
+        expect(tokens.every((token) => token.classList.contains('reached'))).toBe(true);
+        // Token overlays already paint the completed word. Promoting the whole
+        // base silhouette to opacity 1 underneath them double-paints every
+        // glyph and creates the brightness/weight jump at the boundary.
+        expect(lineAnimationSource).not.toMatch(
+            /\.ra-line\.ra-chars \.ra-word:global\(\.reached\) \.ra-shaped-base-layer\s*\{[^}]*opacity:\s*1/,
+        );
+    });
+
+    it('uses one paint layer for completed words in full-opacity letter mode', async () => {
+        const shaped = unit('2:2:1', 'ذَٰلِكَ', 0, 4, [
+            { char: 'ذ', start: 0, end: 1 },
+            { char: 'ٰ', start: 1, end: 2 },
+            { char: 'ل', start: 2, end: 3 },
+            { char: 'ك', start: 3, end: 4 },
+        ]);
+        const trailing = unit('2:2:2', 'ٱلْكِتَٰبُ', 4, 5, [
+            { char: 'ٱ', start: 4, end: 5 },
+        ]);
+        const { container } = render(LineAnimation, {
+            units: [shaped, trailing],
+            config: { ...charConfig, unreachedOpacity: 1 },
+            getTimeMs: () => 4500,
+            playing: false,
+            shapedGlyphs,
+        });
+        await tick();
+
+        const word = container.querySelector<HTMLElement>('.ra-word[data-start="0"]');
+        expect(container.querySelector('.ra-line')?.classList.contains('ra-full-opacity')).toBe(true);
+        expect(word?.classList.contains('reached')).toBe(true);
+        expect(lineAnimationSource).toMatch(
+            /\.ra-line\.ra-full-opacity\.ra-chars \.ra-shaped-token:global\(\.reached\):not\(:global\(\.active\)\)\s*\{[^}]*opacity:\s*0/,
+        );
+    });
+
+    it('uses the same shaped word paint tree in word and letter modes', async () => {
+        const shaped = unit('2:2:1', 'ذَٰلِكَ', 0, 4, [
+            { char: 'ذ', start: 0, end: 1 },
+            { char: 'ٰ', start: 1, end: 2 },
+            { char: 'ل', start: 2, end: 3 },
+            { char: 'ك', start: 3, end: 4 },
+        ]);
+
+        function paintTree(granularity: 'word' | 'char'): {
+            svg: boolean;
+            ruler: string;
+            paths: number;
+            stopMarks: number;
+        } {
+            const { container, unmount } = render(LineAnimation, {
+                units: [shaped],
+                config: { ...charConfig, granularity },
+                getTimeMs: () => 1500,
+                playing: false,
+                shapedGlyphs,
+            });
+            const word = container.querySelector<HTMLElement>('.ra-word');
+            const svg = word?.querySelector<SVGElement>('.ra-shaped-svg');
+            const result = {
+                svg: !!svg,
+                ruler: word?.querySelector<HTMLElement>('.ra-shaped-base-text')?.style.visibility ?? 'missing',
+                paths: svg?.querySelectorAll('path').length ?? 0,
+                stopMarks: word?.querySelectorAll('.ra-decorator--waqf').length ?? 0,
+            };
+            unmount();
+            return result;
+        }
+
+        const word = paintTree('word');
+        const letter = paintTree('char');
+
+        expect(word).toEqual(letter);
+        expect(word.svg).toBe(true);
+        expect(word.ruler).toBe('hidden');
+        expect(word.paths).toBeGreaterThan(0);
+        expect(word.stopMarks).toBe(0);
+    });
+
+    it('keeps the whole-word scale and fade motion out of letter mode', () => {
+        expect(lineAnimationSource).toContain(
+            'transform var(--ra-active-emphasis) var(--ra-easing)',
+        );
+        expect(lineAnimationSource).toMatch(
+            /\.ra-line:not\(\.ra-chars\) \.ra-word:global\(\.active\)\s*\{[^}]*transform: scale\(var\(--ra-active-scale\)\);/,
+        );
+        expect(lineAnimationSource).not.toMatch(
+            /\.ra-line\.ra-chars \.ra-shaped-token:global\(\.active\)\s*\{[^}]*transform:/,
+        );
+    });
+
+    it('renders one shaped stop sign in either mode without a native duplicate', () => {
+        const stopped = unit('2:2:4', 'رَيْبَۛ', 0, 3, [
+            { char: 'ر', start: 0, end: 1 },
+            { char: 'ي', start: 1, end: 2 },
+            { char: 'ب', start: 2, end: 3 },
+        ]);
+
+        for (const granularity of ['word', 'char'] as const) {
+            const { container, unmount } = render(LineAnimation, {
+                units: [stopped],
+                config: { ...charConfig, granularity },
+                getTimeMs: () => 1500,
+                playing: false,
+                shapedGlyphs,
+            });
+            expect(container.querySelectorAll('.ra-decorator--waqf')).toHaveLength(1);
+            unmount();
+        }
     });
 
     const WAQF = 'ۖ'; // ARABIC SMALL HIGH SAD-LAM-ALEF-MEEM (a surfaced stop)

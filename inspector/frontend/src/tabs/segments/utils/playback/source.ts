@@ -19,15 +19,16 @@
 import { get } from 'svelte/store';
 
 import type { AudioSource } from '../../../../lib/playback/audio-port';
+import { playUrl } from '../../../../lib/playback/play-url';
 import type { Segment } from '../../../../lib/types/view-models';
 import { reciterVbrChapters, selectedReciter } from '../../stores/chapter';
 
-/** Wrap a cross-origin chapter MP3 URL in the same-origin audio-proxy.
- *  Required when the resulting `<audio>` is routed through Web Audio's
- *  `MediaElementAudioSourceNode` (kill-switch enabled ports) — the CDN
- *  response carries no `Access-Control-Allow-Origin`, so a cross-origin src
- *  on a `crossorigin="anonymous"` element makes the source node output
- *  zeroes. The proxy streams same-origin with `ACAO: *`.
+/** Resolve the `<audio>` src for a cross-origin chapter MP3: the CDN URL
+ *  itself when its host has passed the CORS + Range probe
+ *  (`lib/playback/play-url.ts`), else the same-origin audio-proxy wrapper.
+ *  The element is routed through Web Audio's `MediaElementAudioSourceNode`
+ *  (kill-switch enabled ports), which outputs zeroes on a cross-origin src
+ *  without `Access-Control-Allow-Origin` — so unknown hosts stay proxied.
  *
  *  Earlier this gated on `_isCurrentReciterBySurah()` reading
  *  `audio_source.startsWith('by_surah')`, but the actual values served by
@@ -38,8 +39,7 @@ import { reciterVbrChapters, selectedReciter } from '../../stores/chapter';
  *  anything else (http:, https:, protocol-relative) needs the proxy wrap. */
 export function wrapCbrSrcIfBySurah(audioUrl: string, reciter: string | null): string {
     if (!reciter || !audioUrl) return audioUrl;
-    if (audioUrl.startsWith('/api/')) return audioUrl;
-    return `/api/seg/audio-proxy/${reciter}?url=${encodeURIComponent(audioUrl)}`;
+    return playUrl(reciter, audioUrl);
 }
 
 /** Resolve the AudioPort source descriptor for a segment.

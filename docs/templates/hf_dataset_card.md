@@ -34,7 +34,7 @@ size_categories:
 
 Qur'anic Universal Audio (QUA) is a project that unifies recitations on the internet and generates timing data using forced alignment — community-verified results and constantly expanding dataset.
 
-This dataset pairs ayah by ayah audio with word-level timestamps, letter timestamps, and waqf-aware segment data. Repeated words are preserved in `text_uthmani` and `word_timestamps`, so the row reflects what the reciter actually recited rather than a plain copy of canonical ayah text.
+This dataset pairs ayah by ayah audio with word-level timestamps, DigitalKhatt letter-animation timestamps, and waqf-aware segment data. Repeated words are preserved in `text_uthmani` and `word_timestamps`, so the row reflects what the reciter actually recited rather than a plain copy of canonical ayah text.
 
 > **Tip:** Click the three dots (···) at the top right and toggle **Notifications** to get updates whenever recitations are added or refreshed.
 
@@ -54,10 +54,9 @@ Each remaining subset is one published mushaf — a config named after the musha
 | `surah` | `int32` | Surah number, 1-114. |
 | `ayah` | `int32` | Ayah number within the surah. |
 | `duration_ms` | `int32` | Clip duration. |
-| `text_uthmani` | `string` | Recited Uthmani text (normalized) |
+| `text_uthmani` | `string` | Exact recited DigitalKhatt V2 text. |
 | `segments` | `[[int,int,int,int]]` | Waqf/pause-aware regions: `[word_from, word_to, start_ms, end_ms]`. |
 | `word_timestamps` | `[[int,int,int]]` | `[word_idx, start_ms, end_ms]`; word indices are 1-based. |
-| `letter_timestamps` | struct of lists | `word_idx`, `char`, `start_ms`, `end_ms`. `char` is one token from a fixed 42-token alphabet — see `letter_vocab_hafs_qpc.csv` in this repo. |
 | `source_url` | `string` | Original chapter or ayah audio URL. |
 | `source_offset_ms` | `int32` | Clip start inside `source_url`. |
 

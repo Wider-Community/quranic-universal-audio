@@ -24,6 +24,7 @@ Playbook for one-shot migrations / backfills against bucket data (`reciters/<slu
 | `unignore_category.py` | edit_history.jsonl | bulk-revert `ignore_issue` ops for a category | yes (skips reverted) | Data fix, not a migration — drives `services.segments.undo.undo_ops`. |
 | `audit_bucket_reciter.py` | (read-only) | per-reciter integrity audit | n/a | Run before publishing a reciter. |
 | `restamp_timestamps_v12.py` | timestamps/ | historical chapter shard → native v12 staging object | separate output | Migration #7; strict local cutover only. |
+| `migrate_timestamps_v13.py` | timestamps/ | native v12 tree → producer-token v13 staging tree | separate output | Migration #8; local-only, dual-audited, timing-preserving. |
 | `migrate_ts_reports_v12.py` | SQLite + staged shards | positional reports → native targets | guarded map | Migration #7; any unresolved row blocks. |
 
 Tooling (not migrations): `download_bucket_reciter.py`, `upload_bucket_reciter.py` (download → migrate → re-upload workflow), `bench_storage.py`, `regen_fe_types.py` (FE codegen — see CLAUDE.md schema convention).
@@ -103,6 +104,27 @@ still v27 after v12 shards become active, boot's `legacy_target_migration` prepa
 guarded map from retained canonical positions and verifies every legacy snapshot before migration 28.
 Hugging Face buckets have no object-version history, so retained staging artefacts and database
 backups—not the live bucket—are the recovery path.
+
+## Migration #8 — producer-owned animation tokens
+
+Schema v13 replaces only the teleprompter timing surface: compact render metadata gains `a`
+(producer animation tokens) and timing gains positional `a` intervals; the legacy timing `l` table
+is removed. Word, sound, part, and column timings remain independent and are required to survive
+the restamp exactly. Current phonemizer cells/rules are rebuilt rather than copied, so legitimate
+producer evolution can update those renderer projections without changing recorded audio timing.
+
+1. Download production `timestamps/` trees read-only to an ignored local directory.
+2. Run `scripts/migrations/migrate_timestamps_v13.py <v12-root> <fresh-v13-root> --report <json>`
+   with the v3 producer and matching SDK source on `PYTHONPATH`.
+3. The command refuses non-v12 input or existing output, rebuilds each connected reading through
+   the SDK, proves part identity, word text, sound tokens, boundary semantics, and all `w/s/c`
+   timing tables are preserved, then runs both SDK and Inspector v13 closure audits.
+4. Compare the complete output tree byte-for-byte with a timing-engine replay using the same
+   `detailed.json`, alignment results, and provenance. Deterministic JSON+Brotli makes equality a
+   file-byte assertion, not a semantic approximation.
+
+The command has no bucket client and cannot upload. Production promotion is deliberately outside
+this migration and requires a separate reviewed release procedure.
 
 ## Source of truth for byte shapes
 

@@ -62,7 +62,7 @@ Blueprints register in `routes/__init__.py::register_blueprints`. Subpackage `__
 | `/api/seg` | `seg_edit` | `routes/segments/edit.py` | Segments save/undo (`@require_same_origin` → `@require_edit_lock`) |
 | `/api/seg` | `seg_val` | `routes/segments/validation.py` | Validate, stats, edit-history |
 | `/api/seg` | `peaks` | `routes/segments/peaks.py` | `/peaks`, `/segment-peaks`, `/history-peaks` |
-| `/api/seg` | `audio_proxy` | `routes/audio/proxy.py` | `/audio-proxy/<reciter>` — bucket-resident audio; CDN **stream-through** fallback (same-origin 200/206 + ACAO, not a 302) |
+| `/api/seg` | `audio_proxy` | `routes/audio/proxy.py` | `/audio-proxy/<reciter>` — bucket-resident audio streamed by `routes/audio/range_file.py` (1 MB reads; NOT `send_file`, whose Range path reads the NFS mount 8 KB at a time → ~150 KB/s); CDN **stream-through** fallback (same-origin 200/206 + ACAO, not a 302) |
 | `/api/audio` | `audio_meta` | `routes/audio/metadata.py` | Audio tab metadata |
 | `/api/seg` | `segment_clip` | `routes/audio/clip.py` | `/segment-clip` — ffmpeg MP3 window clip (VBR-safe seek) |
 | `/api/qf` | `qf_auth` | `routes/qf_auth.py` | Quran.Foundation OAuth2 (pre-prod user APIs) |

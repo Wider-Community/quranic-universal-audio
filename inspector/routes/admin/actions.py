@@ -56,6 +56,8 @@ def force_release(slug: str):
     user, err = _require_cap("claim.force_release")
     if err is not None:
         return err
+    if not state_service.is_delivery_visible(slug, user):
+        return jsonify({"error": "unknown slug"}), 404
 
     body = request.get_json(silent=True) or {}
     # Reason is optional on owner claim mutations — the action is auditable
@@ -88,6 +90,8 @@ def reassign(slug: str):
     user, err = _require_cap("claim.reassign")
     if err is not None:
         return err
+    if not state_service.is_delivery_visible(slug, user):
+        return jsonify({"error": "unknown slug"}), 404
 
     body = request.get_json(silent=True) or {}
     to_login = (body.get("to_login") or "").strip()
@@ -148,6 +152,8 @@ def send_back(slug: str):
     user, err = _require_cap("review.send_back")
     if err is not None:
         return err
+    if not state_service.is_delivery_visible(slug, user):
+        return jsonify({"error": "unknown slug"}), 404
 
     body = request.get_json(silent=True) or {}
     reason, err = validate_reason(body)

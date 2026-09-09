@@ -255,3 +255,38 @@ def test_edit_reciter_notes_only_does_not_stamp(fresh_catalog, monkeypatch):
     assert hf is not None
     assert hf["stale_since"] is None
     assert hf["stale_reason"] is None
+
+
+def test_full_catalog_edit_surface_updates_and_clears_metadata(fresh_catalog, monkeypatch):
+    catalog_service, _ = fresh_catalog
+    from services import audit as audit_service
+
+    monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
+    updated = catalog_service.edit_delivery_fields(
+        actor=_actor(),
+        slug="rec_a",
+        fields={
+            "variant_label": "remastered",
+            "source_url": "https://example.test/source",
+            "sample_rate_hz": 48000,
+            "recording_context": None,
+        },
+    )
+    assert updated.variant_label == "remastered"
+    assert updated.source_url == "https://example.test/source"
+    assert updated.sample_rate_hz == 48000
+    assert updated.recording_context is None
+
+    reciter = catalog_service.edit_reciter_fields(
+        actor=_actor(),
+        reciter_id="rec_a",
+        fields={"notes": "owner note", "name_ar": "قاريء"},
+    )
+    assert reciter.notes == "owner note"
+    assert reciter.name_ar == "قاريء"
+
+    cleared = catalog_service.edit_reciter_fields(
+        actor=_actor(), reciter_id="rec_a", fields={"notes": None, "name_ar": None}
+    )
+    assert cleared.notes is None
+    assert cleared.name_ar is None

@@ -1,4 +1,4 @@
-"""Compact native timestamp shard v12 stored as ``timestamps/<chapter>.json.br``."""
+"""Compact native timestamp shard v13 stored as ``timestamps/<chapter>.json.br``."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 TsShardPart = tuple[str, int, int, int, int]
 TsWordTiming = tuple[int, int]
 TsSoundTiming = tuple[int, int]
-TsUnitTiming = tuple[int, int, str, int | None, int | None, Literal[0, 1]]
+TsAnimationTiming = tuple[int | None, int | None]
 TsColumnTiming = tuple[str | int, int | None, int | None]
 
 
@@ -24,6 +24,7 @@ class TsCompactRender(_Closed):
     r: list[str]
     w: list[list[Any]]
     b: list[list[Any]]
+    a: list[list[Any]]
 
     @model_validator(mode="after")
     def _counts(self):
@@ -35,7 +36,7 @@ class TsCompactRender(_Closed):
 class TsShardTiming(_Closed):
     w: list[TsWordTiming]
     s: list[TsSoundTiming]
-    l: list[TsUnitTiming]  # noqa: E741 - compact wire key, not a local variable
+    a: list[TsAnimationTiming]
     c: list[TsColumnTiming]
 
     @model_validator(mode="after")
@@ -43,11 +44,11 @@ class TsShardTiming(_Closed):
         for label, rows in (("word", self.w), ("sound", self.s)):
             if any(end < start for start, end in rows):
                 raise ValueError(f"{label} timing end precedes start")
-        for _, _, _, start, end, _ in self.l:
+        for start, end in self.a:
             if (start is None) != (end is None):
-                raise ValueError("letter timing has a half-null interval")
+                raise ValueError("animation timing has a half-null interval")
             if start is not None and end is not None and end < start:
-                raise ValueError("letter timing end precedes start")
+                raise ValueError("animation timing end precedes start")
         for _, start, end in self.c:
             if (start is None) != (end is None):
                 raise ValueError("column timing has a half-null interval")
@@ -68,6 +69,8 @@ class TsShardReading(_Closed):
             raise ValueError("word timing count differs from compact words")
         if len(self.timing.s) != len(self.render.p):
             raise ValueError("sound timing count differs from compact tokens")
+        if len(self.timing.a) != len(self.render.a):
+            raise ValueError("animation timing count differs from animation tokens")
         for ref, start, end, first, count in self.parts:
             if not ref or end < start or first < 0 or count < 1:
                 raise ValueError("invalid compact part")
@@ -86,7 +89,7 @@ class TsNativeProfile(_Closed):
 class TsShardMeta(BaseModel):
     model_config = ConfigDict(extra="allow")
 
-    schema_version: Literal[12]
+    schema_version: Literal[13]
     chapter: int = Field(ge=1, le=114)
     audio_category: str = Field(min_length=1)
     phonemizer_version: str = Field(min_length=1)
@@ -112,6 +115,6 @@ __all__ = [
     "TsShardReading",
     "TsShardTiming",
     "TsSoundTiming",
-    "TsUnitTiming",
+    "TsAnimationTiming",
     "TsWordTiming",
 ]

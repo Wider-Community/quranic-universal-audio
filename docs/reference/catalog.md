@@ -12,7 +12,7 @@ Layers, slug convention, schema, audio-metadata split, naming guide, and add/pro
 | Read model (`ReciterCatalog`) | `repo_catalog.snapshot()` → cached on `db_seq` by `services/state/catalog.py::snapshot()` | — |
 | Pydantic shapes (runtime authority) | `qua_shared/schemas/bucket/catalog.py` | — |
 | Per-delivery audio sidecar | `catalog/audio_manifest/<slug>.json` (bucket JSON) | offline probe `scripts/audio/probe_audio_meta.py` |
-| Public read endpoint | `/api/static/catalog.json` (`routes/public/static.py`) — serializes `snapshot()` | — |
+| Public read endpoint | `/api/static/catalog.json` (`routes/public/static.py`) — serializes the viewer projection of `snapshot()` | — |
 
 `repo_catalog.snapshot()` reassembles the full `ReciterCatalog` so the public JSON stays byte-identical to the pre-migration file (migration parity gate diffs `model_dump(by_alias=True)`). Sidecars are 5–20 KB each for `by_surah` (114 chapters), larger for `by_ayah` (6236 ayahs).
 
@@ -175,7 +175,17 @@ Editable columns: `_RECITER_WRITABLE = (name_en, name_ar, country, notes)` (`rep
 | `added_at` | TEXT (datetime) | ISO-8601 UTC. |
 | `added_by_hf_id` | TEXT | HF user id of the maintainer who added the row. |
 
-Editable columns: `_DELIVERY_WRITABLE` (`repo_catalog.py`) covers riwayah/style/recording_context/recording_year/variant_label/source/channel/source_url/audio_category/chapter_count/codec/container/sample_rate_hz/channels/bitrate_mode/bitrate_kbps_nominal/total_duration_sec. The **service** (`services/state/catalog.py::edit_delivery`) exposes a narrower public surface: only `riwayah/style/recording_context/recording_year`. `slug`/`reciter_id` immutable. Checksum does **not** live on the row (sidecar `_meta.checksum` only).
+Editable columns: `_DELIVERY_WRITABLE` (`repo_catalog.py`) covers riwayah/style/recording_context/recording_year/variant_label/source/channel/source_url/audio_category/chapter_count/codec/container/sample_rate_hz/channels/bitrate_mode/bitrate_kbps_nominal/total_duration_sec. The capability-gated `PATCH /api/admin/catalog/delivery/<slug>` surface exposes that complete metadata set; `PATCH /api/admin/catalog/reciter/<reciter_id>` exposes name, Arabic name, country, and notes. `slug`/`reciter_id` and provenance fields (`added_at`, `added_by_hf_id`) are immutable. Explicit `null` clears nullable metadata. Every edit is audited; public-projection edits mark the affected HF/GH release rows `catalog_edit`-stale. Checksum does **not** live on the row (sidecar `_meta.checksum` only).
+
+### Inspector visibility and EveryAyah
+
+`everyayah` is retained in SQLite for owner operations, but it is an internal
+Inspector-only channel. Non-owner catalog projections remove its deliveries,
+remove reciters that have no remaining delivery, and recompute derived channel
+counts from the visible set. The same rule applies to dashboard lists, filters,
+stats, activity, review/release status, audio/timestamp reads, and static catalog
+data. Owners receive the canonical projection and may edit these rows; EveryAyah
+is never eligible for a public HF dataset split or GitHub release member.
 
 ### `audio_manifest/<slug>.json` (bucket sidecar — `AudioManifestSidecar`)
 

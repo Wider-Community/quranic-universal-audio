@@ -1,4 +1,4 @@
-/** Native v12 shard indexing and timing-view assembly. */
+/** Native v13 shard indexing and timing-view assembly. */
 
 import type {
     Letter,
@@ -48,16 +48,21 @@ function selectedWords(members: ChapterOccasion[]): Map<TsShardReading, Set<numb
 }
 
 function lettersOf(reading: TsShardReading, wordId: number, offset: number): Letter[] {
-    return reading.letters
-        .filter((unit) => unit.word_id === wordId)
-        .map((unit) => {
-            const start = unit.start_ms == null ? null : unit.start_ms / 1000 - offset;
-            const end = unit.end_ms == null ? null : unit.end_ms / 1000 - offset;
+    return reading.animationTokens
+        .filter((token) => token.word_id === wordId)
+        .map((token) => {
+            const start = token.start_ms == null ? null : token.start_ms / 1000 - offset;
+            const end = token.end_ms == null ? null : token.end_ms / 1000 - offset;
             return {
-                char: unit.text,
+                char: token.text,
                 start,
                 end,
-                silent: unit.silent,
+                tokenId: token.id,
+                sourceUnitIds: token.source_unit_ids,
+                characterIds: token.character_ids,
+                paintCharacterIds: token.paint_character_ids,
+                policy: token.policy,
+                silent: token.sound_ids.length === 0,
             };
         });
 }

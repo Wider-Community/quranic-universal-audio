@@ -64,9 +64,11 @@ export function nativeReading(id: string, parts: FixturePart[]): TsShardReading 
                 },
             },
         },
-        letters: parts.map((part, index) => ({
-            source_unit_id: index, word_id: index, text: words[index]!.text,
-            start_ms: part.start, end_ms: part.end, silent: false,
+        animationTokens: parts.map((part, index) => ({
+            id: index, word_id: index, source_unit_ids: [index], character_ids: [index],
+            paint_character_ids: [index],
+            text: words[index]!.text, sound_ids: [index], policy: 'timed' as const,
+            target_token_id: null, start_ms: part.start, end_ms: part.end,
         })),
         timing: {
             words: parts.map((part, index) => ({
@@ -84,7 +86,7 @@ export function nativeReading(id: string, parts: FixturePart[]): TsShardReading 
 export function nativeShard(readings: TsShardReading[]): TsShardResponse {
     return {
         _meta: {
-            schema_version: 12,
+            schema_version: 13,
             native_schema_version: 2,
             renderer_codec_version: 1,
             native_profile: {

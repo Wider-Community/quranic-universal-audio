@@ -132,10 +132,12 @@ def test_audio_pairing_and_timestamp_layers_are_explained():
     assert "every timestamp value is milliseconds relative to that matching source audio." in md
     assert "storage, speed, and network efficiency" in md
     assert "Use `shard.py` when your app prefers per-surah files locally" in md
-    assert '"1:1": [0, 2831]' in md
-    # the worked example spans multiple words + letters (not a single ب letter)
+    assert '["1:1", 70, 2790, true, 41]' in md
+    assert "later releases may append repeated or partial rows" in md
+    # The worked example spans multiple words and timed paint units.
     assert "ٱللَّهِ" in md
-    assert '"س"' in md and '"ا"' in md
+    assert "word_occurrence" in md and "owns_sound" in md and "paint" in md
+    assert "Unicode-scalar ranges" in md
     assert "loops back or re-recites" in md
 
 

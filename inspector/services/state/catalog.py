@@ -16,8 +16,10 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+from collections.abc import Mapping
 from datetime import UTC, datetime
 
+from qua_shared.catalog_visibility import is_everyayah_channel
 from qua_shared.schemas import (
     Actor,
     AudioCategory,
@@ -28,6 +30,7 @@ from qua_shared.schemas import (
     Source,
     StaleReason,
 )
+from qua_shared.schemas.bucket.catalog import Derived, SourceChannelPair
 from services.db import errors as db_errors
 from services.db import repo_catalog, repo_releases
 from services.db import sync as _sync
@@ -36,13 +39,33 @@ from . import audit
 
 logger = logging.getLogger(__name__)
 
-# Catalog fields that surface in a public projection (HF ``mushafs`` catalog +
-# GH release ``catalog.json``). Editing one of these desyncs the published
-# artifacts → stamp the affected delivery rows ``catalog_edit``-stale. Fields
-# outside this set (``notes``/``variant_label``/``source``) are admin-only and
-# never warrant a republish. Keep in lockstep with the edit surfaces below.
-PUBLIC_DELIVERY_FIELDS = frozenset({"riwayah", "style", "recording_context", "recording_year"})
+# All delivery metadata is represented by at least one public catalog or
+# release projection. Editing one therefore invalidates the affected artifact;
+# the next HF/GH publish operation carries the new value outward.
+PUBLIC_DELIVERY_FIELDS = frozenset(
+    {
+        "riwayah",
+        "style",
+        "recording_context",
+        "recording_year",
+        "variant_label",
+        "source",
+        "channel",
+        "source_url",
+        "audio_category",
+        "chapter_count",
+        "codec",
+        "container",
+        "sample_rate_hz",
+        "channels",
+        "bitrate_mode",
+        "bitrate_kbps_nominal",
+        "total_duration_sec",
+    }
+)
 PUBLIC_RECITER_FIELDS = frozenset({"name_en", "name_ar", "country"})
+RECITER_EDITABLE_FIELDS = frozenset({"name_en", "name_ar", "country", "notes"})
+DELIVERY_EDITABLE_FIELDS = frozenset(PUBLIC_DELIVERY_FIELDS)
 
 
 # ---- Errors ----
@@ -58,6 +81,16 @@ class InvalidCatalogChange(CatalogError):
 
 class NotAuthorizedForCatalog(CatalogError):
     pass
+
+
+def _actor_is_owner(actor: Actor) -> bool:
+    role = getattr(actor.role, "value", actor.role)
+    return role == "owner"
+
+
+def _require_everyayah_owner(actor: Actor, channel: str) -> None:
+    if is_everyayah_channel(channel) and not _actor_is_owner(actor):
+        raise NotAuthorizedForCatalog("EveryAyah catalog rows are owner-only")
 
 
 # ---- Boot ----
@@ -89,6 +122,46 @@ def snapshot() -> ReciterCatalog:
     cat = repo_catalog.snapshot()
     _cache.set_catalog_snapshot_cache(seq, cat)
     return cat
+
+
+def for_viewer(*, include_everyayah: bool = False) -> ReciterCatalog:
+    """Return the catalog projection appropriate for an Inspector viewer.
+
+    The owner receives the canonical snapshot. Other viewers receive a
+    self-consistent projection: EveryAyah deliveries, EveryAyah-only reciters,
+    and derived source/channel counts are removed together.
+    """
+    cat = snapshot()
+    if include_everyayah:
+        return cat
+    deliveries = [d for d in cat.deliveries if not is_everyayah_channel(d.channel)]
+    reciter_ids = {d.reciter_id for d in deliveries}
+    reciters = [r for r in cat.reciters if r.reciter_id in reciter_ids]
+    counts: dict[tuple[str, str], int] = {}
+    for d in deliveries:
+        key = (d.source, d.channel)
+        counts[key] = counts.get(key, 0) + 1
+    derived = Derived(
+        source_channels=[
+            SourceChannelPair(source=source, channel=channel, delivery_count=count)
+            for (source, channel), count in sorted(counts.items())
+        ]
+    )
+    vocab = cat.vocab.model_copy(
+        update={
+            "channels": [
+                channel for channel in cat.vocab.channels if not is_everyayah_channel(channel.slug)
+            ]
+        }
+    )
+    return cat.model_copy(
+        update={
+            "reciters": reciters,
+            "deliveries": deliveries,
+            "derived": derived,
+            "vocab": vocab,
+        }
+    )
 
 
 def find_delivery(slug: str) -> Delivery | None:
@@ -179,6 +252,10 @@ def edit_reciter(
     existing = repo_catalog.find_reciter(reciter_id)
     if existing is None:
         raise InvalidCatalogChange(f"reciter_id {reciter_id!r} not found")
+    if not _actor_is_owner(actor):
+        reciter_deliveries = [d for d in snapshot().deliveries if d.reciter_id == reciter_id]
+        if reciter_deliveries and all(is_everyayah_channel(d.channel) for d in reciter_deliveries):
+            raise NotAuthorizedForCatalog("EveryAyah-only reciters are owner-only")
     proposed = {
         "name_en": name_en,
         "name_ar": name_ar,
@@ -206,6 +283,55 @@ def edit_reciter(
     return updated or existing
 
 
+def edit_reciter_fields(
+    *,
+    actor: Actor,
+    reciter_id: str,
+    fields: Mapping[str, object],
+    reason: str | None = None,
+) -> ReciterEntry:
+    """Apply an explicit field map; ``None`` intentionally clears metadata."""
+    _require_capability(actor, "catalog.edit")
+    unknown = set(fields) - RECITER_EDITABLE_FIELDS
+    if unknown:
+        raise InvalidCatalogChange(f"unknown reciter fields: {sorted(unknown)!r}")
+    existing = repo_catalog.find_reciter(reciter_id)
+    if existing is None:
+        raise InvalidCatalogChange(f"reciter_id {reciter_id!r} not found")
+    if not _actor_is_owner(actor):
+        reciter_deliveries = [d for d in snapshot().deliveries if d.reciter_id == reciter_id]
+        if reciter_deliveries and all(is_everyayah_channel(d.channel) for d in reciter_deliveries):
+            raise NotAuthorizedForCatalog("EveryAyah-only reciters are owner-only")
+    try:
+        candidate = ReciterEntry.model_validate(
+            {**existing.model_dump(mode="python"), **dict(fields)}
+        )
+    except Exception as exc:
+        raise InvalidCatalogChange(str(exc)) from exc
+    patch = {
+        field: {"from": getattr(existing, field), "to": getattr(candidate, field)}
+        for field in fields
+        if getattr(existing, field) != getattr(candidate, field)
+    }
+    if not patch:
+        return existing
+    with _sync.durable_transaction():
+        updated = repo_catalog.edit_reciter(
+            reciter_id, **{field: change["to"] for field, change in patch.items()}
+        )
+        audit.append(
+            event="catalog.edited",
+            actor=actor,
+            payload={"kind": "reciter", "reciter_id": reciter_id, "patch": patch},
+            reason=reason,
+        )
+        if PUBLIC_RECITER_FIELDS & patch.keys():
+            repo_releases.stamp_stale_for_reciter(
+                reciter_id, at=datetime.now(UTC), reason=StaleReason.CATALOG_EDIT
+            )
+    return updated or candidate
+
+
 def add_delivery(
     *,
     actor: Actor,
@@ -213,6 +339,7 @@ def add_delivery(
     reason: str | None = None,
 ) -> Delivery:
     _require_capability(actor, "catalog.add")
+    _require_everyayah_owner(actor, delivery.channel)
     with _sync.durable_transaction():
         try:
             repo_catalog.add_delivery(delivery)
@@ -252,6 +379,7 @@ def edit_delivery(
     existing = repo_catalog.find_delivery(slug)
     if existing is None:
         raise InvalidCatalogChange(f"delivery slug {slug!r} not found")
+    _require_everyayah_owner(actor, existing.channel)
     proposed = {
         "riwayah": riwayah,
         "style": style,
@@ -280,6 +408,53 @@ def edit_delivery(
         if PUBLIC_DELIVERY_FIELDS & patch.keys():
             repo_releases.stamp_stale(slug, at=datetime.now(UTC), reason=StaleReason.CATALOG_EDIT)
     return updated or existing
+
+
+def edit_delivery_fields(
+    *,
+    actor: Actor,
+    slug: str,
+    fields: Mapping[str, object],
+    reason: str | None = None,
+) -> Delivery:
+    """Apply the complete delivery metadata edit surface atomically."""
+    _require_capability(actor, "catalog.edit")
+    unknown = set(fields) - DELIVERY_EDITABLE_FIELDS
+    if unknown:
+        raise InvalidCatalogChange(f"unknown delivery fields: {sorted(unknown)!r}")
+    existing = repo_catalog.find_delivery(slug)
+    if existing is None:
+        raise InvalidCatalogChange(f"delivery slug {slug!r} not found")
+    _require_everyayah_owner(actor, existing.channel)
+    try:
+        candidate = Delivery.model_validate({**existing.model_dump(mode="python"), **dict(fields)})
+    except Exception as exc:
+        raise InvalidCatalogChange(str(exc)) from exc
+    _require_everyayah_owner(actor, candidate.channel)
+    patch = {
+        field: {"from": getattr(existing, field), "to": getattr(candidate, field)}
+        for field in fields
+        if getattr(existing, field) != getattr(candidate, field)
+    }
+    if not patch:
+        return existing
+    with _sync.durable_transaction():
+        try:
+            updated = repo_catalog.edit_delivery(
+                slug, **{field: change["to"] for field, change in patch.items()}
+            )
+        except sqlite3.IntegrityError as exc:
+            raise InvalidCatalogChange(str(exc)) from exc
+        audit.append(
+            event="catalog.edited",
+            actor=actor,
+            slug=slug,
+            payload={"kind": "delivery", "slug": slug, "patch": patch},
+            reason=reason,
+        )
+        if PUBLIC_DELIVERY_FIELDS & patch.keys():
+            repo_releases.stamp_stale(slug, at=datetime.now(UTC), reason=StaleReason.CATALOG_EDIT)
+    return updated or candidate
 
 
 def add_audio_source(
@@ -367,7 +542,9 @@ __all__ = [
     "add_reciter",
     "add_source",
     "edit_delivery",
+    "edit_delivery_fields",
     "edit_reciter",
+    "edit_reciter_fields",
     "find_delivery",
     "find_reciter",
     "display_name",

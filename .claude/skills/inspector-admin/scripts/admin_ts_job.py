@@ -202,12 +202,11 @@ def main() -> int:
     bs.add_common_args(pm, mutating=False)
 
     a = p.parse_args()
-    # launch/cancel/publish mutate (need actor + --yes-prod); status/record/
-    # history/monitor are read-only. Only cancel + publish do an in-process
-    # bucket-DB write (cancel_job / complete_timestamps_job) → safe_write; launch
-    # only queues an HF job (no DB write, and --monitor needs the Space up).
-    mutates = a.cmd in ("launch", "cancel", "publish")
-    safe_write = a.cmd in ("cancel", "publish")
+    # Launch links its Space run id into SQLite; status may complete a terminal
+    # run and publish/refresh the reciter. Both need the guarded single-writer
+    # window in production, just like cancel/publish.
+    mutates = a.cmd in ("launch", "cancel", "status", "publish")
+    safe_write = mutates
     return bs.run(
         a,
         lambda ctx: {"launch": _do_launch, "cancel": _do_cancel, "status": _do_status,

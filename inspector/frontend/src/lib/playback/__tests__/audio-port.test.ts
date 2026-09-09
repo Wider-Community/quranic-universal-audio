@@ -305,6 +305,23 @@ describe('AudioPort — setSource invalidation', () => {
 // ---------------------------------------------------------------------------
 
 describe('AudioPort — attachElement', () => {
+    it('CORS-enables the element for kill-switch ports before any src is set', () => {
+        // Regression: direct-CDN srcs (play-url.ts) through a
+        // MediaElementAudioSourceNode are SILENT unless the element is
+        // crossorigin="anonymous".
+        const el = makeAudioStub({ src: '', readyState: 4 }) as unknown as HTMLAudioElement & { crossOrigin: string | null };
+        el.crossOrigin = null;
+        new AudioPort().attachElement(el);
+        expect(el.crossOrigin).toBe('anonymous');
+    });
+
+    it('leaves crossOrigin untouched for non-kill-switch (dashboard) ports', () => {
+        const el = makeAudioStub({ src: '', readyState: 4 }) as unknown as HTMLAudioElement & { crossOrigin: string | null };
+        el.crossOrigin = null;
+        new AudioPort({ disableKillSwitch: true }).attachElement(el);
+        expect(el.crossOrigin).toBeNull();
+    });
+
     it('detaches DOM listeners and aborts pending load on element swap', async () => {
         port.setSource({ audioUrl: 'http://cdn/a.mp3', reciter: 'r1', vbr: false });
         const r = port.loadCovering(0, 1000);

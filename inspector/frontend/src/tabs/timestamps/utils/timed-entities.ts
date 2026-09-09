@@ -102,9 +102,11 @@ export function columnReportSpans(
     item: ParsedReading,
     playbackColumns: Map<string, Span> = columnSpans(item),
 ): Map<string, Span> {
-    const units = new Map(item.reading.letters.flatMap((letter) => {
-        if (letter.start_ms === null || letter.end_ms === null) return [];
-        return [[String(letter.source_unit_id), [letter.start_ms, letter.end_ms] as Span] as const];
+    const units = new Map(item.reading.animationTokens.flatMap((token) => {
+        if (token.start_ms === null || token.end_ms === null) return [];
+        return token.source_unit_ids.map((unitId) =>
+            [String(unitId), [token.start_ms!, token.end_ms!] as Span] as const,
+        );
     }));
     const overrides = new Map(item.reading.timing.columns.map((row) => [
         String(row.column_id), row.start_ms === null || row.end_ms === null

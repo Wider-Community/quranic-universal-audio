@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Shard a v2 release tier file into per-surah files.
+"""Shard a release tier file into per-surah files.
 
 Stdlib-only — shipped as a release asset so consumers can use it without
 installing dependencies. Reads any of ``verse_timestamps.json.gz``,
@@ -10,11 +10,9 @@ re-runs.
 Usage:
     python shard.py <tier_file> [--out-dir <dir>]
 
-The output directory defaults to ``per_surah/`` next to the input. Each
-per-surah file preserves the ``_meta`` block from the source and contains only
-the verse keys (``"<surah>:<ayah>"``) for that chapter. JSON is emitted with
-sorted keys + no trailing whitespace, so the same input always produces the
-same bytes.
+The output directory defaults to ``per_surah/`` next to the input. Each shard
+preserves ``_meta`` and the source occurrence order. Legacy keyed tiers remain
+accepted so the helper can also split pre-v3 releases.
 """
 
 from __future__ import annotations
@@ -54,12 +52,30 @@ def _ayah_of(verse_key: str) -> int:
 
 
 def split(doc: dict) -> dict[int, dict]:
-    """Group verse entries by chapter. Returns ``{surah: shard_dict}``.
+    """Group timestamp rows by chapter. Returns ``{surah: shard_dict}``.
 
-    Each shard preserves the source's ``_meta`` block (with ``chapter`` set)
-    and contains only that chapter's verse keys, sorted by ayah for byte stability.
+    V3 occurrence rows preserve timeline order. Legacy keyed rows are sorted by
+    ayah for byte stability.
     """
     src_meta = doc.get("_meta", {}) or {}
+    rows = doc.get("rows")
+    if isinstance(rows, list):
+        by_chapter_rows: dict[int, list[list]] = {}
+        for row in rows:
+            if not isinstance(row, list) or not row:
+                continue
+            surah = _surah_of(row[0]) if isinstance(row[0], str) else None
+            if surah is not None:
+                by_chapter_rows.setdefault(surah, []).append(row)
+        out: dict[int, dict] = {}
+        for surah, chapter_rows in by_chapter_rows.items():
+            meta = dict(src_meta)
+            meta["chapter"] = surah
+            meta["verse_count"] = len({row[0] for row in chapter_rows})
+            meta["occurrence_count"] = len(chapter_rows)
+            out[surah] = {"_meta": meta, "rows": chapter_rows}
+        return out
+
     by_chapter: dict[int, dict[str, object]] = {}
     for key, val in doc.items():
         if key.startswith("_"):

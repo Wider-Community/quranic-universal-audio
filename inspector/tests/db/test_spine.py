@@ -51,6 +51,7 @@ def test_migration_creates_all_tables(fresh_db):
         "visitor_daily",
         "request_views",
         "review_views",
+        "recitation_discard_cleanup",
     }
     assert expected <= names
     # ``activity_dismissals`` was dropped in migration 0006 (admin notifs rail).

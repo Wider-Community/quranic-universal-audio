@@ -31,7 +31,7 @@ function occasion(ref: string, reading = nativeReading('r1', [
     return { result };
 }
 
-describe('native v12 timestamp assembly', () => {
+describe('native v13 timestamp assembly', () => {
     it('uses native timing IDs and zero-anchors chapter audio', () => {
         const { result } = occasion('1:1');
         const data = assembleOccasion(

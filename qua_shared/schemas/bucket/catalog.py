@@ -78,8 +78,9 @@ class Style(_ShortNamed):
 class Channel(_ShortNamed):
     host_patterns: list[str] = Field(default_factory=list)
     #: Drives GH release inclusion. True for public-CDN channels whose audio
-    #: can be linked from a public release manifest. Seeded for mp3quran /
-    #: everyayah / qul / quranicaudio / tvquran / archive_org in migration 0014.
+    #: can be linked from a public release manifest. ``everyayah`` may remain
+    #: true for historical vocabulary compatibility, but the release adapters
+    #: explicitly exclude it as an Inspector-owner-only channel.
     gh_release_eligible: bool = Field(default=False)
 
 

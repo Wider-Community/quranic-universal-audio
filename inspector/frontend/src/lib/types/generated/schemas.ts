@@ -139,8 +139,14 @@ export interface AdminDiscardedDelivery {
     [k: string]: string[];
   } | null;
   ts_refresh_dates?: string[] | null;
+  variant_label?: string | null;
+  codec: string;
+  container: string;
+  sample_rate_hz?: number | null;
+  channels?: number | null;
   visibility: "public" | "discarded";
   visibility_reason?: string | null;
+  cleanup_status?: ("pending" | "failed" | "completed" | "restored") | null;
 }
 export interface AdminGhReleaseMember {
   change_kind: "added" | "refresh" | "unchanged";
@@ -558,7 +564,7 @@ export interface AdminViewReciter {
   country?: string | null;
   primary_bucket: "available_for_request" | "requested" | "available_for_review" | "under_review" | "published";
   buckets: ("available_for_request" | "requested" | "available_for_review" | "under_review" | "published")[];
-  deliveries: PublicDelivery[];
+  deliveries: AdminDelivery[];
   riwayat: string[];
   styles: string[];
   recording_contexts: string[];
@@ -568,19 +574,14 @@ export interface AdminViewReciter {
   deliveries_count: number;
   coverage_kind: "full" | "partial" | "mixed";
   last_activity?: string | null;
-  discarded_deliveries: AdminDiscardedDelivery[];
+  notes?: string | null;
+  discarded_deliveries: AdminDelivery[];
   fully_discarded: boolean;
 }
 /**
- * One reciter delivery (riwayah × style × source × channel combo).
- *
- * Mirrors ``_to_public_delivery`` in ``services/reference/public_state.py``.
- * ``slug`` is an internal grouping ID only — never rendered to users.
- * ``bucket_dates`` / ``ts_refresh_dates`` are attached only by the detail /
- * admin-view paths (``_attach_bucket_dates``), so they are absent on the
- * cached list payload — dump with ``exclude_none=True``.
+ * Full delivery metadata exposed only in the admin reciter modal.
  */
-export interface PublicDelivery {
+export interface AdminDelivery {
   slug: string;
   bucket: "available_for_request" | "requested" | "available_for_review" | "under_review" | "published";
   state_since?: string | null;
@@ -602,6 +603,14 @@ export interface PublicDelivery {
     [k: string]: string[];
   } | null;
   ts_refresh_dates?: string[] | null;
+  variant_label?: string | null;
+  codec: string;
+  container: string;
+  sample_rate_hz?: number | null;
+  channels?: number | null;
+  visibility?: "public" | "discarded";
+  visibility_reason?: string | null;
+  cleanup_status?: ("pending" | "failed" | "completed" | "restored") | null;
 }
 export interface AdminVisitorStats {
   today: VisitorDayStat;
@@ -1342,6 +1351,38 @@ export interface ProbeResult {
   [k: string]: unknown;
 }
 /**
+ * One reciter delivery (riwayah × style × source × channel combo).
+ *
+ * Mirrors ``_to_public_delivery`` in ``services/reference/public_state.py``.
+ * ``slug`` is an internal grouping ID only — never rendered to users.
+ * ``bucket_dates`` / ``ts_refresh_dates`` are attached only by the detail /
+ * admin-view paths (``_attach_bucket_dates``), so they are absent on the
+ * cached list payload — dump with ``exclude_none=True``.
+ */
+export interface PublicDelivery {
+  slug: string;
+  bucket: "available_for_request" | "requested" | "available_for_review" | "under_review" | "published";
+  state_since?: string | null;
+  riwayah: string;
+  style: string;
+  recording_context?: string | null;
+  recording_year?: number | null;
+  source: string;
+  channel: string;
+  channel_name: string;
+  source_url?: string | null;
+  audio_category: string;
+  chapter_count: number;
+  coverage_kind: "full" | "partial";
+  bitrate_kbps_nominal?: number | null;
+  bitrate_mode: string;
+  total_duration_sec?: number | null;
+  bucket_dates?: {
+    [k: string]: string[];
+  } | null;
+  ts_refresh_dates?: string[] | null;
+}
+/**
  * One reciter aggregated for the public dashboard.
  *
  * Mirrors ``to_public_reciter`` in ``services/reference/public_state.py``.
@@ -2032,6 +2073,7 @@ export interface TsCompactRender {
   r: string[];
   w: unknown[][];
   b: unknown[][];
+  a: unknown[][];
 }
 /**
  * ``GET /api/ts/config`` — display constants + read-path URLs.
@@ -2184,7 +2226,7 @@ export interface TsReportTarget {
  */
 export interface TsReportSnapshot {
   native_schema_version?: 2;
-  shard_schema_version?: 12;
+  shard_schema_version?: 12 | 13;
   native?: {
     [k: string]: unknown;
   };
@@ -2269,7 +2311,7 @@ export interface TsShardDoc {
   readings: TsShardReading[];
 }
 export interface TsShardMeta {
-  schema_version: 12;
+  schema_version: 13;
   chapter: number;
   audio_category: string;
   phonemizer_version: string;
@@ -2287,7 +2329,7 @@ export interface TsShardReading {
 export interface TsShardTiming {
   w: [unknown, unknown][];
   s: [unknown, unknown][];
-  l: [unknown, unknown, unknown, unknown, unknown, unknown][];
+  a: [unknown, unknown][];
   c: [unknown, unknown, unknown][];
 }
 /**

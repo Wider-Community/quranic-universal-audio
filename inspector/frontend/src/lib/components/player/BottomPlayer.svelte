@@ -35,6 +35,7 @@
         primeDashSpeculative,
     } from '../../playback/dash-prewarm';
     import { dashPort } from '../../playback/dash-port';
+    import { probeDirectPlayable } from '../../playback/play-url';
     import { exitLoop, loopTarget } from '../../playback/loop';
     import { recycleAsShadow } from '../../playback/shadow-audio';
     import { vbrCoveringRangeFor } from '../../playback/vbr-covering';
@@ -172,6 +173,10 @@
                 ]);
                 urls = nextUrls;
                 vbrChapters = new Set(nextVbrChapters);
+                // One CORS + Range probe per delivery host so the first play
+                // already resolves to the direct CDN URL (see play-url.ts).
+                const probeUrl = Object.values(nextUrls)[0]?.url;
+                if (probeUrl) await probeDirectPlayable(probeUrl);
             } catch {
                 urls = {};
                 vbrChapters = new Set();
@@ -247,9 +252,7 @@
                 } else if (entry.via === 'qf_fallback') {
                     console.warn('[qf-audio] API unavailable — using our CDN link:', url);
                 }
-                const cbrSrc = url.startsWith('/api/')
-                    ? url
-                    : `/api/seg/audio-proxy/${delivery.slug}?url=${encodeURIComponent(url)}`;
+                const cbrSrc = dashProxyUrl(delivery.slug, url);
                 dashPort.setSource({
                     audioUrl: url,
                     cbrSrc,

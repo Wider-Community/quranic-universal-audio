@@ -142,17 +142,27 @@ def _locate_verse_timestamps(catalog_path: Path, explicit: Path | None) -> Path:
 def _load_verse_windows(path: Path) -> dict[str, list[tuple[int, int, int]]]:
     """Parse a verse tier file into ``{chapter: [(ayah, start_ms, end_ms), ...]}``.
 
-    Reads gzipped or plain JSON; verse keys are ``"surah:ayah"`` and values are
-    ``[start_ms, end_ms]`` relative to the chapter start (the release contract).
+    Reads gzipped or plain JSON. V3 rows are
+    ``[ref,start_ms,end_ms,canonical,silence_after_ms]``; only the canonical row
+    is cut so repeated/partial takes cannot overwrite the same ayah filename.
+    Legacy keyed release tiers remain accepted.
     """
     raw = gzip.decompress(path.read_bytes()) if path.suffix == ".gz" else path.read_bytes()
     doc = json.loads(raw)
     by_chapter: dict[str, list[tuple[int, int, int]]] = {}
-    for key, val in doc.items():
-        if key.startswith("_"):
-            continue
-        surah, ayah = key.split(":")
-        by_chapter.setdefault(surah, []).append((int(ayah), int(val[0]), int(val[1])))
+    rows = doc.get("rows")
+    if isinstance(rows, list):
+        for row in rows:
+            if not row[3]:
+                continue
+            surah, ayah = row[0].split(":")
+            by_chapter.setdefault(surah, []).append((int(ayah), int(row[1]), int(row[2])))
+    else:
+        for key, val in doc.items():
+            if key.startswith("_"):
+                continue
+            surah, ayah = key.split(":")
+            by_chapter.setdefault(surah, []).append((int(ayah), int(val[0]), int(val[1])))
     for chs in by_chapter.values():
         chs.sort()
     return by_chapter

@@ -188,6 +188,15 @@ function outlineShadow(px: number, color: string): string {
     ].join(', ');
 }
 
+/** SVG equivalent of the native word silhouette. Applied once to the complete
+ * shaped word, never per token, so joined Arabic letters do not acquire seams. */
+function outlineDropShadow(px: number, color: string): string {
+    if (!px || px <= 0) return '';
+    // One filter sees the composited word silhouette. Chaining directional
+    // drop-shadows would feed each shadow into the next and balloon the outline.
+    return `drop-shadow(0 0 ${px}px ${color})`;
+}
+
 /** Project the line-animation slice of config to CSS custom properties.
  *  The active-unit effects (emphasis/scale/glow) resolve to the *current*
  *  granularity's value, so the same CSS rules render word- or char-tuned. */
@@ -199,6 +208,7 @@ export function cssVars(cfg: RecitationAnimConfig, theme: Theme = 'dark'): Recor
     // dark page.
     const baseColor = isLight ? LIGHT_BASE_COLOR : cfg.baseColor;
     const baseOutline = isLight ? '' : outlineShadow(cfg.baseStrokePx, cfg.baseStrokeColor);
+    const svgBaseOutline = isLight ? '' : outlineDropShadow(cfg.baseStrokePx, cfg.baseStrokeColor);
     // The active unit is coloured with the SAME legible highlight the analysis
     // triad uses (`legibleAccent` == the analysis `triad.word`), so the line
     // animation and the analysis cells always read as one colour — no dark↔light
@@ -232,11 +242,15 @@ export function cssVars(cfg: RecitationAnimConfig, theme: Theme = 'dark'): Recor
         '--ra-scale-pad': `${scalePad}px`,
         // Word-silhouette outline (base) + active outline/glow, as text-shadow.
         '--ra-word-shadow': baseOutline || 'none',
+        '--ra-svg-word-shadow': svgBaseOutline || 'none',
         '--ra-word-shadow-active': [glow, activeOutline].filter(Boolean).join(', ') || 'none',
         // Glow-only (no outline) — used by the active CHAR in char granularity so
         // the active letter glows without re-stroking each glyph (the legibility
         // stroke stays on the word silhouette in char mode).
         '--ra-glow': glow || 'none',
+        '--ra-svg-glow': cfg.activeGlowPx > 0
+            ? `drop-shadow(0 0 ${cfg.activeGlowPx}px ${hl})`
+            : 'none',
         '--ra-font': cfg.fontFamily,
         '--ra-font-size': `${cfg.fontSizePx}px`,
         '--ra-line-height': String(cfg.lineHeight),
@@ -252,4 +266,3 @@ export function cssVarText(cfg: RecitationAnimConfig, theme: Theme = 'dark'): st
         .map(([k, v]) => `${k}: ${v}`)
         .join('; ');
 }
-

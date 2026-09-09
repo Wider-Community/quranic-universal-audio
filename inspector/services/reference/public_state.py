@@ -23,6 +23,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Literal, NotRequired, TypedDict
 
+from qua_shared.catalog_visibility import is_everyayah_channel
 from qua_shared.schemas import (
     AudioCategory,
     Delivery,
@@ -123,6 +124,19 @@ class PublicReciter(TypedDict):
     deliveries_count: int
     coverage_kind: Literal["full", "partial", "mixed"]
     last_activity: str | None  # max state_since across deliveries
+
+
+class AdminDelivery(PublicDelivery):
+    """Full editable delivery metadata for maintainer/owner modal views."""
+
+    variant_label: str | None
+    codec: str
+    container: str
+    sample_rate_hz: int | None
+    channels: int | None
+    visibility: str
+    visibility_reason: str | None
+    cleanup_status: str | None
 
 
 # ---------- core mappers ----------
@@ -255,7 +269,7 @@ def _primary_bucket(buckets: list[PublicBucket]) -> PublicBucket:
 
 
 def _coverage_rollup(
-    deliveries: list[PublicDelivery],
+    deliveries: Sequence[PublicDelivery],
 ) -> Literal["full", "partial", "mixed"]:
     if not deliveries:
         return "partial"
@@ -290,6 +304,8 @@ def to_public_reciter(
     deliveries: list[Delivery],
     state_index: dict[str, ReciterRow],
     channel_names: dict[str, str] | None = None,
+    *,
+    include_everyayah: bool = False,
 ) -> PublicReciter:
     """Aggregate one reciter's catalog + state into a single public payload.
 
@@ -305,6 +321,8 @@ def to_public_reciter(
         channel_names = _channel_name_map()
     public_dels: list[PublicDelivery] = []
     for d in deliveries:
+        if not include_everyayah and is_everyayah_channel(d.channel):
+            continue
         row = state_index.get(d.slug)
         if row is not None and row.visibility != Visibility.PUBLIC:
             continue
@@ -344,7 +362,7 @@ def _build_state_index() -> dict[str, ReciterRow]:
     return {row.slug: row for row in state_service.all_rows()}
 
 
-def all_public_reciters() -> list[PublicReciter]:
+def all_public_reciters(*, include_everyayah: bool = False) -> list[PublicReciter]:
     """Materialize every catalog reciter as a public payload.
 
     A reciter with zero deliveries (theoretically possible at catalog-edit
@@ -360,7 +378,7 @@ def all_public_reciters() -> list[PublicReciter]:
     from services.storage import cache as _cache
 
     seq = _db.current_db_seq()
-    cached = _cache.get_public_reciters_cache(seq)
+    cached = _cache.get_public_reciters_cache(seq, include_everyayah)
     if cached is not None:
         return list(cached)
 
@@ -378,18 +396,24 @@ def all_public_reciters() -> list[PublicReciter]:
         dels = by_reciter.get(reciter.reciter_id, [])
         if not dels:
             continue
-        public = to_public_reciter(reciter, dels, state_index, channel_names)
+        public = to_public_reciter(
+            reciter,
+            dels,
+            state_index,
+            channel_names,
+            include_everyayah=include_everyayah,
+        )
         # If every delivery was discarded, the reciter has no public deliveries
         # — also skip; it would render an empty row.
         if not public["deliveries"]:
             continue
         out.append(public)
 
-    _cache.set_public_reciters_cache(seq, out)
+    _cache.set_public_reciters_cache(seq, out, include_everyayah)
     return list(out)
 
 
-def detail(reciter_id: str) -> PublicReciter | None:
+def detail(reciter_id: str, *, include_everyayah: bool = False) -> PublicReciter | None:
     """Materialize a single reciter for the public detail page.
 
     Returns ``None`` when the reciter_id isn't in the catalog, or when
@@ -407,7 +431,13 @@ def detail(reciter_id: str) -> PublicReciter | None:
         return None
     state_index = _build_state_index()
     channel_names = {ch.slug: ch.name for ch in catalog.vocab.channels}
-    public = to_public_reciter(reciter, deliveries, state_index, channel_names)
+    public = to_public_reciter(
+        reciter,
+        deliveries,
+        state_index,
+        channel_names,
+        include_everyayah=include_everyayah,
+    )
     if not public["deliveries"]:
         return None
     # Modal renders a per-delivery lifecycle timeline; the cached list path
@@ -416,13 +446,14 @@ def detail(reciter_id: str) -> PublicReciter | None:
     return public
 
 
-class AdminViewDelivery(PublicDelivery):
+class AdminViewDelivery(AdminDelivery):
     """Admin-view delivery: same fields as PublicDelivery plus visibility + reason
     so the reciter modal can render a separate ``Discarded`` section.
     """
 
     visibility: str  # "public" | "discarded"
     visibility_reason: str | None
+    cleanup_status: str | None
 
 
 class AdminViewReciter(TypedDict):
@@ -436,9 +467,10 @@ class AdminViewReciter(TypedDict):
     name: str
     name_ar: str | None
     country: str | None
+    notes: str | None
     primary_bucket: PublicBucket
     buckets: list[PublicBucket]
-    deliveries: list[PublicDelivery]
+    deliveries: list[AdminDelivery]
     discarded_deliveries: list[AdminViewDelivery]
     riwayat: list[str]
     styles: list[str]
@@ -462,12 +494,49 @@ def _to_admin_discarded_delivery(
     base = _to_public_delivery(d, row, channel_names)
     return AdminViewDelivery(
         **base,
+        variant_label=d.variant_label,
+        codec=d.codec,
+        container=d.container,
+        sample_rate_hz=d.sample_rate_hz,
+        channels=d.channels,
         visibility=row.visibility.value,
         visibility_reason=row.visibility_reason,
+        cleanup_status=_discard_cleanup_status(row.slug),
     )
 
 
-def admin_view_reciter(reciter_id: str) -> AdminViewReciter | None:
+def _discard_cleanup_status(slug: str) -> str | None:
+    from services.db import repo_discard_cleanup
+
+    cleanup = repo_discard_cleanup.get(slug)
+    if cleanup is None:
+        return None
+    return cleanup.get("status")
+
+
+def _to_admin_public_delivery(
+    d: Delivery,
+    row: ReciterRow | None,
+    channel_names: dict[str, str],
+) -> AdminDelivery:
+    return AdminDelivery(
+        **_to_public_delivery(d, row, channel_names),
+        variant_label=d.variant_label,
+        codec=d.codec,
+        container=d.container,
+        sample_rate_hz=d.sample_rate_hz,
+        channels=d.channels,
+        visibility="public",
+        visibility_reason=None,
+        cleanup_status=None,
+    )
+
+
+def admin_view_reciter(
+    reciter_id: str,
+    *,
+    include_everyayah: bool = False,
+) -> AdminViewReciter | None:
     """Materialize a single reciter for admin viewers (maintainer + owner).
 
     Surfaces PUBLIC combos in ``deliveries`` (same shape as the public
@@ -490,14 +559,19 @@ def admin_view_reciter(reciter_id: str) -> AdminViewReciter | None:
     state_index = _build_state_index()
     channel_names = {ch.slug: ch.name for ch in catalog.vocab.channels}
 
-    public_dels: list[PublicDelivery] = []
+    public_dels: list[AdminDelivery] = []
     discarded_dels: list[AdminViewDelivery] = []
     for d in deliveries:
+        if not include_everyayah and is_everyayah_channel(d.channel):
+            continue
         row = state_index.get(d.slug)
         if row is not None and row.visibility == Visibility.DISCARDED:
             discarded_dels.append(_to_admin_discarded_delivery(d, row, channel_names))
         else:
-            public_dels.append(_to_public_delivery(d, row, channel_names))
+            public_dels.append(_to_admin_public_delivery(d, row, channel_names))
+
+    if not public_dels and not discarded_dels:
+        return None
 
     fully_discarded = len(public_dels) == 0 and len(discarded_dels) > 0
 
@@ -514,6 +588,7 @@ def admin_view_reciter(reciter_id: str) -> AdminViewReciter | None:
         name=reciter.name_en,
         name_ar=reciter.name_ar,
         country=reciter.country,
+        notes=reciter.notes,
         primary_bucket=_primary_bucket(buckets),
         buckets=buckets,
         deliveries=public_dels,
@@ -552,7 +627,7 @@ def is_reciter_fully_discarded(reciter_id: str) -> bool:
     return True
 
 
-def stats() -> dict[str, int]:
+def stats(*, include_everyayah: bool = False) -> dict[str, int]:
     """Counts of reciters per public bucket — primary_bucket only.
 
     Buckets are mutually exclusive at the reciter level (each reciter has
@@ -560,6 +635,6 @@ def stats() -> dict[str, int]:
     of public reciters.
     """
     counts: dict[str, int] = {b: 0 for b in _BUCKET_PROGRESS}
-    for r in all_public_reciters():
+    for r in all_public_reciters(include_everyayah=include_everyayah):
         counts[r["primary_bucket"]] += 1
     return counts

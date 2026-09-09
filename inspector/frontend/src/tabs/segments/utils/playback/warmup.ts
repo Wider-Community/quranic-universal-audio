@@ -28,6 +28,7 @@
 
 import { get } from 'svelte/store';
 
+import { playUrl } from '../../../../lib/playback/play-url';
 import type { Segment } from '../../../../lib/types/view-models';
 import { segAllData } from '../../stores/chapter';
 import { cbrKbpsForChapter } from '../../stores/chapter-meta';
@@ -58,7 +59,8 @@ function _pruneExpired(nowMs: number): void {
 }
 
 function _fire(reciter: string, audioUrl: string, byteStart: number): void {
-    const proxyUrl = `/api/seg/audio-proxy/${reciter}?url=${encodeURIComponent(audioUrl)}`;
+    // Direct CDN hosts get warmed at the edge instead of the Space's page cache.
+    const proxyUrl = playUrl(reciter, audioUrl);
     const startedAt = performance.now();
     // Verbose-mode trace — flip via `localStorage.insp_warmup_log = 'true'` to
     // confirm the warmup is firing in production. The win is server-side OS

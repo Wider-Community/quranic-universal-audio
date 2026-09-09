@@ -20,7 +20,7 @@
      * driven by CSS custom properties projected from `RecitationAnimConfig`,
      * so the throwaway playground can tune it live.
      */
-    import { toArabicNumeral, ZWSP } from '../utils/arabic-text';
+    import { isCombiningMark, toArabicNumeral, ZWSP } from '../utils/arabic-text';
     import { ayahUnitRanges } from './chapter-words';
     import { themeStore } from '../stores/theme.svelte';
     import { cssVarText, type RecitationAnimConfig } from './config';
@@ -34,9 +34,32 @@
     import { type ActiveHit, buildSortedIntervals, findActiveAt } from './recitation-active';
     import type { AnimUnit, TimeSpan } from './types';
     import { buildWaslChains } from './wasl-chains';
+    import {
+        EMPTY_SHAPED_GLYPHS,
+        type ShapedGlyphFixture,
+    } from './shaped-glyphs';
 
     /** U+06DD ARABIC END OF AYAH — the same glyph segment cards use. */
     const AYAH_END = '۝';
+
+    /** Standalone Quranic marks are already isolated as shaped SVG paths. A
+     * drop-shadow around such a tiny path can overlap its seat/host and make
+     * that neighbouring letter look co-highlighted (notably هُۥ in 21:88).
+     * Tatweel/word-joiner are positioning anchors, not painted bases. */
+    function isMarkOnly(text: string): boolean {
+        let sawMark = false;
+        for (const char of text.normalize('NFD')) {
+            const cp = char.codePointAt(0);
+            if (cp === undefined) continue;
+            if (isCombiningMark(cp)) {
+                sawMark = true;
+                continue;
+            }
+            if (cp === 0x0640 || cp === 0x2060) continue;
+            return false;
+        }
+        return sawMark;
+    }
 
     interface Props {
         units: AnimUnit[];
@@ -45,11 +68,23 @@
         getTimeMs: () => number;
         /** Whether playback is running (drives the rAF loop). */
         playing: boolean;
+        /** Pre-shaped DigitalKhatt geometry for the active Hafs chapter. */
+        shapedGlyphs?: ShapedGlyphFixture;
+        /** Reveal timing-only silent tokens without applying the active colour. */
+        omitSilentHighlights?: boolean;
         /** Click-to-seek: receives the clicked word's chapter-absolute ms. */
         onSeekToWord?: (_ms: number) => void;
     }
 
-    let { units, config, getTimeMs, playing, onSeekToWord }: Props = $props();
+    let {
+        units,
+        config,
+        getTimeMs,
+        playing,
+        shapedGlyphs = EMPTY_SHAPED_GLYPHS,
+        omitSilentHighlights = false,
+        onSeekToWord,
+    }: Props = $props();
 
     // ---- paging state (reactive — drives the rendered page) ----
     let rootEl = $state<HTMLDivElement | undefined>(undefined);
@@ -120,16 +155,37 @@
             const u = pageUnits[wi];
             const occLetters = u?.occurrenceLetters;
             const chars = s[wi]!.chars;
-            if (!u || !occLetters || u.intervals.length < 2) continue; // single take → canonical is enough
+            if (!u || !occLetters) continue;
             const perChar: (TimeSpan | undefined)[][] = chars.map(() => []);
+            const perSilent: (boolean | undefined)[][] = chars.map(() => []);
             u.intervals.forEach((span, oi) => {
                 const lts = occLetters[oi];
-                const times = lts && lts.length
-                    ? stampCharTimes(chars, lts, span.start, span.end)
-                    : null;
-                chars.forEach((_, di) => perChar[di]!.push(times ? times[di] : undefined));
+                let times: (TimeSpan | undefined)[] | null = null;
+                let sameFoundationTokens = false;
+                if (lts && lts.length) {
+                    sameFoundationTokens = lts.length === chars.length
+                        && lts.every((lt, index) => lt.char === chars[index]?.text);
+                    if (sameFoundationTokens) {
+                        // Animation-token IDs are positional inside one native
+                        // reading, not stable across repeated readings. The
+                        // producer's within-word token order + exact text is the
+                        // stable identity shared by stop/wasl takes.
+                        times = lts.map((lt) => lt.start != null && lt.end != null
+                            ? { start: lt.start, end: lt.end }
+                            : undefined);
+                    } else {
+                        times = stampCharTimes(chars, lts, span.start, span.end);
+                    }
+                }
+                chars.forEach((_, di) => {
+                    perChar[di]!.push(times ? times[di] : undefined);
+                    perSilent[di]!.push(sameFoundationTokens ? lts?.[di]?.silent : undefined);
+                });
             });
-            chars.forEach((ch, di) => { ch.occIntervals = perChar[di]; });
+            chars.forEach((ch, di) => {
+                ch.occIntervals = perChar[di];
+                ch.occSilent = perSilent[di];
+            });
         }
         return s;
     });
@@ -179,6 +235,7 @@
     // post-DOM-commit, so the spans exist.
     $effect(() => {
         void structure; // re-run when the page content changes
+        void omitSilentHighlights; // policy toggles re-sweep without re-paging
         if (!rootEl) return;
         wordCache = indexCache(rootEl, '.ra-word');
         charCache = config.granularity === 'char' ? indexCache(rootEl, '.ra-char') : null;
@@ -328,7 +385,7 @@
      *  of the repeated word, so the whole word read `reached` and the active
      *  letter never travelled back. Instead we locate the active word's CURRENT
      *  occurrence and reveal letter-by-letter against THAT take's own letter
-     *  timings (`ch.occIntervals[occIdx]`, raw playback time) — so a re-recitation
+     *  timings (`ch.occIntervals`, raw playback time) — so a re-recitation
      *  tracks its own (often slower / melodic) pace. When a take carries no
      *  per-letter data we fall back to remapping `t` onto the canonical timeline.
      *
@@ -343,17 +400,12 @@
         const active = pageLocal(hit?.unitIdx ?? -1);
         const occStart = hit?.ivStart ?? 0;
         const occEnd = hit?.ivEnd ?? 0;
-        if (active >= 0) lastActive = active;
-
-        // Which take of the active word is being recited — its index in the unit's
-        // ascending `intervals`. Drives the per-occurrence letter timings, so a
-        // repeat reveals at ITS pace rather than a stretched take 1.
-        let occIdx = -1;
-        if (active >= 0 && hit) {
-            occIdx = pageUnits[active]!.intervals.findIndex(
+        const activeOccIdx = active >= 0 && hit
+            ? pageUnits[active]!.intervals.findIndex(
                 (iv) => iv.start === occStart && iv.end === occEnd,
-            );
-        }
+            )
+            : -1;
+        if (active >= 0) lastActive = active;
 
         // Remap playback time into the active word's canonical letter timeline —
         // the FALLBACK for a take with no per-letter data. The letters are anchored
@@ -382,7 +434,7 @@
             // exception: if a non-current word has an active char, that word
             // must also become active or the highlighted char is hidden.
             const wordEl = wordCache?.items[wi]?.el;
-            let wordHasActiveChar = false;
+            let wordHasLiveChar = false;
             for (let k = 0; k < chars.length; k++) {
                 const el = items[ci]?.el;
                 ci++;
@@ -390,17 +442,31 @@
                 let isActive = false;
                 let isReached = wordReached;
                 const ch = chars[k]!;
+                let silentForOccurrence = ch.silent;
+                const rawOccIdx = ch.occIntervals?.findIndex(
+                    (iv) => iv !== undefined && t >= iv.start && t < iv.end,
+                ) ?? -1;
+                const activeOccIv = wi === active && activeOccIdx >= 0
+                    ? ch.occIntervals?.[activeOccIdx]
+                    : undefined;
+                const hasRecordedOccurrences = ch.occIntervals?.some(
+                    (iv) => iv !== undefined,
+                ) ?? false;
                 // Prefer the active take's OWN letter timing (raw playback time);
                 // fall back to the canonical remap when that take lacks per-letter
                 // data (or the unit was built without `occurrenceLetters`).
-                const occIv = wi === active && occIdx >= 0 ? ch.occIntervals?.[occIdx] : undefined;
-                if (wi === active && occIv) {
-                    isActive = t >= occIv.start && t < occIv.end;
-                    isReached = !isActive && t >= occIv.end;
+                if (rawOccIdx >= 0) {
+                    isActive = true;
+                    isReached = false;
+                    silentForOccurrence = ch.occSilent?.[rawOccIdx] ?? ch.silent;
+                } else if (activeOccIv) {
+                    isReached = t >= activeOccIv.end;
+                    silentForOccurrence = ch.occSilent?.[activeOccIdx] ?? ch.silent;
                 } else if (wi === active && localT >= 0) {
                     isActive = localT >= ch.start && localT < ch.end;
                     isReached = !isActive && localT >= ch.end;
-                } else if (active >= 0 && localT >= 0 && sw && (ch.start !== sw.start || ch.end !== sw.end)) {
+                } else if (!hasRecordedOccurrences && active >= 0 && localT >= 0
+                    && sw && (ch.start !== sw.start || ch.end !== sw.end)) {
                     // Cross-word idgham/ghunnah: a real-timed letter in a
                     // NON-active word, co-timed with the active letter, lights
                     // with it. Compare against the SAME remapped `localT` the
@@ -415,12 +481,22 @@
                 // Inert symbols (rub-el-hizb, sajdah) reveal in place but never
                 // take the highlight — show as reached where they'd otherwise light.
                 if (ch.inert && isActive) { isActive = false; isReached = true; }
-                if (isActive) wordHasActiveChar = true;
+                if (isActive) {
+                    wordHasLiveChar = true;
+                    if (omitSilentHighlights && silentForOccurrence) {
+                        isActive = false;
+                        // Dim/hidden modes need an opaque base-colour overlay so
+                        // the borrower appears at its target's time. Full mode's
+                        // base silhouette is already opaque, so paint no extra
+                        // layer at all.
+                        isReached = config.unreachedOpacity < 1;
+                    }
+                }
                 el.classList.toggle('active', isActive);
                 el.classList.toggle('reached', isReached);
             }
             if (wordEl) {
-                const wActive = wi === active || wordHasActiveChar;
+                const wActive = wi === active || wordHasLiveChar;
                 wordEl.classList.toggle('active', wActive);
                 wordEl.classList.toggle('reached', wordReached && !wActive);
             }
@@ -486,12 +562,15 @@
     bind:this={rootEl}
     class="ra-line"
     class:ra-chars={config.granularity === 'char'}
+    class:ra-omit-silent={omitSilentHighlights}
+    class:ra-full-opacity={config.unreachedOpacity >= 0.999}
     class:ra-no-transition={suppressTransition}
     style={cssVarText(config, themeStore.current)}
     style:text-align={pageCount === null ? 'right' : null}
 >
     {#each structure as w, i (pageStart + '-' + i)}
         {@const u = pageUnits[i]}
+        {@const shaped = u ? shapedGlyphs.words[u.text] : undefined}
         {#if i > 0}{' '}{/if}<span
             class="ra-word"
             data-start={w.start}
@@ -500,21 +579,62 @@
             tabindex="-1"
             onclick={() => onSeekToWord?.((pageUnits[i]?.start ?? 0) * 1000)}
             onkeydown={() => {}}
-        >{#each w.leading as d, di (di)}<span
+                    >{#each w.leading.filter((d) => !(shaped && w.hasChars && d.role === 'waqf')) as d, di (di)}<span
                     class="ra-decorator ra-decorator--{d.role}"
-                    aria-hidden="true"
-                >{ZWSP}{d.glyph}</span>{/each}{#if config.granularity === 'char' && w.hasChars}<span
-                    class="ra-word-ink"
-                    aria-hidden="true"
-                >{w.clean}</span>{#each w.chars as ch, ci (ci)}<span
-                    class="ra-char"
-                    data-start={ch.start}
-                    data-end={ch.end}
-                    data-group-id={ch.groupId}
-                >{ch.text}</span>{/each}{:else}{w.clean}{/if}{#each w.trailing as d, di (di)}<span
+                    aria-hidden="true">{ZWSP}{d.glyph}</span
+                    >{/each}{#if shaped && w.hasChars}<span
+                        class="ra-shaped-base-text"
+                        aria-hidden="true"
+                        style="visibility: hidden">{shaped.baseText}</span
+                    ><svg
+                        class="ra-shaped-svg"
+                        viewBox="0 -200 {shaped.advance} 1500"
+                        preserveAspectRatio="none"
+                        aria-label={u?.text}
+                        ><g class="ra-shaped-base-layer" aria-hidden="true"
+                            >{#each shaped.placements.filter((placement) => placement[4] !== 'waqf') as placement}<path
+                                    d={shapedGlyphs.paths[placement[0]]}
+                                    transform="translate({placement[1]} {placement[2]}) scale(1 -1)"
+                                />{/each}</g
+                        >{#each w.chars as ch, ci (ch.tokenId ?? ci)}<g
+                                class="ra-char ra-shaped-token"
+                                data-start={ch.start}
+                                data-end={ch.end}
+                                data-group-id={ch.groupId}
+                                data-token-id={ch.tokenId}
+                                data-token-text={ch.text}
+                                data-mark-only={isMarkOnly(ch.text)}
+                                data-has-silent-companion={shaped.placements.some(
+                                    (placement) => placement[3] === ci && placement[4] === 'silent_companion',
+                                )}
+                                data-silent={ch.silent}
+                                >{#each shaped.placements.filter((placement) => placement[3] === ci && placement[4] !== 'waqf') as placement}<path
+                                        class:ra-silent-companion={placement[4] === 'silent_companion'}
+                                        d={shapedGlyphs.paths[placement[0]]}
+                                        transform="translate({placement[1]} {placement[2]}) scale(1 -1)"
+                                    />{/each}</g
+                            >{/each}{#each shaped.placements.filter((placement) => placement[4] === 'waqf') as placement}<g
+                                class="ra-decorator ra-decorator--waqf"
+                                ><path
+                                    d={shapedGlyphs.paths[placement[0]]}
+                                    transform="translate({placement[1]} {placement[2]}) scale(1 -1)"
+                                /></g
+                            >{/each}</svg
+                    >{:else if config.granularity === 'char' && w.hasChars}<span class="ra-word-ink" aria-hidden="true">{w.clean}</span
+                    >{#each w.chars as ch, ci (ci)}<span
+                            class="ra-char"
+                            data-start={ch.start}
+                            data-end={ch.end}
+                            data-group-id={ch.groupId}
+                            data-silent={ch.silent}>{ch.text}</span
+                        >{/each}{:else}{w.clean}{/if}{#each w.trailing.filter((d) => !(shaped && w.hasChars && d.role === 'waqf')) as d, di (di)}<span
                     class="ra-decorator ra-decorator--{d.role}"
-                    aria-hidden="true"
-                >{ZWSP}{d.glyph}</span>{/each}</span>{#if config.showAyahMarker && u && ayahRanges.get(u.ayahKey)?.[1] === pageStart + i + 1}{' '}<span class="ra-ayah-marker" data-after-word={i}>{AYAH_END}{toArabicNumeral(u.ayah)}</span>{/if}
+                    aria-hidden="true">{ZWSP}{d.glyph}</span
+                >{/each}</span
+        >{#if config.showAyahMarker && u && ayahRanges.get(u.ayahKey)?.[1] === pageStart + i + 1}{' '}<span
+                class="ra-ayah-marker"
+                data-after-word={i}>{AYAH_END}{toArabicNumeral(u.ayah)}</span
+            >{/if}
     {/each}
 </div>
 
@@ -560,11 +680,12 @@
         color: var(--ra-highlight);
     }
 
-    /* Word granularity: the word is the animated unit. Word mode renders the
-     *  word as plain text (not per-char spans), so the outline traces the whole
-     *  word silhouette rather than each joined letter. */
+    /* Word granularity: the whole shaped word is the animated unit, so scale
+     *  and fade never disturb the joined glyph geometry or leak into char mode. */
     .ra-word {
         display: inline-block;
+        /* Shared containing block for the shaped SVG in both granularities. */
+        position: relative;
         cursor: pointer;
         opacity: var(--ra-unreached-opacity);
         text-shadow: var(--ra-word-shadow);
@@ -595,10 +716,112 @@
      *  stroked — a per-char outline shows dark seams across the joins. */
     .ra-line.ra-chars .ra-word {
         opacity: 1;
-        /* Containing block for the absolute `.ra-word-ink` underlay. */
-        position: relative;
         /* Don't inherit the word outline down to each char span. */
         text-shadow: none;
+    }
+    /* Shaped letter mode has exactly one paint source for the word's lifetime.
+     * Native DigitalKhatt text remains in flow only as the width/line-height
+     * ruler; `visibility:hidden` keeps that geometry without rasterizing it. */
+    .ra-line .ra-word .ra-shaped-base-text {
+        visibility: hidden;
+        white-space: nowrap;
+        pointer-events: none;
+    }
+    .ra-line .ra-word .ra-shaped-svg {
+        position: absolute;
+        /* The shaped paths use the font's 1000-unit em at 1.5em of vertical
+         * canvas. Centre that canvas inside the native line box with a POSITIVE
+         * inset. The previous negative inset put the SVG baseline ~12px above
+         * the native DigitalKhatt baseline at the default 26px size. */
+        inset: calc((var(--ra-line-height) - 1.5) * 0.5em) 0 auto;
+        width: 100%;
+        height: 1.5em;
+        overflow: visible;
+        pointer-events: none;
+        color: inherit;
+        opacity: 1;
+        transition: opacity var(--ra-char-reveal) var(--ra-easing);
+        /* Apply the legibility silhouette to the complete joined word. A
+         * per-token filter would draw dark seams through cursive joins. */
+        filter: var(--ra-svg-word-shadow);
+    }
+    .ra-line .ra-word .ra-shaped-svg path {
+        fill: currentColor;
+    }
+    /* Word mode paints one complete base silhouette only. Letter mode adds
+     * token overlays for independent colouring while retaining that same base
+     * silhouette underneath. Keeping the base in both modes also preserves
+     * source-owned inert glyphs which deliberately have no animation token.
+     *
+     * Letter mode adds one
+     * complete base silhouette underneath it so the unreached remainder of an
+     * active word is dimmed as a single SVG group, not path by path. SVG group
+     * opacity composites after its joined children have painted, preventing
+     * alpha accumulation where the font intentionally overlaps cursive joins. */
+    .ra-line .ra-word .ra-shaped-base-layer {
+        display: inline;
+    }
+    .ra-line .ra-word .ra-shaped-token {
+        display: none;
+    }
+    .ra-line.ra-chars .ra-shaped-base-layer {
+        display: inline;
+        color: var(--ra-base-color);
+        opacity: var(--ra-unreached-opacity);
+        transition: opacity var(--ra-char-reveal) var(--ra-easing);
+    }
+    .ra-line.ra-chars .ra-shaped-token {
+        display: inline;
+        color: var(--ra-base-color);
+        /* The base layer owns all unreached ink. This layer contains only the
+         * opaque reached/current overlays needed for independent highlighting. */
+        opacity: 0;
+        transition:
+            opacity var(--ra-char-reveal) var(--ra-easing),
+            color var(--ra-active-emphasis) var(--ra-easing);
+    }
+    .ra-line.ra-chars .ra-shaped-token:global(.reached) {
+        opacity: 1;
+    }
+    .ra-line.ra-full-opacity.ra-chars .ra-shaped-token:global(.reached):not(:global(.active)) {
+        /* Full mode already paints the complete word through its opaque base
+         * silhouette. Retaining opaque reached overlays would paint completed
+         * glyphs twice and make previous words look heavier than they do in
+         * Dim/Hidden. Active tokens remain visible through the rule below. */
+        opacity: 0;
+    }
+    .ra-line.ra-chars .ra-shaped-token:global(.active) {
+        opacity: 1;
+        color: var(--ra-highlight);
+        /* SVG groups do not support text-shadow. Keep the established active
+         * character glow on the one active paint group only. */
+        filter: var(--ra-svg-glow);
+    }
+    .ra-line.ra-chars .ra-shaped-token[data-mark-only="true"]:global(.active) {
+        /* Keep the fill highlight exact. A mark-sized glow has nowhere to land
+         * except over the adjacent base letter, falsely reading as co-paint. */
+        filter: none;
+    }
+    /* U+06E2 iqlab is display-only in the Hafs DigitalKhatt text. Its producer
+     * token owns the meem sound, while the shaped token also contains the
+     * written (silent) noon body and dot. In silent-omit mode those host paths
+     * stay visible through the shared base silhouette but are not repainted by
+     * the active/reached token overlay. */
+    .ra-line.ra-omit-silent.ra-chars .ra-shaped-token .ra-silent-companion {
+        /* Follow the token's reveal opacity, but never inherit its active
+         * highlight colour. This makes the silent host appear at the sound's
+         * time in Dim/Invisible modes without claiming that sound. */
+        fill: var(--ra-base-color);
+    }
+    .ra-line.ra-omit-silent.ra-chars .ra-shaped-token[data-has-silent-companion="true"]:global(.active) {
+        /* A group filter would cast the mini-meem's green glow across the
+         * base-coloured noon paths. Keep the exact fills clean instead. */
+        filter: none;
+    }
+    .ra-line.ra-full-opacity.ra-omit-silent.ra-chars .ra-shaped-token .ra-silent-companion {
+        /* Full mode's base silhouette is already opaque; avoid double-painting
+         * its antialiased edge while the mini-meem overlay remains active. */
+        display: none;
     }
     .ra-line.ra-chars .ra-word-ink {
         position: absolute;
@@ -613,7 +836,7 @@
          *  letters were Dim or Hidden). At Hidden (0) the outline vanishes too. */
         opacity: var(--ra-unreached-opacity);
     }
-    .ra-line.ra-chars .ra-char {
+    .ra-line.ra-chars span.ra-char {
         position: relative;
         z-index: 1;
         opacity: var(--ra-unreached-opacity);
@@ -622,10 +845,10 @@
             color var(--ra-active-emphasis) var(--ra-easing),
             text-shadow var(--ra-active-emphasis) var(--ra-easing);
     }
-    .ra-line.ra-chars .ra-char:global(.reached) {
+    .ra-line.ra-chars span.ra-char:global(.reached) {
         opacity: 1; /* visited words stay fully visible (no reached-dim) */
     }
-    .ra-line.ra-chars .ra-char:global(.active) {
+    .ra-line.ra-chars span.ra-char:global(.active) {
         opacity: 1;
         color: var(--ra-highlight);
         /* Glow only — never re-stroke the active letter. */
@@ -643,7 +866,7 @@
     .ra-line.ra-chars .ra-word:not(:global(.active)) .ra-word-ink {
         color: var(--ra-base-color);
     }
-    .ra-line.ra-chars .ra-word:not(:global(.active)) .ra-char {
+    .ra-line.ra-chars .ra-word:not(:global(.active)) span.ra-char {
         opacity: 0;
     }
     /* Already-recited words stay fully visible, like word-mode reached. */
@@ -667,6 +890,11 @@
             opacity var(--ra-word-reveal) var(--ra-easing),
             color var(--ra-active-emphasis) var(--ra-easing);
     }
+    /* Stop signs are discrete recitation events, not sounding text. Their
+     * reveal at the anchor boundary and pause highlight both snap immediately. */
+    .ra-line .ra-word .ra-decorator--waqf {
+        transition: none;
+    }
     /* Waqf (stop) sign — opacity follows the same reveal model as the text it
      *  rides. Word mode dims the whole `.ra-word`, so the child mark just
      *  composites under it (no own opacity — an own one would double-dim) and
@@ -689,14 +917,21 @@
      *  letter→word flash). */
     .ra-line.ra-no-transition .ra-word,
     .ra-line.ra-no-transition.ra-chars .ra-word,
-    .ra-line.ra-no-transition.ra-chars .ra-char,
+    .ra-line.ra-no-transition.ra-chars span.ra-char,
+    .ra-line.ra-no-transition.ra-chars .ra-shaped-base-layer,
+    .ra-line.ra-no-transition.ra-chars .ra-shaped-token,
+    .ra-line.ra-no-transition.ra-chars .ra-shaped-svg,
+    .ra-line.ra-no-transition.ra-chars .ra-shaped-base-text,
     .ra-line.ra-no-transition.ra-chars .ra-word-ink {
         transition: none;
     }
 
     @media (prefers-reduced-motion: reduce) {
         .ra-word,
-        .ra-line.ra-chars .ra-char,
+        .ra-line.ra-chars span.ra-char,
+        .ra-line.ra-chars .ra-shaped-base-layer,
+        .ra-line.ra-chars .ra-shaped-token,
+        .ra-line.ra-chars .ra-shaped-svg,
         .ra-line .ra-word .ra-decorator,
         .ra-ayah-marker {
             transition: none;

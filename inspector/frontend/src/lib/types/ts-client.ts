@@ -1,7 +1,7 @@
 /**
  * Timestamps-tab client types — FE-only.
  *
- * The timing view is assembled client-side from native v12 readings. Shard
+ * The timing view is assembled client-side from native v13 readings. Shard
  * metadata and timing sidecars reuse generated wire types; native phonemizer
  * documents reuse the renderer package types.
  */
@@ -28,7 +28,14 @@ export interface Letter {
     end: number | null;
     /** True when the native source unit owns or presents no sound. */
     silent?: boolean;
+    tokenId?: number;
+    sourceUnitIds?: number[];
+    characterIds?: number[];
+    paintCharacterIds?: number[];
+    policy?: AnimationPolicy;
 }
+
+export type AnimationPolicy = 'timed' | 'cohighlight_previous' | 'cohighlight_next';
 
 /** Single word with text + timing + letters + phoneme indices into the flat intervals list. */
 export interface TsWord {
@@ -104,7 +111,7 @@ export interface TsCatalogResponse {
 }
 
 // ---------------------------------------------------------------------------
-// Native shard v12
+// Native shard v13
 // ---------------------------------------------------------------------------
 
 export interface TsShardPart {
@@ -113,13 +120,18 @@ export interface TsShardPart {
     word_ids: number[];
 }
 
-export interface TsLetterUnit {
-    source_unit_id: number;
+export interface TsAnimationToken {
+    id: number;
     word_id: number;
+    source_unit_ids: number[];
+    character_ids: number[];
+    paint_character_ids: number[];
     text: string;
+    sound_ids: number[];
+    policy: AnimationPolicy;
+    target_token_id: number | null;
     start_ms: number | null;
     end_ms: number | null;
-    silent: boolean;
 }
 
 export interface TsWordTiming {
@@ -150,7 +162,7 @@ export interface TsShardReading {
     id: string;
     parts: TsShardPart[];
     wire: WirePayload;
-    letters: TsLetterUnit[];
+    animationTokens: TsAnimationToken[];
     timing: {
         words: TsWordTiming[];
         sounds: TsSoundTiming[];

@@ -6,6 +6,7 @@ from flask import Blueprint, jsonify
 
 from qua_shared.schemas import AudioSurahsResponse, ErrorEnvelope
 from services import audio_fetch, cache, storage_paths
+from services import state as state_service
 from services.hf_bucket import StorageNotFound, get_backend
 from services.quran_foundation import config as qf_config
 from services.quran_foundation import content as qf_content
@@ -69,6 +70,8 @@ def audio_surahs(category, source, slug):
     ``audio_fetch.read_prefetched_peaks_duration_ms``. Stays ``None`` only
     when peaks are also absent.
     """
+    if not state_service.has_content_access(slug):
+        return jsonify(ErrorEnvelope(error="Reciter not found").model_dump(exclude_none=True)), 404
     key = f"{category}/{source}/{slug}"
     cached = cache.get_audio_url_cache(key)
     if cached is not None:

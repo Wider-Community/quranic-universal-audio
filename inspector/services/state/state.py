@@ -20,9 +20,11 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, TypedDict
 
+from qua_shared.catalog_visibility import is_everyayah_channel
 from qua_shared.schemas import (
     Actor,
     ReciterRow,
@@ -141,6 +143,10 @@ class DiscardedPayload(TypedDict, total=False):
     pass
 
 
+class ContentDiscardedPayload(TypedDict, total=False):
+    cleanup_id: str
+
+
 # ----------------------------------------------------------------------
 # Reads (assembled from the SQLite substrate via repo_state)
 # ----------------------------------------------------------------------
@@ -168,8 +174,57 @@ def get_row(slug: str) -> ReciterRow | None:
     return repo_state.get_row(slug)
 
 
+def is_delivery_visible(slug: str, viewer=None) -> bool:
+    """Whether a delivery slug may be addressed by this Inspector viewer.
+
+    EveryAyah remains in the canonical database for owner operations, but it
+    is not a visible delivery for anonymous, contributor, or maintainer
+    callers—even when they already know the slug.
+    """
+    if slug.startswith("sample--"):
+        return True
+    if viewer is None:
+        from services import auth as _auth
+
+        viewer = _auth.current_user()
+    from services.state import catalog as _catalog
+
+    delivery = _catalog.find_delivery(slug)
+    if delivery is None or not is_everyayah_channel(delivery.channel):
+        return True
+    return viewer is not None and permissions.is_owner(viewer)
+
+
 def all_rows() -> list[ReciterRow]:
     return repo_state.all_rows()
+
+
+def has_content_access(slug: str, viewer=None) -> bool:
+    """Whether a delivery is public and currently backed by reviewable data.
+
+    Maintainer-uploaded ``sample--`` slugs are an isolated Segments-only
+    namespace and intentionally have no lifecycle row, so preserve their
+    existing route behavior here.
+    """
+    if slug.startswith("sample--"):
+        return True
+    if viewer is None:
+        from services import auth as _auth
+
+        viewer = _auth.current_user()
+    if not is_delivery_visible(slug, viewer):
+        return False
+    row = get_row(slug)
+    return bool(
+        row is not None
+        and row.visibility == Visibility.PUBLIC
+        and row.state
+        in (
+            ReciterState.AWAITING_REVIEW,
+            ReciterState.UNDER_REVIEW,
+            ReciterState.RELEASED,
+        )
+    )
 
 
 # ----------------------------------------------------------------------
@@ -255,6 +310,7 @@ _EVENT_CAPABILITY: dict[str, str] = {
     "reciter.published": "reciter.publish",
     "reciter.unpublished": "reciter.unpublish",
     "reciter.discarded": "reciter.discard",
+    "reciter.content_discarded": "reciter.discard_content",
     "reciter.undiscarded": "reciter.undiscard",
     "claim.force_released": "claim.force_release",
     "claim.reassigned": "claim.reassign",
@@ -364,6 +420,7 @@ def _apply_event(
     actor: Actor,
     payload: dict[str, Any],
     reason: str | None,
+    after_persist: Callable[[str], None] | None = None,
 ) -> ReciterRow:
     """Apply one event on the active transaction connection (NON-locking).
 
@@ -422,6 +479,11 @@ def _apply_event(
         raise RuntimeError("transition record missing request_id")
     _persist_state(before, new_row, tid=tid)
     _persist_claim_diff(before, new_row, tid=tid, event=event, payload=payload)
+
+    # Compound workflows can update adjacent projections while the lifecycle,
+    # state, and claim changes are still inside the same durable transaction.
+    if after_persist is not None:
+        after_persist(tid)
 
     if auto_claim_requester is not None:
         _maybe_auto_claim(conn, slug, auto_claim_requester)
@@ -1064,6 +1126,36 @@ def _h_discarded(slug, before, actor, payload, reason):
     return _replace(before, visibility=Visibility.DISCARDED, visibility_reason=reason)
 
 
+def _h_content_discarded(slug, before, actor, payload, reason):
+    """Owner-only destructive discard; distinct from legacy soft discard."""
+    if before is None:
+        raise UnknownReciter(slug)
+    _require_capability(actor, "reciter.discard_content")
+    if before.visibility == Visibility.DISCARDED:
+        raise InvalidTransition("already discarded")
+    if before.state not in (
+        ReciterState.AWAITING_REVIEW,
+        ReciterState.UNDER_REVIEW,
+        ReciterState.RELEASED,
+    ):
+        raise _state_precondition("content_discarded", before)
+    norm_reason = _require_reason(reason, "content_discarded")
+    return _replace(
+        before,
+        state=ReciterState.CATALOGUED,
+        state_since=_now(),
+        assignee_hf_id=None,
+        assignee_login=None,
+        assignee_since=None,
+        marked_ready=False,
+        visibility=Visibility.DISCARDED,
+        visibility_reason=norm_reason,
+        last_save_at=None,
+        timestamps_job_ids=[],
+        revision_in_progress=None,
+    )
+
+
 def _h_undiscarded(slug, before, actor, payload, reason):
     if before is None:
         raise UnknownReciter(slug)
@@ -1134,6 +1226,7 @@ _HANDLERS: dict[str, Any] = {
     "reciter.published": _h_published,
     "reciter.unpublished": _h_unpublished,
     "reciter.discarded": _h_discarded,
+    "reciter.content_discarded": _h_content_discarded,
     "reciter.undiscarded": _h_undiscarded,
     "claim.force_released": _h_force_released,
     "claim.reassigned": _h_reassigned,

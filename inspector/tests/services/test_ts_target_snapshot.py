@@ -1,4 +1,4 @@
-"""Exact native v12 report target resolution and staleness."""
+"""Exact native v13 report target resolution and staleness."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from services.ts_reports import ts_target_snapshot as snapshots
 
 def _doc() -> dict:
     return {
-        "_meta": {"schema_version": 12},
+        "_meta": {"schema_version": 13},
         "readings": [
             {
                 "id": "r1",
@@ -73,7 +73,14 @@ def _doc() -> dict:
                         {"sound_id": 20, "start_ms": 200, "end_ms": 300},
                         {"sound_id": 21, "start_ms": 350, "end_ms": 500},
                     ],
-                    "units": [{"source_unit_id": 100, "start_ms": 100, "end_ms": 180}],
+                    "animation_tokens": [
+                        {
+                            "id": 0,
+                            "source_unit_ids": [100],
+                            "start_ms": 100,
+                            "end_ms": 180,
+                        }
+                    ],
                     "boundaries": [{"boundary_id": 5, "start_ms": 300, "end_ms": 350}],
                 },
             }
@@ -101,7 +108,7 @@ def test_resolves_every_native_target_kind_exactly():
         assert snapshot is not None, (kind, target_id)
         assert snapshot["timing"] == {"start_ms": span[0], "end_ms": span[1]}
         assert snapshot["native_schema_version"] == 2
-        assert snapshot["shard_schema_version"] == 12
+        assert snapshot["shard_schema_version"] == 13
 
 
 def test_group_identity_is_ordered_native_column_ids():

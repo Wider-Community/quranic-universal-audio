@@ -49,7 +49,7 @@ def _document() -> dict:
         }
 
     return {
-        "_meta": {"schema_version": 12},
+        "_meta": {"schema_version": 13},
         "readings": [
             {
                 "id": "r1",
@@ -114,9 +114,16 @@ def _document() -> dict:
                 "timing": {
                     "words": [{"word_id": 0, "start_ms": 100, "end_ms": 400}],
                     "sounds": [{"sound_id": 0, "start_ms": 100, "end_ms": 300}],
-                    "units": [
-                        {"source_unit_id": 0, "start_ms": 100, "end_ms": 300},
-                        {"source_unit_id": 1, "start_ms": 250, "end_ms": 300},
+                    "animation_tokens": [
+                        {
+                            "id": 0,
+                            "word_id": 0,
+                            "text": "aَ",
+                            "source_unit_ids": [0, 1],
+                            "policy": "timed",
+                            "start_ms": 100,
+                            "end_ms": 300,
+                        },
                     ],
                     "columns": [],
                     "boundaries": [
@@ -239,7 +246,7 @@ def test_prepares_every_legacy_target_then_migration_preserves_rows(tmp_path, mo
 
     assert prepare_native_report_map(conn, load_document=loader) == 6
     assert prepare_native_report_map(conn, load_document=loader) == 6
-    assert migrate.run_migrations(conn) == 29
+    assert migrate.run_migrations(conn) == 30
     assert_native_report_schema(conn)
 
     rows = {

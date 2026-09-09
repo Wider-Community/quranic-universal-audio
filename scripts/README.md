@@ -63,4 +63,6 @@ no-op-or-error by design. Idempotent `backfill_*`/`purge_*`/`convert_*` stay in
 - `check_eligibility_parity.py` — assert DB-backed eligibility == legacy git-tracked set
 
 ### `migrations/`
-Frozen, completed one-shot schema moves — see [`migrations/README.md`](migrations/README.md).
+Frozen one-shot schema moves — see [`../docs/reference/data-migrations.md`](../docs/reference/data-migrations.md).
+`migrate_timestamps_v13.py` is the local-only v12→v13 timestamp restamp/audit command; it writes a
+parallel destination tree and has no bucket upload capability.

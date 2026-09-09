@@ -1,4 +1,4 @@
-/** Decode compact schema-v12 storage into the Inspector's timing view. */
+/** Decode compact schema-v13 storage into the Inspector's timing view. */
 
 import {
     decodeCompact,
@@ -14,17 +14,18 @@ import type {
 } from '../types/ts-client';
 
 type StoredPart = [string, number, number, number, number];
-type StoredLetter = [number, number, string, number | null, number | null, 0 | 1];
+type StoredAnimation = [number | null, number | null];
+type StoredAnimationMeta = [number, number[], number[], number[], string, number[], 0 | 1 | 2, number | null];
 type StoredColumn = [string | number, number | null, number | null];
 
 interface StoredReading {
     id: string;
     parts: StoredPart[];
-    render: CompactCellPayload;
+    render: CompactCellPayload & { a: StoredAnimationMeta[] };
     timing: {
         w: Array<[number, number]>;
         s: Array<[number, number]>;
-        l: StoredLetter[];
+        a: StoredAnimation[];
         c: StoredColumn[];
     };
 }
@@ -66,16 +67,26 @@ function boundariesOf(
 function readingOf(raw: StoredReading): TsShardReading {
     const parts = partsOf(raw.parts);
     if (raw.timing.w.length !== raw.render.w.length
-        || raw.timing.s.length !== raw.render.p.length) {
+        || raw.timing.s.length !== raw.render.p.length
+        || raw.timing.a.length !== raw.render.a.length) {
         throw new Error(`${raw.id}: compact timing count mismatch`);
     }
     return {
         id: raw.id,
         parts,
         wire: decodeCompact(raw.render),
-        letters: raw.timing.l.map(([source_unit_id, word_id, text, start_ms, end_ms, silent]) => ({
-            source_unit_id, word_id, text, start_ms, end_ms, silent: Boolean(silent),
-        })),
+        animationTokens: raw.render.a.map((meta, id) => {
+            const [word_id, source_unit_ids, character_ids, paint_character_ids, text,
+                sound_ids, policyCode,
+                target_token_id] = meta;
+            const [start_ms, end_ms] = raw.timing.a[id]!;
+            const policies = ['timed', 'cohighlight_previous', 'cohighlight_next'] as const;
+            const policy = policies[policyCode];
+            if (!policy) throw new Error(`${raw.id}: invalid animation policy ${policyCode}`);
+            return { id, word_id, source_unit_ids, character_ids, paint_character_ids,
+                text, sound_ids,
+                policy, target_token_id, start_ms, end_ms };
+        }),
         timing: {
             words: raw.timing.w.map(([start_ms, end_ms], word_id) => ({
                 word_id, start_ms, end_ms,
@@ -108,7 +119,7 @@ function stitchInterReadingPauses(readings: TsShardReading[]): void {
 function storedShard(raw: unknown): StoredShard {
     if (!raw || typeof raw !== 'object') throw new Error('Timestamp shard is not an object');
     const shard = raw as StoredShard;
-    if (shard._meta?.schema_version !== 12) throw new Error('Timestamp shard is not schema v12');
+    if (shard._meta?.schema_version !== 13) throw new Error('Timestamp shard is not schema v13');
     if (shard._meta.native_schema_version !== 2) throw new Error('Native schema is not v2');
     if (shard._meta.renderer_codec_version !== 1) {
         throw new Error(`Renderer codec ${String(shard._meta.renderer_codec_version)} is unsupported`);

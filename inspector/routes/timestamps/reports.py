@@ -48,6 +48,7 @@ from services.db import _serde, repo_ts_reports
 from services.db import sync as _sync
 from services.notifications import emit as _notify
 from services.permissions import role_of
+from services.state import state as state_service
 from services.ts_reports import ts_target_snapshot
 from utils.decorators import require_same_origin
 
@@ -123,6 +124,8 @@ def get_reciter_reports(slug: str):
     ``view_nonpublic_reports`` holder."""
     try:
         user = auth_service.current_user()
+        if not state_service.is_delivery_visible(slug, user):
+            return jsonify({"error": "reciter not found"}), 404
         hf_user_id = user.hf_user_id if user is not None else None
         anon_token = request.args.get("anon_token") if user is None else None
         counts = repo_ts_reports.verse_counts(
@@ -146,6 +149,8 @@ def get_verse_reports(slug: str, verse_key: str):
     (owner-gated)."""
     try:
         user = auth_service.current_user()
+        if not state_service.is_delivery_visible(slug, user):
+            return jsonify({"error": "reciter not found"}), 404
         show_author = cap_service.can(user, _IDENTITY_CAP)
         hf_user_id = user.hf_user_id if user is not None else None
         anon_token = request.args.get("anon_token") if user is None else None
@@ -181,6 +186,8 @@ def create_report(slug: str):
     user = auth_service.current_user()
     if not cap_service.can(user, _REPORT_CAP):
         return jsonify({"error": "not available"}), 403
+    if not state_service.is_delivery_visible(slug, user):
+        return jsonify({"error": "reciter not found"}), 404
     try:
         req = TsReportCreateRequest.model_validate(request.get_json(silent=True) or {})
     except ValidationError as e:
@@ -319,6 +326,8 @@ def create_reports_batch(slug: str):
     user = auth_service.current_user()
     if not cap_service.can(user, _REPORT_CAP):
         return jsonify({"error": "not available"}), 403
+    if not state_service.is_delivery_visible(slug, user):
+        return jsonify({"error": "reciter not found"}), 404
     try:
         req = TsReportBatchCreateRequest.model_validate(request.get_json(silent=True) or {})
     except ValidationError as e:
@@ -394,6 +403,8 @@ def resolve_report(slug: str, report_id: int):
     user = auth_service.current_user()
     if not cap_service.can(user, _RESOLVE_CAP):
         return jsonify({"error": "not available"}), 403
+    if not state_service.is_delivery_visible(slug, user):
+        return jsonify({"error": "reciter not found"}), 404
     try:
         req = TsReportResolveRequest.model_validate(request.get_json(silent=True) or {})
     except ValidationError as e:
@@ -442,6 +453,8 @@ def resolve_word_group(slug: str, verse_key: str, reading_id: str, word_id: str,
     user = auth_service.current_user()
     if not cap_service.can(user, _RESOLVE_CAP):
         return jsonify({"error": "not available"}), 403
+    if not state_service.is_delivery_visible(slug, user):
+        return jsonify({"error": "reciter not found"}), 404
     if category not in _WORD_GROUPED:
         return jsonify({"error": "group resolve is only for timing/phoneme word-groups"}), 400
     try:
@@ -499,6 +512,8 @@ def delete_report(slug: str, report_id: int):
     user = auth_service.current_user()
     if not cap_service.can(user, _REPORT_CAP):
         return jsonify({"error": "not available"}), 403
+    if not state_service.is_delivery_visible(slug, user):
+        return jsonify({"error": "reciter not found"}), 404
     if user is not None:
         hf_user_id: str | None = user.hf_user_id
         anon_token: str | None = None

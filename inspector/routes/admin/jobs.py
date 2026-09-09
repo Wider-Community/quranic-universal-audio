@@ -18,6 +18,7 @@ from flask import Blueprint, jsonify, request
 
 from qua_shared.schemas import JobsListResponse
 from services.admin.jobs import registry
+from services.state import state as state_service
 from utils.decorators import require_capability
 
 log = logging.getLogger("inspector")
@@ -29,7 +30,11 @@ admin_jobs_bp = Blueprint("admin_jobs", __name__, url_prefix="/api/admin")
 @require_capability("reviews.view")
 def list_jobs(user):
     """Unified job list across all kinds (running + historical)."""
-    jobs = registry.list_all_jobs()
+    jobs = [
+        job
+        for job in registry.list_all_jobs()
+        if job.slug is None or state_service.is_delivery_visible(job.slug, user)
+    ]
     running = sum(1 for j in jobs if j.status == "running")
     payload = JobsListResponse(jobs=jobs, running_count=running)
     return jsonify(payload.model_dump(mode="json"))
@@ -44,6 +49,8 @@ def job_detail(user):
     slug = (request.args.get("slug") or "").strip() or None
     if not kind or not job_id:
         return jsonify({"error": "kind and job_id are required"}), 400
+    if slug is not None and not state_service.is_delivery_visible(slug, user):
+        return jsonify({"error": "job record not found"}), 404
     rec = registry.job_detail(kind, job_id, slug)
     if rec is None:
         return jsonify({"error": "job record not found"}), 404

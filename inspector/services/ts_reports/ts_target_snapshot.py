@@ -1,4 +1,4 @@
-"""Resolve native v12 report targets and recheck their staleness."""
+"""Resolve native v13 report targets and recheck their staleness."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ def _load_shard(slug: str, chapter: int) -> dict[str, Any] | None:
     except Exception:  # noqa: BLE001 - storage lookup is best effort during recheck
         logger.warning("native report shard read failed %s ch%s", slug, chapter)
         return None
-    if not isinstance(doc, dict) or doc.get("_meta", {}).get("schema_version") != 12:
+    if not isinstance(doc, dict) or doc.get("_meta", {}).get("schema_version") != 13:
         return None
     return decode_document(doc)
 
@@ -117,7 +117,11 @@ def _column_span(reading: dict[str, Any], column: dict[str, Any]) -> tuple[int, 
                 sound_ids.add(str(sound["sound_id"]))
     return _union(
         [
-            *(_span(timing.get("units", []), "source_unit_id", unit_id) for unit_id in unit_ids),
+            *(
+                _span(timing.get("animation_tokens", []), "id", str(token["id"]))
+                for token in timing.get("animation_tokens", [])
+                if unit_ids.intersection(str(value) for value in token.get("source_unit_ids", []))
+            ),
             *(_span(timing.get("sounds", []), "sound_id", sound_id) for sound_id in sound_ids),
         ]
     )
@@ -153,7 +157,7 @@ def resolve_target(
     doc: dict[str, Any], verse_key: str, target: dict[str, Any]
 ) -> dict[str, Any] | None:
     """Return the exact native/timing fingerprint for ``target``."""
-    if doc.get("_meta", {}).get("schema_version") != 12:
+    if doc.get("_meta", {}).get("schema_version") != 13:
         return None
     reading = _reading(doc, target)
     if reading is None:
@@ -192,7 +196,7 @@ def resolve_target(
     span = _timing_span(reading, kind, target_id, native)
     return {
         "native_schema_version": 2,
-        "shard_schema_version": 12,
+        "shard_schema_version": 13,
         "native": native,
         "timing": None if span is None else {"start_ms": span[0], "end_ms": span[1]},
     }

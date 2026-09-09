@@ -493,6 +493,14 @@ def set_audio_url_cache(key: str, urls: dict) -> None:
     _audio_url.set(key, urls)
 
 
+def pop_audio_url_cache(slug: str) -> None:
+    """Evict every serialized audio-URL projection for one exact slug."""
+    suffix = f"/{slug}"
+    for key in _audio_url.all():
+        if key.endswith(suffix):
+            _audio_url.pop(key)
+
+
 # Quran.Foundation Content API. Token is a single client_credentials grant
 # shared process-wide ({access_token, expires_at}); chapter-URL maps are keyed
 # by the QF chapter-reciter id (stringified). Content is immutable, so the
@@ -686,21 +694,25 @@ def set_surah_info_lite_cache(data: dict) -> None:
 import threading as _threading
 
 _public_reciters_lock = _threading.Lock()
-_public_reciters: "tuple[int, list] | None" = None
+_public_reciters: "tuple[int, bool, list] | None" = None
 
 
-def get_public_reciters_cache(db_seq: int):
+def get_public_reciters_cache(db_seq: int, include_everyayah: bool = False):
     """Return the cached list iff it was computed at ``db_seq``, else None."""
     with _public_reciters_lock:
-        if _public_reciters is not None and _public_reciters[0] == db_seq:
-            return _public_reciters[1]
+        if (
+            _public_reciters is not None
+            and _public_reciters[0] == db_seq
+            and _public_reciters[1] == include_everyayah
+        ):
+            return _public_reciters[2]
     return None
 
 
-def set_public_reciters_cache(db_seq: int, value: list) -> None:
+def set_public_reciters_cache(db_seq: int, value: list, include_everyayah: bool = False) -> None:
     global _public_reciters
     with _public_reciters_lock:
-        _public_reciters = (db_seq, value)
+        _public_reciters = (db_seq, include_everyayah, value)
 
 
 def invalidate_public_reciters_cache() -> None:

@@ -1,4 +1,4 @@
-/** Occasion splitting over native v12 readings and their original parts. */
+/** Occasion splitting over native v13 readings and their original parts. */
 
 import type { TsShardPart, TsShardReading } from '../types/ts-client';
 

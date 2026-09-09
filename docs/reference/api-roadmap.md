@@ -15,7 +15,7 @@ QUA already ships its data three ways, all **adapters over the canonical bucket*
 - **Inspector app** — the editor/admin surface.
 
 The data is available; the **barrier is format-literacy**. To use it a developer must learn
-the zip layout, the three timestamp tiers, the manifest schema, the 42-token letter vocab,
+the zip layout, the three timestamp tiers, the manifest schema, the letter-animation paint-token schema,
 the dedup semantics, and then stitch things together themselves (pair audio URLs to timings,
 do per-ayah/per-surah lookups, poll for updates). That's a lot of reading for "play ayah
 2:255 with word highlighting."
@@ -32,7 +32,7 @@ do per-ayah/per-surah lookups, poll for updates). That's a lot of reading for "p
 Pillars (the honest value prop — see [Non-claims](#non-claims--pitfalls) for what NOT to overstate):
 
 - **One interface, not formats** — abstracts GH releases / HF dataset; call `reciter().ayah()`
-  instead of learning zips, tiers, manifests, the char vocab.
+  instead of learning zips, tiers, manifests, and paint ranges.
 - **Typed** — IDE autocomplete + models generated from the same schemas the data ships with.
 - **Fetch-what-you-need + cached** — granular slices, instant on repeat.
 - **Fresh by default, reproducible on demand** — always-latest automatically; pin a version

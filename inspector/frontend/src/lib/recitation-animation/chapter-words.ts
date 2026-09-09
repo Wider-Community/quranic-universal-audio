@@ -88,6 +88,9 @@ export function buildChapterRecitation(
                     char: lt.char,
                     start: lt.start === null ? null : lt.start + offsetSec,
                     end: lt.end === null ? null : lt.end + offsetSec,
+                    tokenId: lt.tokenId,
+                    paintCharacterIds: lt.paintCharacterIds,
+                    silent: lt.silent,
                 })),
             });
         }

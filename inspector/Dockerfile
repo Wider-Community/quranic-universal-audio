@@ -21,6 +21,13 @@ RUN apk add --no-cache git openssh-client
 # Copy the full frontend before `npm ci`: the root `postinstall` hook runs
 # `paraglide:compile`, which needs `project.inlang/` + the message sources.
 COPY inspector/frontend ./
+# HF Spaces leaves binary font transports as unsmudged Git-LFS pointers in the
+# Docker context. The compressed font is therefore committed as base64 text.
+# Strip certutil's two envelope lines, decode, and require real OpenType bytes
+# before Vite copies public/ into dist/.
+RUN sed '1d;$d' public/fonts/DigitalKhattV2.otf.gz.b64 | \
+      base64 -d | gzip -dc > public/fonts/DigitalKhattV2.otf && \
+    [ "$(head -c 4 public/fonts/DigitalKhattV2.otf)" = "OTTO" ]
 RUN --mount=type=ssh,required=false \
     --mount=type=secret,id=CELLS_DEPLOY_KEY,required=false \
     mkdir -p -m 700 /root/.ssh && \
@@ -162,17 +169,33 @@ COPY LICENSE ./LICENSE
 # (state, catalog, audit, per-reciter reciters/) lives in the bucket
 # mounted at /data/inspector-bucket. INSPECTOR_QUA_DATA_PATH=/app/data tells
 # config.py to look here instead of the default sibling-project path.
-# qpc_hafs.json (~12 MB) ships gzipped because HF Spaces auto-LFS-promote
+# qpc_hafs.json (~12 MB) still serves the Inspector's internal Quran-data path
+# and ships gzipped because HF Spaces auto-LFS-promote
 # files >10 MB at push time and the Space build doesn't smudge LFS — the
 # uncompressed source would land as a 133-byte pointer. upload_inspector.py
-# pre-gzips at stage time; runtime readers (services/storage/data_loader,
-# qua_jobs/{publish_hf,cut_release}) gunzip on read.
+# pre-gzips at stage time; the runtime data loader gunzips it on read.
 COPY data/surah_info.json \
      data/qpc_hafs.json.gz \
      data/digital_khatt_v2_script.json \
      data/phoneme_sub_costs.json \
      ./data/
+# The release jobs publish this exact font and stage_job_code validates the
+# source path before launch. Keep it alongside the built frontend asset.
+COPY --chmod=0644 inspector/frontend/public/fonts/DigitalKhattV2.otf.gz.b64 \
+     ./inspector/frontend/public/fonts/DigitalKhattV2.otf.gz.b64
+# Decode the text transport and fail if it is missing/malformed. stage_job_code
+# must upload the real font bytes before an HF publish can launch.
+RUN sed '1d;$d' ./inspector/frontend/public/fonts/DigitalKhattV2.otf.gz.b64 | \
+      base64 -d | gzip -dc > ./inspector/frontend/public/fonts/DigitalKhattV2.otf && \
+    rm ./inspector/frontend/public/fonts/DigitalKhattV2.otf.gz.b64 && \
+    test -s ./inspector/frontend/public/fonts/DigitalKhattV2.otf && \
+    [ "$(head -c 4 ./inspector/frontend/public/fonts/DigitalKhattV2.otf)" = "OTTO" ] && \
+    ! head -c 40 ./inspector/frontend/public/fonts/DigitalKhattV2.otf | grep -q "version https://git-lfs"
 COPY --from=frontend-build /app/dist ./inspector/frontend/dist
+# Cross-stage COPY preserves the source modes; cached Vite output can contain
+# owner-only directories on the HF builder. The runtime user must be able to
+# traverse and read the static tree.
+RUN chmod -R a+rX ./inspector/frontend
 
 # Data volume is mounted here at runtime (see docker-compose.yml). Inside the
 # container every data path derives from DATA_DIR via inspector/config.py.

@@ -8,7 +8,7 @@ import tempfile
 from pathlib import Path
 
 MANIFEST_SCHEMA_VERSION = 1
-TIMESTAMP_SHARD_SCHEMA_VERSION = 12
+TIMESTAMP_SHARD_SCHEMA_VERSION = 13
 
 
 def build_timestamp_shards(
@@ -17,7 +17,7 @@ def build_timestamp_shards(
     audio_category: str,
     src_meta: dict | None = None,
 ) -> dict[int, dict]:
-    """Build strict native v12 shards through the staged SDK."""
+    """Build strict native v13 shards through the staged SDK."""
     from qua_sdk.integrations.shards import build_native_shards
 
     return build_native_shards(
@@ -37,10 +37,10 @@ def brotli_shard(shard_doc: dict) -> bytes:
 
 
 def validated_brotli_shard(shard_doc: dict) -> bytes:
-    """Audit a v12 document and prove deterministic serialization."""
-    from qua_shared.timestamps_v12_audit import audit_v12_document
+    """Audit a v13 document and prove deterministic serialization."""
+    from qua_shared.timestamps_v13_audit import audit_v13_document
 
-    audit_v12_document(shard_doc)
+    audit_v13_document(shard_doc)
     payload = brotli_shard(shard_doc)
     if brotli_shard(shard_doc) != payload:
         raise RuntimeError("non-deterministic timestamp shard serialization")
@@ -48,7 +48,7 @@ def validated_brotli_shard(shard_doc: dict) -> bytes:
 
 
 def write_validated_shard(path: Path, shard_doc: dict) -> bytes:
-    """Atomically replace ``path`` with an audited deterministic v12 shard."""
+    """Atomically replace ``path`` with an audited deterministic v13 shard."""
     payload = validated_brotli_shard(shard_doc)
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)

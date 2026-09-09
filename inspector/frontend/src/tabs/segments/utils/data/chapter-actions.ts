@@ -22,6 +22,7 @@ import {
     selectedVerse,
 } from '../../stores/chapter';
 import { chapterCbrKbps } from '../../stores/chapter-meta';
+import { probeDirectPlayable } from '../../../../lib/playback/play-url';
 import { segPort } from '../../stores/playback';
 import { disposeSegRange, stopSegAnimation } from '../playback/playback';
 import { wrapCbrSrcIfBySurah } from '../playback/source';
@@ -66,28 +67,35 @@ export async function loadChapterData(reciter: string, chapter: string): Promise
     const chNumEager = parseInt(chapter);
     const eagerAudioUrl = eagerAll?.audio_by_chapter?.[String(chNumEager)] ?? '';
     const eagerVbr = (eagerAll?.reciter_vbr_chapters ?? []).includes(chNumEager);
-    let eagerPrewarmFired = false;
-    if (eagerAudioUrl && !eagerVbr) {
-        const eagerCbrSrc = wrapCbrSrcIfBySurah(eagerAudioUrl, reciter);
-        segPort.setSource({
-            audioUrl: eagerAudioUrl,
-            cbrSrc: eagerCbrSrc,
-            reciter,
-            vbr: false,
-        });
-        segPort.prewarm();
-        eagerPrewarmFired = true;
-    }
+    // The CDN CORS probe (one per host, cached) runs in parallel with the
+    // chapter-data fetch so the eager prewarm already targets the direct CDN
+    // URL when the host allows it — otherwise it would warm the proxy and the
+    // real setSource below would swap to a different src and re-load.
+    const eagerPromise: Promise<boolean> = (eagerAudioUrl && !eagerVbr)
+        ? probeDirectPlayable(eagerAudioUrl).then(() => {
+            if (get(selectedReciter) !== reciter || get(selectedChapter) !== chapter) return false;
+            segPort.setSource({
+                audioUrl: eagerAudioUrl,
+                cbrSrc: wrapCbrSrcIfBySurah(eagerAudioUrl, reciter),
+                reciter,
+                vbr: false,
+            });
+            segPort.prewarm();
+            return true;
+        })
+        : Promise.resolve(false);
 
     try {
         const chData = await fetchJson<SegDataResponse>(`/api/seg/data/${reciter}/${chapter}`);
         if (get(selectedReciter) !== reciter || get(selectedChapter) !== chapter) return;
         if (chData.error) return;
+        const eagerPrewarmFired = await eagerPromise;
 
-        // by_surah reciters need the audio-proxy wrap for CORS so Web Audio
-        // can route the chapter MP3 through `MediaElementAudioSourceNode`.
-        // The canonical `audioUrl` stays unwrapped so VBR clip-URL building
-        // uses it raw.
+        // Direct CDN src when the host passed the CORS + Range probe (Web
+        // Audio's `MediaElementAudioSourceNode` needs ACAO), else the
+        // audio-proxy wrap. The canonical `audioUrl` stays unwrapped so VBR
+        // clip-URL building uses it raw.
+        await probeDirectPlayable(chData.audio_url ?? '');
         const cbrSrc = wrapCbrSrcIfBySurah(chData.audio_url ?? '', reciter);
 
         const chNum = parseInt(chapter);

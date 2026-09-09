@@ -16,6 +16,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from qua_shared.catalog_visibility import is_everyayah_channel
 from qua_shared.schemas.bucket.catalog import ReciterCatalog
 
 CATALOG_CONFIG_NAME = "mushafs"
@@ -221,13 +222,27 @@ def project_catalog_rows(
     hf_releases = hf_releases or {}
 
     rows: list[dict[str, Any]] = []
+    # ``None`` means "derive the set from the database/current projection";
+    # an explicit empty set means that the hub currently has no verse splits.
+    # Keep those cases distinct so deleting the final HF subset cannot fall
+    # back to stale release rows and repopulate ``mushafs/all``.
     matched_published = (
-        _catalog_slugs_for_published_splits(catalog, published_slugs) if published_slugs else set()
+        _catalog_slugs_for_published_splits(catalog, published_slugs)
+        if published_slugs is not None
+        else set()
     )
-    delivered_slugs = matched_published or set(hf_releases) or set(ts_releases)
+    delivered_slugs = (
+        matched_published if published_slugs is not None else set(hf_releases) or set(ts_releases)
+    )
 
     for delivery in sorted(catalog.deliveries, key=lambda d: d.slug):
-        if delivered_slugs and delivery.slug not in delivered_slugs:
+        # EveryAyah remains available in the Inspector owner projection only;
+        # it is never part of the public HF catalog.
+        if is_everyayah_channel(delivery.channel):
+            continue
+        if (
+            published_slugs is not None or delivered_slugs
+        ) and delivery.slug not in delivered_slugs:
             continue
         reciter = reciters.get(delivery.reciter_id)
         channel = channels.get(delivery.channel)
@@ -290,6 +305,7 @@ def _catalog_slugs_for_published_splits(
         delivery.slug
         for split in published_slugs
         if (delivery := _delivery_for_published_split(catalog, split)) is not None
+        and not is_everyayah_channel(delivery.channel)
     }
 
 
@@ -318,11 +334,12 @@ def _delivery_for_published_split(catalog: ReciterCatalog, split: str):
 
 
 def _preferred_delivery(deliveries: list[Any]):
-    candidates = [d for d in deliveries if d.total_duration_sec and d.chapter_count >= 100]
+    public_deliveries = [d for d in deliveries if not is_everyayah_channel(d.channel)]
+    candidates = [d for d in public_deliveries if d.total_duration_sec and d.chapter_count >= 100]
     if not candidates:
-        candidates = [d for d in deliveries if d.total_duration_sec]
+        candidates = [d for d in public_deliveries if d.total_duration_sec]
     if not candidates:
-        return deliveries[0] if deliveries else None
+        return public_deliveries[0] if public_deliveries else None
 
     def score(delivery: Any) -> tuple[int, int, str]:
         style_penalty = 1 if delivery.style in {"muallim", "mujawwad"} else 0
@@ -337,14 +354,16 @@ def _stats_from_published_splits(
 ) -> HfDatasetCatalogStats:
     riwayat: set[str] = set()
     seconds = 0
+    published_count = 0
     for split in published_slugs:
         delivery = _delivery_for_published_split(catalog, split)
-        if delivery is None:
+        if delivery is None or is_everyayah_channel(delivery.channel):
             continue
+        published_count += 1
         riwayat.add(delivery.riwayah)
         seconds += int(delivery.total_duration_sec or 0)
     return HfDatasetCatalogStats(
-        timestamped_recitations=len(published_slugs),
+        timestamped_recitations=published_count,
         timestamped_riwayat=len(riwayat),
         timestamped_seconds=seconds,
     )
@@ -560,18 +579,28 @@ def upload_dataset_card(*, repo_id: str, content: str, token: str | None) -> Non
     )
 
 
-def upload_vocab_file(*, repo_id: str, filename: str, content: bytes, token: str | None) -> None:
-    """Commit the letter-tier vocab CSV to the dataset under ``filename``."""
-    from huggingface_hub import CommitOperationAdd, HfApi
+def sync_dataset_assets(
+    *,
+    repo_id: str,
+    assets: dict[str, bytes],
+    remove: tuple[str, ...] = (),
+    token: str | None,
+) -> None:
+    """Commit public presentation assets and remove superseded files."""
+    from huggingface_hub import CommitOperationAdd, CommitOperationDelete, HfApi
 
-    HfApi(token=token).create_commit(
+    api = HfApi(token=token)
+    existing = set(api.list_repo_files(repo_id=repo_id, repo_type="dataset"))
+    operations: list[CommitOperationAdd | CommitOperationDelete] = [
+        CommitOperationAdd(path_in_repo=filename, path_or_fileobj=content)
+        for filename, content in sorted(assets.items())
+    ]
+    operations.extend(
+        CommitOperationDelete(path_in_repo=filename) for filename in remove if filename in existing
+    )
+    api.create_commit(
         repo_id=repo_id,
         repo_type="dataset",
-        operations=[
-            CommitOperationAdd(
-                path_in_repo=filename,
-                path_or_fileobj=content,
-            ),
-        ],
-        commit_message="update letter vocab",
+        operations=operations,
+        commit_message="update DigitalKhatt release assets",
     )

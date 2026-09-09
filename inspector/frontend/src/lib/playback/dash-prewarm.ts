@@ -24,6 +24,7 @@
  * adopt-time `setSource` triple + `playerContext` follow.
  */
 import { cancelWarm, consumeWarm, shadowPrewarm } from './shadow-audio';
+import { playUrl } from './play-url';
 
 /** HTMLMediaElement.HAVE_CURRENT_DATA — enough decoded to play at the position. */
 const HAVE_CURRENT_DATA = 2;
@@ -45,12 +46,13 @@ export interface DashCommitted {
 
 let _committed: DashCommitted | null = null;
 
-/** Build the same proxy URL BottomPlayer / TimestampsTab build for a chapter
- *  CDN link. Already-proxied (`/api/...`) URLs pass through untouched. */
+/** Build the same play URL BottomPlayer / TimestampsTab build for a chapter
+ *  CDN link — direct CDN when its host passed the CORS probe, else the
+ *  audio-proxy wrapper (`play-url.ts`). Already-proxied (`/api/...`) URLs
+ *  pass through untouched. Every dashboard site MUST build the src through
+ *  here so the shadow-pool consume key and `adoptElement` src stay identical. */
 export function dashProxyUrl(slug: string, rawUrl: string): string {
-    return rawUrl.startsWith('/api/')
-        ? rawUrl
-        : `/api/seg/audio-proxy/${slug}?url=${encodeURIComponent(rawUrl)}`;
+    return playUrl(slug, rawUrl);
 }
 
 /** Speculative warm — range-windowed decode at `seekSec` (default 0). Replaces

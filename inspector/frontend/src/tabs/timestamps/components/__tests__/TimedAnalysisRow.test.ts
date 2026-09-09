@@ -243,8 +243,10 @@ describe('TimedAnalysisRow native renderer integration', () => {
         const reading = nativeReading('r1', [
             { ref: '1:1', start: 100, end: 400, text: 'a' },
         ]);
-        reading.letters = [{
-            source_unit_id: 0, word_id: 0, text: 'a', start_ms: 120, end_ms: 280, silent: false,
+        reading.animationTokens = [{
+            id: 0, word_id: 0, source_unit_ids: [0], character_ids: [0],
+            paint_character_ids: [0], text: 'a',
+            sound_ids: [0], policy: 'timed', target_token_id: null, start_ms: 120, end_ms: 280,
         }];
         reading.timing.sounds = [{ sound_id: 0, start_ms: 150, end_ms: 350 }];
         reading.timing.words = [{ word_id: 0, start_ms: 100, end_ms: 400 }];

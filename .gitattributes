@@ -7,6 +7,8 @@
 *.woff binary
 *.woff2 binary
 *.otf binary
+*.otf.gz binary
+*.b64 text eol=lf
 *.ttf binary
 *.mp3 binary
 *.wav binary

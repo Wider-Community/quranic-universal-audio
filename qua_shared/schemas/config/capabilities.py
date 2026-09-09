@@ -192,7 +192,7 @@ CAPABILITIES: tuple[Capability, ...] = (
         "catalog.edit",
         G_LIFECYCLE,
         "Edit catalog metadata",
-        "Change a reciter's catalog fields (names, riwayah, style, country).",
+        "Change reciter identity and delivery metadata.",
         contributor=False,
         maintainer=True,
     ),
@@ -219,6 +219,14 @@ CAPABILITIES: tuple[Capability, ...] = (
         "Reopen a published recitation for further edits.",
         contributor=False,
         maintainer=True,
+    ),
+    _c(
+        "reciter.discard_content",
+        G_LIFECYCLE,
+        "Permanently discard recitation content",
+        "Delete a recitation's bucket content and active published projections; owner only.",
+        contributor=False,
+        maintainer=False,
     ),
     _c(
         "reciter.discard",

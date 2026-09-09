@@ -15,6 +15,7 @@
 
     import { type RecitationAnimConfig } from './config';
     import LineAnimation from './LineAnimation.svelte';
+    import type { ShapedGlyphFixture } from './shaped-glyphs';
     import type { AnimUnit } from './types';
 
     interface Props {
@@ -22,6 +23,8 @@
         config: RecitationAnimConfig;
         getTimeMs: () => number;
         playing: boolean;
+        shapedGlyphs?: ShapedGlyphFixture;
+        omitSilentHighlights?: boolean;
         /** Short context line, e.g. "Surah 36 · Al-Fatihah". Omit to hide. */
         context?: string;
         /** Header eyebrow label; '' hides it (slim chrome — just the caret). */
@@ -42,6 +45,8 @@
         config,
         getTimeMs,
         playing,
+        shapedGlyphs,
+        omitSilentHighlights = false,
         context,
         eyebrow = 'Now reciting',
         onSeekToWord,
@@ -89,6 +94,8 @@
                 {config}
                 {getTimeMs}
                 {playing}
+                {shapedGlyphs}
+                {omitSilentHighlights}
                 {onSeekToWord}
             />
         </div>
