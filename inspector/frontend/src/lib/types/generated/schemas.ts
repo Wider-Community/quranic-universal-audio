@@ -1419,6 +1419,28 @@ export interface PublicReciterPage {
   total: number;
   next_cursor?: number | null;
 }
+/**
+ * One supported riwayah and its two slug spellings.
+ */
+export interface RiwayahSupport {
+  inspector_slug: "hafs_an_asim" | "warsh_an_nafi" | "qalon_an_nafi" | "shubah_an_asim";
+  sdk_slug: "hafs" | "warsh" | "qalun" | "shuba";
+}
+/**
+ * The supported-riwayah vocabulary as the FE sees it.
+ *
+ * ``supported`` is ordered product order (the order the aligner app offers).
+ * Everything outside it is a riwayah the request form still accepts but the
+ * pipeline cannot yet align.
+ */
+export interface RiwayatConfig {
+  /**
+   * @minItems 1
+   */
+  supported: [RiwayahSupport, ...RiwayahSupport[]];
+  default_inspector_slug: "hafs_an_asim" | "warsh_an_nafi" | "qalon_an_nafi" | "shubah_an_asim";
+  default_sdk_slug: "hafs" | "warsh" | "qalun" | "shuba";
+}
 export interface SampleRenameRequest {
   name: string;
 }

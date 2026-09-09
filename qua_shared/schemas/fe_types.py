@@ -57,6 +57,7 @@ from .config.automation import (
     StaleTsRegenConfig,
     TsGenerationDefaults,
 )
+from .config.riwayat import RiwayahSupport, RiwayatConfig
 from .wire._envelopes import ErrorEnvelope, OkAck
 from .wire.admin_permissions import (
     AdminCapabilityRow,
@@ -232,6 +233,8 @@ __all__ = [
     "StaleMetadataConfig",
     "StaleTsRegenConfig",
     "TsGenerationDefaults",
+    "RiwayahSupport",
+    "RiwayatConfig",
     "AdminActiveClaim",
     "AdminActivityEvent",
     "AdminCapabilityRow",
