@@ -42,6 +42,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from qua_shared.catalog_visibility import is_everyayah_channel  # noqa: E402
+from qua_shared.riwayat import DEFAULT_RIWAYAH  # noqa: E402
 from qua_shared.mp3_frames import (  # noqa: E402
     FrameIndex,
     MultiFrameSlice,
@@ -624,14 +625,27 @@ def _sync_dataset_catalog_and_card(repo_id: str) -> None:
 
 
 def _riwayah_for(audio_manifest: dict | None, detailed: dict) -> str:
-    """Find the riwayah slug. Audio manifest ``_meta.riwayah`` is canonical;
-    detailed.json ``_meta`` is the legacy fallback."""
-    if audio_manifest:
-        riw = (audio_manifest.get("_meta") or {}).get("riwayah")
-        if riw:
-            return riw
-    riw = (detailed.get("_meta") or {}).get("riwayah")
-    return riw or "hafs_an_asim"
+    """Find the riwayah slug — it becomes the HF dataset config name.
+
+    The audio manifest's ``_meta.riwayah`` is canonical. ``detailed.json``'s
+    ``_meta.riwayah`` is the secondary source: it records the coordinate system
+    ``matched_ref`` is expressed in, so for a non-Hafs delivery the two MUST
+    agree. (Before the multi-riwayah schema change this branch was unreachable
+    — ``DetailedMeta`` is ``extra="forbid"`` and had no such field, so no
+    writer could emit one and no reader could load one.)
+
+    Falls back to Hafs only when neither source names a riwayah, which is every
+    pre-multi-riwayah reciter.
+    """
+    manifest_riw = (audio_manifest or {}).get("_meta", {}).get("riwayah")
+    detailed_riw = (detailed.get("_meta") or {}).get("riwayah")
+    if manifest_riw and detailed_riw and manifest_riw != detailed_riw:
+        raise ValueError(
+            f"riwayah mismatch: audio manifest says {manifest_riw!r}, "
+            f"detailed.json says {detailed_riw!r} — publishing would file the "
+            f"rows under a config whose coordinates they are not in"
+        )
+    return manifest_riw or detailed_riw or DEFAULT_RIWAYAH
 
 
 # ---------------------------------------------------------------------------

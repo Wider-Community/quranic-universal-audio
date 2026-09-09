@@ -210,7 +210,10 @@ def load_pipeline_meta(reciter: str) -> dict | None:
     if doc is None:
         return None
     try:
-        validated = PipelineMeta.model_validate(doc).model_dump(mode="json")
+        # ``exclude_none`` so an optional field the sidecar doesn't carry
+        # (e.g. ``riwayah`` on a pre-multi-riwayah extraction) stays absent
+        # rather than being served as an explicit ``null``.
+        validated = PipelineMeta.model_validate(doc).model_dump(mode="json", exclude_none=True)
     except Exception:  # noqa: BLE001 — a malformed/forward sidecar must not 500 the validation panel
         # The sidecar is a hot read on /api/seg/validate; a single un-migrated
         # or forward-compat field would otherwise raise ValidationError →

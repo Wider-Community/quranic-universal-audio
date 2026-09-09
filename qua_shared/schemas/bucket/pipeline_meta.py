@@ -29,3 +29,9 @@ class PipelineMeta(BaseModel):
     schema_version: int = 1
     generated_at: str  # ISO-8601 timestamp, UTC
     deleted_basmala_chapters: list[int] = Field(default_factory=list)
+
+    #: Inspector vocabulary slug the extraction ran under. ``None`` on every
+    #: pre-multi-riwayah sidecar, which means Hafs. Mirrors
+    #: ``DetailedMeta.riwayah`` — the two are written by the same extraction
+    #: run and must agree.
+    riwayah: str | None = None

@@ -836,6 +836,7 @@ export interface DetailedDocument {
  */
 export interface DetailedMeta {
   created_at?: string | null;
+  riwayah?: string | null;
   asr_model?: string | null;
   vad_model?: string | null;
   min_silence_ms?: number | null;
@@ -904,6 +905,8 @@ export interface DetailedSegment {
   confidence?: number;
   wrap_word_ranges?: string[][] | null;
   segment_uid?: string | null;
+  source_ref?: string | null;
+  projection_support?: ("full" | "partial") | null;
   ignored_categories?: string[] | null;
   ignored?: boolean | null;
   is_wasl?: boolean;
