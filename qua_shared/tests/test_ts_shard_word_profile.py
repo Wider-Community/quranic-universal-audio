@@ -21,6 +21,35 @@ from qua_shared.timestamps_shards import (
 )
 from qua_shared.timestamps_word_audit import WordAuditError, audit_word_document
 
+def _installed_edition() -> dict:
+    """Real ids + digests when ``qua_domain`` is installed, else placeholders.
+
+    The audit refuses a shard whose ``words_sha256`` disagrees with the
+    installed index, so a fixture with an invented digest would exercise only
+    that rejection. Reading the real values keeps every audit test below on the
+    path a producer actually takes, while a runtime without the package (a fork)
+    still collects — the audit skips the coordinate check there.
+    """
+    try:
+        import qua_domain
+    except ImportError:
+        return {
+            "edition_id": "qaloon-v21+sdk-words-v1",
+            "words_sha256": "a" * 64,
+            "reference_id": "qul-text-qpc-hafs-312",
+            "projection_id": "qua-edition-projection-v1",
+            "projection_sha256": "b" * 64,
+        }
+    edition = qua_domain.get_edition("qalun")
+    return {
+        "edition_id": edition.edition_id,
+        "words_sha256": edition.words_sha256,
+        "reference_id": qua_domain.REFERENCE_ID,
+        "projection_id": qua_domain.PROJECTION_ID,
+        "projection_sha256": qua_domain.projection_asset_info().sha256,
+    }
+
+
 WORD_SHARD: dict = {
     "_meta": {
         "schema_version": 14,
@@ -28,13 +57,9 @@ WORD_SHARD: dict = {
         "chapter": 112,
         "audio_category": "by_surah",
         "riwayah": "qalun",
-        "edition_id": "qalun-v21+sdk-words-v1",
-        "words_sha256": "a" * 64,
         "timing_provider": "hafs_proxy_mfa",
         "reference_riwayah": "hafs",
-        "reference_id": "qul-text-qpc-hafs-312",
-        "projection_id": "qua-edition-projection-v1",
-        "projection_sha256": "b" * 64,
+        **_installed_edition(),
     },
     "readings": [
         {
@@ -165,6 +190,30 @@ def test_unknown_boundary_state_rejected():
 
 def test_audit_accepts_a_well_formed_shard():
     assert audit_word_document(WORD_SHARD).meta.riwayah == "qalun"
+
+
+@pytest.mark.skipif(
+    _installed_edition()["words_sha256"] == "a" * 64,
+    reason="qua-domain not installed (the audit skips the coordinate check)",
+)
+def test_audit_rejects_a_shard_built_against_a_different_script_revision():
+    # The whole point of carrying words_sha256: a shard whose text came from
+    # one revision of the edition and whose refs came from another would time
+    # the wrong words, silently.
+    with pytest.raises(WordAuditError, match="different revisions"):
+        audit_word_document(_shard(words_sha256="a" * 64))
+
+
+@pytest.mark.skipif(
+    _installed_edition()["words_sha256"] == "a" * 64,
+    reason="qua-domain not installed (the audit skips the coordinate check)",
+)
+def test_audit_rejects_a_ref_that_is_not_a_word_of_this_edition():
+    raw = copy.deepcopy(WORD_SHARD)
+    # 112:1 has four words in every edition; a fifth does not exist.
+    raw["readings"][0]["words"][3] = ["112:1:5", "w5", 2200, 3000]
+    with pytest.raises(WordAuditError, match="is not a qalun word"):
+        audit_word_document(raw)
 
 
 def test_audit_rejects_words_outside_their_part():
