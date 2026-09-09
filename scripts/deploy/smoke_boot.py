@@ -139,8 +139,12 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         print(f"==> Building {args.tag} from {context}")
         build = ["docker", "build"]
-        if os.environ.get("CELLS_DEPLOY_KEY"):
-            build.extend(["--secret", "id=CELLS_DEPLOY_KEY,env=CELLS_DEPLOY_KEY"])
+        # Both deploy keys are optional at the docker layer (`required=false`);
+        # absent, the image builds without the renderer package / without
+        # qua-domain, and the boot assertion below still has to pass.
+        for secret in ("CELLS_DEPLOY_KEY", "QUA_DOMAIN_DEPLOY_KEY"):
+            if os.environ.get(secret):
+                build.extend(["--secret", f"id={secret},env={secret}"])
         _run([*build, "-f", str(dockerfile), "-t", args.tag, str(context)])
 
     print("==> Preparing offline fixtures")

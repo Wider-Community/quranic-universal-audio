@@ -104,6 +104,12 @@ jobs:
           cache-to: type=gha,mode=max
           provenance: false
           ssh: default
+          # qua-domain (the four riwayat's scripts/fonts/projection) is fetched
+          # by a Dockerfile stage from the private monorepo. `required=false` at
+          # the mount, so a missing secret yields a Hafs-only image, not a
+          # failed build.
+          secrets: |
+            QUA_DOMAIN_DEPLOY_KEY=${{ secrets.QUA_DOMAIN_DEPLOY_KEY }}
 
       - name: Boot smoke test (/healthz)
         run: python scripts/deploy/smoke_boot.py --skip-build --tag inspector-smoke:latest
@@ -168,5 +174,9 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           CELLS_DEPLOY_KEY: ${{ secrets.CELLS_DEPLOY_KEY }}
+          # Pushed onto the Space as a secret so ITS Docker build can fetch
+          # qua-domain. Absent, upload_inspector warns and leaves the Space's
+          # existing secret alone.
+          QUA_DOMAIN_DEPLOY_KEY: ${{ secrets.QUA_DOMAIN_DEPLOY_KEY }}
         run: |
           python scripts/deploy/upload_inspector.py "${{ steps.env.outputs.env }}"

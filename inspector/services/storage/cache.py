@@ -1017,3 +1017,70 @@ def invalidate_all_jobs_cache() -> None:
     global _all_jobs
     with _all_jobs_lock:
         _all_jobs = None
+
+
+# ---------------------------------------------------------------------------
+# Editions (multi-riwayah)
+# ---------------------------------------------------------------------------
+# Keyed on the SDK riwayah slug, never the Inspector slug, so one edition's
+# script can never be served for another. Immutable for the life of the
+# process: the data comes from a pinned ``qua-domain`` wheel, not the bucket,
+# so there is no invalidation hook — a new pin means a new image.
+#
+# At most four editions exist, so these are unbounded by slug but tiny:
+# a word map is ~77k entries, a font ~0.9 MB.
+
+_edition_word_map: _KeyedCache[dict[str, str]] = _KeyedCache()
+_edition_word_counts: _KeyedCache[dict[tuple[int, int], int]] = _KeyedCache()
+_edition_projection: _KeyedCache[object] = _KeyedCache()
+_edition_font: _KeyedCache[tuple[bytes, object]] = _KeyedCache()
+_edition_tables: _KeyedCache[dict[str, object]] = _KeyedCache()
+
+
+def get_edition_word_map(riwayah: str) -> dict[str, str] | None:
+    return _edition_word_map.get(riwayah)
+
+
+def set_edition_word_map(riwayah: str, value: dict[str, str]) -> None:
+    _edition_word_map.set(riwayah, value)
+
+
+def get_edition_word_counts(riwayah: str) -> dict[tuple[int, int], int] | None:
+    return _edition_word_counts.get(riwayah)
+
+
+def set_edition_word_counts(riwayah: str, value: dict[tuple[int, int], int]) -> None:
+    _edition_word_counts.set(riwayah, value)
+
+
+def get_edition_projection(riwayah: str):
+    return _edition_projection.get(riwayah)
+
+
+def set_edition_projection(riwayah: str, value) -> None:
+    _edition_projection.set(riwayah, value)
+
+
+def get_edition_font(riwayah: str) -> tuple[bytes, object] | None:
+    return _edition_font.get(riwayah)
+
+
+def set_edition_font(riwayah: str, value: tuple[bytes, object]) -> None:
+    _edition_font.set(riwayah, value)
+
+
+def get_edition_tables(riwayah: str) -> dict[str, object] | None:
+    return _edition_tables.get(riwayah)
+
+
+def set_edition_tables(riwayah: str, value: dict[str, object]) -> None:
+    _edition_tables.set(riwayah, value)
+
+
+def clear_edition_caches() -> None:
+    """Drop every edition-derived cache (tests that swap the accessor)."""
+    _edition_word_map.clear()
+    _edition_word_counts.clear()
+    _edition_projection.clear()
+    _edition_font.clear()
+    _edition_tables.clear()

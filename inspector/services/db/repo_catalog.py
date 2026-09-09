@@ -198,6 +198,19 @@ def find_delivery(slug: str) -> Delivery | None:
     return _delivery_from_row(r) if r else None
 
 
+def deliveries_per_riwayah() -> dict[str, int]:
+    """``{riwayah_slug: delivery_count}``.
+
+    A counting query rather than a ``snapshot()`` walk because ``/healthz``
+    calls it on every probe to decide whether a runtime missing ``qua_domain``
+    is actually degraded (it is, iff a non-Hafs delivery exists to serve).
+    """
+    rows = get_conn().execute(
+        "SELECT riwayah, COUNT(*) AS n FROM deliveries GROUP BY riwayah"
+    )
+    return {r["riwayah"]: r["n"] for r in rows}
+
+
 # ---- mutations (caller owns the transaction) ----
 
 

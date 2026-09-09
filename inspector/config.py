@@ -271,3 +271,18 @@ AUDIO_MIME_TYPES = {
     ".mp3": "audio/mpeg",
     ".ogg": "audio/ogg",
 }
+
+
+# ---------------------------------------------------------------------------
+# Multi-riwayah
+# ---------------------------------------------------------------------------
+# Kill-switch for the non-Hafs editions. Default on; forced off in practice
+# whenever ``qua_domain`` cannot be imported (see
+# ``services/reference/editions.py``). Set to 0 to disable without rebuilding
+# the image: an HF Space *variable* change plus a restart is a 60-second
+# rollback, where a Docker rebuild is ten minutes.
+#
+# Disabling does NOT make non-Hafs deliveries render as Hafs — they fail
+# loudly. Silently substituting Hafs coordinates under another edition's
+# script would let a reviewer save wrong refs.
+MULTI_RIWAYAH_ENABLED = os.getenv("INSPECTOR_MULTI_RIWAYAH", "1") not in ("0", "false", "False")

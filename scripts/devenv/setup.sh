@@ -47,6 +47,12 @@ setup_backend() {
         echo "   pip conflict (distro-managed package?); retrying --ignore-installed ..."
         python3 -m pip install --ignore-installed "${reqs[@]}"
     fi
+    # qua-domain is the multi-riwayah edition data (scripts, fonts, coordinate
+    # indexes, Hafs->target projection) from the private monorepo. Optional by
+    # design: without a credential this installs nothing and the Inspector runs
+    # Hafs-only. Never let it abort setup.
+    echo "==> Edition data (optional): qua-domain"
+    python3 "$ROOT/scripts/devenv/install_qua_domain.py" ||         echo "   WARN: qua-domain install failed; running Hafs-only." >&2
 }
 
 case "$target" in
