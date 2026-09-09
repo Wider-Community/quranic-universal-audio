@@ -8,7 +8,7 @@ import type {
     TsVerseData,
     TsWord,
 } from '../types/ts-client';
-import { type ChapterOccasion, chapterOccasions } from './occasions';
+import { type AnyShardReading, type ChapterOccasion, chapterOccasions } from './occasions';
 
 const occasionsByShard = new WeakMap<TsShardResponse, ChapterOccasion[]>();
 
@@ -31,17 +31,34 @@ interface AssembleOptions {
     audioUrl: string;
 }
 
+/**
+ * Narrow an occasion reading to the native profile.
+ *
+ * Occasion splitting is profile-independent, so a `ChapterOccasion` can carry
+ * either kind. Everything below this line reads cells, sounds and animation
+ * tokens, which a proxy-timed word reading does not have — callers must branch
+ * on `isWordShard` before assembling. Throwing here makes a missed branch a
+ * loud failure rather than a half-rendered verse.
+ */
+function asNative(reading: AnyShardReading): TsShardReading {
+    if (!('wire' in reading)) {
+        throw new Error(`reading ${reading.id}: word-profile shard has no native cells`);
+    }
+    return reading;
+}
+
 const uniqueReadings = (members: ChapterOccasion[]): TsShardReading[] => [
-    ...new Set(members.flatMap((member) => member.readings.map((one) => one.reading))),
+    ...new Set(members.flatMap((member) => member.readings.map((one) => asNative(one.reading)))),
 ];
 
 function selectedWords(members: ChapterOccasion[]): Map<TsShardReading, Set<number>> {
     const selected = new Map<TsShardReading, Set<number>>();
     for (const member of members) {
         for (const entry of member.readings) {
-            const ids = selected.get(entry.reading) ?? new Set<number>();
+            const reading = asNative(entry.reading);
+            const ids = selected.get(reading) ?? new Set<number>();
             entry.parts.flatMap((part) => part.word_ids).forEach((id) => ids.add(id));
-            selected.set(entry.reading, ids);
+            selected.set(reading, ids);
         }
     }
     return selected;

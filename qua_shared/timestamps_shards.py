@@ -8,7 +8,31 @@ import tempfile
 from pathlib import Path
 
 MANIFEST_SCHEMA_VERSION = 1
-TIMESTAMP_SHARD_SCHEMA_VERSION = 13
+#: The version a freshly written shard stamps. Objects written before the word
+#: profile existed stamp 13 and are never restamped — readers accept both.
+TIMESTAMP_SHARD_SCHEMA_VERSION = 14
+#: Versions a reader accepts for a native document.
+NATIVE_SHARD_SCHEMA_VERSIONS = (13, 14)
+
+
+def shard_profile(shard_doc: dict) -> str:
+    """``"native"`` or ``"word"`` for a stored shard document.
+
+    ``_meta.profile`` is absent on every v13 object, which predates the word
+    profile — absent therefore means native. Every reader must go through here
+    rather than branching on ``schema_version``, which does not distinguish
+    the two.
+    """
+    return (shard_doc.get("_meta") or {}).get("profile") or "native"
+
+
+def parse_shard(shard_doc: dict):
+    """Validate a stored shard into its profile's model."""
+    from qua_shared.schemas.bucket.ts_shard import TsShardDoc, TsWordShardDoc
+
+    if shard_profile(shard_doc) == "word":
+        return TsWordShardDoc.model_validate(shard_doc)
+    return TsShardDoc.model_validate(shard_doc)
 
 
 def build_timestamp_shards(
@@ -37,10 +61,15 @@ def brotli_shard(shard_doc: dict) -> bytes:
 
 
 def validated_brotli_shard(shard_doc: dict) -> bytes:
-    """Audit a v13 document and prove deterministic serialization."""
-    from qua_shared.timestamps_v13_audit import audit_v13_document
+    """Audit a shard under its own profile and prove deterministic serialization."""
+    if shard_profile(shard_doc) == "word":
+        from qua_shared.timestamps_word_audit import audit_word_document
 
-    audit_v13_document(shard_doc)
+        audit_word_document(shard_doc)
+    else:
+        from qua_shared.timestamps_v13_audit import audit_v13_document
+
+        audit_v13_document(shard_doc)
     payload = brotli_shard(shard_doc)
     if brotli_shard(shard_doc) != payload:
         raise RuntimeError("non-deterministic timestamp shard serialization")
@@ -48,7 +77,7 @@ def validated_brotli_shard(shard_doc: dict) -> bytes:
 
 
 def write_validated_shard(path: Path, shard_doc: dict) -> bytes:
-    """Atomically replace ``path`` with an audited deterministic v13 shard."""
+    """Atomically replace ``path`` with an audited deterministic shard."""
     payload = validated_brotli_shard(shard_doc)
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)

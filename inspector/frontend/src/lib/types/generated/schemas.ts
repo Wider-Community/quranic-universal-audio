@@ -2336,7 +2336,7 @@ export interface TsShardDoc {
   readings: TsShardReading[];
 }
 export interface TsShardMeta {
-  schema_version: 13;
+  schema_version: 13 | 14;
   chapter: number;
   audio_category: string;
   phonemizer_version: string;
@@ -2393,4 +2393,29 @@ export interface TsValidationVerse {
 export interface TsVerseReports {
   verse_key: string;
   reports?: TsReport[];
+}
+export interface TsWordShardDoc {
+  _meta: TsWordShardMeta;
+  readings: TsWordShardReading[];
+}
+export interface TsWordShardMeta {
+  schema_version: 14;
+  profile: "word";
+  chapter: number;
+  audio_category: string;
+  riwayah: string;
+  edition_id: string;
+  words_sha256: string;
+  timing_provider: "hafs_proxy_mfa";
+  reference_riwayah: string;
+  reference_id: string;
+  projection_id?: string | null;
+  projection_sha256?: string | null;
+  [k: string]: unknown;
+}
+export interface TsWordShardReading {
+  id: string;
+  parts: [unknown, unknown, unknown, unknown, unknown][];
+  words: [unknown, unknown, unknown, unknown][];
+  boundaries: [unknown, unknown][];
 }

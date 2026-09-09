@@ -43,6 +43,9 @@ from .bucket.ts_shard import (
     TsShardReading,
     TsShardTiming,
     TsSoundTiming,
+    TsWordShardDoc,
+    TsWordShardMeta,
+    TsWordShardReading,
     TsWordTiming,
 )
 from .bucket.ts_validation import TsValidationDoc, TsValidationMeta, TsValidationVerse
@@ -312,6 +315,9 @@ __all__ = [
     "TsShardPart",
     "TsShardReading",
     "TsShardTiming",
+    "TsWordShardDoc",
+    "TsWordShardMeta",
+    "TsWordShardReading",
     "TsColumnTiming",
     "TsCompactRender",
     "TsNativeProfile",
