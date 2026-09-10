@@ -38,6 +38,7 @@
         PublicReciter,
     } from '../../../lib/types/generated/schemas';
     import { countryName as countryLabel } from '../../../lib/utils/delivery-label';
+    import { isSupportedRiwayah } from '../../../lib/riwayat';
     import {
         countryByCode,
         countryByName,
@@ -202,10 +203,11 @@
                 && d.style === style,
         );
 
-    // Non-hafs riwayahs aren't aligned yet — non-blocking heads-up. Hafs is
-    // matched by vocab SHORT ('hafs'), not the slug ('hafs_an_asim').
-    $: selectedRiwayahShort = riwayatOptions.find((r) => r.slug === riwayah)?.short;
-    $: nonHafsRiwayah = !!selectedRiwayahShort && selectedRiwayahShort !== 'hafs';
+    // The pipeline aligns four riwayat; anything else is a heads-up, not a
+    // block — the request is still worth recording. Matched on the delivery
+    // SLUG via the shared table, not the vocab `short`: `short` is a third slug
+    // space (a display abbreviation) that nothing else keys on.
+    $: unsupportedRiwayah = !!riwayah && !isSupportedRiwayah(riwayah);
 
     async function onSubmit(): Promise<void> {
         if (busy) return;
@@ -313,7 +315,7 @@
     $: autoClaimLabel = tr(lang, m.dashboard_request_auto_claim_label());
     $: autoClaimHintUnchecked = tr(lang, m.dashboard_request_auto_claim_hint_unchecked());
     $: autoClaimHintOneAtATime = tr(lang, m.dashboard_request_auto_claim_hint_one_at_a_time());
-    $: nonHafsCallout = tr(lang, m.dashboard_request_non_hafs_callout());
+    $: unsupportedRiwayahCallout = tr(lang, m.dashboard_request_unsupported_riwayah_callout());
     $: cancelLabel = tr(lang, m.common_action_cancel());
     $: submitInvalidCountryTitle = tr(lang, m.dashboard_request_submit_invalid_country_title());
     $: submittingLabel = tr(lang, m.common_status_submitting());
@@ -471,8 +473,8 @@
         </span>
     </label>
 
-    {#if mode === 'create' && nonHafsRiwayah}
-        <p class="callout">{nonHafsCallout}</p>
+    {#if mode === 'create' && unsupportedRiwayah}
+        <p class="callout">{unsupportedRiwayahCallout}</p>
     {/if}
 
     {#if conflict}

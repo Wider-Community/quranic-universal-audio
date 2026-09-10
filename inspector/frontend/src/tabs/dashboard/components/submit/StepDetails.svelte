@@ -18,6 +18,7 @@
     import { catalogData } from '../../stores/catalog-data';
     import { submitWizard } from '../../stores/submit-wizard';
 
+    import { isSupportedRiwayah } from '../../../../lib/riwayat';
     const MIN_YEAR = 1885;
     const MAX_YEAR = new Date().getFullYear();
 
@@ -37,13 +38,12 @@
                 && d.style === $submitWizard.combination.style,
         );
 
-    // Hafs is identified by its vocab SHORT ('hafs'), not the slug
-    // ('hafs_an_asim'). Show the callout only once we know the short and it
-    // isn't hafs — avoids a false positive before vocab loads.
-    $: selectedRiwayahShort = riwayatOptions.find(
-        (r) => r.slug === $submitWizard.combination.riwayah,
-    )?.short;
-    $: nonHafsRiwayah = !!selectedRiwayahShort && selectedRiwayahShort !== 'hafs';
+    // The pipeline aligns four riwayat; anything else is a heads-up, not a
+    // block — the request is still worth recording. Matched on the delivery
+    // SLUG via the shared table, not the vocab `short`: `short` is a third slug
+    // space (a display abbreviation) that nothing else keys on.
+    $: unsupportedRiwayah = !!$submitWizard.combination.riwayah
+        && !isSupportedRiwayah($submitWizard.combination.riwayah);
 
     $: yearOutOfBounds = $submitWizard.combination.recording_year !== ''
         && (($submitWizard.combination.recording_year as number) < MIN_YEAR
@@ -68,7 +68,7 @@
     $: yearLabel = tr(lang, m.dashboard_request_field_recording_year());
     $: yearPlaceholder = tr(lang, m.dashboard_submit_year_placeholder_dash());
     $: yearBoundsMsg = tr(lang, m.dashboard_request_year_out_of_bounds({ min: MIN_YEAR, max: MAX_YEAR }));
-    $: nonHafsCallout = tr(lang, m.dashboard_request_non_hafs_callout());
+    $: unsupportedRiwayahCallout = tr(lang, m.dashboard_request_unsupported_riwayah_callout());
     $: commentsLabel = tr(lang, m.dashboard_request_field_comments());
     $: commentsPlaceholder = tr(lang, m.dashboard_submit_comments_placeholder());
     $: autoClaimLabel = tr(lang, m.dashboard_submit_auto_claim_label());
@@ -164,9 +164,9 @@
         </label>
     </div>
 
-    {#if nonHafsRiwayah}
+    {#if unsupportedRiwayah}
         <p class="callout" transition:fade={{ duration: 160 }}>
-            {nonHafsCallout}
+            {unsupportedRiwayahCallout}
         </p>
     {/if}
 
