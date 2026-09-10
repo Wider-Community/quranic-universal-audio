@@ -75,6 +75,7 @@ def test_a_word_target_carries_the_editions_own_text_as_its_identity():
     # index; the report has to read as stale, not silently re-point.
     snap = resolve_word_target(WORD_DOC, "112:1", _target("word", 2))
 
+    assert snap is not None
     assert snap["native"] == {"word_id": 2, "ref": "112:1:3", "text": "C"}
     assert snap["timing"] == {"start_ms": 1500, "end_ms": 2200}
 
@@ -84,6 +85,7 @@ def test_a_boundary_target_is_the_gap_before_its_word():
     # the lead-in, id i the gap between word i-1 and word i.
     snap = resolve_word_target(WORD_DOC, "112:1", _target("boundary", 1))
 
+    assert snap is not None
     assert snap["timing"] == {"start_ms": 700, "end_ms": 800}
     assert snap["native"]["before"] == "112:1:1"
     assert snap["native"]["after"] == "112:1:2"
@@ -93,8 +95,10 @@ def test_the_trailing_boundary_of_the_last_word_resolves():
     snap = resolve_word_target(WORD_DOC, "112:2", _target("boundary", 6))
 
     assert snap is not None
-    assert snap["native"]["after"] is None
-    assert snap["native"]["verse_end"] == 2
+    native = snap["native"]
+    assert isinstance(native, dict)
+    assert native["after"] is None
+    assert native["verse_end"] == 2
 
 
 def test_a_target_in_another_verse_is_refused():

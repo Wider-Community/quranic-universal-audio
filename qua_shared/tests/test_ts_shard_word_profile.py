@@ -122,7 +122,9 @@ def test_native_meta_accepts_both_schema_versions():
     """v13 objects are never restamped, so the reader accepts 13 and 14."""
     assert NATIVE_SHARD_SCHEMA_VERSIONS == (13, 14)
     assert TS_SHARD_SCHEMA_VERSION == 14
-    fields = TsShardDoc.model_fields["meta"].annotation.model_fields
+    meta_model = TsShardDoc.model_fields["meta"].annotation
+    assert meta_model is not None
+    fields = meta_model.model_fields
     assert fields["schema_version"].annotation.__args__ == (13, 14)
 
 
@@ -130,7 +132,9 @@ def test_native_meta_declares_no_profile_field():
     """The shard route serves native bytes verbatim, so a defaulted ``profile``
     would rewrite 4,126 existing objects on the first round-trip. Native is the
     absence of the key; ``shard_profile`` reads it from the raw dict."""
-    assert "profile" not in TsShardDoc.model_fields["meta"].annotation.model_fields
+    meta_model = TsShardDoc.model_fields["meta"].annotation
+    assert meta_model is not None
+    assert "profile" not in meta_model.model_fields
     native = {
         "_meta": {
             "schema_version": 13,

@@ -14,7 +14,18 @@ from services.storage import cache
 
 
 @pytest.fixture(autouse=True)
-def _clean_seg_meta():
+def _clean_seg_meta(monkeypatch):
+    """Keep the resolver off the bucket, and leave no cache state behind.
+
+    ``sdk_riwayah_for`` reads ``detailed.json``'s ``_meta`` through
+    ``data_loader.seg_meta``, which loads the file when nothing has read it yet.
+    These cases seed the meta cache directly and never write a file, so without
+    this stub every one of them reaches the real bucket — which answers 401 in
+    CI, where there is no token.
+    """
+    from services.storage import data_loader
+
+    monkeypatch.setattr(data_loader, "load_detailed", lambda reciter: [])
     yield
     # Both halves: the meta AND the entries cache, whose presence is what tells
     # `data_loader.seg_meta` the file has already been read.

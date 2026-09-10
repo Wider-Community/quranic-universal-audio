@@ -22,8 +22,8 @@ SCRIPT = ROOT / "scripts" / "devenv" / "install_qua_domain.py"
 @pytest.fixture
 def installer():
     spec = importlib.util.spec_from_file_location("_install_qua_domain", SCRIPT)
+    assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
     spec.loader.exec_module(module)
     return module
 
