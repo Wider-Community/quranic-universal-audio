@@ -9,6 +9,10 @@ Two writers stamp through here: the live save path, segment by segment as an
 edit rewrites a ref (``services/segments/save.py``), and the pipeline-run
 promoter, whole entries at once.
 
+``source_ref`` and ``projection_support`` ride along for the same reason: they
+are pure functions of ``matched_ref`` too, and a ref edit invalidates them (see
+``projection_stamp``).
+
 ``is_boundary_adj`` is computed structural-only (``canonical=None``): the
 phonemic side was retired in Migration #5 and ``compute_is_boundary_adj``
 ignores the argument.
@@ -22,6 +26,7 @@ validate pass then trusts without recomputing.
 from __future__ import annotations
 
 from qua_shared.riwayat import DEFAULT_SDK_RIWAYAH
+from services.segments.projection_stamp import stamp_projection
 from services.segments.qalqala import compute_qalqala_letter
 from services.storage.data_loader import get_single_word_verses
 from services.validation.classifier import compute_is_boundary_adj
@@ -32,12 +37,11 @@ _REF_ENDPOINTS = 2
 _LOCATION_PARTS = 3
 
 
-def stamp_segment(
-    seg: dict, single_word_verses: set, riwayah: str = DEFAULT_SDK_RIWAYAH
-) -> None:
-    """Stamp ``qalqala_letter`` and ``is_boundary_adj`` onto *seg* in place."""
+def stamp_segment(seg: dict, single_word_verses: set, riwayah: str = DEFAULT_SDK_RIWAYAH) -> None:
+    """Stamp the persisted classifier fields and the coordinate provenance in place."""
     seg["qalqala_letter"] = compute_qalqala_letter(seg, riwayah)
     seg["is_boundary_adj"] = _boundary_adj(seg, single_word_verses, riwayah)
+    stamp_projection(seg, riwayah)
 
 
 def stamp_entries(
@@ -68,9 +72,7 @@ def stamp_entries(
     return stamped
 
 
-def _boundary_adj(
-    seg: dict, single_word_verses: set, riwayah: str = DEFAULT_SDK_RIWAYAH
-) -> bool:
+def _boundary_adj(seg: dict, single_word_verses: set, riwayah: str = DEFAULT_SDK_RIWAYAH) -> bool:
     """The structural boundary-adjustment value for *seg*.
 
     ``False`` whenever ``matched_ref`` is not a parseable word range — the rule

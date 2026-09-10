@@ -167,9 +167,11 @@ def load_detailed(reciter: str) -> list[dict]:
             return cached
         raw = data_dir.read_detailed_bytes(reciter)
         if raw is None:
-            # Remember the absence too. Every caller re-reading a missing file
-            # is a bucket round-trip per request, and `invalidate_seg_caches`
-            # already drops this the moment a save creates one.
+            # Remember the absence too: without it every caller re-reads a
+            # missing file, a bucket round-trip per request, on exactly the
+            # slugs the Reviews drawer sweeps. `invalidate_seg_caches` drops it
+            # when the file appears — a save, a discard, and the auto-detect
+            # reconciler, which is what notices an out-of-band promote.
             cache.set_seg_cache(reciter, [])
             return []
         meta, entries = _load_detailed_entries_from_bytes(raw)

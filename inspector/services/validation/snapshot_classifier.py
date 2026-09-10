@@ -14,6 +14,7 @@ classification logic is reimplemented here.
 
 from __future__ import annotations
 
+from qua_shared.riwayat import DEFAULT_SDK_RIWAYAH
 from services.validation.classifier import classify_segment
 
 
@@ -25,6 +26,7 @@ def classify_snapshot(
     entry_ref: str = "",
     is_by_ayah: bool = False,
     probe_failed_uids: set | None = None,
+    riwayah: str = DEFAULT_SDK_RIWAYAH,
 ) -> list[str]:
     """Classify a snapshot dict and return its category list.
 
@@ -38,6 +40,12 @@ def classify_snapshot(
     snapshots carry ``segment_uid``, so the *Low Confidence v2* category
     can resolve cleanly against the same sidecar uid set.
 
+    ``riwayah`` is the delivery's SDK slug. It reaches ``muqattaat`` (Warsh
+    merges Hafs 42:1 and 42:2, so BOTH of the merged verse's first two words
+    are openings) and the ``qalqala`` letter derivation, which walks that
+    edition's word map. Defaulting it would persist Hafs-derived categories
+    into a non-Hafs delivery's ``edit_history.jsonl``.
+
     Returns categories in registry-declared order.
     """
     if not snap or not isinstance(snap, dict):
@@ -49,6 +57,7 @@ def classify_snapshot(
         single_word_verses=single_word_verses,
         canonical=canonical,
         probe_failed_uids=probe_failed_uids,
+        riwayah=riwayah,
     )
 
 

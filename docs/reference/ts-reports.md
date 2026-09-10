@@ -36,12 +36,25 @@ Creation stores a snapshot beside the target:
 {
   "native_schema_version": 2,
   "shard_schema_version": 12,
+  "shard_profile": "native",
   "native": {},
   "timing": {"start_ms": 1200, "end_ms": 1300}
 }
 ```
 
 `native` contains the target-specific identity/content fingerprint. `timing` records the absolute interval when the report was created, or `null` for an untimed target. Regeneration resolves the same native target and compares the snapshot; it never searches for the nearest cell or first matching glyph.
+
+### Word-profile deliveries
+
+A non-Hafs delivery ships a **word-profile** shard (schema 14, `_meta.profile: "word"`) with no cells, sounds, columns or bridges — see [`editions.md`](editions.md). Its snapshots carry `shard_profile: "word"` and `native_schema_version: null`, because there is no native analysis behind them, and only three target kinds resolve:
+
+| Kind | Identity |
+| --- | --- |
+| `verse` | The reading's parts for that ayah — what the `audio` / `other` composers target. |
+| `word` | `{word_id, ref, text}`. The text is part of the identity: a re-stamp that moved the projection puts a different word at the same index, and the report must read as stale rather than silently re-point. |
+| `boundary` | `{boundary_id, state, verse_end, before, after}`. Ids run `0..len(words)` — id 0 is the lead-in, id `i` the gap before word `i` — matching `boundariesOf` in the FE decoder, so a boundary id means the same thing in either profile. |
+
+`tajweed` and `phonemes` are refused, which is what the FE already shows: both are `nativeOnly` in `domain/report-categories.ts`. `services/ts_reports/ts_word_snapshot.py` owns this; `resolve_target` routes by profile so no route needs to know which it was handed.
 
 ## Categories
 

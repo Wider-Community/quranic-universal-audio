@@ -103,17 +103,12 @@ def make_seg(
     if existing_flag:
         result["flag"] = existing_flag
 
-    # Coordinate provenance (multi-riwayah). Never sent by the FE — the editor
-    # works in the delivery edition's coordinates and knows nothing about the
-    # Hafs source span. Inherit it, but ONLY while ``matched_ref`` is unchanged:
-    # a re-reference moves the target span, which makes the recorded Hafs
-    # evidence stale. Dropping is safe because the span is recoverable by
-    # reverse-projecting the new ``matched_ref``; keeping a stale value would
-    # feed the wrong source words to MFA. Absent on every Hafs seg (identity).
-    if existing.get("source_ref") and matched_ref == existing.get("matched_ref"):
-        result["source_ref"] = existing["source_ref"]
-        if existing.get("projection_support"):
-            result["projection_support"] = existing["projection_support"]
+    # Coordinate provenance (multi-riwayah) is deliberately NOT carried here.
+    # The FE never sends it — the editor works in the delivery edition's
+    # coordinates and knows nothing about the Hafs source span — and inheriting
+    # it would keep a value the new ``matched_ref`` has invalidated. It is
+    # re-derived from the ref by ``services.segments.stamping.stamp_segment``,
+    # which every save path already runs and which knows the riwayah.
 
     return result
 

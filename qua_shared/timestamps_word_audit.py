@@ -36,6 +36,9 @@ class WordAuditError(ValueError):
 def _check_reading(reading, riwayah: str, index: dict[str, str] | None) -> None:
     label = f"reading {reading.id!r}"
 
+    if not reading.words:
+        raise WordAuditError(f"{label}: has no words")
+
     covered: set[int] = set()
     for ref, start, end, first, count in reading.parts:
         span = range(first, first + count)
@@ -75,9 +78,6 @@ def _check_reading(reading, riwayah: str, index: dict[str, str] | None) -> None:
                 f"{label}: word {word_id} ({ref}) carries text the {riwayah} index does "
                 f"not write — the shard would render another edition's script"
             )
-
-    if not reading.words:
-        raise WordAuditError(f"{label}: has no words")
 
 
 def audit_word_document(shard_doc: dict) -> TsWordShardDoc:

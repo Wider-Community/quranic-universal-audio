@@ -113,7 +113,6 @@ def _edition_blocks(reciters_block: dict[str, dict]) -> dict[str, dict]:
     wrong script.
     """
     from services.reference import editions as editions_service
-    from services.reference import quran_refs as quran_refs_service
 
     blocks: dict[str, dict] = {}
     for block in reciters_block.values():
@@ -126,8 +125,10 @@ def _edition_blocks(reciters_block: dict[str, dict]) -> dict[str, dict]:
             sdk_slug = resolve_sdk_slug(slug)
             if sdk_slug == DEFAULT_SDK_RIWAYAH:
                 continue
+            # Metadata only — it is lru-cached and touches no file. Reading the
+            # font bytes or hashing the refs payload here put a multi-MB cost on
+            # every manifest build for digests nothing reads.
             metadata = editions_service.metadata(sdk_slug)
-            _, asset = editions_service.font(sdk_slug)
         except (UnsupportedRiwayah, EditionsUnavailable) as exc:
             log.warning("ts manifest: riwayah %s cannot be served (%s)", slug, exc)
             continue
@@ -141,9 +142,7 @@ def _edition_blocks(reciters_block: dict[str, dict]) -> dict[str, dict]:
             "words_sha256": metadata.words_sha256,
             "font_url": f"/api/static/edition/{key}/font",
             "font_family": metadata.font_family,
-            "font_sha256": asset.sha256,
             "refs_url": f"/api/static/quran-refs.json?riwayah={key}",
-            "refs_version": quran_refs_service.payload_hash(sdk_slug),
         }
     return blocks
 

@@ -90,6 +90,15 @@ proxy phones**. The result is *projected* onto the delivery's edition. So:
 | Coordinates a reviewer sees and edits (`matched_ref`) | the delivery's edition |
 | The Hafs span the matcher actually matched (`source_ref`) | Hafs, recorded on the seg |
 | `projection_support` | `full` / `partial` — `partial` means a source word in the span reached no target word, or sat in an N:M relation the projection could only partly carry |
+
+Both provenance fields are **derived, never sent by the client**: the editor
+works in the delivery edition's coordinates and knows nothing about Hafs.
+`services/segments/stamping.py` re-derives them from `matched_ref` on every
+save (`projection_stamp.stamp_projection`), so a reviewer's re-reference moves
+the Hafs span with it. Inheriting the old value would align the wrong audio;
+dropping it would make the timestamps engine refuse the delivery, which it
+does — `assert_projected_segments_are_sourced` runs before any alignment.
+Support is computed from the SOURCE side by `qua_shared/projection_support.py`.
 | Display text + font | the delivery's edition |
 | Verse word counts, ayah counts, stop signs | the delivery's edition |
 
@@ -193,7 +202,9 @@ A word-profile delivery:
 - disables Letters, Phonemes, karaoke wipe and Tajweed with an explanatory title;
 - locks the teleprompter to word-by-word animation with no shaped glyphs;
 - shows a header badge naming the timings as Hafs-proxy word timings;
-- offers only `audio` / `timing` / `silence` / `other` report categories;
+- offers only `audio` / `timing` / `silence` / `other` report categories, whose
+  snapshots resolve through `ts_word_snapshot` (`verse` / `word` / `boundary`
+  kinds only) — see [`ts-reports.md`](ts-reports.md);
 - omits filmstrip coverage badges (the mushaf verse index is the Hafs one);
 - gets word-by-word glosses reverse-projected server-side (**D9**) —
   `GET /api/qf/wbw/<s>/<a>?riwayah=<inspector slug>`, cached per
@@ -264,7 +275,10 @@ letter timings" from "this verse happened to have none".
   instead of `digital_khatt_v2`, with the matching digest.
 - The CHANGELOG gains a **Timings** column and a note explaining proxy timings.
 - The HF dataset stays config-per-mushaf under the riwayah folder (the viewer
-  caps a config at 30 splits).
+  caps a config at 30 splits). The folder — the HF **config name** — is the
+  INSPECTOR slug (`hafs_an_asim/<slug>-*`), which is where every split published
+  so far lives; publishing the SDK slug would open a second `hafs/` folder,
+  duplicate the config in the card frontmatter and orphan the old split.
 
 `RELEASE_FORMAT_MAJOR` is bumped to v4.0.0 only when the first non-Hafs reciter
 is actually publishable (**D20**) — Hafs consumers should not be forced through a

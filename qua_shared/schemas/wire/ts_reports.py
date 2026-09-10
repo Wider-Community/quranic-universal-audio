@@ -177,12 +177,17 @@ class TsReportTimingSnapshot(BaseModel):
 
 
 class TsReportSnapshot(BaseModel):
-    """Native entity plus timing fingerprint captured at report creation."""
+    """The entity plus timing fingerprint captured at report creation."""
 
     model_config = ConfigDict(extra="forbid")
 
-    native_schema_version: Literal[2] = 2
+    #: ``None`` on a word profile, which carries no native analysis at all — a
+    #: reader must not expect cells behind the fingerprint.
+    native_schema_version: Literal[2] | None = 2
     shard_schema_version: Literal[12, 13, 14] = 13
+    #: Which shard shape the fingerprint came from. Absent on every row written
+    #: before the word profile existed, all of which are native.
+    shard_profile: Literal["native", "word"] = "native"
     native: dict[str, object] = Field(default_factory=dict)
     timing: TsReportTimingSnapshot | None = None
 

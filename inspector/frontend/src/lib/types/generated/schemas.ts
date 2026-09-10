@@ -2208,10 +2208,18 @@ export interface TsManifestReciter {
 /**
  * One non-Hafs edition's display assets, advertised in the manifest.
  *
- * The Timestamps tab needs the font + the reference bundle before it can
- * render a word-profile shard, and it learns both from here rather than
- * hardcoding a URL shape. Hafs is absent: its font is inlined in the frontend
- * bundle and its refs bundle is the unparameterised default.
+ * The block's presence is the deployment's statement that it CAN serve this
+ * edition — a Hafs-only build (no ``qua_domain``) advertises none. The URLs
+ * are the same ones ``lib/refs/edition-font.ts`` builds by convention today;
+ * they are published so a client need not encode that shape.
+ *
+ * Hafs is absent: its font is inlined in the frontend bundle and its refs
+ * bundle is the unparameterised default.
+ *
+ * No content digests here. ``font_sha256`` cost a ~0.9 MB font read and
+ * ``refs_version`` a full ~3 MB word-map serialise on the manifest-build path,
+ * for cache-busting nothing currently does. Add them back with the consumer
+ * that needs them, not before.
  */
 export interface TsEditionAsset {
   riwayah: string;
@@ -2219,9 +2227,7 @@ export interface TsEditionAsset {
   words_sha256: string;
   font_url: string;
   font_family: string;
-  font_sha256: string;
   refs_url: string;
-  refs_version: string;
 }
 export interface TsNativeProfile {
   riwayah: string;
@@ -2277,11 +2283,12 @@ export interface TsReportTarget {
   target_id: string;
 }
 /**
- * Native entity plus timing fingerprint captured at report creation.
+ * The entity plus timing fingerprint captured at report creation.
  */
 export interface TsReportSnapshot {
-  native_schema_version?: 2;
+  native_schema_version?: 2 | null;
   shard_schema_version?: 12 | 13 | 14;
+  shard_profile?: "native" | "word";
   native?: {
     [k: string]: unknown;
   };

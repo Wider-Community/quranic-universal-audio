@@ -167,7 +167,12 @@ def _ensure_patch_on_ops(operations: list) -> list:
     return out
 
 
-def _attach_classified_issues(operations: list, probe_failed_uids: set | None = None) -> list:
+def _attach_classified_issues(
+    operations: list,
+    probe_failed_uids: set | None = None,
+    *,
+    riwayah: str,
+) -> list:
     """Return a deep-enough copy of ``operations`` with ``classified_issues``
     populated on every snapshot.
 
@@ -202,7 +207,11 @@ def _attach_classified_issues(operations: list, probe_failed_uids: set | None = 
                 if isinstance(snap, dict):
                     enriched = dict(snap)
                     enriched["classified_issues"] = _history_visible_categories(
-                        classify_snapshot(enriched, probe_failed_uids=probe_failed_uids)
+                        classify_snapshot(
+                            enriched,
+                            probe_failed_uids=probe_failed_uids,
+                            riwayah=riwayah,
+                        )
                     )
                     new_arr.append(enriched)
                 else:
@@ -217,7 +226,11 @@ def _attach_classified_issues(operations: list, probe_failed_uids: set | None = 
                 if isinstance(snap, dict):
                     enriched = dict(snap)
                     enriched["classified_issues"] = _history_visible_categories(
-                        classify_snapshot(enriched, probe_failed_uids=probe_failed_uids)
+                        classify_snapshot(
+                            enriched,
+                            probe_failed_uids=probe_failed_uids,
+                            riwayah=riwayah,
+                        )
                     )
                     new_snapshots[which] = enriched
             new_op["snapshots"] = new_snapshots
@@ -367,9 +380,7 @@ def _apply_full_replace(
     return None
 
 
-def _apply_patch(
-    matching: list[dict], updates: dict, riwayah: str = DEFAULT_SDK_RIWAYAH
-) -> None:
+def _apply_patch(matching: list[dict], updates: dict, riwayah: str = DEFAULT_SDK_RIWAYAH) -> None:
     """Mutate ``matching`` in place for a patch save (field-level updates by index)."""
     flat_segments = []
     for e in matching:
@@ -522,7 +533,14 @@ def _apply_flag_ops(matching: list[dict], operations: list, *, actor: Actor):
 
 
 def _persist_and_record(
-    reciter: str, chapter: int, entries: list[dict], meta: dict, updates: dict, *, actor: Actor
+    reciter: str,
+    chapter: int,
+    entries: list[dict],
+    meta: dict,
+    updates: dict,
+    *,
+    actor: Actor,
+    riwayah: str,
 ) -> SaveResult:
     """Persist mutated entries to disk, append edit_history, invalidate caches."""
     # Validate patch envelopes before writing anything.
@@ -542,6 +560,7 @@ def _persist_and_record(
     operations = _attach_classified_issues(
         _ensure_patch_on_ops(raw_ops),
         probe_failed_uids=probe_failed_uids,
+        riwayah=riwayah,
     )
     # ``actor`` block carries the per-edit attribution surfaced in the
     # History panel and feeding the contributor-recognition page.
@@ -649,9 +668,7 @@ def save_seg_data(reciter: str, chapter: int, updates: dict, *, actor: Actor) ->
     riwayah = sdk_riwayah_for(reciter)
 
     if updates.get("full_replace"):
-        err = _apply_full_replace(
-            matching, updates, existing_by_time, existing_by_uid, riwayah
-        )
+        err = _apply_full_replace(matching, updates, existing_by_time, existing_by_uid, riwayah)
         if err is not None:
             return err
     else:
@@ -678,6 +695,7 @@ def save_seg_data(reciter: str, chapter: int, updates: dict, *, actor: Actor) ->
         meta,
         updates,
         actor=actor,
+        riwayah=riwayah,
     )
 
     # Notify after the save persisted — best-effort (own durable txn), never

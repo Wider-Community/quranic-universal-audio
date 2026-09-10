@@ -138,10 +138,18 @@ class TsManifestReciter(BaseModel):
 class TsEditionAsset(BaseModel):
     """One non-Hafs edition's display assets, advertised in the manifest.
 
-    The Timestamps tab needs the font + the reference bundle before it can
-    render a word-profile shard, and it learns both from here rather than
-    hardcoding a URL shape. Hafs is absent: its font is inlined in the frontend
-    bundle and its refs bundle is the unparameterised default.
+    The block's presence is the deployment's statement that it CAN serve this
+    edition — a Hafs-only build (no ``qua_domain``) advertises none. The URLs
+    are the same ones ``lib/refs/edition-font.ts`` builds by convention today;
+    they are published so a client need not encode that shape.
+
+    Hafs is absent: its font is inlined in the frontend bundle and its refs
+    bundle is the unparameterised default.
+
+    No content digests here. ``font_sha256`` cost a ~0.9 MB font read and
+    ``refs_version`` a full ~3 MB word-map serialise on the manifest-build path,
+    for cache-busting nothing currently does. Add them back with the consumer
+    that needs them, not before.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -155,9 +163,7 @@ class TsEditionAsset(BaseModel):
     words_sha256: str
     font_url: str
     font_family: str
-    font_sha256: str
     refs_url: str
-    refs_version: str
 
 
 class TsManifestResponse(BaseModel):

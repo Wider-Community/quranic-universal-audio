@@ -60,20 +60,32 @@ def test_each_non_hafs_edition_is_advertised_once_with_its_own_assets():
     assert warsh["font_url"] == "/api/static/edition/warsh_an_nafi/font"
     assert warsh["refs_url"] == "/api/static/quran-refs.json?riwayah=warsh_an_nafi"
     assert len(warsh["words_sha256"]) == 64
-    assert len(warsh["font_sha256"]) == 64
-    # Warsh and Qalun share a script but not an edition id or a bundle.
+    # Warsh and Qalun share a script but not an edition id or a word list.
     assert blocks["qalon_an_nafi"]["edition_id"] != warsh["edition_id"]
-    assert blocks["qalon_an_nafi"]["refs_version"] != warsh["refs_version"]
+    assert blocks["qalon_an_nafi"]["words_sha256"] != warsh["words_sha256"]
 
 
 @has_editions
-def test_the_advertised_digests_match_what_the_routes_actually_serve(flask_client):
-    from services import quran_refs
-
+def test_the_advertised_urls_are_the_ones_the_routes_actually_serve(flask_client):
     block = _edition_blocks(_reciters("warsh_an_nafi"))["warsh_an_nafi"]
-    font = flask_client.get(block["font_url"])
-    assert font.headers["ETag"] == f'"{block["font_sha256"]}"'
-    assert quran_refs.payload_hash("warsh") == block["refs_version"]
+
+    assert flask_client.get(block["font_url"]).status_code == 200
+    assert flask_client.get(block["refs_url"]).status_code == 200
+
+
+@has_editions
+def test_building_the_block_reads_no_font_or_refs_payload(monkeypatch):
+    """The manifest is built per request; the digests it used to carry cost a
+    ~0.9 MB font read and a ~3 MB word-map serialise each time, for nothing."""
+    from services.reference import quran_refs as quran_refs_service
+
+    def _boom(*_args, **_kwargs):
+        raise AssertionError("manifest build must not touch the payload")
+
+    monkeypatch.setattr(editions, "font", _boom)
+    monkeypatch.setattr(quran_refs_service, "payload_hash", _boom)
+
+    assert set(_edition_blocks(_reciters("warsh_an_nafi"))) == {"warsh_an_nafi"}
 
 
 def test_an_unservable_edition_is_omitted_when_the_package_is_missing(monkeypatch, caplog):
