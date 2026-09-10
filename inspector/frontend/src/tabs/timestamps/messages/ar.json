@@ -296,5 +296,7 @@
   "ts_unified_pause_bridge_pause_title": "وقف مؤقت",
   "ts_unified_pause_bridge_stop_title": "علامة وقف",
   "ts_validation_panel_chip_aria_label": "الانتقال إلى الآية منخفضة الثقة {verse}",
-  "ts_validation_panel_summary": "آيات منخفضة الثقة"
+  "ts_validation_panel_summary": "آيات منخفضة الثقة",
+  "ts_word_profile_badge_label": "توقيتات على مستوى الكلمة",
+  "ts_word_profile_badge_title": "هذه التلاوة ليست برواية حفص. جرت محاذاة كلماتها باستخدام حفص وسيطًا ثم أُسقطت النتيجة على هذه الرواية، لذلك لا تتضمن توقيتات للحروف أو الفونيمات أو أحكام التجويد."
 }

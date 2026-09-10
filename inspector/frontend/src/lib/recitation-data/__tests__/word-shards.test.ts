@@ -5,7 +5,7 @@ import { WORD_SHARD, WORD_TEXTS } from '../test-word-fixture';
 import { assembleOccasion, shardOccasions, type TsReciterAudio } from '../ts-source';
 import type { TsWordShardResponse } from '../../types/ts-client';
 
-const BY_SURAH: TsReciterAudio = { audio_category: 'by_surah', audio_url_template: '' };
+const BY_SURAH: TsReciterAudio = { audio_category: 'by_surah' };
 
 function assemble() {
     const shard = decodeTimestampShard(WORD_SHARD) as TsWordShardResponse;

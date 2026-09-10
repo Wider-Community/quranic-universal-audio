@@ -17,7 +17,7 @@ function seedVerse() {
     const shard = decodeTimestampShard(WORD_SHARD) as TsWordShardResponse;
     const data = assembleOccasion(
         'r', shardOccasions(shard)[0]!, {}, {},
-        { audio_category: 'by_surah', audio_url_template: '' }, '',
+        { audio_category: 'by_surah' }, '',
     );
     loadedVerse.set({ data, tsSegOffset: 0, tsSegEnd: 3 });
     deliveryRiwayah.set(shard._meta.riwayah);
@@ -109,7 +109,7 @@ describe('WordTimedRow', () => {
         const { container } = render(WordTimedRow);
         await waitFor(() =>
             expect(container.querySelectorAll('[data-qc-word-id]')).toHaveLength(4));
-        enterTiming();
+        enterTiming('r', '112:1');
         container.querySelector<HTMLElement>('[data-qc-word-id="2"]')!.click();
 
         const entries = [...get(staged).values()];
