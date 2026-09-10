@@ -276,7 +276,5 @@
   "ts_unified_pause_bridge_pause_title": "Pause",
   "ts_unified_pause_bridge_stop_title": "Stop sign",
   "ts_validation_panel_chip_aria_label": "Jump to low-confidence verse {verse}",
-  "ts_validation_panel_summary": "Low-confidence verses",
-  "ts_word_profile_badge_label": "Word-level timings",
-  "ts_word_profile_badge_title": "This recitation is not in Hafs. Its words were timed by aligning against Hafs as a proxy and projecting the result onto this riwayah, so it carries no letter, phoneme or tajweed timings."
+  "ts_validation_panel_summary": "Low-confidence verses"
 }

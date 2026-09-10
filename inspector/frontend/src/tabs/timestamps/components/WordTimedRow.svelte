@@ -401,6 +401,15 @@
         font-size: var(--analysis-word-font-size, 30px);
         line-height: 1.7;
     }
+    /* The verse marker is Quran text, not chrome: typeset it in the edition's
+       own face at word size. The packaged QPC faces draw the end-of-ayah
+       ornament around the bare digit themselves, so a UI font here renders a
+       naked numeral instead of the marker. */
+    .pause-bridge.verse-mark {
+        font-family: var(--qc-connected);
+        font-size: var(--analysis-word-font-size, 30px);
+        line-height: 1.7;
+    }
     /* `.active` and `.loop` are toggled imperatively per frame, so Svelte's
        scoped-CSS pass never sees them on an element and would prune the rules. */
     :global(.timed-analysis.word-profile .word-cell.active) {

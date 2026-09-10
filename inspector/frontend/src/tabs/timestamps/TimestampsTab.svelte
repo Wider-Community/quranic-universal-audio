@@ -1170,16 +1170,6 @@
     style:--analysis-letter-font-size={cfg?.analysis_letter_font_size ?? ''}
 >
     <main>
-        {#if $wordProfile}
-            <!-- Says plainly what the reader is looking at: words placed by a
-                 Hafs proxy alignment, projected onto this riwayah. Without it
-                 the missing letter/phoneme rows read as a broken page. -->
-            <p class="proxy-badge" title={m.ts_word_profile_badge_title()}>
-                <span class="proxy-dot" aria-hidden="true"></span>
-                {m.ts_word_profile_badge_label()}
-            </p>
-        {/if}
-
         {#if $tsValidation}
             <div class="ts-validation-row">
                 <TsValidationPanel
@@ -1212,26 +1202,6 @@
     }
     .waveform-words-row {
         transition: opacity 0.12s ease;
-    }
-    .proxy-badge {
-        display: flex;
-        align-items: center;
-        gap: var(--s-2);
-        width: fit-content;
-        margin: 0 auto var(--s-2);
-        padding: 4px 10px;
-        border: 1px solid var(--border-quiet);
-        border-radius: 999px;
-        background: var(--panel-2);
-        color: var(--text-secondary);
-        font-size: 12px;
-        cursor: help;
-    }
-    .proxy-dot {
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-        background: var(--state-warn-fg);
     }
     .waveform-words-row.ts-region-loading {
         opacity: 0.55;
