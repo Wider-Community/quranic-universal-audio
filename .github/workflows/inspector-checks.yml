@@ -136,6 +136,16 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/inspector
         run: python -m pytest scripts/bucket/tests
 
+      - name: Run devenv-script (scripts/devenv) tests
+        # Same shape as the bucket-script step: flat CLI modules that need both
+        # repo root and inspector/ on the path. The synthetic-delivery builder
+        # is the fixture every multi-riwayah verification runs against, so its
+        # coordinates and shard audit are worth gating.
+        working-directory: ${{ github.workspace }}
+        env:
+          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/inspector
+        run: python -m pytest scripts/devenv/tests
+
       # Ruff (lint + format) is enforced locally by the pre-commit + pre-push
       # git hooks (see .husky/ + scripts/devenv/setup.sh), not in CI — it never
       # gated the build here and the reviewdog PR suggestions were noise.
