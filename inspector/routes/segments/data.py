@@ -38,6 +38,7 @@ from services.data_loader import (
     resolve_pad,
 )
 from services.reference import edition_tables
+from services.reference.delivery_edition import inspector_riwayah_for
 from services.segments.flags import flag_view
 from services.segments_query import get_chapter_data
 from services.state import catalog as catalog_service
@@ -279,6 +280,7 @@ def seg_all(reciter):
     # SegAllResponse is asserted at the test boundary (test_wire_seg_models) and
     # the bytes frozen by test_seg_all_snapshot; bucket data is validated at write.
     payload = {
+        "riwayah": inspector_riwayah_for(reciter),
         "segments": segments,
         "audio_by_chapter": audio_by_chapter,
         "chapter_duration_ms_by_chapter": chapter_duration_ms_by_chapter,

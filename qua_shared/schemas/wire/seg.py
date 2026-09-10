@@ -270,6 +270,13 @@ class SegAllResponse(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    #: Inspector riwayah slug of THIS delivery — authoritative, cross-checked
+    #: against ``detailed.json`` server-side. The tab speculatively loads the
+    #: reference bundle from the catalog snapshot (fast, and right whenever the
+    #: catalog is loaded); this field is what it reconciles against, so a
+    #: delivery can never be rendered under another edition's coordinates
+    #: because the catalog happened to arrive late.
+    riwayah: str
     segments: list[SegAllSegment]
     audio_by_chapter: dict[str, str] = Field(default_factory=dict)
     chapter_duration_ms_by_chapter: dict[str, int] = Field(default_factory=dict)

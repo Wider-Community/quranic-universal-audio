@@ -238,7 +238,10 @@
 .seg-text-conf.conf-fail { color: var(--text-faint); }
 
 .seg-text-body {
-    font-family: 'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
+    /* Set per edition on the tab root by `editionFontStack()`; the literal is
+       the Hafs stack, kept here as the fallback for any surface that renders
+       before the tab has resolved a delivery. */
+    font-family: var(--font-quran, 'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif);
     font-size: var(--seg-font-size, 1.84rem);
     word-spacing: var(--seg-word-spacing, 0.15em);
     color: var(--text-primary);

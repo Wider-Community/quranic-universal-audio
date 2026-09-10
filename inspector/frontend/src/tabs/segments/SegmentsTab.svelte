@@ -24,6 +24,8 @@
     import { LS_KEYS } from '../../lib/utils/constants';
     import { pendingSegmentsDeepLink, type SegmentsDeepLink } from '../../lib/utils/goto-segments';
     import { surahInfoReady } from '../../lib/utils/surah-info';
+    import { editionFontStack, ensureEditionFont } from '../../lib/refs/edition-font';
+    import { isSupportedRiwayah } from '../../lib/riwayat';
     import { catalogData, deliveryRiwayah, loadCatalog, startCatalogPolling } from '../dashboard/stores/catalog-data';
     import EditOverlay from './components/edit/EditOverlay.svelte';
     import FiltersBar from './components/filters/FiltersBar.svelte';
@@ -419,15 +421,38 @@
         if (handleSegmentsKey(e)) e.preventDefault();
     }
 
+    // The edition everything on this tab is rendered in. `segAllData.riwayah` is
+    // the server's authoritative answer for the loaded delivery; the catalog is
+    // the fast path used before that payload lands. `null` means the delivery
+    // names a riwayah this build cannot serve — the tab then keeps the Hafs
+    // fallback stack rather than rendering another edition's coordinates in it.
+    $: tabRiwayah = $segAllData?.riwayah ?? deliveryRiwayah($selectedReciter);
+    $: editionRiwayah = isSupportedRiwayah(tabRiwayah) ? tabRiwayah : null;
+    $: fontStack = editionFontStack(editionRiwayah);
+    $: if (editionRiwayah) ensureEditionFont(editionRiwayah);
+
+    // A cross-edition switch invalidates the coordinate vocabularies (muqattaat
+    // openings, standalone allow-lists) the accordion and ref editor read, so
+    // re-fetch them — and the reference bundle — for the new edition.
+    let _configRiwayah: string | null = null;
+    $: if (editionRiwayah && editionRiwayah !== _configRiwayah) {
+        _configRiwayah = editionRiwayah;
+        void loadQuranRefs(editionRiwayah);
+        void loadSegConfig(editionRiwayah).then((cfg) => {
+            cssFontSize = cfg.fontSize;
+            cssWordSpacing = cfg.wordSpacing;
+        });
+    }
+
     onMount(async () => {
         // Fire-and-forget the ~2.4 MB quran-refs bundle that only Segments
         // consumers (SegmentRow, ReferenceEditor, split/merge/auto-fix) need.
         // Idempotent — reciter-actions awaits this same promise before
-        // hydrating per-segment matched_text, and supersedes it with the
-        // selected delivery's own edition once the catalog resolves.
+        // hydrating per-segment matched_text, and the reactive block above
+        // supersedes it once the delivery's own edition is known.
         void loadQuranRefs(deliveryRiwayah($selectedReciter) ?? undefined);
         await surahInfoReady;
-        const cfg = await loadSegConfig();
+        const cfg = await loadSegConfig(deliveryRiwayah($selectedReciter) ?? undefined);
         cssFontSize = cfg.fontSize;
         cssWordSpacing = cfg.wordSpacing;
         await loadReciters();
@@ -444,6 +469,7 @@
     id="segments-panel-inner"
     style:--seg-font-size={cssFontSize || null}
     style:--seg-word-spacing={cssWordSpacing || null}
+    style:--font-quran={fontStack}
 >
     {#if $canManageSamples && !$historyVisible && !$savePreviewVisible}
         <nav class="seg-subtabs" aria-label="Segments sections">

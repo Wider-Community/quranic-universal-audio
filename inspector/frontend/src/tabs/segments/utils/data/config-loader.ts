@@ -1,4 +1,5 @@
 import { fetchJsonOrNull } from '../../../../lib/api';
+import { DEFAULT_RIWAYAH, type InspectorRiwayah } from '../../../../lib/riwayat';
 import {
     SCROLL_ANIM_DEFAULT,
     SCROLL_ANIM_MODES,
@@ -19,23 +20,33 @@ type SegConfigApiResponse = {
     qalqala_letters?: string[];
     standalone_refs?: Array<[number, number, number]>;
     standalone_words?: string[];
+    muqattaat_words?: Array<[number, number, number]>;
     accordion_context?: Record<string, string>;
 };
 
 const _validAnim = new Set<string>(Object.values(SCROLL_ANIM_MODES));
 
 /**
- * Fetch `/api/seg/config`, push parsed values to `segConfig` store,
- * and return CSS var strings `{ fontSize, wordSpacing }` so the tab can
- * apply them to its root element.
+ * Fetch `/api/seg/config` for one edition, push parsed values to `segConfig`,
+ * and return CSS var strings `{ fontSize, wordSpacing }` so the tab can apply
+ * them to its root element.
+ *
+ * The coordinate vocabularies are edition-specific — the muqattaat openings,
+ * the standalone allow-lists and their skeletons all move between riwayat — so
+ * a reciter switch across editions must re-fetch, not reuse.
  */
-export async function loadSegConfig(): Promise<{ fontSize: string; wordSpacing: string }> {
+export async function loadSegConfig(
+    riwayah: InspectorRiwayah = DEFAULT_RIWAYAH,
+): Promise<{ fontSize: string; wordSpacing: string }> {
     try {
-        const cfg = await fetchJsonOrNull<SegConfigApiResponse>('/api/seg/config');
+        const cfg = await fetchJsonOrNull<SegConfigApiResponse>(
+            `/api/seg/config?riwayah=${encodeURIComponent(riwayah)}`,
+        );
         if (!cfg) return { fontSize: '', wordSpacing: '' };
         segConfig.set({
             validationCategories: cfg.validation_categories ?? null,
             muqattaatVerses: cfg.muqattaat_verses ? new Set(cfg.muqattaat_verses.map(([s, a]) => `${s}:${a}`)) : null,
+            muqattaatWords: cfg.muqattaat_words ? new Set(cfg.muqattaat_words.map(([s, a, w]) => `${s}:${a}:${w}`)) : null,
             qalqalaLetters: cfg.qalqala_letters ? new Set(cfg.qalqala_letters) : null,
             standaloneRefs: cfg.standalone_refs ? new Set(cfg.standalone_refs.map(([s, a, w]) => `${s}:${a}:${w}`)) : null,
             standaloneWords: cfg.standalone_words ? new Set(cfg.standalone_words) : null,

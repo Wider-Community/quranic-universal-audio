@@ -1479,6 +1479,7 @@ export interface SamplesListResponse {
  * symmetric shim ``(pad_left_ms + pad_right_ms) // 2``.
  */
 export interface SegAllResponse {
+  riwayah: string;
   segments: SegAllSegment[];
   audio_by_chapter?: {
     [k: string]: string;
