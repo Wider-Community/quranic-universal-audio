@@ -32,6 +32,13 @@ export interface ReportCategoryDef {
     /** Target-flow categories that enter the in-grid report mode. `timing` /
      *  `phonemes` enter directly; `tajweed` + `silence` enter per subtype. */
     entersMode?: 'timing' | 'tajweed' | 'phonemes' | 'silence';
+    /**
+     * The category asks about a fact only a native shard carries. A
+     * word-profile recitation has no cells and no tajweed derivation, so the
+     * row is shown disabled rather than hidden — a reader who expects the
+     * category should learn why it is absent, not wonder where it went.
+     */
+    nativeOnly?: boolean;
 }
 
 export const REPORT_CATEGORIES: ReportCategoryDef[] = [
@@ -48,6 +55,7 @@ export const REPORT_CATEGORIES: ReportCategoryDef[] = [
         blurb: m.ts_report_category_tajweed_blurb,
         flow: 'target',
         entersMode: 'tajweed',
+        nativeOnly: true,
     },
     {
         id: 'phonemes',
@@ -55,6 +63,7 @@ export const REPORT_CATEGORIES: ReportCategoryDef[] = [
         blurb: m.ts_report_category_phonemes_blurb,
         flow: 'target',
         entersMode: 'phonemes',
+        nativeOnly: true,
     },
     {
         id: 'silence',

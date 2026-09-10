@@ -66,7 +66,7 @@ def test_bucketer_edge_cases():
     assert _bucket_pcm_minmax([1, 2, 3], 3, 0) == []
 
 
-def test_compute_audio_peaks_drift_was_zeroed_out():
+def test_compute_audio_peaks_drift_was_zeroed_out(monkeypatch):
     """End-to-end probe of the fencepost using a synthetic decode result.
 
     Stubs the ffmpeg call so the test stays hermetic. With a stride that
@@ -89,15 +89,12 @@ def test_compute_audio_peaks_drift_was_zeroed_out():
         returncode = 0
         stdout = raw
 
-    peaks_mod.subprocess.run = lambda *a, **k: _R()  # type: ignore[attr-defined]
-    try:
-        out = compute_audio_peaks("/fake/path.mp3")
-    finally:
-        # `subprocess.run` was monkey-patched on the module; reload the
-        # default by re-importing the subprocess attribute from stdlib.
-        import subprocess as _sp
-
-        peaks_mod.subprocess = _sp  # type: ignore[attr-defined]
+    # `peaks_mod.subprocess` IS the stdlib module object, so setting `.run` on
+    # it stubs `subprocess.run` process-wide. monkeypatch undoes that at
+    # teardown; rebinding the module attribute afterwards would not, and used
+    # to leave every later subprocess call in the session stubbed.
+    monkeypatch.setattr(peaks_mod.subprocess, "run", lambda *a, **k: _R())
+    out = compute_audio_peaks("/fake/path.mp3")
 
     assert out is not None
     assert out["schema_version"] == PEAKS_SCHEMA_VERSION

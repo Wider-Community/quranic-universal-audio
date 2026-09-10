@@ -67,6 +67,7 @@
       112
     ],
     "delivery_checksum": null,
+    "riwayah": "hafs",
     "slug": "example-reciter",
     "source_urls": {
       "1": "https://example.invalid/media/001.mp3",

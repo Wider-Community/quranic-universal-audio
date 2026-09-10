@@ -1,10 +1,11 @@
 import { fetchJsonOrNull } from '../../../../lib/api';
+import { DEFAULT_RIWAYAH, type InspectorRiwayah } from '../../../../lib/riwayat';
 import {
     SCROLL_ANIM_DEFAULT,
     SCROLL_ANIM_MODES,
     type ScrollAnimMode,
 } from '../../../../lib/utils/constants';
-import { segConfig } from '../../stores/config';
+import { resetSegConfig, segConfig } from '../../stores/config';
 
 type SegConfigApiResponse = {
     seg_font_size?: string;
@@ -19,23 +20,47 @@ type SegConfigApiResponse = {
     qalqala_letters?: string[];
     standalone_refs?: Array<[number, number, number]>;
     standalone_words?: string[];
+    muqattaat_words?: Array<[number, number, number]>;
     accordion_context?: Record<string, string>;
+    riwayah?: string;
 };
 
 const _validAnim = new Set<string>(Object.values(SCROLL_ANIM_MODES));
 
 /**
- * Fetch `/api/seg/config`, push parsed values to `segConfig` store,
- * and return CSS var strings `{ fontSize, wordSpacing }` so the tab can
- * apply them to its root element.
+ * Fetch `/api/seg/config` for one edition, push parsed values to `segConfig`,
+ * and return CSS var strings `{ fontSize, wordSpacing }` so the tab can apply
+ * them to its root element.
+ *
+ * The coordinate vocabularies are edition-specific — the muqattaat openings,
+ * the standalone allow-lists and their skeletons all move between riwayat — so
+ * a reciter switch across editions must re-fetch, not reuse.
+ *
+ * Responses are not last-write-wins: the backend echoes the edition it answered
+ * for, and a stale one is discarded. Two fetches race on every tab open, and on
+ * a single-worker backend the Hafs one can land after the Warsh one.
  */
-export async function loadSegConfig(): Promise<{ fontSize: string; wordSpacing: string }> {
+let _wanted: InspectorRiwayah = DEFAULT_RIWAYAH;
+
+export function clearSegConfig(): void {
+    _wanted = DEFAULT_RIWAYAH;
+    resetSegConfig();
+}
+
+export async function loadSegConfig(
+    riwayah: InspectorRiwayah = DEFAULT_RIWAYAH,
+): Promise<{ fontSize: string; wordSpacing: string }> {
+    _wanted = riwayah;
     try {
-        const cfg = await fetchJsonOrNull<SegConfigApiResponse>('/api/seg/config');
+        const cfg = await fetchJsonOrNull<SegConfigApiResponse>(
+            `/api/seg/config?riwayah=${encodeURIComponent(riwayah)}`,
+        );
         if (!cfg) return { fontSize: '', wordSpacing: '' };
+        if (_wanted !== riwayah) return { fontSize: '', wordSpacing: '' };
         segConfig.set({
             validationCategories: cfg.validation_categories ?? null,
             muqattaatVerses: cfg.muqattaat_verses ? new Set(cfg.muqattaat_verses.map(([s, a]) => `${s}:${a}`)) : null,
+            muqattaatWords: cfg.muqattaat_words ? new Set(cfg.muqattaat_words.map(([s, a, w]) => `${s}:${a}:${w}`)) : null,
             qalqalaLetters: cfg.qalqala_letters ? new Set(cfg.qalqala_letters) : null,
             standaloneRefs: cfg.standalone_refs ? new Set(cfg.standalone_refs.map(([s, a, w]) => `${s}:${a}:${w}`)) : null,
             standaloneWords: cfg.standalone_words ? new Set(cfg.standalone_words) : null,

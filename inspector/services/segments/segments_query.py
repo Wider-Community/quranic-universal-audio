@@ -5,12 +5,13 @@ No Flask imports -- functions accept parameters and return plain dicts/lists.
 
 import statistics
 
-from config import LOW_CONFIDENCE_RED, LOW_CONFIDENCE_THRESHOLD
+from config import LOW_CONFIDENCE_RED, LOW_CONFIDENCE_THRESHOLDS
 from services.audio.audio_meta import (
     chapter_bitrate_kbps_for_reciter,
     is_vbr,
     vbr_chapters_for_reciter,
 )
+from services.reference.delivery_edition import sdk_riwayah_for
 from services.storage import cache
 from services.storage.data_loader import (
     get_word_counts,
@@ -95,7 +96,11 @@ def get_chapter_data(reciter: str, chapter: int, verse_filter: str | None = None
 
     # Missing verses
     missing_verses = []
-    wc = get_word_counts()
+    # The chapter's verse list under THIS edition's counting profile: Warsh's
+    # al-Baqarah ends at 285, so a Hafs-derived expectation would report 2:286
+    # missing on every Warsh delivery, forever.
+    riwayah = sdk_riwayah_for(reciter)
+    wc = get_word_counts(riwayah)
     expected_verses = {v for (s, v) in wc if s == chapter}
     if expected_verses:
         found_verses = set()
@@ -123,7 +128,9 @@ def get_chapter_data(reciter: str, chapter: int, verse_filter: str | None = None
         "conf_mean": round(statistics.mean(confidences), 4) if confidences else 0,
         "conf_max": round(max(confidences), 4) if confidences else 0,
         "below_60": sum(1 for c in confidences if c < LOW_CONFIDENCE_RED),
-        "below_80": sum(1 for c in confidences if c < LOW_CONFIDENCE_THRESHOLD),
+        # The same per-edition cutoff validation and the ready-gate use, so the
+        # stats panel and the accordion cannot disagree about one segment.
+        "below_80": sum(1 for c in confidences if c < LOW_CONFIDENCE_THRESHOLDS[riwayah]),
         "total_speech_ms": round(total_speech),
         "avg_segment_ms": round(total_speech / len(segments)) if segments else 0,
         "total_silence_ms": round(total_silence),

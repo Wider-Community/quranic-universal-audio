@@ -6,6 +6,7 @@ Extracted from validate_reciter_segments. Given the verse_segments map
 
 from __future__ import annotations
 
+from qua_shared.riwayat import DEFAULT_SDK_RIWAYAH
 from services.storage.data_loader import word_has_stop
 
 
@@ -13,6 +14,7 @@ def _build_missing_words(
     verse_segments: dict[tuple[int, int], list],
     word_counts: dict[tuple[int, int], int],
     sequence_gaps: list[dict] | None = None,
+    riwayah: str = DEFAULT_SDK_RIWAYAH,
 ) -> list[dict]:
     """Build a list of missing-word issue dicts from the verse coverage map.
 
@@ -71,13 +73,13 @@ def _build_missing_words(
                     wf, wt, idx = seg_list[j]
                     next_wf, next_wt, next_idx = seg_list[j + 1]
                     if wt + 1 == mw and mw + 1 == next_wf:
-                        if word_has_stop(surah, ayah, wt):
+                        if word_has_stop(surah, ayah, wt, riwayah):
                             auto_fix = {
                                 "target_seg_index": next_idx,
                                 "new_ref_start": f"{surah}:{ayah}:{mw}",
                                 "new_ref_end": f"{surah}:{ayah}:{next_wt}",
                             }
-                        elif word_has_stop(surah, ayah, mw):
+                        elif word_has_stop(surah, ayah, mw, riwayah):
                             auto_fix = {
                                 "target_seg_index": idx,
                                 "new_ref_start": f"{surah}:{ayah}:{wf}",

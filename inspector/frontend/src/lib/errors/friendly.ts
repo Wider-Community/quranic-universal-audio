@@ -69,6 +69,12 @@ const CODE_COPY: Record<string, CopyEntry> = {
 
     // Storage
     READ_ONLY: m.errors_read_only,
+
+    // Editions (multi-riwayah)
+    RIWAYAH_MISMATCH: m.errors_riwayah_mismatch,
+    UNSUPPORTED_RIWAYAH: m.errors_unsupported_riwayah,
+    EDITIONS_UNAVAILABLE: m.errors_editions_unavailable,
+    REF_NOT_IN_EDITION: m.errors_ref_not_in_edition,
 };
 
 const STATUS_FALLBACK: Record<number, () => string> = {
@@ -76,6 +82,7 @@ const STATUS_FALLBACK: Record<number, () => string> = {
     403: m.errors_status_403,
     404: m.errors_status_404,
     409: m.errors_status_409,
+    503: m.errors_status_503,
     500: m.errors_status_500,
 };
 

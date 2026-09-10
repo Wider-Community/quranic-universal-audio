@@ -4,18 +4,36 @@ Timestamp shards store a compact, renderer-neutral projection of native
 phonemizer readings plus audio timing. Full native documents are generation
 and audit inputs; they are not repeated in every reciter's runtime shards.
 
+## Two profiles
+
+Each object at `reciters/<slug>/timestamps/<chapter>.json.br` is one of two
+profiles, discriminated by `_meta.profile`:
+
+| Profile | Schema | Contains | Produced for |
+|---|---|---|---|
+| `native` | 13 or 14 | full phonemizer cells, sounds, animation tokens | Hafs |
+| `word` | 14 | proxy-timed words + pause boundaries, nothing below | the other three riwayat |
+
+**Absent `profile` reads as `native`.** Every v13 object predates the
+discriminator, and existing Hafs shards are never restamped, so a reader must
+branch on `shard_profile()` / `isWordShard()` and never on `schema_version`.
+
+The word profile is documented in full in
+[`editions.md`](editions.md#5-the-word-profile-shard); the rest of this page is
+the native profile.
+
 ## Contract
 
-Each object at `reciters/<slug>/timestamps/<chapter>.json.br` is a closed
-schema-v12 JSON document compressed with deterministic Brotli quality 6:
+A native object is a closed schema-v13/v14 JSON document compressed with
+deterministic Brotli quality 6:
 
 ```json
 {
   "_meta": {
-    "schema_version": 12,
+    "schema_version": 13,
     "chapter": 1,
     "audio_category": "by_surah",
-    "phonemizer_version": "2.15.3",
+    "phonemizer_version": "3.0",
     "native_schema_version": 2,
     "renderer_codec_version": 1,
     "native_profile": {
@@ -31,15 +49,21 @@ schema-v12 JSON document compressed with deterministic Brotli quality 6:
     "render": {
       "v": 1,
       "m": ["1:3", "canonical-digest", "native-documents-sha256"],
-      "p": [], "r": [], "w": [], "b": []
+      "p": [], "r": [], "w": [], "b": [], "a": []
     },
-    "timing": {"w": [], "s": [], "l": [], "c": []}
+    "timing": {"w": [], "s": [], "a": [], "c": []}
   }]
 }
 ```
 
-There is no legacy reader. Historical v9/v11 objects are accepted only by the
-one-time restamper, which emits this final v12 shape and validates it before
+v13 supersedes v12 by replacing the per-letter timing array (`timing.l`) with
+producer-owned **animation tokens** (`render.a` + `timing.a`). Everything else
+about the codec — parts, words, boundaries, columns, sounds, the deterministic
+Brotli envelope — is unchanged from v12, so the two differ only in how sub-word
+paint is expressed.
+
+There is no legacy reader. Historical v9/v11/v12 objects are accepted only by
+the one-time restampers, which emit the current shape and validate it before
 upload.
 
 ## Why the compact codec is native
@@ -88,6 +112,7 @@ opacity and editability only; it never changes phonemes or geometry.
 | `r` | Producer rule IDs indexed by native rule-occurrence ID. |
 | `w` | Words indexed by native word ID. |
 | `b` | Post-word boundaries; item `i` has native boundary ID `i + 1`. |
+| `a` | Animation tokens indexed by token ID (v13; see [Timing payload](#timing-payload)). |
 
 A word is:
 
@@ -124,15 +149,30 @@ variant profile remains in `_meta` for reproducibility.
 | --- | --- | --- |
 | `w` | `[start_ms, end_ms]` | Word span indexed by word ID. |
 | `s` | `[start_ms, end_ms]` | Sound span indexed by sound ID. |
-| `l` | `[unit_id, word_id, text, start_ms, end_ms, silent]` | Native letter-unit timing; nullable spans are retained. |
+| `a` | `[start_ms, end_ms]` | Animation-token span indexed by token ID; both ends are nullable together (an untimed token). |
 | `c` | `[column_id, start_ms, end_ms]` | Sparse exact column-span override; a null pair suppresses a derived span. |
 
-Non-letter source units are omitted. A sounding column is timed exclusively by
-its native cell sounds; source-unit timing is only the fallback for a soundless
-column. During encoding the SDK compares the letter-only fallback with the full
-source-unit fallback and stores an entry in `c` only when they differ. This
-prevents an attached or inserted mark from extending a neighbouring sounding
-cell while preserving exact timing for genuinely soundless columns.
+`render.a` carries the matching token metadata, positionally aligned with
+`timing.a`:
+
+```text
+[word_id, source_unit_ids, character_ids, paint_character_ids, text,
+ sound_ids, policy_code, target_token_id]
+```
+
+`policy_code` indexes `("timed", "cohighlight_previous", "cohighlight_next")` —
+a token either owns its own interval or borrows a neighbour's, which is how a
+combining mark rides its base rather than detaching into a span of its own.
+`character_ids` are the token's source characters; `paint_character_ids` is the
+subset that actually receives paint. `target_token_id` names the token a
+co-highlight defers to, and is `null` for a `timed` token.
+
+A sounding column is timed exclusively by its native cell sounds; source-unit
+timing is only the fallback for a soundless column. During encoding the SDK
+compares the letter-only fallback with the full source-unit fallback and stores
+an entry in `c` only when they differ. This prevents an attached or inserted
+mark from extending a neighbouring sounding cell while preserving exact timing
+for genuinely soundless columns.
 
 Boundary timing is derived losslessly: each internal boundary runs from the
 preceding word end to the following word start. A reading's final boundary runs
@@ -182,9 +222,9 @@ The main entry points are:
 | --- | --- |
 | Native documents | `qua_sdk.integrations.native` |
 | Compact encoder | `qua_sdk.integrations.cells_codec` |
-| v12 builder | `qua_sdk.integrations.shards.build_native_shards` |
+| v13 builder | `qua_sdk.integrations.shards.build_native_shards` |
 | Validated atomic writer | `qua_shared.timestamps_shards.write_validated_shard` |
-| Structural audit | `qua_shared.timestamps_v12_audit` |
+| Structural audit | `qua_shared.timestamps_v13_audit` |
 | Python decoder | `qua_shared.timestamps_codec` |
 | Canonical release projection | `qua_shared.timestamps_native` |
 
@@ -195,11 +235,13 @@ normal JSON. Manifest and reference-resource compression remain independent.
 Fresh MFA generation and the one-time restamper share the same structural
 audit and deterministic serializer. The active chapter is replaced atomically
 only after both checks pass. Generation also pins the staged SDK by clean Git
-revision in `.github/config/repo.yml`; matching schema 12 alone is not enough.
+revision in `.github/config/repo.yml`; matching schema 13 alone is not enough.
 
-## Production restamp runbook
+## Production restamp runbook (historical, v11 to v12)
 
-The v11-to-v12 cutover is backup-first and uses a frozen source. Never restamp
+Retained as the worked example of a shard cutover; the v12-to-v13 restamp
+followed the same shape. A cutover is backup-first and uses a frozen source.
+Never restamp
 from live paths while files can still change.
 
 1. Inventory every production `reciters/<slug>/timestamps/` tree. Record the
@@ -272,7 +314,7 @@ separate, explicitly approved cleanup.
 
 ## Validation and cutover gate
 
-For every backed-up chapter, the audit requires schema 12/native schema 2/
+For every backed-up chapter, the audit requires the target schema/native schema 2/
 codec 1, complete ID closure, byte-identical word and sound intervals, exact
 letter recutting, complete part coverage, valid sparse overrides,
 deterministic Brotli output, retained known cross-verse wasl chains, and zero

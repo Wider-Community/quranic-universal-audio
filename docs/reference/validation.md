@@ -123,10 +123,14 @@ The before/after category delta on each op record drives the per-batch resolved-
 
 `failed` resolution: once a ref is committed the seg's confidence becomes 1.0 and the empty-`matched_ref` condition no longer holds, so the category auto-drops on the next validate.
 
-## Bench / drift harness
+## Drift gates
 
-`bench/` (`snapshot.py` / `drift.py` / `measure.py`) + committed canonical snapshots `bench/ground_truth/<slug>.json` are the drift gate for any change to a perf-sensitive validation path. The gate asserts **byte-equivalent per-category output** against the ground-truth snapshot across the WIP reciter set. Any change to compute placement, caching, parallelism, or a persisted-field writer must pass drift before landing.
+Any change to a coordinate table, a persisted-field writer, compute placement, caching, or parallelism must prove it did not move existing output. Three gates do that, in ascending cost:
 
-Backfill scripts use **parallel-then-promote**: write to a staging path (`archive/backfill/<slug>/detailed.json`), drift-check in-memory against `bench/ground_truth/<slug>.json`, then atomically promote to `reciters/<slug>/detailed.json` only on byte-equivalent match. All persisted-field writers (save / extraction / backfill / classifier fall-through) must produce identical values — drift check is the only guarantee of that.
+1. **Derivation identity** — `tests/services/test_edition_tables.py::test_hafs_tables_are_projection_identity` and `test_surah_info_matches_edition_index`. The per-edition coordinate tables (`muqattaat_words`, `standalone_refs`, `standalone_words`, `single_word_verses`) are *derived* by projecting the Hafs baseline in `inspector/constants.py` through `qua_domain`; for Hafs that projection is the identity, so the test asserts the derived table equals the frozen literal exactly. Stronger than a snapshot: it proves the derivation for all 77,433 words, not one sampled reciter.
+2. **Fixture classifier parity** — `classify_segment` over the committed segment fixtures must produce identical `classified_issues` with the edition accessor forced unavailable. This is what keeps the persisted-field writers (save / extraction / backfill / classifier fall-through) in agreement, since they all call the same source-of-truth helpers.
+3. **Nightly bucket validation** — `bucket-validate.yml` + `/healthz?deep=1` (`services/storage/bucket_audit.py::sample_validation`) round-trips a real bucket sample through `qua_shared/schemas`, catching a writer that emits a shape the readers reject.
 
-(The `bench/` tree and parent-repo `validators/` are gitignored / live outside the inspector working tree; paths above are canonical for when the harness is checked out.)
+Backfill scripts use **parallel-then-promote**: write to a staging path (`archive/backfill/<slug>/detailed.json`), compare in memory against the current object, then atomically promote to `reciters/<slug>/detailed.json` only on byte-equivalent match for every field the backfill does not intend to change.
+
+> An earlier version of this document described a `bench/` harness (`snapshot.py` / `drift.py` / `measure.py` + `bench/ground_truth/<slug>.json`) as the drift gate. No such tree exists in this repo or on disk — `git ls-files` matches only `scripts/diagnostics/bench_storage.py` — so it could not gate anything. The three gates above replace it.

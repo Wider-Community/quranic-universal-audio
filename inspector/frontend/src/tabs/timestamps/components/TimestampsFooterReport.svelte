@@ -18,6 +18,7 @@
     import { can } from '../../../lib/stores/capabilities';
     import { playerContext } from '../../../lib/stores/player-context';
     import { dashPort } from '../../../lib/playback/dash-port';
+    import type { TsVerseData } from '../../../lib/types/ts-client';
     import type { TsReport } from '../../../lib/types/generated/schemas';
     import { getVerseReports } from '../services/reports-client';
     import {
@@ -91,17 +92,44 @@
         await loadVerse();
     }
 
+    /**
+     * Every span of `verse` in the loaded occasion, in the file-absolute ms
+     * `dashPort` reports.
+     *
+     * Native readings carry `parts` in that unit already. A word-profile
+     * reading has no parts — its rows are occasion-relative seconds — so shift
+     * them by the occasion's own start. Without this branch a non-Hafs delivery
+     * matched no reading at all, and the audio/other composers (which ARE
+     * offered for a word profile) could never submit.
+     */
+    function verseSpans(data: TsVerseData, verse: string): { id: string; from: number; to: number }[] {
+        const spans: { id: string; from: number; to: number }[] = [];
+        for (const reading of data.native) {
+            for (const part of reading.parts) {
+                if (part.ref === verse) spans.push({ id: reading.id, from: part.t[0], to: part.t[1] });
+            }
+        }
+        for (const reading of data.wordReadings) {
+            const words = reading.words.filter((w) => w.location.startsWith(`${verse}:`));
+            if (words.length === 0) continue;
+            spans.push({
+                id: reading.id,
+                from: data.time_start_ms + Math.min(...words.map((w) => w.start)) * 1000,
+                to: data.time_start_ms + Math.max(...words.map((w) => w.end)) * 1000,
+            });
+        }
+        return spans;
+    }
+
     function readingIdFor(verse: string): string {
         const data = get(focusWaslGroup)?.data ?? get(loadedVerse)?.data;
-        const matches = data?.native.filter((reading) =>
-            reading.parts.some((part) => part.ref === verse),
-        ) ?? [];
-        if (matches.length === 1) return matches[0]!.id;
+        if (!data) return '';
+        const spans = verseSpans(data, verse);
+        const ids = new Set(spans.map((s) => s.id));
+        if (ids.size === 1) return [...ids][0]!;
         const at = dashPort.currentTimeMs();
-        const active = matches.filter((reading) => reading.parts.some((part) =>
-            part.ref === verse && part.t[0] <= at && at < part.t[1],
-        ));
-        return active.length === 1 ? active[0]!.id : '';
+        const active = new Set(spans.filter((s) => s.from <= at && at < s.to).map((s) => s.id));
+        return active.size === 1 ? [...active][0]! : '';
     }
 
     function toggle(): void {

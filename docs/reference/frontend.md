@@ -142,7 +142,7 @@ Stop-sign detection is one shared util — `lib/utils/waqf.ts` (`splitWaqf`/`has
 | `generated/schemas.ts` | **Codegen'd FE data contracts** — `scripts/codegen/regen_fe_types.py` over `qua_shared/schemas/fe_types.py` (Pydantic → JSON Schema → TS). Never hand-edit; CI `schema-codegen-check` gates it. The `bucket/` artefact shapes (`Segment`, `EditOp`, `PeakBucket`, `HistoryBatch`, `PhonemeInterval`, …) **and** the `wire/` `seg`/`ts`/`public`/`audio` request/response shapes are now modeled there and codegen'd. |
 | `view-models.ts` | **FE-only** view-models + derived reads with no single wire producer: the editor's working `Segment` superset, the `EditOp`/`EditOpPatch`/`HistoryBatch` history views, `GenerationBoundary`/`HistorySummary` rollups, `Actor`, the `Ref`/`VerseRef` string aliases, and the derived `/api/seg/*` reads (`SegEditHistoryResponse`, `SegStatsResponse`, …). |
 | `peaks-transport.ts` | **FE-only** waveform transport — `PeakBucket`/`AudioPeaks`/`SegmentPeaks`, including the flag-gated `Int8Array` drawer branch (no wire model). |
-| `ts-client.ts` | **FE-only** Timestamps-tab client types — the `TsVerseData` verse model, slim `TsCatalog*` projection, native-v12 response aliases, and `SurahInfo*`. Native shard document types come from generated shared schemas. |
+| `ts-client.ts` | **FE-only** Timestamps-tab client types — the `TsVerseData` verse model, slim `TsCatalog*` projection, native-v13 response aliases, and `SurahInfo*`. Native shard document types come from generated shared schemas. |
 | `public-bucket.ts` | **FE-only** public-bucket display vocabulary — `PublicBucket`/`AdminBucket`, the `PUBLIC_BUCKET_LABELS`/`PUBLIC_BUCKETS`/`BUCKET_PRIORITY` tables, `bucketRank`, and `CoverageKind`. |
 | `ui.ts` | Shared UI types for components |
 
@@ -279,3 +279,31 @@ These components stay Svelte-4 legacy by design (`docs/planning/svelte-migration
 ## Build outputs
 
 `frontend/dist/` is gitignored. `npm run build` = `tsc --noEmit && vite build` → hashed JS + CSS, Chart.js in a separate `charts` chunk. Run before launching Flask in production mode.
+
+
+## Multi-riwayah
+
+`lib/riwayat.ts` mirrors the backend slug table and is typed off the codegen'd
+union, so a backend change that adds a riwayah breaks `npm run check` rather
+than shipping a stale list. Two vocabularies meet in the browser: the shard's
+`_meta.riwayah` is the **SDK** slug (`warsh`), while the font and reference
+routes are keyed by the **Inspector** slug (`warsh_an_nafi`) —
+`toInspectorSlug()` is the bridge.
+
+- `lib/refs/quran-refs.ts` — the per-edition reference bundle. One edition in the
+  store at a time, cleared on switch, one bundle in `sessionStorage`.
+- `lib/refs/edition-font.ts` — `--font-quran` per edition; Hafs keeps the bundled
+  Digital Khatt stack (its font is inlined because HF Spaces do not smudge
+  Git-LFS at build time).
+- `tabs/timestamps/stores/display.ts` — `wordProfile` + `deliveryRiwayah`, set
+  from the **shard**, and the derived `lettersVisible` / `phonemesVisible` /
+  `wipeActive` / `effectiveGranularity` that every view renders from. The raw
+  writables stay the user's persisted preference.
+- `tabs/timestamps/components/WordTimedRow.svelte` — the word-profile analysis
+  row, reusing the `.timed-analysis` class so every `--qc-*` token and
+  report-mode rule applies unchanged.
+- Shared `lib/` components must not import a tab store: `NowReciting.svelte`
+  locks granularity off the DATA (`units.some(u => u.letters.length)`), not off
+  the delivery's riwayah.
+
+Full detail: [`editions.md`](editions.md).

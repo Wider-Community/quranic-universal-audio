@@ -16,7 +16,7 @@
     import { getReciterTaskStore, type ReciterTask,refreshReciterTask } from '../../lib/api/reciter-task';
     import { localeStore, tr } from '../../lib/i18n/locale-store';
     import * as m from '../../lib/paraglide/messages';
-    import { loadQuranRefs } from '../../lib/refs/quran-refs';
+    import { clearQuranRefs, loadQuranRefs } from '../../lib/refs/quran-refs';
     import { currentUser, loadCurrentUser } from '../../lib/stores/current-user';
     import { setEditingMode, syncEditingMode } from '../../lib/stores/editing-mode';
     import { openGuidesGate } from '../../lib/stores/guides-gate';
@@ -24,7 +24,9 @@
     import { LS_KEYS } from '../../lib/utils/constants';
     import { pendingSegmentsDeepLink, type SegmentsDeepLink } from '../../lib/utils/goto-segments';
     import { surahInfoReady } from '../../lib/utils/surah-info';
-    import { catalogData, loadCatalog, startCatalogPolling } from '../dashboard/stores/catalog-data';
+    import { editionFontStack, ensureEditionFont } from '../../lib/refs/edition-font';
+    import { isSupportedRiwayah } from '../../lib/riwayat';
+    import { catalogData, deliveryRiwayah, loadCatalog, startCatalogPolling } from '../dashboard/stores/catalog-data';
     import EditOverlay from './components/edit/EditOverlay.svelte';
     import FiltersBar from './components/filters/FiltersBar.svelte';
     import SegmentsFooter from './components/footer/SegmentsFooter.svelte';
@@ -68,7 +70,7 @@
     import { savePreviewVisible } from './stores/save';
     import { accordionViewActive, valUiOpenCategory } from './stores/validation';
     import { loadChapterData } from './utils/data/chapter-actions';
-    import { loadSegConfig } from './utils/data/config-loader';
+    import { clearSegConfig, loadSegConfig } from './utils/data/config-loader';
     import { reloadCurrentReciter } from './utils/data/reciter-actions';
     import { handleSegmentsKey } from './utils/keyboard';
     import { playFromSegment } from './utils/playback/playback';
@@ -268,6 +270,20 @@
                 localStorage.removeItem(LS_KEYS.SEG_RECITER);
             }
             if (validSaved) {
+                // The catalog FIRST, and awaited. `onReciterChange` resolves
+                // the delivery's edition to pick its refs bundle, and
+                // `deliveryRiwayah` answers Hafs for a slug whose roster has
+                // not loaded — so kicking this after the await hydrated every
+                // segment's `matched_text` from the HAFS script on a Warsh
+                // delivery, and left those strings in the client model for the
+                // session (the reactive block below moves the store, not the
+                // rows already hydrated). Segments is the tab that mounts
+                // without DashboardTab, so nothing else has fetched it.
+                // Tolerated on failure: a Hafs guess renders wrong, an empty
+                // tab renders nothing.
+                await loadCatalog().catch((e) =>
+                    console.error('catalog fetch failed before reciter bind:', e),
+                );
                 // Mark this slug as handled before updating the store so the
                 // out-of-band reactive subscription below skips it (we run
                 // _bindTask + onReciterChange imperatively right here).
@@ -275,9 +291,6 @@
                 selectedReciter.set(validSaved);
                 _bindTask(isSampleSlug(validSaved) ? null : validSaved);
                 await onReciterChange(validSaved);
-                // Kick the shared catalog fetch; the footer chip's identity +
-                // bucket derive reactively from `$catalogData` once it lands.
-                void loadCatalog();
             }
         } catch (e) { console.error('Error loading seg reciters:', e); }
     }
@@ -419,16 +432,54 @@
         if (handleSegmentsKey(e)) e.preventDefault();
     }
 
+    // The edition everything on this tab is rendered in. `segAllData.riwayah` is
+    // the server's authoritative answer for the loaded delivery; the catalog is
+    // the fast path used before that payload lands. `null` means the delivery
+    // names a riwayah this build cannot serve — the tab then shows nothing
+    // edition-specific rather than the previous delivery's words under this
+    // one's coordinates.
+    $: tabRiwayah = $segAllData?.riwayah ?? deliveryRiwayah($selectedReciter);
+    $: editionRiwayah = isSupportedRiwayah(tabRiwayah) ? tabRiwayah : null;
+    $: fontStack = editionFontStack(editionRiwayah);
+    $: if (editionRiwayah) ensureEditionFont(editionRiwayah);
+
+    // A cross-edition switch invalidates the coordinate vocabularies (muqattaat
+    // openings, standalone allow-lists) the accordion and ref editor read, so
+    // re-fetch them — and the reference bundle — for the new edition. An
+    // unservable edition clears both instead: stale tables answer questions
+    // ("is this one-word segment legitimate?") for a different mushaf.
+    let _configRiwayah: string | null = null;
+    $: if (editionRiwayah && editionRiwayah !== _configRiwayah) {
+        _configRiwayah = editionRiwayah;
+        void loadQuranRefs(editionRiwayah);
+        void loadSegConfig(editionRiwayah).then((cfg) => {
+            cssFontSize = cfg.fontSize;
+            cssWordSpacing = cfg.wordSpacing;
+        });
+    } else if (!editionRiwayah && _configRiwayah !== null) {
+        _configRiwayah = null;
+        clearQuranRefs();
+        clearSegConfig();
+    }
+
     onMount(async () => {
-        // Fire-and-forget the 2.4 MB quran-refs bundle that only Segments
+        // Fire-and-forget the ~2.4 MB quran-refs bundle that only Segments
         // consumers (SegmentRow, ReferenceEditor, split/merge/auto-fix) need.
         // Idempotent — reciter-actions awaits this same promise before
-        // hydrating per-segment matched_text.
-        void loadQuranRefs();
-        await surahInfoReady;
-        const cfg = await loadSegConfig();
-        cssFontSize = cfg.fontSize;
-        cssWordSpacing = cfg.wordSpacing;
+        // hydrating per-segment matched_text, and the reactive block above
+        // supersedes it once the delivery's own edition is known.
+        // `null` means unservable, not "use Hafs" — the reactive block above
+        // fetches for the real edition once the delivery is known.
+        const known = deliveryRiwayah($selectedReciter);
+        if (known) {
+            void loadQuranRefs(known);
+            await surahInfoReady;
+            const cfg = await loadSegConfig(known);
+            cssFontSize = cfg.fontSize;
+            cssWordSpacing = cfg.wordSpacing;
+        } else {
+            await surahInfoReady;
+        }
         await loadReciters();
         stopCatalogPoll = startCatalogPolling();
     });
@@ -443,6 +494,7 @@
     id="segments-panel-inner"
     style:--seg-font-size={cssFontSize || null}
     style:--seg-word-spacing={cssWordSpacing || null}
+    style:--font-quran={fontStack}
 >
     {#if $canManageSamples && !$historyVisible && !$savePreviewVisible}
         <nav class="seg-subtabs" aria-label="Segments sections">

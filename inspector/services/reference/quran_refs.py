@@ -1,16 +1,24 @@
-"""Quran reference-data payload served as one immutable static asset.
+"""Quran reference-data payload, one immutable static asset per edition.
 
-Bundles the two pieces of fixed reference data the Segments tab needs at
-edit time: the Digital Khatt word map (``dk_words``) and the per-verse word
-counts (``verse_word_counts``). Both are constant across users, reciters,
-chapters, and sessions, so the frontend fetches the payload once per
-browser via ``/api/static/quran-refs.json`` (immutable, content-hashed) and
-shares it across every tab.
+Bundles the three pieces of fixed reference data the Segments tab needs at edit
+time: the word map (``dk_words``), the per-verse word counts
+(``verse_word_counts``), and the end-of-ayah marker prefix
+(``verse_marker_prefix``). All are constant across users, reciters, chapters and
+sessions, so the frontend fetches one payload per edition per browser via
+``/api/static/quran-refs.json?riwayah=…`` (immutable, content-hashed) and shares
+it across every tab.
 
-The payload is built lazily on first request and memoised at module scope;
-the SHA-256 hash of the serialised bytes powers ETag + cache-busting query
-param. The hash changes only when the underlying Digital Khatt script or
-surah metadata is rebuilt.
+The payload is built lazily per riwayah and memoised in
+``services/storage/cache.py``; the SHA-256 prefix of the serialised bytes powers
+the ETag + cache-busting query param, and changes only when the underlying
+script or surah metadata is rebuilt.
+
+``verse_marker_prefix`` is U+06DD for Hafs, whose Digital Khatt font needs the
+ornament sent alongside the Arabic-Indic digits, and empty for the three
+packaged QPC fonts, which decorate the digits themselves — sending both would
+render two nested ornaments. This mirrors the aligner app's
+``src/core/quran_refs_bundle.py`` exactly, so a ref preview looks the same in
+both apps.
 """
 
 from __future__ import annotations
@@ -20,58 +28,70 @@ import threading
 
 import orjson
 
+from qua_shared.riwayat import DEFAULT_SDK_RIWAYAH
+from services.storage import cache
 from services.storage.data_loader import get_dk_words_flat, get_word_counts
 
+#: U+06DD ARABIC END OF AYAH.
+VERSE_MARKER = "۝"
+
 _lock = threading.Lock()
-_payload: bytes | None = None
-_hash: str | None = None
 
 
-def _build() -> tuple[bytes, str]:
-    """Serialise the dk_words + verse_word_counts bundle and hash it."""
-    verse_word_counts = {f"{surah}:{ayah}": n for (surah, ayah), n in get_word_counts().items()}
+def verse_marker_prefix(riwayah: str = DEFAULT_SDK_RIWAYAH) -> str:
+    """The glyph to put before an Arabic-Indic verse number in this edition."""
+    return VERSE_MARKER if riwayah == DEFAULT_SDK_RIWAYAH else ""
+
+
+def _build(riwayah: str) -> tuple[bytes, str]:
+    """Serialise the reference bundle for one edition and hash it."""
+    verse_word_counts = {
+        f"{surah}:{ayah}": n for (surah, ayah), n in get_word_counts(riwayah).items()
+    }
     body = orjson.dumps(
         {
-            "dk_words": get_dk_words_flat(),
+            "riwayah": riwayah,
+            "dk_words": get_dk_words_flat(riwayah),
             "verse_word_counts": verse_word_counts,
+            "verse_marker_prefix": verse_marker_prefix(riwayah),
         }
     )
     digest = hashlib.sha256(body).hexdigest()[:12]
     return body, digest
 
 
-def _ensure() -> tuple[bytes, str]:
-    global _payload, _hash
-    if _payload is not None and _hash is not None:
-        return _payload, _hash
+def _ensure(riwayah: str) -> tuple[bytes, str]:
+    cached = cache.get_edition_refs_payload(riwayah)
+    if cached is not None:
+        return cached
     with _lock:
-        if _payload is None or _hash is None:
-            _payload, _hash = _build()
-    return _payload, _hash
+        cached = cache.get_edition_refs_payload(riwayah)
+        if cached is None:
+            cached = _build(riwayah)
+            cache.set_edition_refs_payload(riwayah, cached)
+    return cached
 
 
-def build_payload() -> bytes:
-    """Return the serialised Quran-refs JSON body."""
-    body, _ = _ensure()
+def build_payload(riwayah: str = DEFAULT_SDK_RIWAYAH) -> bytes:
+    """Return the serialised Quran-refs JSON body for one edition."""
+    body, _ = _ensure(riwayah)
     return body
 
 
-def payload_hash() -> str:
+def payload_hash(riwayah: str = DEFAULT_SDK_RIWAYAH) -> str:
     """Return the 12-char SHA-256 prefix used as ETag + cache buster."""
-    _, digest = _ensure()
+    _, digest = _ensure(riwayah)
     return digest
 
 
 def reset_cache() -> None:
-    """Drop the memoised payload. Test-only — prod has no rebuild trigger."""
-    global _payload, _hash
+    """Drop every memoised payload. Test-only — prod has no rebuild trigger."""
     with _lock:
-        _payload = None
-        _hash = None
+        cache.clear_edition_refs_payloads()
 
 
 # ---------------------------------------------------------------------------
-# matched_ref -> dk_words text resolver
+# matched_ref -> word-map text resolver
 #
 # Mirror of `frontend/src/tabs/segments/utils/data/references.ts::dkTextForRef`.
 # Server-side derivation of the Arabic text for a canonical
@@ -82,10 +102,14 @@ def reset_cache() -> None:
 _MAX_AYAH_BOUNDARY = 300  # mirrors references.ts; runaway-ayah guard
 
 
-def dk_text_for_ref(matched_ref: str | None) -> str:
-    """Walk dk_words from the start endpoint through the end endpoint
-    (inclusive). Returns ``""`` for malformed or missing input so callers
-    can short-circuit on falsy.
+def dk_text_for_ref(matched_ref: str | None, riwayah: str = DEFAULT_SDK_RIWAYAH) -> str:
+    """Walk the edition's word map from the start endpoint through the end
+    endpoint (inclusive). Returns ``""`` for malformed or missing input so
+    callers can short-circuit on falsy.
+
+    The ref must already be in ``riwayah``'s own coordinates — this walks by
+    that edition's verse word counts, and a Hafs ref would run off the end of a
+    Warsh verse (or address a verse that does not exist there at all).
     """
     if not matched_ref or "-" not in matched_ref:
         return ""
@@ -102,8 +126,8 @@ def dk_text_for_ref(matched_ref: str | None) -> str:
 
     # Segments don't cross surahs in practice; mirror the FE assumption.
     su = s_su
-    dk = get_dk_words_flat()
-    wc = get_word_counts()
+    dk = get_dk_words_flat(riwayah)
+    wc = get_word_counts(riwayah)
 
     words: list[str] = []
     ay, w = s_ay, s_w

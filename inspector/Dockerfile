@@ -41,6 +41,51 @@ RUN --mount=type=ssh,required=false \
 RUN npm run build
 
 
+# --- Stage 1b: build the qua-domain wheel from the pinned monorepo commit ---
+# qua-domain carries the four riwayat's exact scripts, coordinate indexes,
+# fonts, and the Hafs->target word projection. It is a package inside the
+# PRIVATE Hetchy/qua monorepo, so it is fetched with a read-only SSH deploy key
+# — the same arrangement stage 1 uses for the renderer package.
+#
+# `required=false` is load-bearing: a fork, or any build without the secret,
+# still produces a working image. The wheel is simply absent and the Inspector
+# runs Hafs-only (services/reference/editions.available() is False; a non-Hafs
+# delivery fails loudly rather than rendering under Hafs coordinates).
+FROM python:3.11-alpine AS qua-domain-build
+RUN apk add --no-cache git openssh-client
+WORKDIR /build
+# QUA_COMMIT must match qua_shared/qua_domain_pin.py — HF Spaces build with no
+# build args, so this literal IS the pin on the Space. A test asserts they agree.
+ARG QUA_COMMIT=29e073322f8197f2af5ecdb95d09780d6655bec7
+# -s, not -f on the secret: buildx mounts a secret that resolved to "" as an
+# EMPTY FILE THAT EXISTS, so -f is true on a fork PR and the build dies on git
+# auth instead of degrading to the Hafs-only image.
+#
+# The key is normalised rather than copied: OpenSSH refuses a private key with
+# CRLF endings or no trailing newline ("error in libcrypto: unsupported"),
+# offers no identity, and the fetch then fails as "Permission denied
+# (publickey)" — which reads like an unauthorized key rather than a mangled
+# one. A CI secret round-trip is exactly where that mangling happens.
+RUN --mount=type=secret,id=QUA_DOMAIN_DEPLOY_KEY,required=false \
+    mkdir -p -m 700 /root/.ssh && \
+    if [ -s /run/secrets/QUA_DOMAIN_DEPLOY_KEY ]; then \
+      tr -d '\r' < /run/secrets/QUA_DOMAIN_DEPLOY_KEY > /root/.ssh/id_ed25519 && \
+      printf '\n' >> /root/.ssh/id_ed25519 && \
+      chmod 600 /root/.ssh/id_ed25519 && \
+      ssh-keyscan -H github.com >> /root/.ssh/known_hosts && \
+      git init --quiet src && cd src && \
+      git remote add origin git@github.com:Hetchy/qua.git && \
+      git sparse-checkout set --cone packages/quran-domain && \
+      git fetch --quiet --depth 1 --filter=blob:none origin "$QUA_COMMIT" && \
+      git checkout --quiet FETCH_HEAD && \
+      pip wheel --no-deps --no-cache-dir --wheel-dir /wheels ./packages/quran-domain && \
+      cd / && rm -rf /root/.ssh /build/src; \
+    else \
+      echo "QUA_DOMAIN_DEPLOY_KEY absent or empty — building Hafs-only (no qua-domain)"; \
+    fi && \
+    mkdir -p /wheels
+
+
 # --- Stage 2: compile minimal static ffmpeg (mp3 decode + s16le/wav output) ---
 # Alpine 3.23 is current stable (released Apr 2026, supported until 2028).
 # Note on libmp3lame: Alpine dropped the `lame-static` subpackage across all
@@ -132,7 +177,18 @@ COPY --from=ffmpeg-build /ff/bin/ffmpeg /ff/bin/ffprobe /usr/local/bin/
 # Python deps — single source of truth in inspector/requirements.txt.
 # pip/setuptools/wheel are purged — not needed at runtime.
 COPY inspector/requirements.txt ./inspector/requirements.txt
+# The qua-domain wheel (stage 1b) is an OPTIONAL 11.7 MB of edition data. Stage
+# 1b always creates /wheels, so this directory copy succeeds whether or not the
+# build had a deploy key. An absent wheel is a Hafs-only image; a wheel that is
+# present and will not install is a build failure, not a silent downgrade.
+COPY --from=qua-domain-build /wheels/ /tmp/wheels/
 RUN pip install --no-cache-dir -r ./inspector/requirements.txt && \
+    if ls /tmp/wheels/qua_domain-*.whl >/dev/null 2>&1; then \
+      pip install --no-cache-dir --no-deps /tmp/wheels/qua_domain-*.whl; \
+    else \
+      echo "no qua-domain wheel — Hafs-only image"; \
+    fi && \
+    rm -rf /tmp/wheels && \
     pip uninstall -y pip setuptools wheel && \
     find /usr/local/lib/python3.11 -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 

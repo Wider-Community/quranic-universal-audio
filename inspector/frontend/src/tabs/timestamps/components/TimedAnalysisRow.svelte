@@ -13,9 +13,9 @@
     import { nativePayload } from '../../../lib/types/ts-client';
     import { i18n } from '$lib/i18n/locale.svelte';
     import {
-        highlightWipe,
-        showLetters,
-        showPhonemes,
+        lettersVisible,
+        phonemesVisible,
+        wipeActive,
         showTranslations,
         tsHoveredElement,
         tsWaveformHoverTime,
@@ -230,8 +230,8 @@
     });
 
     $effect(() => {
-        void $showLetters;
-        void $showPhonemes;
+        void $lettersVisible;
+        void $phonemesVisible;
         void $showTranslations;
         void tick().then(recomputeRowGap);
     });
@@ -264,7 +264,7 @@
 
     export function updateHighlights(): void {
         const time = currentTime();
-        const wipe = get(highlightWipe);
+        const wipe = get(wipeActive);
         for (const entity of entities) {
             if (!entity.timed) {
                 entity.element.classList.remove('active');
@@ -493,9 +493,9 @@
 <div
     class="timed-analysis"
     role="toolbar"
-    class:no-letters={!$showLetters}
-    class:no-phonemes={!$showPhonemes}
-    class:hl-track={$highlightWipe}
+    class:no-letters={!$lettersVisible}
+    class:no-phonemes={!$phonemesVisible}
+    class:hl-track={$wipeActive}
     class:report-mode={$reportMode.kind !== 'inactive'}
     class:report-silence={$reportMode.kind === 'silence'}
     class:report-missed={$reportMode.kind === 'silence' && $reportMode.subtype === 'pause_missed'}

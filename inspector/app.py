@@ -88,11 +88,14 @@ from config import (
     SAMPLES_MAX_UPLOAD_BYTES,
     SERVER_HOST,
 )
+from qua_shared.riwayat import UnsupportedRiwayah
 from services import auth as auth_service
 from services import auto_detect as auto_detect_service
 from services.admin import visitors as visitor_analytics
 from services.data_loader import load_surah_info_lite
 from services.errors import Codes, error_body
+from services.reference.delivery_edition import RiwayahMismatch
+from services.reference.editions import EditionsUnavailable, RefNotInEdition
 
 # Phonemizer was eagerly initialized here. It's now imported lazily inside
 # scripts/backfills/backfill_boundary_adj.py (the only remaining consumer).
@@ -547,6 +550,46 @@ def _handle_read_only(e: StorageReadOnly):
         ),
         403,
     )
+
+
+@app.errorhandler(RiwayahMismatch)
+def _handle_riwayah_mismatch(e: RiwayahMismatch):
+    """The catalog row and ``detailed.json`` name different editions.
+
+    Registered app-wide rather than per route: every Segments read, save, undo
+    and validate resolves the delivery's edition, and a delivery whose two
+    records disagree is genuinely unserveable — it must read as a conflict the
+    FE can explain, not as a 500 the FE cannot tell from a crash.
+    """
+    return jsonify(error_body(str(e), code=Codes.RIWAYAH_MISMATCH)), 409
+
+
+@app.errorhandler(UnsupportedRiwayah)
+def _handle_unsupported_riwayah(e: UnsupportedRiwayah):
+    return jsonify(error_body(str(e), code=Codes.UNSUPPORTED_RIWAYAH)), 409
+
+
+@app.errorhandler(RefNotInEdition)
+def _handle_ref_not_in_edition(e: RefNotInEdition):
+    """A saved ``matched_ref`` that names no word of the delivery's edition.
+
+    The ref comes from the client, so this is a 400 — and a specific one:
+    Warsh and Qalun renumber 50 surahs, so a ref that is perfectly valid in
+    Hafs can name nothing here, and "internal server error" would send the
+    reviewer looking for a fault instead of at their ref.
+    """
+    return jsonify(error_body(str(e), code=Codes.REF_NOT_IN_EDITION)), 400
+
+
+@app.errorhandler(EditionsUnavailable)
+def _handle_editions_unavailable(e: EditionsUnavailable):
+    """A non-Hafs delivery on a build without ``qua_domain``.
+
+    A documented degraded state, not a fault: the image was built without the
+    deploy key, or ``INSPECTOR_MULTI_RIWAYAH=0``. 503 says "this deployment
+    cannot serve it" rather than "something broke".
+    """
+    return jsonify(error_body(str(e), code=Codes.EDITIONS_UNAVAILABLE)), 503
 
 
 @app.errorhandler(Exception)

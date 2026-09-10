@@ -1,9 +1,18 @@
-/** Occasion splitting over native v13 readings and their original parts. */
+/**
+ * Occasion splitting over shard readings and their original parts.
+ *
+ * Profile-independent: this only reads `reading.parts` and uses the reading as
+ * an identity key, so a word-profile reading splits into occasions exactly like
+ * a native one. Surfaces that need cells narrow with `isWordShard` first.
+ */
 
-import type { TsShardPart, TsShardReading } from '../types/ts-client';
+import type { TsShardPart, TsShardReading, TsWordShardReading } from '../types/ts-client';
+
+/** Either profile's reading — occasion splitting does not care which. */
+export type AnyShardReading = TsShardReading | TsWordShardReading;
 
 export interface OccasionReading {
-    reading: TsShardReading;
+    reading: AnyShardReading;
     parts: TsShardPart[];
 }
 
@@ -16,12 +25,12 @@ export interface ChapterOccasion {
 }
 
 interface IndexedPart {
-    reading: TsShardReading;
+    reading: AnyShardReading;
     part: TsShardPart;
     readingIndex: number;
 }
 
-function orderedParts(readings: TsShardReading[]): IndexedPart[] {
+function orderedParts(readings: AnyShardReading[]): IndexedPart[] {
     return readings.flatMap((reading, readingIndex) =>
         reading.parts.map((part) => ({ reading, part, readingIndex })),
     ).sort((a, b) => a.part.t[0] - b.part.t[0] || a.readingIndex - b.readingIndex);
@@ -34,7 +43,7 @@ function append(occasion: ChapterOccasion, entry: IndexedPart): void {
     else occasion.readings.push({ reading: entry.reading, parts: [entry.part] });
 }
 
-export function chapterOccasions(readings: TsShardReading[]): ChapterOccasion[] {
+export function chapterOccasions(readings: AnyShardReading[]): ChapterOccasion[] {
     const occasions: ChapterOccasion[] = [];
     let previous: IndexedPart | null = null;
     for (const entry of orderedParts(readings)) {

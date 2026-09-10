@@ -47,6 +47,10 @@ class RunInputsDoc(BaseModel):
 
     ``audio_source`` is the intake manifest's ``_meta.source`` and lands in the
     promoted ``_meta`` block; it is ``None`` when the input carried none.
+
+    ``riwayah`` is the producer's **SDK** slug (``warsh``, not ``warsh_an_nafi``)
+    and names the coordinate system every staged ``matched_ref`` is written in.
+    A run staged before multi-riwayah names none, which is Hafs.
     """
 
     model_config = ConfigDict(extra="ignore")
@@ -54,6 +58,7 @@ class RunInputsDoc(BaseModel):
     slug: str
     chapters: list[int]
     audio_source: str | None = None
+    riwayah: str = "hafs"
 
 
 class RunManifestDoc(BaseModel):
@@ -96,7 +101,12 @@ class CandidateEntryDoc(BaseModel):
 
 
 class ChapterCandidateDoc(BaseModel):
-    """Every candidate segment for one chapter, plus the audio it was cut from."""
+    """Every candidate segment for one chapter, plus the audio it was cut from.
+
+    ``riwayah`` repeats the run's SDK slug on each candidate file. Promote checks
+    the two agree: a candidate copied in from another run is otherwise
+    indistinguishable, and its refs would be published under the wrong edition.
+    """
 
     model_config = ConfigDict(extra="ignore")
 
@@ -105,6 +115,7 @@ class ChapterCandidateDoc(BaseModel):
     source_url: str
     source_offset_ms: int
     trim_span_ms: tuple[int, int] | None
+    riwayah: str = "hafs"
 
 
 class PipelineSegSnapshot(BaseModel):

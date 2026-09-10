@@ -836,6 +836,7 @@ export interface DetailedDocument {
  */
 export interface DetailedMeta {
   created_at?: string | null;
+  riwayah?: string | null;
   asr_model?: string | null;
   vad_model?: string | null;
   min_silence_ms?: number | null;
@@ -904,6 +905,8 @@ export interface DetailedSegment {
   confidence?: number;
   wrap_word_ranges?: string[][] | null;
   segment_uid?: string | null;
+  source_ref?: string | null;
+  projection_support?: ("full" | "partial") | null;
   ignored_categories?: string[] | null;
   ignored?: boolean | null;
   is_wasl?: boolean;
@@ -1419,6 +1422,28 @@ export interface PublicReciterPage {
   total: number;
   next_cursor?: number | null;
 }
+/**
+ * One supported riwayah and its two slug spellings.
+ */
+export interface RiwayahSupport {
+  inspector_slug: "hafs_an_asim" | "warsh_an_nafi" | "qalon_an_nafi" | "shubah_an_asim";
+  sdk_slug: "hafs" | "warsh" | "qalun" | "shuba";
+}
+/**
+ * The supported-riwayah vocabulary as the FE sees it.
+ *
+ * ``supported`` is ordered product order (the order the aligner app offers).
+ * Everything outside it is a riwayah the request form still accepts but the
+ * pipeline cannot yet align.
+ */
+export interface RiwayatConfig {
+  /**
+   * @minItems 1
+   */
+  supported: [RiwayahSupport, ...RiwayahSupport[]];
+  default_inspector_slug: "hafs_an_asim" | "warsh_an_nafi" | "qalon_an_nafi" | "shubah_an_asim";
+  default_sdk_slug: "hafs" | "warsh" | "qalun" | "shuba";
+}
 export interface SampleRenameRequest {
   name: string;
 }
@@ -1454,6 +1479,7 @@ export interface SamplesListResponse {
  * symmetric shim ``(pad_left_ms + pad_right_ms) // 2``.
  */
 export interface SegAllResponse {
+  riwayah: string;
   segments: SegAllSegment[];
   audio_by_chapter?: {
     [k: string]: string;
@@ -1531,6 +1557,10 @@ export interface FlagComment {
  * ``seg_font_size`` / ``seg_word_spacing`` are CSS dimension STRINGS
  * (``"1.8rem"`` / ``"0.2em"``), not numbers. ``accordion_context`` maps a
  * validation category to a default reveal state (``"shown"`` / ``"hidden"``).
+ *
+ * The three coordinate vocabularies are EDITION-SPECIFIC — the route takes
+ * ``?riwayah=`` and echoes which edition it answered for, so the FE cannot
+ * render one edition's tables against another's script.
  */
 export interface SegConfigResponse {
   seg_font_size: string;
@@ -1541,10 +1571,13 @@ export interface SegConfigResponse {
   trim_dim_alpha: number;
   low_conf_default_threshold: number;
   validation_categories: string[];
+  riwayah: string;
   muqattaat_verses: [unknown, unknown][];
   qalqala_letters: string[];
   standalone_refs: [unknown, unknown, unknown][];
   standalone_words: string[];
+  muqattaat_words: [unknown, unknown, unknown][];
+  low_confidence_threshold: number;
   accordion_context: {
     [k: string]: string;
   };
@@ -2133,6 +2166,7 @@ export interface TsJobRecord {
  * Inspector (resources resolve as absolute Flask paths); ``commit`` is ``""``.
  * ``resources`` maps a purpose key (``qpc_hafs`` / ``digital_khatt`` / …) to
  * a ``/api/ts/resource/<key>`` URL. ``reciters`` is keyed by delivery slug.
+ * ``editions`` carries the non-Hafs display assets, keyed by riwayah slug.
  */
 export interface TsManifestResponse {
   schema_version: number;
@@ -2145,6 +2179,9 @@ export interface TsManifestResponse {
   };
   reciters?: {
     [k: string]: TsManifestReciter;
+  };
+  editions?: {
+    [k: string]: TsEditionAsset;
   };
 }
 /**
@@ -2167,6 +2204,30 @@ export interface TsManifestReciter {
   audio_category: AudioCategory;
   ts_chapters?: number[];
   vbr_chapters?: number[];
+}
+/**
+ * One non-Hafs edition's display assets, advertised in the manifest.
+ *
+ * The block's presence is the deployment's statement that it CAN serve this
+ * edition — a Hafs-only build (no ``qua_domain``) advertises none. The URLs
+ * are the same ones ``lib/refs/edition-font.ts`` builds by convention today;
+ * they are published so a client need not encode that shape.
+ *
+ * Hafs is absent: its font is inlined in the frontend bundle and its refs
+ * bundle is the unparameterised default.
+ *
+ * No content digests here. ``font_sha256`` cost a ~0.9 MB font read and
+ * ``refs_version`` a full ~3 MB word-map serialise on the manifest-build path,
+ * for cache-busting nothing currently does. Add them back with the consumer
+ * that needs them, not before.
+ */
+export interface TsEditionAsset {
+  riwayah: string;
+  edition_id: string;
+  words_sha256: string;
+  font_url: string;
+  font_family: string;
+  refs_url: string;
 }
 export interface TsNativeProfile {
   riwayah: string;
@@ -2222,11 +2283,12 @@ export interface TsReportTarget {
   target_id: string;
 }
 /**
- * Native entity plus timing fingerprint captured at report creation.
+ * The entity plus timing fingerprint captured at report creation.
  */
 export interface TsReportSnapshot {
-  native_schema_version?: 2;
-  shard_schema_version?: 12 | 13;
+  native_schema_version?: 2 | null;
+  shard_schema_version?: 12 | 13 | 14;
+  shard_profile?: "native" | "word";
   native?: {
     [k: string]: unknown;
   };
@@ -2311,7 +2373,7 @@ export interface TsShardDoc {
   readings: TsShardReading[];
 }
 export interface TsShardMeta {
-  schema_version: 13;
+  schema_version: 13 | 14;
   chapter: number;
   audio_category: string;
   phonemizer_version: string;
@@ -2368,4 +2430,29 @@ export interface TsValidationVerse {
 export interface TsVerseReports {
   verse_key: string;
   reports?: TsReport[];
+}
+export interface TsWordShardDoc {
+  _meta: TsWordShardMeta;
+  readings: TsWordShardReading[];
+}
+export interface TsWordShardMeta {
+  schema_version: 14;
+  profile: "word";
+  chapter: number;
+  audio_category: string;
+  riwayah: string;
+  edition_id: string;
+  words_sha256: string;
+  timing_provider: "hafs_proxy_mfa";
+  reference_riwayah: string;
+  reference_id: string;
+  projection_id?: string | null;
+  projection_sha256?: string | null;
+  [k: string]: unknown;
+}
+export interface TsWordShardReading {
+  id: string;
+  parts: [unknown, unknown, unknown, unknown, unknown][];
+  words: [unknown, unknown, unknown, unknown][];
+  boundaries: [unknown, unknown][];
 }

@@ -11,6 +11,8 @@ from __future__ import annotations
 import sys
 import types
 
+import pytest
+
 from qua_jobs import publish_hf
 from qua_jobs.publish_hf import (
     _detailed_by_ref,
@@ -333,3 +335,33 @@ def test_rebase_row_multi_excises_gap_gaplessly():
         [4, 2500, 3000],
     ]
     assert row["segments"] == [[1, 2, 0, 2000], [3, 4, 2000, 3000]]
+
+
+def test_the_hf_config_name_stays_the_inspector_slug():
+    """The config name IS the dataset's parquet folder.
+
+    Every split published so far lives under ``hafs_an_asim/``. Pushing the SDK
+    slug would open a second ``hafs/`` folder, duplicate the config in the card
+    frontmatter and orphan the existing split.
+    """
+    from qua_jobs import publish_hf
+
+    # No riwayah anywhere — every pre-multi-riwayah reciter.
+    assert publish_hf._config_riwayah(None, {}) == ("hafs", "hafs_an_asim")
+    # A legacy row that stored the short form lands on the SAME folder.
+    assert publish_hf._config_riwayah({"_meta": {"riwayah": "hafs"}}, {}) == (
+        "hafs",
+        "hafs_an_asim",
+    )
+    assert publish_hf._config_riwayah({"_meta": {"riwayah": "warsh_an_nafi"}}, {}) == (
+        "warsh",
+        "warsh_an_nafi",
+    )
+
+
+def test_an_unknown_riwayah_is_refused_rather_than_given_a_folder():
+    from qua_jobs import publish_hf
+    from qua_shared.riwayat import UnsupportedRiwayah
+
+    with pytest.raises(UnsupportedRiwayah):
+        publish_hf._config_riwayah({"_meta": {"riwayah": "duri_an_abi_amr"}}, {})

@@ -48,8 +48,9 @@ from __future__ import annotations
 from collections.abc import Container
 from typing import Any
 
-from config import LOW_CONFIDENCE_DETAIL_THRESHOLD, LOW_CONFIDENCE_THRESHOLD
-from constants import MUQATTAAT_VERSES, STANDALONE_REFS, STANDALONE_WORDS
+from config import LOW_CONFIDENCE_DETAIL_THRESHOLD, LOW_CONFIDENCE_THRESHOLDS
+from qua_shared.riwayat import DEFAULT_SDK_RIWAYAH
+from services.reference import edition_tables
 from services.reference.quran_refs import dk_text_for_ref
 from services.validation.registry import PER_SEGMENT_CATEGORIES
 from utils.arabic_text import strip_quran_deco
@@ -111,6 +112,7 @@ def compute_is_boundary_adj(
     e_word: int,
     single_word_verses: set,
     canonical: dict | None = None,
+    riwayah: str = DEFAULT_SDK_RIWAYAH,
 ) -> bool:
     """Raw boundary-adjustment computation — NO suppression check.
 
@@ -126,16 +128,21 @@ def compute_is_boundary_adj(
     side was retired in Migration #5 along with ``phonemes_asr``, so
     structural-only is now the canonical signal. Kept in the signature so
     callers (save, backfill, extraction outputs.py) don't need touching.
+
+    Every table is read in ``riwayah``'s own coordinates. The muqattaat
+    exemption stays VERSE-keyed: it covers words far past the opening letters
+    (13:1 runs on for eight more), and narrowing it to the opening word would
+    newly flag one-word segments across the published Hafs corpus.
     """
     _ = canonical  # retired; see docstring
-    if (surah, s_ayah) in MUQATTAAT_VERSES:
+    if (surah, s_ayah) in edition_tables.muqattaat_verses(riwayah):
         return False
     if (surah, s_ayah) in single_word_verses:
         return False
 
-    if s_word == e_word and (surah, s_ayah, s_word) not in STANDALONE_REFS:
-        text = dk_text_for_ref(seg.get("matched_ref"))
-        if strip_quran_deco(text) not in STANDALONE_WORDS:
+    if s_word == e_word and (surah, s_ayah, s_word) not in edition_tables.standalone_refs(riwayah):
+        text = dk_text_for_ref(seg.get("matched_ref"), riwayah)
+        if strip_quran_deco(text) not in edition_tables.standalone_words(riwayah):
             return True
 
     return False
@@ -149,6 +156,7 @@ def _check_boundary_adj(
     e_word: int,
     single_word_verses: set,
     canonical: dict | None,
+    riwayah: str = DEFAULT_SDK_RIWAYAH,
 ) -> bool:
     """Apply boundary-adjustment, honoring runtime suppression.
 
@@ -170,6 +178,7 @@ def _check_boundary_adj(
         e_word,
         single_word_verses,
         canonical,
+        riwayah,
     )
 
 
@@ -218,6 +227,7 @@ def classify_flags(
     hidden_pause_uids: Container[str] | None = None,
     false_split_uids: Container[str] | None = None,
     unmarked_wasl_uids: Container[str] | None = None,
+    riwayah: str = DEFAULT_SDK_RIWAYAH,
 ) -> dict[str, Any]:
     """Return per-category boolean flags + auxiliary fields for one segment.
 
@@ -279,7 +289,8 @@ def classify_flags(
     if seg.get("wrap_word_ranges") and not is_suppressed_for(seg, "repetitions"):
         result["repetitions"] = True
 
-    if confidence < LOW_CONFIDENCE_THRESHOLD and not is_ignored_for(seg, "low_confidence"):
+    low_conf_cutoff = LOW_CONFIDENCE_THRESHOLDS[riwayah]
+    if confidence < low_conf_cutoff and not is_ignored_for(seg, "low_confidence"):
         result["low_confidence"] = True
     if confidence < LOW_CONFIDENCE_DETAIL_THRESHOLD and not is_ignored_for(seg, "low_confidence"):
         result["low_confidence_detail"] = True
@@ -306,10 +317,13 @@ def classify_flags(
             result["cross_verse"] = True
     else:
         result["boundary_adj"] = _check_boundary_adj(
-            seg, surah, s_ayah, s_word, e_word, single_word_verses, canonical
+            seg, surah, s_ayah, s_word, e_word, single_word_verses, canonical, riwayah
         )
 
-    if s_word == 1 and (surah, s_ayah) in MUQATTAAT_VERSES:
+    # Word-keyed, unlike the boundary-adj exemption above: Warsh merges Hafs's
+    # 42:1 and 42:2 into one verse, so BOTH of its first two words are muqattaat
+    # openings. For Hafs this is exactly `s_word == 1 and verse in MUQATTAAT`.
+    if (surah, s_ayah, s_word) in edition_tables.muqattaat_words(riwayah):
         if not is_ignored_for(seg, "muqattaat"):
             result["muqattaat"] = True
 
@@ -325,7 +339,7 @@ def classify_flags(
             compute_qalqala_letter,  # local import: avoid cycle at module load
         )
 
-        qalqala_letter = compute_qalqala_letter(seg)
+        qalqala_letter = compute_qalqala_letter(seg, riwayah)
     if qalqala_letter and not is_suppressed_for(seg, "qalqala"):
         result["qalqala"] = True
         result["qalqala_letter"] = qalqala_letter
@@ -366,6 +380,7 @@ def classify_segment(
     hidden_pause_uids: Container[str] | None = None,
     false_split_uids: Container[str] | None = None,
     unmarked_wasl_uids: Container[str] | None = None,
+    riwayah: str = DEFAULT_SDK_RIWAYAH,
 ) -> list[str]:
     """Classify one segment and return the category list.
 
@@ -376,6 +391,10 @@ def classify_segment(
     Pass ``detail=True`` to surface the 1.00 cutoff under the synthetic
     ``low_confidence_detail`` category — used by the validation API to
     distinguish counts (< 0.80) from detail-list items (< 1.00).
+
+    ``riwayah`` is the delivery's SDK slug — every coordinate table, script
+    lookup and confidence cutoff is read in that edition. It defaults to Hafs,
+    so a caller that has not been threaded yet behaves exactly as before.
     """
     matched_ref = seg.get("matched_ref", "")
     if not matched_ref:
@@ -412,6 +431,7 @@ def classify_segment(
         hidden_pause_uids=hidden_pause_uids,
         false_split_uids=false_split_uids,
         unmarked_wasl_uids=unmarked_wasl_uids,
+        riwayah=riwayah,
     )
     return _flags_to_categories(flags, detail=detail)
 
@@ -433,11 +453,16 @@ def classify_segment_full(
     hidden_pause_uids: Container[str] | None = None,
     false_split_uids: Container[str] | None = None,
     unmarked_wasl_uids: Container[str] | None = None,
+    riwayah: str = DEFAULT_SDK_RIWAYAH,
 ) -> dict:
     """Like :func:`classify_segment` but returns a dict with auxiliary fields.
 
     Returned keys: ``categories`` (list[str]), ``qalqala_letter`` (str|None),
     ``low_confidence_detail`` (bool), ``end_of_verse`` (bool).
+
+    ``riwayah`` is the delivery's SDK slug — every coordinate table, script
+    lookup and confidence cutoff is read in that edition. It defaults to Hafs,
+    so a caller that has not been threaded yet behaves exactly as before.
     """
     matched_ref = seg.get("matched_ref", "")
     if not matched_ref:
@@ -485,6 +510,7 @@ def classify_segment_full(
         hidden_pause_uids=hidden_pause_uids,
         false_split_uids=false_split_uids,
         unmarked_wasl_uids=unmarked_wasl_uids,
+        riwayah=riwayah,
     )
     return {
         "categories": _flags_to_categories(flags, detail=detail),
@@ -505,6 +531,7 @@ def classify_entry(
     hidden_pause_uids: Container[str] | None = None,
     false_split_uids: Container[str] | None = None,
     unmarked_wasl_uids: Container[str] | None = None,
+    riwayah: str = DEFAULT_SDK_RIWAYAH,
 ) -> dict[str, dict]:
     """Classify every segment in an entry.
 
@@ -531,6 +558,7 @@ def classify_entry(
             hidden_pause_uids=hidden_pause_uids,
             false_split_uids=false_split_uids,
             unmarked_wasl_uids=unmarked_wasl_uids,
+            riwayah=riwayah,
         )
         out[uid] = {
             "categories": info["categories"],

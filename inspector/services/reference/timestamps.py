@@ -25,9 +25,17 @@ from pathlib import Path
 
 from config import DK_SCRIPT_PATH
 from qua_shared.catalog_visibility import is_everyayah_channel
+from qua_shared.riwayat import (
+    DEFAULT_RIWAYAH,
+    DEFAULT_SDK_RIWAYAH,
+    UnsupportedRiwayah,
+    from_sdk_slug,
+    resolve_sdk_slug,
+)
 from qua_shared.schemas import ReciterCatalog, TsManifestResponse
 from qua_shared.timestamps_shards import MANIFEST_SCHEMA_VERSION
 from services.audio.audio_meta import chapter_numbers, vbr_chapters_for_reciter
+from services.reference.editions import EditionsUnavailable
 from services.state import catalog as catalog_service
 from services.state import state as state_service
 from services.storage import data_dir, static_refs
@@ -86,9 +94,79 @@ def _build_manifest_dict(reciters_block: dict[str, dict]) -> dict:
             "shard_url_template": "/api/ts/shard/{reciter}/{chapter}",
             "resources": {key: f"/api/ts/resource/{key}" for key in _RESOURCE_KEYS},
             "reciters": reciters_block,
+            "editions": _edition_blocks(reciters_block),
         }
     )
     return manifest.model_dump(mode="json", by_alias=True)
+
+
+def _servable(slug: str | None) -> bool:
+    """Can this deployment render *slug*'s script and coordinates?
+
+    Hafs always: its script is inlined and its coordinates are the constants.
+    Anything else needs the ``qua_domain`` wheel, which a Hafs-only image does
+    not carry.
+    """
+    from services.reference import editions as editions_service
+
+    if not slug:
+        return True
+    try:
+        if resolve_sdk_slug(slug) == DEFAULT_SDK_RIWAYAH:
+            return True
+    except UnsupportedRiwayah:
+        return False
+    return editions_service.available()
+
+
+def _edition_blocks(reciters_block: dict[str, dict]) -> dict[str, dict]:
+    """Display assets for every non-Hafs edition an advertised reciter uses.
+
+    Built from the reciters actually in the manifest rather than from the four
+    supported slugs, so a Hafs-only deployment emits ``{}`` and the FE never
+    fetches a 0.9 MB font it has no use for.
+
+    A riwayah the runtime cannot serve is SKIPPED with a warning, not defaulted
+    to Hafs: the FE treats an absent entry as "cannot render this edition",
+    which surfaces as a clear failure instead of an edition rendered under the
+    wrong script.
+    """
+    from services.reference import editions as editions_service
+
+    blocks: dict[str, dict] = {}
+    for block in reciters_block.values():
+        slug = block.get("riwayah")
+        if not slug:
+            continue
+        try:
+            # Accepts either vocabulary: the field is a plain catalog string and
+            # older rows / fixtures can carry the short SDK form. The dedupe
+            # below has to happen on the canonical slug for the same reason —
+            # ``blocks`` is keyed canonically, so a row holding ``warsh`` and a
+            # row holding ``warsh_an_nafi`` are one edition, not two.
+            sdk_slug = resolve_sdk_slug(slug)
+            if sdk_slug == DEFAULT_SDK_RIWAYAH:
+                continue
+            # Metadata only — it is lru-cached and touches no file. Reading the
+            # font bytes or hashing the refs payload here put a multi-MB cost on
+            # every manifest build for digests nothing reads.
+            metadata = editions_service.metadata(sdk_slug)
+        except (UnsupportedRiwayah, EditionsUnavailable) as exc:
+            log.warning("ts manifest: riwayah %s cannot be served (%s)", slug, exc)
+            continue
+        # The catalog column is free text and older rows hold the short SDK
+        # form, but both routes below parse strictly — so the URLs are built
+        # from the canonical Inspector slug, not from whatever the row said.
+        key = from_sdk_slug(sdk_slug)
+        blocks[key] = {
+            "riwayah": sdk_slug,
+            "edition_id": metadata.edition_id,
+            "words_sha256": metadata.words_sha256,
+            "font_url": f"/api/static/edition/{key}/font",
+            "font_family": metadata.font_family,
+            "refs_url": f"/api/static/quran-refs.json?riwayah={key}",
+        }
+    return blocks
 
 
 def _build_resource_bytes() -> dict[str, bytes]:
@@ -180,7 +258,7 @@ def _bucket_reciter_block(
 
     name_en = reciter.name_en if reciter is not None else slug_to_name(slug)
     name_ar = reciter.name_ar if reciter is not None else None
-    riwayah = delivery.riwayah if delivery is not None else "hafs_an_asim"
+    riwayah = delivery.riwayah if delivery is not None else DEFAULT_RIWAYAH
     style = delivery.style if delivery is not None else "murattal"
     source = delivery.source if delivery is not None else ""
     audio_category = delivery.audio_category.value if delivery is not None else "by_surah"
@@ -230,8 +308,24 @@ def _ensure_built(*, include_everyayah: bool = False) -> None:
                 )
                 continue
             block = _bucket_reciter_block(slug, chapters, catalog, delivery)
-            if block is not None:
-                reciters_block[slug] = block
+            if block is None:
+                continue
+            if not _servable(block.get("riwayah")):
+                # A build without ``qua_domain`` (no deploy key, or
+                # INSPECTOR_MULTI_RIWAYAH=0) cannot serve this delivery's script
+                # or coordinates, and advertising it anyway is worse than
+                # omitting it: the font endpoint 503s, ``font-display: swap``
+                # leaves the text in the DigitalKhatt fallback, and the reader
+                # is shown one edition's words in another's typeface with no
+                # indication anything is wrong. Omit is the documented
+                # degradation.
+                log.warning(
+                    "timestamps: skipping %s — this build cannot serve riwayah %s",
+                    slug,
+                    block.get("riwayah"),
+                )
+                continue
+            reciters_block[slug] = block
 
         served = set(reciters_block)
         manifest = _build_manifest_dict(reciters_block)

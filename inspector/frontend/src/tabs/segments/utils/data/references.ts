@@ -20,6 +20,22 @@ export function getVerseWordCounts(): VerseWordCounts | undefined {
     return get(quranRefs)?.verse_word_counts as VerseWordCounts | undefined;
 }
 
+/**
+ * The glyph that precedes an Arabic-Indic verse number in the loaded edition.
+ *
+ * U+06DD for Hafs, whose DigitalKhatt font expects the ornament sent alongside
+ * the digits; empty for the three packaged QPC fonts, which decorate the digits
+ * themselves — sending both renders two nested ornaments. The bundle carries it
+ * rather than the FE assuming, so the two apps agree.
+ *
+ * Defaults to the Hafs ornament before the bundle loads: that is what every
+ * pre-multi-riwayah render did, and the alternative (no marker at all) reads as
+ * a rendering bug rather than as "still loading".
+ */
+export function verseMarkerPrefix(): string {
+    return get(quranRefs)?.verse_marker_prefix ?? '۝';
+}
+
 export function isCrossVerse(ref: Ref | null | undefined): boolean {
     if (!ref) return false;
     const parts = ref.split('-');
@@ -149,7 +165,7 @@ export function _addVerseMarkers(text: string | null | undefined, ref: Ref | nul
         if (!/[\u0600-\u066F]/.test(word)) continue;
         const total = vwc[`${p.surah}:${ay}`] || 0;
         if (total > 0 && w >= total) {
-            out.push('\u06DD' + _toArabicNumeral(ay));
+            out.push(verseMarkerPrefix() + _toArabicNumeral(ay));
             ay++;
             w = 1;
         } else {

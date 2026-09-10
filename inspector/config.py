@@ -1,8 +1,18 @@
 import os
+import sys
 from pathlib import Path
 
 # Repo root (inspector/ is one level below)
 _REPO = Path(__file__).resolve().parent.parent
+
+# The repo root carries ``qua_shared``. app.py puts it on sys.path at startup,
+# but config.py can be imported before that — by a script, or by a test
+# collecting from inspector/ — so make the import work either way.
+sys.path.insert(0, str(_REPO))
+from qua_shared.riwayat import SUPPORTED_RIWAYAT as _INSPECTOR_RIWAYAT  # noqa: E402
+
+#: SDK slugs, in product order. Defined once, in qua_shared.riwayat.
+_SDK_RIWAYAT = tuple(_INSPECTOR_RIWAYAT.values())
 
 # Data root — holds only bundled reference data (surah_info, qpc_hafs,
 # digital_khatt, phoneme_sub_costs, .audio_meta) in deployed mode. All
@@ -133,6 +143,22 @@ MISSED_BASMALA_FLAG_MIN_DELETED = int(os.getenv("MISSED_BASMALA_FLAG_MIN_DELETED
 # "Show everything below perfect" tier — used to populate detail lists (not count badges).
 # Distinct from LOW_CONFIDENCE_THRESHOLD (count badge cutoff) and LOW_CONFIDENCE_RED (red highlight).
 LOW_CONFIDENCE_DETAIL_THRESHOLD = 1.0
+
+# Per-edition low-confidence cutoff, keyed on SDK riwayah slug.
+#
+# Confidence is a DP-matching score against the Hafs reference text, and the
+# non-Hafs editions are aligned through that same Hafs proxy — so their scores
+# are on the same scale and every edition ships at the Hafs value. They get
+# their own knob anyway because the first real Warsh delivery may show a
+# systematically different score distribution (a different reciting style, or
+# the projection's split/join words scoring lower), and re-tuning one edition
+# must not move the badge cutoff under the 37 published Hafs reciters.
+#
+# Override per edition with e.g. ``INSPECTOR_LOW_CONF_WARSH=0.72``.
+LOW_CONFIDENCE_THRESHOLDS: dict[str, float] = {
+    slug: float(os.getenv(f"INSPECTOR_LOW_CONF_{slug.upper()}", str(LOW_CONFIDENCE_THRESHOLD)))
+    for slug in _SDK_RIWAYAT
+}
 METADATA_PEEK_BYTES = 512
 
 # Statistics histogram defaults
@@ -271,3 +297,18 @@ AUDIO_MIME_TYPES = {
     ".mp3": "audio/mpeg",
     ".ogg": "audio/ogg",
 }
+
+
+# ---------------------------------------------------------------------------
+# Multi-riwayah
+# ---------------------------------------------------------------------------
+# Kill-switch for the non-Hafs editions. Default on; forced off in practice
+# whenever ``qua_domain`` cannot be imported (see
+# ``services/reference/editions.py``). Set to 0 to disable without rebuilding
+# the image: an HF Space *variable* change plus a restart is a 60-second
+# rollback, where a Docker rebuild is ten minutes.
+#
+# Disabling does NOT make non-Hafs deliveries render as Hafs — they fail
+# loudly. Silently substituting Hafs coordinates under another edition's
+# script would let a reviewer save wrong refs.
+MULTI_RIWAYAH_ENABLED = os.getenv("INSPECTOR_MULTI_RIWAYAH", "1") not in ("0", "false", "False")

@@ -18,7 +18,7 @@
     import { dashPort } from '../../../lib/playback/dash-port';
     import { ControlIcon } from '../../../lib/recitation-animation';
     import { LS_KEYS } from '../../../lib/utils/constants';
-    import { highlightWipe, showLetters, showPhonemes } from '../stores/display';
+    import { highlightWipe, showLetters, showPhonemes, wordProfile } from '../stores/display';
     import { loopTarget } from '../stores/playback';
     import { reportMode, reportModeActive } from '../stores/report-mode';
     import { loadedVerse } from '../stores/verse';
@@ -49,6 +49,14 @@
     const guideTitle = $derived((i18n.locale, m.ts_footer_shortcuts_guide_title()));
     const wipeTitle = $derived((i18n.locale, m.ts_footer_wipe_title()));
     const tajweedSettingsTitle = $derived((i18n.locale, m.ts_footer_tajweed_settings_title()));
+
+    // A word-profile shard has no letters, phonemes, per-cell tajweed tags or
+    // sound timings, so these four controls have nothing to act on. Disabled
+    // with an explanation rather than hidden: a reader who knows the control
+    // should be there is better served by being told why it is inert.
+    const wordProfileTitle = $derived(
+        (i18n.locale, m.ts_footer_word_profile_disabled_title()),
+    );
 
     function persist(key: string, v: boolean): void {
         try { localStorage.setItem(key, String(v)); } catch { /* ignore */ }
@@ -163,26 +171,32 @@
         aria-pressed={$loopTarget !== null} title={loopTitle} onclick={toggleLoop}
     ><img class="img-icon" src="/icons/loop.svg" alt="" aria-hidden="true" /></button>
     <button
-        type="button" class="icon-btn" class:on={$showLetters}
-        aria-pressed={$showLetters}
-        disabled={$reportModeActive && $reportMode.kind !== 'phonemes'}
-        title={lettersTitle}
+        type="button" class="icon-btn" class:on={$showLetters && !$wordProfile}
+        aria-pressed={$showLetters && !$wordProfile}
+        disabled={$wordProfile || ($reportModeActive && $reportMode.kind !== 'phonemes')}
+        title={$wordProfile ? wordProfileTitle : lettersTitle}
         onclick={toggleLetters}
     ><ControlIcon name="letters" /></button>
     <button
-        type="button" class="icon-btn" class:on={$showPhonemes}
-        aria-pressed={$showPhonemes} disabled={$reportModeActive}
-        title={phonemesTitle}
+        type="button" class="icon-btn" class:on={$showPhonemes && !$wordProfile}
+        aria-pressed={$showPhonemes && !$wordProfile}
+        disabled={$wordProfile || $reportModeActive}
+        title={$wordProfile ? wordProfileTitle : phonemesTitle}
         onclick={togglePhonemes}
     ><ControlIcon name="phonemes" /></button>
     <button
-        type="button" class="icon-btn" class:on={$highlightWipe}
-        aria-pressed={$highlightWipe} title={wipeTitle} onclick={toggleWipe}
+        type="button" class="icon-btn" class:on={$highlightWipe && !$wordProfile}
+        aria-pressed={$highlightWipe && !$wordProfile}
+        disabled={$wordProfile}
+        title={$wordProfile ? wordProfileTitle : wipeTitle}
+        onclick={toggleWipe}
     ><ControlIcon name="wipe" /></button>
 
     <div class="guide-wrap" use:clickOutside={() => (tajweedOpen = false)}>
         <button
-            type="button" class="icon-btn" class:on={tajweedOpen} title={tajweedSettingsTitle}
+            type="button" class="icon-btn" class:on={tajweedOpen}
+            disabled={$wordProfile}
+            title={$wordProfile ? wordProfileTitle : tajweedSettingsTitle}
             aria-haspopup="dialog" aria-expanded={tajweedOpen}
             onclick={() => (tajweedOpen = !tajweedOpen)}
         ><ControlIcon name="tajweed" /></button>

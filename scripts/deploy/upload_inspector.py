@@ -249,6 +249,35 @@ def _stage(repo: Path, stage_root: Path, env: str, branch: str) -> None:
     _assert_no_lfs_pointers(stage_root)
 
 
+def _whole_private_key(value: str) -> str:
+    """A private key normalised for OpenSSH, or a loud failure.
+
+    A secret that lost its body — the usual cause is a CI input that split the
+    multi-line value on newlines and kept only the first — is still present and
+    non-empty, so the Space builds, the qua-domain fetch fails as "Permission
+    denied (publickey)", and the image quietly ships Hafs-only. That surfaces
+    days later as a Warsh delivery that will not render, so check it here while
+    the cause is still visible.
+
+    CRLF and a missing trailing newline are the other two ways a round-trip
+    breaks a key, and both make OpenSSH refuse it outright ("error in libcrypto:
+    unsupported"). Repairing them costs nothing; the Dockerfile does the same to
+    its own copy, because the Space's build reads the secret directly.
+    """
+    text = value.replace("\r\n", "\n").replace("\r", "\n").strip("\n")
+    head, _, body = text.partition("\n")
+    if not (head.startswith("-----BEGIN ") and head.endswith("-----")):
+        raise SystemExit("QUA_DOMAIN_DEPLOY_KEY does not begin with a PEM header")
+    if not body.strip():
+        raise SystemExit(
+            "QUA_DOMAIN_DEPLOY_KEY is a header with no body — the secret was "
+            "truncated in transit; check that the workflow quotes it"
+        )
+    if not text.endswith("-----"):
+        raise SystemExit("QUA_DOMAIN_DEPLOY_KEY does not end with a PEM footer")
+    return text + "\n"
+
+
 def _retry_on_429(label: str, fn, *args, **kwargs):
     """Call ``fn``, retrying on HTTP 429 with a Retry-After honoring backoff.
 
@@ -274,7 +303,12 @@ def _retry_on_429(label: str, fn, *args, **kwargs):
 
 
 def _upload(
-    stage_root: Path, repo_id: str, token: str, commit_msg: str, cells_deploy_key: str
+    stage_root: Path,
+    repo_id: str,
+    token: str,
+    commit_msg: str,
+    cells_deploy_key: str,
+    qua_domain_deploy_key: str,
 ) -> str:
     api = HfApi(token=token)
     # The prod/dev Spaces are permanent — skip the create_repo call (it 409s on
@@ -297,6 +331,23 @@ def _upload(
         key="CELLS_DEPLOY_KEY",
         value=cells_deploy_key,
     )
+    # Unlike CELLS_DEPLOY_KEY (hard-required — the frontend does not build
+    # without the renderer package), qua-domain is optional: without it the
+    # Space builds and serves Hafs, and every non-Hafs delivery fails loudly.
+    # Pushing an empty value would overwrite a good secret already on the Space.
+    if qua_domain_deploy_key:
+        _retry_on_429(
+            "add_space_secret",
+            api.add_space_secret,
+            repo_id=repo_id,
+            key="QUA_DOMAIN_DEPLOY_KEY",
+            value=_whole_private_key(qua_domain_deploy_key),
+        )
+    else:
+        print(
+            "    WARN: QUA_DOMAIN_DEPLOY_KEY absent from env; leaving the Space "
+            "secret as-is. A Space that never had it builds Hafs-only."
+        )
     _retry_on_429(
         "upload_folder",
         api.upload_folder,
@@ -394,7 +445,14 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         print(f"==> Uploading to {repo_id}")
-        url = _upload(stage_root, repo_id, token, commit_msg, cells_deploy_key or "")
+        url = _upload(
+            stage_root,
+            repo_id,
+            token,
+            commit_msg,
+            cells_deploy_key or "",
+            os.environ.get("QUA_DOMAIN_DEPLOY_KEY") or "",
+        )
         print(f"==> Done. Space: {url}")
 
     return 0

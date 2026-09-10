@@ -18,6 +18,7 @@ from services.activity.history_query import (
     build_resolved_by_edit_index,
     build_split_group_index,
 )
+from services.reference.delivery_edition import sdk_riwayah_for
 from services.storage import cache
 from services.storage.data_loader import (
     get_single_word_verses,
@@ -146,13 +147,18 @@ def validate_reciter_segments(reciter: str, *, include_boundary_review: bool = T
     if not entries:
         return None
 
-    word_counts = get_word_counts()
+    # Every coordinate table, script lookup and confidence cutoff below is read
+    # in the delivery's own edition. Raises rather than defaulting to Hafs: a
+    # Warsh delivery validated against Hafs verse counts reports missing words
+    # that are not missing and misses ones that are.
+    riwayah = sdk_riwayah_for(reciter)
+    word_counts = get_word_counts(riwayah)
     # canonical=None: the phonemic side of boundary_adj is captured at backfill
     # time onto each seg's ``is_boundary_adj`` field. Classifier short-circuits
     # on the persisted value; legacy segs without the field fall through to
     # compute_is_boundary_adj with canonical=None → structural side only.
     canonical = None
-    single_word_verses = get_single_word_verses()
+    single_word_verses = get_single_word_verses(riwayah)
 
     meta = cache.get_seg_meta(reciter)
     is_by_ayah = is_by_ayah_source(meta.get("audio_source", ""))
@@ -192,11 +198,12 @@ def validate_reciter_segments(reciter: str, *, include_boundary_review: bool = T
         hidden_pause_map=hidden_pause_map,
         false_split_map=false_split_map,
         unmarked_wasl_map=unmarked_wasl_map,
+        riwayah=riwayah,
     )
     missing_words = _build_missing_words(
-        detail["verse_segments"], word_counts, detail["sequence_gaps"]
+        detail["verse_segments"], word_counts, detail["sequence_gaps"], riwayah
     )
-    errors, missing_verses, stats = _check_structural_errors(reciter, entries)
+    errors, missing_verses, stats = _check_structural_errors(reciter, entries, riwayah)
 
     # Aggregate counts in registry-declared accordion order. Additive on top
     # of the per-category arrays; the frontend uses it to render badge totals

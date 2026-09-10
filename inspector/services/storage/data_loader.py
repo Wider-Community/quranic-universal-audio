@@ -9,6 +9,13 @@ go through the storage backend via ``services.data_dir`` — no direct
 filesystem access to ``RECITATION_SEGMENTS_PATH``. Static reference data
 (qpc_hafs, surah_info, digital_khatt) still lives in the image at
 ``INSPECTOR_DATA_DIR`` and is read directly.
+
+The four reference accessors — ``get_dk_words_flat``, ``get_word_counts``,
+``get_single_word_verses``, ``word_has_stop`` — take a riwayah, defaulting to
+Hafs. The Hafs branch reads the bundled files exactly as before (so every
+existing call site is byte-identical); every other edition is served from
+``services.reference.editions``, which owns the optional ``qua_domain``
+dependency. Nothing here falls back to Hafs for a non-Hafs riwayah: it raises.
 """
 
 import threading
@@ -21,6 +28,7 @@ from config import (
     SURAH_INFO_PATH,
 )
 from constants import STOP_SIGNS
+from qua_shared.riwayat import DEFAULT_SDK_RIWAYAH
 from services.storage import cache, data_dir, static_refs
 
 _detailed_locks: dict[str, threading.Lock] = {}
@@ -74,15 +82,22 @@ def load_dk() -> dict[str, dict]:
     return data
 
 
-def get_dk_words_flat() -> dict[str, str]:
-    """Flat ``"surah:ayah:word" -> text`` projection of ``load_dk()``.
+def get_dk_words_flat(riwayah: str = DEFAULT_SDK_RIWAYAH) -> dict[str, str]:
+    """Flat ``"surah:ayah:word" -> text`` word map for one edition.
 
     Promoted off per-request payloads to the immutable
-    ``/api/static/quran-refs.json`` asset (see ``services/quran_refs.py``).
-    Still consumed in-process by save / auto-split / validation. End-of-verse
-    markers (``۝``) are stripped — ``dkTextForRef`` walks bounded by verse
-    word counts and never indexes them, so they're dead weight.
+    ``/api/static/quran-refs.json`` asset (see ``services/reference/quran_refs``).
+    Still consumed in-process by save / auto-split / validation.
+
+    Hafs comes from ``digital_khatt_v2_script.json`` — end-of-verse markers
+    (``۝``) stripped, since ``dkTextForRef`` walks bounded by verse word counts
+    and never indexes them. Every other edition comes from its packaged index,
+    which carries no marker entries to begin with.
     """
+    if riwayah != DEFAULT_SDK_RIWAYAH:
+        from services.reference import editions
+
+        return editions.word_map(riwayah)
     cached = cache.get_dk_words_flat_cache()
     if cached is not None:
         return cached
@@ -152,6 +167,15 @@ def load_detailed(reciter: str) -> list[dict]:
             return cached
         raw = data_dir.read_detailed_bytes(reciter)
         if raw is None:
+            # Remember the absence too: without it every caller re-reads a
+            # missing file, a bucket round-trip per request, on exactly the
+            # slugs the Reviews drawer sweeps. Marked `absent` so it lapses on
+            # its own: `invalidate_seg_caches` drops it when a save, a discard
+            # or the auto-detect reconciler notices the file, but the reconciler
+            # only looks at deliveries still awaiting alignment — a promote run
+            # against any other slug would otherwise 404 it until restart, with
+            # no way in, because the editor cannot load to save.
+            cache.set_seg_cache(reciter, [], absent=True)
             return []
         meta, entries = _load_detailed_entries_from_bytes(raw)
         if meta:
@@ -163,6 +187,25 @@ def load_detailed(reciter: str) -> list[dict]:
             if seg_doc and "_meta" in seg_doc:
                 cache.set_seg_meta(reciter, seg_doc["_meta"])
         return entries
+
+
+def seg_meta(reciter: str) -> dict:
+    """The delivery's ``detailed.json`` ``_meta``, loading the file if needed.
+
+    ``cache.get_seg_meta`` answers ``{}`` for both "the file carries no meta"
+    and "nothing has read the file in this process yet". A caller that reads
+    the cache directly therefore gets a silent pass on a cold process — which
+    is precisely when a cross-check against ``_meta`` matters. Going through
+    :func:`load_detailed` makes the answer mean what it says; the load is
+    cached, and every Segments path warms it anyway.
+    """
+    meta = cache.get_seg_meta(reciter)
+    if meta or cache.get_seg_cache(reciter) is not None:
+        # Entries cached with no meta is a real answer (a file written before
+        # the field existed), not a cold process — do not re-read for it.
+        return meta
+    load_detailed(reciter)
+    return cache.get_seg_meta(reciter)
 
 
 def load_probe_v2(reciter: str) -> tuple[set[str], dict | None]:
@@ -210,7 +253,10 @@ def load_pipeline_meta(reciter: str) -> dict | None:
     if doc is None:
         return None
     try:
-        validated = PipelineMeta.model_validate(doc).model_dump(mode="json")
+        # ``exclude_none`` so an optional field the sidecar doesn't carry
+        # (e.g. ``riwayah`` on a pre-multi-riwayah extraction) stays absent
+        # rather than being served as an explicit ``null``.
+        validated = PipelineMeta.model_validate(doc).model_dump(mode="json", exclude_none=True)
     except Exception:  # noqa: BLE001 — a malformed/forward sidecar must not 500 the validation panel
         # The sidecar is a hot read on /api/seg/validate; a single un-migrated
         # or forward-compat field would otherwise raise ValidationError →
@@ -324,13 +370,22 @@ def load_unmarked_wasl(reciter: str) -> tuple[dict[str, dict], dict | None]:
 # ---------------------------------------------------------------------------
 
 
-def get_word_counts() -> dict[tuple[int, int], int]:
-    """Load and cache word counts from surah_info.json.
+def get_word_counts(riwayah: str = DEFAULT_SDK_RIWAYAH) -> dict[tuple[int, int], int]:
+    """``{(surah, ayah): word_count}`` under this edition's counting profile.
 
-    Also primes ``cache.set_single_word_verses_cache`` with the derived
-    ``{(surah, ayah): wc == 1}`` set so classifier / save callers don't
-    rebuild it per call.
+    Not a reindex of the Hafs map: Warsh/Qalun renumber 50 of the 114 surahs
+    (6,214 ayahs against Hafs's 6,236), so a Hafs verse key can be out of range
+    there entirely.
+
+    The Hafs branch loads ``surah_info.json`` and also primes
+    ``cache.set_single_word_verses_cache`` with the derived
+    ``{(surah, ayah): wc == 1}`` set so classifier / save callers don't rebuild
+    it per call.
     """
+    if riwayah != DEFAULT_SDK_RIWAYAH:
+        from services.reference import editions
+
+        return editions.word_counts(riwayah)
     cached = cache.get_word_counts_cache()
     if cached is not None:
         return cached
@@ -347,12 +402,21 @@ def get_word_counts() -> dict[tuple[int, int], int]:
     return wc
 
 
-def get_single_word_verses() -> set[tuple[int, int]]:
-    """Singleton set of ``(surah, ayah)`` keys whose verse has exactly one word.
+def get_single_word_verses(riwayah: str = DEFAULT_SDK_RIWAYAH) -> set[tuple[int, int]]:
+    """``(surah, ayah)`` keys whose verse is exactly one word long.
+
+    Hafs has 28, Warsh/Qalun 3 — the muqattaat openings are standalone verses
+    in the Kufan count and swallowed into longer verses in the Medinan one. The
+    edition-aware set lives in ``services.reference.edition_tables``; this
+    accessor is the Hafs one the save/stamping paths already hold.
 
     Derived from ``get_word_counts()`` once at first read; cached for the
     process lifetime alongside word_counts (both immutable post-boot).
     """
+    if riwayah != DEFAULT_SDK_RIWAYAH:
+        from services.reference import edition_tables
+
+        return set(edition_tables.single_word_verses(riwayah))
     cached = cache.get_single_word_verses_cache()
     if cached is not None:
         return cached
@@ -380,8 +444,19 @@ def load_surah_info_lite() -> dict:
     return result
 
 
-def word_has_stop(surah: int, ayah: int, word_num: int) -> bool:
-    """Check if a word in qpc_hafs.json contains a waqf stop sign."""
+def word_has_stop(surah: int, ayah: int, word_num: int, riwayah: str = DEFAULT_SDK_RIWAYAH) -> bool:
+    """True iff this edition writes a waqf stop sign on the given word.
+
+    Hafs reads ``qpc_hafs.json`` against ``constants.STOP_SIGNS`` (four signs,
+    deliberately excluding the paired stop and the sakt). Other editions read
+    their own script against their own observed inventory — Warsh and Qalun
+    carry only U+06D6, on 9,948 words.
+    """
+    if riwayah != DEFAULT_SDK_RIWAYAH:
+        from services.reference import editions
+
+        text = editions.word_map(riwayah).get(f"{surah}:{ayah}:{word_num}", "")
+        return bool(editions.stop_signs(riwayah) & set(text))
     qpc = load_qpc()
     entry = qpc.get(f"{surah}:{ayah}:{word_num}")
     if not entry:

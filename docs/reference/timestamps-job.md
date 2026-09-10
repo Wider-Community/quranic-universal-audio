@@ -104,3 +104,20 @@ Before a complete corpus is promoted to the v13 prefix:
 - two serializations of every chapter produce identical Brotli bytes.
 
 The cutover process and report migration are documented in [data-migrations.md](data-migrations.md) and [ts-reports.md](ts-reports.md).
+
+
+## Multi-riwayah
+
+The run request names the delivery's edition: `ts_space_client.start_run` puts
+`riwayah` (SDK slug) in the signed body **only when it is not Hafs**. The JCS
+canonicaliser sorts keys and the field is omitted for Hafs, so every existing
+Hafs preimage stays byte-identical and the Space-side change need only ship
+before the first non-Hafs run, not in lockstep.
+
+The Space aligns against Hafs as a proxy, phonemizes Hafs phones, then projects
+onto the delivery's words. What comes back is a **word-profile** shard: words and
+pause boundaries, no cells, sounds or animation tokens. `low_confidence_v2.json`
+and `ts_validation.json` are not produced for it — both are tight-beam probes
+against Hafs proxy phones, so the signal degenerates to "this is not Hafs".
+
+Full detail: [`editions.md`](editions.md).

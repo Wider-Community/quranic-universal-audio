@@ -21,6 +21,8 @@
     import { onDestroy, onMount } from 'svelte';
     import { get } from 'svelte/store';
 
+    import * as m from '$lib/paraglide/messages';
+
     import { fetchSurahsForDelivery } from '../../lib/api/audio-surahs';
     import { setAdoptedSource } from '../../lib/playback/adopt-signal';
     import { adjacentAyahStartMs } from '../../lib/playback/ayah-seek';
@@ -59,6 +61,7 @@
     import { loadVerseReports } from './stores/ts-reports';
     import TsValidationPanel from './components/TsValidationPanel.svelte';
     import TimedAnalysisRow from './components/TimedAnalysisRow.svelte';
+    import WordTimedRow from './components/WordTimedRow.svelte';
     import {
         assembleOccasion,
         assembleWaslGroup,
@@ -76,12 +79,17 @@
         shardOccasions,
         type TsReciterAudio,
     } from './services/ts_client';
+    import { isWordShard } from '../../lib/types/ts-client';
+    import { editionFontStack, ensureEditionFont } from '../../lib/refs/edition-font';
+    import { DEFAULT_RIWAYAH, DEFAULT_SDK_RIWAYAH, toInspectorSlug } from '../../lib/riwayat';
     import type { ChapterOccasion } from '../../lib/recitation-data/occasions';
     import { isInWaslGroup, waslGroupOf } from '../../lib/recitation-data/wasl';
     import { findTsEntryBySlug, isTsCapable, resolveTsDeliveries } from './services/ts-published';
     import {
+        deliveryRiwayah,
         showLetters,
         showPhonemes,
+        wordProfile,
         showTranslations,
         translationLanguage,
         tsConfig,
@@ -113,7 +121,9 @@
     const SHUFFLE_END_GUARD_MS = 40;
 
     // ---- Component refs ----
-    let unifiedEl: TimedAnalysisRow;
+    // Either analysis row — the two are interchangeable to the tab, which only
+    // drives the per-frame highlight and the scroll-into-view.
+    let unifiedEl: { updateHighlights: () => void; scrollActiveIntoView: () => void } | undefined;
     let waveformTabEl: TimestampsWaveform;
 
     // ---- Chapter focus data ----
@@ -166,6 +176,12 @@
     // the `$:` below recomputes the analysis vars on a theme flip.
     let curTheme = themeStore.current;
     $: hlVars = resolveHighlightVars($recitationConfigStore.highlightColor, modelForTheme(curTheme));
+    // Glosses are keyed in Hafs upstream; the server reverse-projects them when
+    // this names another edition (D9). `null` (a slug this build does not know)
+    // means no glosses rather than Hafs ones: gloss n would land on a different
+    // word for every renumbered verse.
+    $: glossRiwayah = toInspectorSlug($deliveryRiwayah);
+
     $: hlVarsText = Object.entries(hlVars)
         .map(([k, v]) => `${k}: ${v}`)
         .join('; ');
@@ -326,6 +342,19 @@
         if (active) armVerseLock();
     }
 
+    /**
+     * Forget which edition and profile the last shard carried.
+     *
+     * Both stores are module-level and outlive one delivery. Left set, a Hafs
+     * delivery whose shard never loads keeps the previous Warsh one's proxy
+     * badge, its disabled letter/tajweed controls, its font — and renders the
+     * word row against an empty reading, i.e. a blank analysis grid.
+     */
+    function resetShardEdition(): void {
+        wordProfile.set(false);
+        deliveryRiwayah.set(DEFAULT_SDK_RIWAYAH);
+    }
+
     async function syncChapter(slug: string, chapter: number): Promise<void> {
         if (!slug || !chapter) return;
         if (!manifestSlugs.has(slug)) return; // non-published reciter on dashboard
@@ -338,9 +367,13 @@
         // audio and re-runs this reactive. Cheap: manifest is a warm singleton.
         const manifest = await loadManifest();
         const block = manifest.reciters?.[slug];
-        if (!block) return;
+        if (!block) {
+            resetShardEdition();
+            return;
+        }
         const blockChapters = block.ts_chapters ?? [];
         if (!blockChapters.includes(chapter)) {
+            resetShardEdition();
             const valid = blockChapters[0];
             if (valid && valid !== chapter) {
                 pendingSeekRef = null;
@@ -361,6 +394,14 @@
                     (): Awaited<ReturnType<typeof fetchSurahsForDelivery>> => ({}),
                 ),
             ]);
+            // The shard itself decides whether this view has letters, phonemes
+            // and cell geometry — see `wordProfile` in stores/display.
+            wordProfile.set(isWordShard(shard));
+            // The shard also names the edition whose script it carries, which
+            // is what the tab must typeset it in — see `--font-quran` below.
+            const wordShard = isWordShard(shard) ? shard : null;
+            deliveryRiwayah.set(wordShard?._meta.riwayah ?? DEFAULT_SDK_RIWAYAH);
+            ensureEditionFont(toInspectorSlug(wordShard?._meta.riwayah));
             const reciterAudio = reciterAudioFromManifest(manifest, slug);
             if (!reciterAudio) return;
             const chapterUrl = surahs[String(chapter)]?.url ?? '';
@@ -792,7 +833,9 @@
                     warmEndMs,
                 );
                 if (get(showTranslations) && data.words.length) {
-                    void loadVerseTranslations(data.words, get(translationLanguage)).catch(() => {});
+                    void loadVerseTranslations(
+                        data.words, get(translationLanguage), glossRiwayah,
+                    ).catch(() => {});
                 }
             }
         } catch { /* seek 0 is an acceptable fallback */ }
@@ -938,7 +981,7 @@
             return;
         }
         const token = ++_trReq;
-        loadVerseTranslations(lv.data.words, lang)
+        loadVerseTranslations(lv.data.words, lang, glossRiwayah)
             .then((map) => { if (token === _trReq) verseTranslations.set(map); })
             .catch(() => { if (token === _trReq) verseTranslations.set({}); });
     }
@@ -964,7 +1007,7 @@
             Math.round(next.endMs),
         );
         if (transOn && next.lv.data.words.length) {
-            void loadVerseTranslations(next.lv.data.words, lang).catch(() => {});
+            void loadVerseTranslations(next.lv.data.words, lang, glossRiwayah).catch(() => {});
         }
     }
 
@@ -1107,6 +1150,7 @@
         // Don't leak this tab's last focus to other surfaces (Dashboard's
         // NowReciting subscribes to it).
         recitationFocus.set(null);
+        resetShardEdition();
     });
 </script>
 
@@ -1115,6 +1159,7 @@
 <div
     id="timestamps-panel"
     style={hlVarsText}
+    style:--font-quran={editionFontStack(toInspectorSlug($deliveryRiwayah))}
     style:--unified-display-max-height="{cfg?.unified_display_max_height ?? TS_UNIFIED_DISPLAY_MAX_HEIGHT_PX}px"
     style:--anim-word-transition={wordTransition}
     style:--anim-char-transition={charTransition}
@@ -1141,7 +1186,11 @@
             {:else}
                 <TimestampsWaveform bind:this={waveformTabEl} />
             {/if}
-            <TimedAnalysisRow bind:this={unifiedEl} />
+            {#if $wordProfile}
+                <WordTimedRow bind:this={unifiedEl} />
+            {:else}
+                <TimedAnalysisRow bind:this={unifiedEl} />
+            {/if}
         </div>
     </main>
 </div>

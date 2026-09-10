@@ -1,8 +1,10 @@
 """Staged-run reader tests — the QUA half of the cross-repo contract.
 
-The three golden files under ``qua_shared/schemas/bucket/fixtures/`` are
+The four golden files under ``qua_shared/schemas/bucket/fixtures/`` are
 byte-identical copies of the ones the producer's own contract test emits, so a
-rename on the monorepo side reds here instead of inside promote. The stamping
+rename on the monorepo side reds here instead of inside promote.
+``projected_candidate`` is the non-Hafs shape: target refs with the Hafs span the
+matcher matched kept beside each one. The stamping
 tests pin the type boundary: ``stamp_operation`` returns a dict, leaves the
 read-only event untouched, and the result validates as a real ``EditOperation``.
 """
@@ -61,6 +63,41 @@ def test_golden_candidate_validates():
     assert candidate.trim_span_ms == (120, 12500)
 
 
+def test_golden_projected_candidate_carries_its_edition_and_its_evidence():
+    """A non-Hafs run publishes target coordinates and keeps the Hafs span."""
+    candidate = ChapterCandidateDoc.model_validate(_load("projected_candidate"))
+    assert candidate.riwayah == "warsh"
+
+    segments = [seg for entry in candidate.entries for seg in entry.segments]
+    merged = next(seg for seg in segments if seg["projection_support"] == "partial")
+    # Warsh writes Hafs 40:26:13 + 40:26:14 as one word, and the aligner matched
+    # only the first of the two — so the staged span is one word wide and the
+    # support says so. This is evidence, not a derivation: it records the text
+    # the matcher actually had. Promote then widens it to the whole projection
+    # group (``stamp_projection``), because that is the span the timing engine
+    # must align a merged word's audio against; ``test_projection_stamp`` pins
+    # that side. The two records disagree by design and each says so.
+    assert merged["matched_ref"] == "40:26:13-40:26:13"
+    assert merged["source_ref"] == "40:26:13-40:26:13"
+
+    for seg in segments:
+        parsed = DetailedSegment.model_validate(seg)
+        assert parsed.source_ref == seg["source_ref"]
+        assert parsed.projection_support == seg["projection_support"]
+
+
+def test_a_hafs_candidate_carries_no_projection_provenance():
+    """The reference edition is the identity, so promote publishes neither field."""
+    candidate = ChapterCandidateDoc.model_validate(_load("chapter_candidate"))
+    assert candidate.riwayah == "hafs"
+    for entry in candidate.entries:
+        for seg in entry.segments:
+            parsed = DetailedSegment.model_validate(seg)
+            assert parsed.source_ref is None
+            assert parsed.projection_support is None
+            assert "source_ref" not in parsed.model_dump(exclude_none=True)
+
+
 def test_golden_events_validate():
     events = _events()
     assert [ev.kind for ev in events] == ["waqf_sakt", "delete_segment", "delete_segment"]
@@ -73,6 +110,7 @@ def test_golden_events_validate():
     [
         ("run_manifest", RunManifestDoc),
         ("chapter_candidate", ChapterCandidateDoc),
+        ("projected_candidate", ChapterCandidateDoc),
     ],
 )
 def test_unknown_producer_field_is_ignored(fixture, reader):

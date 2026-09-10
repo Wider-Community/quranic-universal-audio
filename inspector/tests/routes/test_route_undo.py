@@ -95,6 +95,87 @@ def test_undo_batch_round_trip_with_actor(signed_in_client, tmp_reciter_dir):
     }
 
 
+def test_a_refused_undo_leaves_no_edits_in_the_segment_cache(signed_in_client, tmp_reciter_dir):
+    """A 409 comes AFTER the earlier ops of the batch have already been reversed.
+
+    ``load_detailed`` hands back the process cache by reference, so those
+    reversed-but-never-written segments stay live for every later request in
+    this single-worker process, and the next save persists them. The undo has
+    to drop the cache on any exit that is not a persist.
+    """
+    from services.storage import cache, data_loader
+
+    reciter = "fixture_reciter"
+    tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="u-1")
+    chapter = 112
+    client, _ = signed_in_client(hf_user_id="u-1", login="alice")
+    uid = "019d5c88-f55f-7ee0-81d1-d99f423e8dd5"
+
+    save = client.post(
+        f"/api/seg/save/{reciter}/{chapter}",
+        data=json.dumps(
+            {
+                "full_replace": True,
+                "segments": [],
+                "operations": [
+                    {
+                        "op_id": "op-1",
+                        "type": "delete",
+                        "command": {"type": "delete", "segmentUid": uid},
+                        "patch": {
+                            "before": [{"segment_uid": uid}],
+                            "after": [],
+                            "removedIds": [uid],
+                            "insertedIds": [],
+                            "affectedChapterIds": [chapter],
+                        },
+                    },
+                    {
+                        # Reversed FIRST, and refused: it claims a chapter the
+                        # batch never touched. op-1's reversal has landed in the
+                        # cached entries by then.
+                        "op_id": "op-2",
+                        "type": "trim",
+                        "command": {"type": "trim", "segmentUid": uid},
+                        "patch": {
+                            "before": [],
+                            "after": [],
+                            "removedIds": [],
+                            "insertedIds": [],
+                            "affectedChapterIds": [93],
+                        },
+                    },
+                ],
+            }
+        ),
+        headers=_HEADERS,
+    )
+    assert save.status_code == 200, save.get_json()
+
+    history_path = tmp_reciter_dir.root / reciter / "edit_history.jsonl"
+    batch_id = json.loads(history_path.read_text(encoding="utf-8").splitlines()[-1])["batch_id"]
+
+    undo = client.post(
+        f"/api/seg/undo-batch/{reciter}",
+        data=json.dumps({"batch_id": batch_id}),
+        headers=_HEADERS,
+    )
+    assert undo.status_code == 409, undo.get_json()
+
+    detailed = json.loads(
+        (tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8")
+    )
+    on_disk = {s.get("segment_uid") for e in detailed["entries"] for s in e.get("segments", [])}
+    assert cache.get_seg_cache(reciter) is None, "the refused undo left its edits cached"
+
+    cached = {
+        s.get("segment_uid")
+        for e in data_loader.load_detailed(reciter)
+        for s in e.get("segments", [])
+    }
+    assert cached == on_disk
+
+
 def test_undo_ops_unknown_returns_400_or_404(signed_in_client, tmp_reciter_dir):
     """undo-ops route accepts (batch_id, op_ids) and returns 4xx for unknown
     ids. Test name commits to a 4xx — the previous tuple including 200 would

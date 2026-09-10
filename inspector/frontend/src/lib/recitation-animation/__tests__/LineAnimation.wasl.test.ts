@@ -72,6 +72,28 @@ describe('LineAnimation — waṣl chaining', () => {
     });
 });
 
+describe('LineAnimation — edition verse marker', () => {
+    const units = [unit('1:1:1', 0, 1, '1:2'), unit('1:2:1', 1, 2)];
+
+    it('defaults to the Hafs ornament before the number', async () => {
+        const { container } = render(LineAnimation, {
+            units, config: cfg, getTimeMs: () => 0, playing: false,
+        });
+        await tick();
+        expect(container.querySelector('.ra-ayah-marker')?.textContent).toBe('۝١');
+    });
+
+    it('drops the ornament when the edition font draws its own', async () => {
+        // Warsh/Qalun/Shu'ba render through the packaged QPC faces, which
+        // decorate the Arabic-Indic digits themselves (D7).
+        const { container } = render(LineAnimation, {
+            units, config: cfg, getTimeMs: () => 0, playing: false, ayahMarker: '',
+        });
+        await tick();
+        expect(container.querySelector('.ra-ayah-marker')?.textContent).toBe('١');
+    });
+});
+
 describe('LineAnimation — waqf marker color', () => {
     let rafCbs: FrameRequestCallback[] = [];
     let nowMs = 0;

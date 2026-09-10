@@ -39,3 +39,26 @@ def test_seg_all_no_longer_ships_quran_refs(flask_client, tmp_reciter_dir):
     body = res.get_json()
     assert "dk_words" not in (body or {})
     assert "verse_word_counts" not in (body or {})
+
+
+def test_payload_carries_the_edition_and_its_verse_marker(flask_client, tmp_reciter_dir):
+    body = flask_client.get("/api/static/quran-refs.json").get_json()
+    assert body["riwayah"] == "hafs"
+    assert body["verse_marker_prefix"] == "۝"
+
+
+def test_an_unknown_riwayah_is_rejected_rather_than_served_as_hafs(flask_client, tmp_reciter_dir):
+    # A silent Hafs fallback would render one edition's coordinates under
+    # another's script and let a reviewer save wrong refs.
+    for path in ("/api/static/quran-refs.json", "/api/static/quran-refs/version"):
+        assert flask_client.get(f"{path}?riwayah=duri_an_abi_amr").status_code == 400
+
+
+def test_edition_font_route_rejects_an_unknown_riwayah(flask_client, tmp_reciter_dir):
+    assert flask_client.get("/api/static/edition/duri_an_abi_amr/font").status_code == 400
+
+
+def test_hafs_font_is_not_served_here(flask_client, tmp_reciter_dir):
+    # Hafs's Digital Khatt font ships inlined in the frontend bundle; the
+    # packaged qua_domain Hafs font pairs with a different glyph variant.
+    assert flask_client.get("/api/static/edition/hafs_an_asim/font").status_code == 404

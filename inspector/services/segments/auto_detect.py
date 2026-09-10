@@ -33,7 +33,7 @@ import time
 
 from qua_shared.schemas import Actor, ReciterState, Role
 from services.state import state as state_service
-from services.storage import storage_paths
+from services.storage import cache, storage_paths
 from services.storage.hf_bucket import get_backend
 
 logger = logging.getLogger(__name__)
@@ -97,6 +97,10 @@ def hydrate_initial_seen() -> None:
         seen_now.add(slug)
         if row.state != ReciterState.AWAITING_ALIGNMENT:
             continue
+        # The content arrived out of band, so anything this process cached about
+        # the slug's files predates it — including the "there is no
+        # detailed.json" answer a Reviews-drawer read leaves behind.
+        cache.invalidate_seg_caches(slug)
         try:
             state_service.transition(
                 slug,
@@ -147,6 +151,10 @@ def reconcile_once() -> int:
         seen_now.add(slug)
         if row.state != ReciterState.AWAITING_ALIGNMENT:
             continue
+        # The content arrived out of band, so anything this process cached about
+        # the slug's files predates it — including the "there is no
+        # detailed.json" answer a Reviews-drawer read leaves behind.
+        cache.invalidate_seg_caches(slug)
         try:
             state_service.transition(
                 slug,

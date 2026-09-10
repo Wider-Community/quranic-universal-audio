@@ -70,9 +70,21 @@ def test_unknown_key_rejected():
 
 
 def test_round_trip_byte_shape_equal():
-    """``model_dump()`` reproduces the canonical artefact shape exactly —
-    no field renamed or dropped, no extra key introduced."""
+    """``model_dump(exclude_none=True)`` reproduces the canonical artefact
+    shape exactly — no field renamed or dropped, no extra key introduced.
+
+    ``exclude_none`` is the writer/reader convention for these artefacts (see
+    ``schemas/bucket/segment.py``): an optional field the document does not
+    carry stays absent rather than serializing as ``null``.
+    """
     raw = _canonical_meta()
     m = PipelineMeta.model_validate(raw)
-    out = m.model_dump()
+    out = m.model_dump(exclude_none=True)
+    assert out == raw
+
+
+def test_round_trip_preserves_riwayah_when_present():
+    """A non-Hafs sidecar names the coordinate system its extraction ran in."""
+    raw = {**_canonical_meta(), "riwayah": "warsh_an_nafi"}
+    out = PipelineMeta.model_validate(raw).model_dump(exclude_none=True)
     assert out == raw

@@ -67,8 +67,8 @@ Two layers guard the route contract:
 
 The shapes that bite. Each is real, in-tree, with a path.
 
-- **Tuple spans stay spans.** Pydantic v2 emits JSON-Schema-2020-12 `prefixItems` for fixed tuples such as a part's `t: tuple[int, int]` and peak pairs. The codegen normalizes these where needed. Timestamp words, sounds, units, and boundaries are named objects in v12; there is no positional shard word/cell tuple.
-- **Native documents stay native.** `TsShardDoc` validates the v12 envelope, parts, and timing sidecars while requiring all three embedded phonemizer documents to declare native schema 2. The shared renderer package supplies their TypeScript types and parser; `qua_shared` does not mirror the producer's cell or rule vocabulary. Inspector rule presentation is a separate exhaustive 45-ID policy table whose completeness test fails on producer drift. See [shards.md](shards.md).
+- **Tuple spans stay spans.** Pydantic v2 emits JSON-Schema-2020-12 `prefixItems` for fixed tuples such as a part's `t: tuple[int, int]` and peak pairs. The codegen normalizes these where needed. Timestamp words, sounds, units, and boundaries are named objects in v13; there is no positional shard word/cell tuple.
+- **Native documents stay native.** `TsShardDoc` validates the v13 envelope, parts, and timing sidecars while requiring all three embedded phonemizer documents to declare native schema 2. The shared renderer package supplies their TypeScript types and parser; `qua_shared` does not mirror the producer's cell or rule vocabulary. Inspector rule presentation is a separate exhaustive 45-ID policy table whose completeness test fails on producer drift. See [shards.md](shards.md).
 - **No discriminator field → plain union keyed by response-key.** Validation items carry NO intrinsic on-wire discriminator. The category is the RESPONSE KEY (`failed` / `low_confidence` / …); the FE switches on that key (passed as a `category` prop), never read off the item. So `SegValAnyItem` (`wire/seg.py`) is a plain `RootModel[Union[…every variant…]]`, NOT a Pydantic `Field(discriminator=…)` union — a discriminator would force inventing an off-wire `kind` field and violate `forbid` + "model what the route emits". json2ts renders the plain union as a clean named `A | B | C` (every member is a `$ref` under a top-level `anyOf`), not `unknown` soup.
 - **Literal-discriminated enums.** Finite string fields the FE switches on are `Literal[...]`, not `str`: `SegReciterState`, `SegReciterVisibility`, `audio_category: Literal["by_surah","by_ayah"]`, `OkAck.ok: Literal[True] = True`. Gives the FE a closed switch surface.
 - **Dynamic-keyed maps → `dict[str, T]`.** JSON-object maps whose keys are data (chapter numbers, audio URLs, range strings) are `dict[str, T]` (TS `Record<string, T>`): `chapter_bitrate_kbps: dict[str, int]`, `peaks: dict[str, SegSlimPeaks]`, `audio_by_chapter: dict[str, str]`. JSON object keys are always strings on the wire even when they're conceptually ints.
@@ -103,3 +103,24 @@ The steady-state drift gate for the external bucket — validates on-disk files 
 - **`scripts/diagnostics/validate_bucket.py`** — the whole-bucket CLI over that engine. Three passes: every reciter folder (via `audit`), the DB catalog (`repo_catalog.snapshot()` re-validates `ReciterCatalog` from rows), and every `catalog/audio_manifest/<slug>.json` sidecar (via `AudioManifestSidecar`). Exits non-zero on any hard error; `--strict` also fails on unknown-field warnings. The dead `catalog/reciter_catalog.json` backup is never validated (no app reads it). `--bucket prod|dev` (default dev; prod needs `INSPECTOR_ALLOW_PROD_BUCKET=1`).
 - **`.github/workflows/bucket-validate.yml`** — runs `validate_bucket.py` nightly (~06:00 UTC) + on demand against both buckets, read-only. A non-zero exit fails the job and alerts.
 - **`/healthz?deep=1`** — `bucket_audit.sample_validation()` runs a bounded probe (DB-catalog round-trip + a small spread sample of reciter folders, default 3). Opt-in: the default `/healthz` never walks the bucket, so its latency is unchanged. A deep probe finding drift flips the response to degraded (503 in deployed mode) so misconfiguration surfaces at health-check time, not mid-request.
+
+
+## Multi-riwayah fields
+
+Additive and Hafs-invisible by construction — every one of these is optional
+with a Hafs default, so an existing document round-trips byte-identically:
+
+| Model | Field | Meaning |
+|---|---|---|
+| `DetailedMeta` | `riwayah` | Inspector slug the `matched_ref`s are in; `None` = Hafs |
+| `DetailedSegment` | `source_ref`, `projection_support` | the Hafs span the matcher matched, and whether the seg cuts an N:M relation |
+| `PipelineMeta` | `riwayah` | the edition extraction ran under; must agree with `DetailedMeta` |
+| `TsWordShardMeta` | whole model | the word-profile shard (schema 14, `profile: "word"`) |
+| `TimestampMeta` | `script`, `riwayah` | `script` widened from `Literal["digital_khatt_v2"]` to the edition index id |
+| `ReleaseManifestRecitation` | `tiers`, `riwayah` | which tiers ship, and in which edition |
+| `ReleaseManifest` | `editions` | per non-Hafs edition: word/script/projection digests + font family |
+
+`qua_shared/schemas/config/riwayat.py` generates the two slug unions the FE types
+are built from, so `SUPPORTED_RIWAYAT` has exactly one definition.
+
+Full detail: [`editions.md`](editions.md).

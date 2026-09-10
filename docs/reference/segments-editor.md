@@ -228,3 +228,23 @@ A manual "needs a second look" annotation any editor can attach to a segment —
 **Auto-split** (`services/segments/auto_split.py`) is read-only lookup, not an edit op. MFA alignment that produces cursor positions runs **offline** (`qua_shared/auto_split_precompute.py`), persisting `<reciter>/auto_split_v1.json` keyed by `segment_uid`. At runtime `POST /api/seg/auto-split/<reciter>` (`edit.py::seg_auto_split`) → `compute_auto_split` reads the sidecar via `load_auto_split` (O(1), in-memory) and returns `{cursors:int[]|None, refs:str[]|None, kind:"cross_verse"|"repetition"|null, source:"sidecar"|"miss"}`. On a miss the FE flips the button from *Auto Split* back to plain *Split* and falls back to manual single-cursor placement. The returned `cursors`/`refs` feed a `split` command (`cmd.splitMs` array + `cmd.refs`).
 
 **Auto-detect** (`services/segments/auto_detect.py`) is unrelated to segment editing — it is the request-lifecycle reconciler that fires `reciter.alignment_completed` when new `reciters/<slug>/` folders appear (polling loop + `POST /api/admin/reconcile`). It does not touch `detailed.json` segments.
+
+
+## Multi-riwayah
+
+Every `matched_ref` in `detailed.json` is expressed in the **delivery's own
+edition** — `_meta.riwayah` (Inspector slug; absent means Hafs) names which. The
+tab renders that edition's script in that edition's font, resolves verse word
+counts from its index, and shows its verse-marker glyph.
+
+Because recognition and DP matching always run against Hafs, a non-Hafs seg also
+carries the Hafs evidence: `source_ref` (the Hafs word span the matcher matched)
+and `projection_support` (`full` / `partial`, where `partial` means the seg cuts
+through an N:M relation). Both are `None` on every Hafs seg, so the serialization
+is byte-identical to what it always was.
+
+The one resolver is `services/reference/delivery_edition.py`: the catalog row is
+the authority, `detailed.json`'s `_meta.riwayah` is evidence, and a disagreement
+raises `RiwayahMismatch` rather than picking a side.
+
+Full detail: [`editions.md`](editions.md).

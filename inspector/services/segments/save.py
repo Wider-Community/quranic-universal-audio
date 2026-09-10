@@ -21,9 +21,11 @@ from adapters.save_payload import make_seg as _adapter_make_seg
 from adapters.segments_json import build_segments_doc as _adapter_build_segments_doc
 from constants import HISTORY_SCHEMA_VERSION
 from domain.command import validate_patch_dict
+from qua_shared.riwayat import DEFAULT_SDK_RIWAYAH
 from qua_shared.schemas import Actor, FlagFollowUp, SegmentFlag
 from services.audio import op_peaks as op_peaks_svc
 from services.audio.peaks_history import append_peaks_records
+from services.reference.delivery_edition import sdk_riwayah_for
 from services.segments.stamping import stamp_segment
 from services.storage import cache, data_dir
 from services.storage.data_loader import (
@@ -165,7 +167,12 @@ def _ensure_patch_on_ops(operations: list) -> list:
     return out
 
 
-def _attach_classified_issues(operations: list, probe_failed_uids: set | None = None) -> list:
+def _attach_classified_issues(
+    operations: list,
+    probe_failed_uids: set | None = None,
+    *,
+    riwayah: str,
+) -> list:
     """Return a deep-enough copy of ``operations`` with ``classified_issues``
     populated on every snapshot.
 
@@ -200,7 +207,11 @@ def _attach_classified_issues(operations: list, probe_failed_uids: set | None = 
                 if isinstance(snap, dict):
                     enriched = dict(snap)
                     enriched["classified_issues"] = _history_visible_categories(
-                        classify_snapshot(enriched, probe_failed_uids=probe_failed_uids)
+                        classify_snapshot(
+                            enriched,
+                            probe_failed_uids=probe_failed_uids,
+                            riwayah=riwayah,
+                        )
                     )
                     new_arr.append(enriched)
                 else:
@@ -215,7 +226,11 @@ def _attach_classified_issues(operations: list, probe_failed_uids: set | None = 
                 if isinstance(snap, dict):
                     enriched = dict(snap)
                     enriched["classified_issues"] = _history_visible_categories(
-                        classify_snapshot(enriched, probe_failed_uids=probe_failed_uids)
+                        classify_snapshot(
+                            enriched,
+                            probe_failed_uids=probe_failed_uids,
+                            riwayah=riwayah,
+                        )
                     )
                     new_snapshots[which] = enriched
             new_op["snapshots"] = new_snapshots
@@ -243,9 +258,14 @@ def persist_detailed(reciter: str, meta: dict, entries: list[dict]) -> None:
     rebuild_segments_json(reciter, entries)
 
 
-def normalize_ref_with_wc(ref: str) -> str:
-    """Normalize a short ref to canonical form (passes cached word counts)."""
-    return normalize_ref(ref, get_word_counts())
+def normalize_ref_with_wc(ref: str, riwayah: str = DEFAULT_SDK_RIWAYAH) -> str:
+    """Normalize a short ref to canonical form (passes cached word counts).
+
+    The word counts are the EDITION's: a short ref like ``2:285`` expands to
+    that edition's last word of that verse, and Warsh's al-Baqarah has one
+    fewer verse than Hafs's with different word counts throughout.
+    """
+    return normalize_ref(ref, get_word_counts(riwayah))
 
 
 def rebuild_segments_json(reciter: str, entries: list[dict]) -> None:
@@ -298,22 +318,26 @@ def _make_seg(
 
 
 def _apply_full_replace(
-    matching: list[dict], updates: dict, existing_by_time: dict, existing_by_uid: dict
+    matching: list[dict],
+    updates: dict,
+    existing_by_time: dict,
+    existing_by_uid: dict,
+    riwayah: str = DEFAULT_SDK_RIWAYAH,
 ):
     """Mutate ``matching`` in place for a full_replace save.
 
     Returns ``None`` on success or an ``(error_dict, http_status)`` tuple on
     input validation failure (propagated by the caller as the route response).
     """
-    word_counts = get_word_counts()
-    single_word_verses = get_single_word_verses()
+    word_counts = get_word_counts(riwayah)
+    single_word_verses = get_single_word_verses(riwayah)
     if len(matching) == 1:
         new_segs = [
             _make_seg(s, existing_by_time, existing_by_uid, word_counts)
             for s in updates["segments"]
         ]
         for seg in new_segs:
-            stamp_segment(seg, single_word_verses)
+            stamp_segment(seg, single_word_verses, riwayah)
         matching[0]["segments"] = new_segs
         return None
 
@@ -351,23 +375,23 @@ def _apply_full_replace(
             }, 400
 
         new_seg = _make_seg(s, existing_by_time, existing_by_uid, word_counts)
-        stamp_segment(new_seg, single_word_verses)
+        stamp_segment(new_seg, single_word_verses, riwayah)
         candidates[0]["segments"].append(new_seg)
     return None
 
 
-def _apply_patch(matching: list[dict], updates: dict) -> None:
+def _apply_patch(matching: list[dict], updates: dict, riwayah: str = DEFAULT_SDK_RIWAYAH) -> None:
     """Mutate ``matching`` in place for a patch save (field-level updates by index)."""
     flat_segments = []
     for e in matching:
         for seg in e.get("segments", []):
             flat_segments.append(seg)
 
-    single_word_verses = get_single_word_verses()
+    single_word_verses = get_single_word_verses(riwayah)
     for upd in updates["segments"]:
         idx = upd.get("index")
         if idx is not None and 0 <= idx < len(flat_segments):
-            ref = normalize_ref_with_wc(upd.get("matched_ref", ""))
+            ref = normalize_ref_with_wc(upd.get("matched_ref", ""), riwayah)
             flat_segments[idx]["matched_ref"] = ref
             if "confidence" in upd:
                 flat_segments[idx]["confidence"] = upd["confidence"]
@@ -379,7 +403,7 @@ def _apply_patch(matching: list[dict], updates: dict) -> None:
                     flat_segments[idx].pop("ignored_categories", None)
                     flat_segments[idx].pop("ignored", None)
             # Re-stamp persisted classifier fields since matched_ref/text changed.
-            stamp_segment(flat_segments[idx], single_word_verses)
+            stamp_segment(flat_segments[idx], single_word_verses, riwayah)
 
 
 def _utc_now_iso() -> str:
@@ -509,7 +533,14 @@ def _apply_flag_ops(matching: list[dict], operations: list, *, actor: Actor):
 
 
 def _persist_and_record(
-    reciter: str, chapter: int, entries: list[dict], meta: dict, updates: dict, *, actor: Actor
+    reciter: str,
+    chapter: int,
+    entries: list[dict],
+    meta: dict,
+    updates: dict,
+    *,
+    actor: Actor,
+    riwayah: str,
 ) -> SaveResult:
     """Persist mutated entries to disk, append edit_history, invalidate caches."""
     # Validate patch envelopes before writing anything.
@@ -529,6 +560,7 @@ def _persist_and_record(
     operations = _attach_classified_issues(
         _ensure_patch_on_ops(raw_ops),
         probe_failed_uids=probe_failed_uids,
+        riwayah=riwayah,
     )
     # ``actor`` block carries the per-edit attribution surfaced in the
     # History panel and feeding the contributor-recognition page.
@@ -630,36 +662,53 @@ def save_seg_data(reciter: str, chapter: int, updates: dict, *, actor: Actor) ->
     existing_by_time, existing_by_uid = _build_seg_lookups(matching)
 
     meta = cache.get_seg_meta(reciter)
+    # Refs, word counts and the persisted classifier fields are all
+    # edition-specific. Raises rather than defaulting to Hafs — a save is the
+    # one place a wrong edition becomes permanent on disk.
+    riwayah = sdk_riwayah_for(reciter)
 
-    if updates.get("full_replace"):
-        err = _apply_full_replace(matching, updates, existing_by_time, existing_by_uid)
-        if err is not None:
-            return err
-    else:
-        _apply_patch(matching, updates)
+    # ``entries`` IS the process cache — ``load_detailed`` hands back
+    # ``cache.get_seg_cache(reciter)`` by reference — so the apply steps below
+    # mutate it before anything is written. A save that bails after them (a
+    # rejected patch envelope, a ref that is not in the delivery's edition)
+    # would otherwise leave those never-persisted edits visible to every later
+    # request, so the cache is dropped on any exit that is not a persist.
+    persisted = False
+    try:
+        if updates.get("full_replace"):
+            err = _apply_full_replace(matching, updates, existing_by_time, existing_by_uid, riwayah)
+            if err is not None:
+                return err
+        else:
+            _apply_patch(matching, updates, riwayah)
 
-    # Flag ops carry their payload in the operation envelope, not in
-    # ``segments`` — applied here with a server-authoritative actor + clock.
-    flag_err, flag_replies, flag_owner_activity = _apply_flag_ops(
-        matching, updates.get("operations") or [], actor=actor
-    )
-    if flag_err is not None:
-        return flag_err
+        # Flag ops carry their payload in the operation envelope, not in
+        # ``segments`` — applied here with a server-authoritative actor + clock.
+        flag_err, flag_replies, flag_owner_activity = _apply_flag_ops(
+            matching, updates.get("operations") or [], actor=actor
+        )
+        if flag_err is not None:
+            return flag_err
 
-    # ``ignored_categories`` is mutated only when the payload explicitly
-    # carries it (Ignore action, or explicit ``[]`` clear -- MUST-7).
-    # Edits dispatched from validation accordion cards no longer write to
-    # ``ignored_categories``: that contract is reserved for explicit Ignore.
-    # Card dismissal for soft-rule categories is purely a frontend
-    # session-state concern.
-    result = _persist_and_record(
-        reciter,
-        chapter,
-        entries,
-        meta,
-        updates,
-        actor=actor,
-    )
+        # ``ignored_categories`` is mutated only when the payload explicitly
+        # carries it (Ignore action, or explicit ``[]`` clear -- MUST-7).
+        # Edits dispatched from validation accordion cards no longer write to
+        # ``ignored_categories``: that contract is reserved for explicit Ignore.
+        # Card dismissal for soft-rule categories is purely a frontend
+        # session-state concern.
+        result = _persist_and_record(
+            reciter,
+            chapter,
+            entries,
+            meta,
+            updates,
+            actor=actor,
+            riwayah=riwayah,
+        )
+        persisted = not isinstance(result, tuple)
+    finally:
+        if not persisted:
+            cache.invalidate_seg_caches(reciter)
 
     # Notify after the save persisted — best-effort (own durable txn), never
     # affects the save. Two audiences: the original flagger on a reply to their

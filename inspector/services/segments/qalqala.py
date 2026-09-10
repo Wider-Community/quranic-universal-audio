@@ -17,18 +17,21 @@ equivalent across writers, which keeps drift checks honest.
 from __future__ import annotations
 
 from constants import QALQALA_LETTERS
+from qua_shared.riwayat import DEFAULT_SDK_RIWAYAH
 from services.reference.quran_refs import dk_text_for_ref
 from utils.arabic_text import last_arabic_letter
 
 
-def compute_qalqala_letter(seg: dict) -> str | None:
+def compute_qalqala_letter(seg: dict, riwayah: str = DEFAULT_SDK_RIWAYAH) -> str | None:
     """Return the persisted ``qalqala_letter`` value for *seg*.
 
     Either a single Arabic letter (one of ``QALQALA_LETTERS``) or ``None``
     when no qalqala letter exists at the segment's right boundary. The
     seg's text is derived from ``matched_ref`` via ``dk_text_for_ref``
-    (Migration #5 dropped per-seg ``matched_text``).
+    (Migration #5 dropped per-seg ``matched_text``), in ``riwayah``'s own
+    script — the qalqala letters themselves are the same five in every
+    edition, but which letter ends a given word ref is not.
     """
-    text = dk_text_for_ref(seg.get("matched_ref"))
+    text = dk_text_for_ref(seg.get("matched_ref"), riwayah)
     last = last_arabic_letter(text)
     return last if last in QALQALA_LETTERS else None

@@ -43,6 +43,9 @@ from .bucket.ts_shard import (
     TsShardReading,
     TsShardTiming,
     TsSoundTiming,
+    TsWordShardDoc,
+    TsWordShardMeta,
+    TsWordShardReading,
     TsWordTiming,
 )
 from .bucket.ts_validation import TsValidationDoc, TsValidationMeta, TsValidationVerse
@@ -57,6 +60,7 @@ from .config.automation import (
     StaleTsRegenConfig,
     TsGenerationDefaults,
 )
+from .config.riwayat import RiwayahSupport, RiwayatConfig
 from .wire._envelopes import ErrorEnvelope, OkAck
 from .wire.admin_permissions import (
     AdminCapabilityRow,
@@ -232,6 +236,8 @@ __all__ = [
     "StaleMetadataConfig",
     "StaleTsRegenConfig",
     "TsGenerationDefaults",
+    "RiwayahSupport",
+    "RiwayatConfig",
     "AdminActiveClaim",
     "AdminActivityEvent",
     "AdminCapabilityRow",
@@ -309,6 +315,9 @@ __all__ = [
     "TsShardPart",
     "TsShardReading",
     "TsShardTiming",
+    "TsWordShardDoc",
+    "TsWordShardMeta",
+    "TsWordShardReading",
     "TsColumnTiming",
     "TsCompactRender",
     "TsNativeProfile",

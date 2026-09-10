@@ -55,6 +55,7 @@ function loadedVerseFixture(fullSpanSec: number, words: TsWord[]): TsLoadedVerse
         intervals: [],
         words,
         native: [],
+        wordReadings: [],
     };
     return { data, tsSegOffset: 0, tsSegEnd: fullSpanSec };
 }

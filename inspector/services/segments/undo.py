@@ -7,11 +7,14 @@ from datetime import UTC, datetime
 
 from constants import HISTORY_SCHEMA_VERSION
 from domain.command import apply_inverse_patch
+from qua_shared.riwayat import DEFAULT_SDK_RIWAYAH
 from qua_shared.schemas import Actor
 from services.activity.history_query import parse_history_for_reciter
+from services.reference.delivery_edition import sdk_riwayah_for
 from services.segments.save import persist_detailed
+from services.segments.stamping import stamp_segment
 from services.storage import cache, data_dir
-from services.storage.data_loader import load_detailed
+from services.storage.data_loader import get_single_word_verses, load_detailed
 from utils.references import chapter_from_ref
 from utils.uuid7 import uuid7
 
@@ -223,7 +226,9 @@ def _reverse_ignore(entries: list[dict], op: dict, chapter_set: set[int]) -> Non
 # ---------------------------------------------------------------------------
 
 
-def _reverse_via_patch(entries: list[dict], op: dict, chapter_set: set[int]) -> None:
+def _reverse_via_patch(
+    entries: list[dict], op: dict, chapter_set: set[int], riwayah: str = DEFAULT_SDK_RIWAYAH
+) -> None:
     """Apply the inverse of an op by running the patch in reverse.
 
     Validates that the patch's affectedChapterIds are within the batch's
@@ -242,13 +247,19 @@ def _reverse_via_patch(entries: list[dict], op: dict, chapter_set: set[int]) -> 
             chapter_set,
         )
         raise ValueError(f"patch claims chapters {outside} outside the batch scope {chapter_set}")
-    apply_inverse_patch(entries, patch)
+    apply_inverse_patch(entries, patch, riwayah)
 
 
-def apply_reverse_op(entries: list[dict], op: dict, chapter_set: set[int]) -> None:
-    """Apply the reverse of a single operation.  Raises ``ValueError`` on conflict."""
+def apply_reverse_op(
+    entries: list[dict], op: dict, chapter_set: set[int], riwayah: str = DEFAULT_SDK_RIWAYAH
+) -> None:
+    """Apply the reverse of a single operation.  Raises ``ValueError`` on conflict.
+
+    ``riwayah`` only reaches the patch path, which is the one that re-derives a
+    snapshot's ``matched_text`` — every other reverse restores stored text.
+    """
     if "patch" in op:
-        _reverse_via_patch(entries, op, chapter_set)
+        _reverse_via_patch(entries, op, chapter_set, riwayah)
         return
     op_type = op.get("op_type", "")
     if op_type in ("trim_segment", "auto_fix_missing_word"):
@@ -280,6 +291,30 @@ def _get_affected_chapters(batch: dict) -> set[int]:
     if chs:
         affected.update(chs)
     return affected
+
+
+def _restamp(entries: list[dict], chapters: set[int], riwayah: str) -> None:
+    """Re-derive the backend-owned stamped fields on every entry an undo touched.
+
+    An undo is a write like any other, and two of its paths move a segment's
+    coordinates: ``_reverse_ref_edit`` rewrites ``matched_ref`` outright, and
+    the patch path replaces the whole segment dict with the frontend's
+    before-snapshot. That snapshot carries only what the editor can change --
+    ``snapshotSeg`` never sees ``source_ref``, ``projection_support``,
+    ``qalqala_letter`` or ``is_boundary_adj``, because none of them are on the
+    wire model -- so restoring it drops them.
+
+    For a projected delivery that is not cosmetic: the timestamps engine refuses
+    a run whose projected segments have no ``source_ref``
+    (``assert_projected_segments_are_sourced``), so one undo would block the
+    next alignment until every touched segment was re-saved by hand.
+    """
+    single_word_verses = get_single_word_verses(riwayah)
+    for entry in entries:
+        if chapters and chapter_from_ref(entry.get("ref", "")) not in chapters:
+            continue
+        for seg in entry.get("segments", []):
+            stamp_segment(seg, single_word_verses, riwayah)
 
 
 def _append_revert_record(
@@ -372,17 +407,34 @@ def undo_batch(reciter: str, target_batch_id: str, *, actor: Actor) -> dict | tu
         return {"error": "Reciter data not found"}, 404
 
     meta = cache.get_seg_meta(reciter)
+    riwayah = sdk_riwayah_for(reciter)
     affected_chapters: set[int] = set()
     for rec in matching:
         affected_chapters.update(_get_affected_chapters(rec))
 
+    # ``entries`` IS the process cache — ``load_detailed`` returns
+    # ``cache.get_seg_cache(reciter)`` by reference — and the reverse ops below
+    # mutate it before anything is written. An undo that stops partway (a patch
+    # claiming chapters outside the batch, a ref ``_restamp`` refuses) would
+    # otherwise leave those never-persisted changes visible to every later
+    # request, and the next save would write them out. Same guard as the save
+    # path; see ``segments/save.py``.
+    persisted = False
     try:
-        for op in reversed(operations):
-            apply_reverse_op(entries, op, affected_chapters)
-    except ValueError as e:
-        return {"error": str(e)}, 409
-
-    persist_detailed(reciter, meta, entries)
+        try:
+            for op in reversed(operations):
+                apply_reverse_op(entries, op, affected_chapters, riwayah)
+        except ValueError as e:
+            return {"error": str(e)}, 409
+        # Outside the inner ``except``: a ``RefNotInEdition`` from here is a 400
+        # about the ref, not a 409 about the batch, and a write-time
+        # ValidationError is a fault rather than a conflict.
+        _restamp(entries, affected_chapters, riwayah)
+        persist_detailed(reciter, meta, entries)
+        persisted = True
+    finally:
+        if not persisted:
+            cache.invalidate_seg_caches(reciter)
 
     ch_union = sorted(affected_chapters)
     _append_revert_record(
@@ -466,17 +518,34 @@ def undo_ops(
         return {"error": "Reciter data not found"}, 404
 
     meta = cache.get_seg_meta(reciter)
+    riwayah = sdk_riwayah_for(reciter)
     affected_chapters: set[int] = set()
     for rec in matching:
         affected_chapters.update(_get_affected_chapters(rec))
 
+    # ``entries`` IS the process cache — ``load_detailed`` returns
+    # ``cache.get_seg_cache(reciter)`` by reference — and the reverse ops below
+    # mutate it before anything is written. An undo that stops partway (a patch
+    # claiming chapters outside the batch, a ref ``_restamp`` refuses) would
+    # otherwise leave those never-persisted changes visible to every later
+    # request, and the next save would write them out. Same guard as the save
+    # path; see ``segments/save.py``.
+    persisted = False
     try:
-        for op in reversed(ops_to_undo):
-            apply_reverse_op(entries, op, affected_chapters)
-    except ValueError as e:
-        return {"error": str(e)}, 409
-
-    persist_detailed(reciter, meta, entries)
+        try:
+            for op in reversed(ops_to_undo):
+                apply_reverse_op(entries, op, affected_chapters, riwayah)
+        except ValueError as e:
+            return {"error": str(e)}, 409
+        # Outside the inner ``except``: a ``RefNotInEdition`` from here is a 400
+        # about the ref, not a 409 about the batch, and a write-time
+        # ValidationError is a fault rather than a conflict.
+        _restamp(entries, affected_chapters, riwayah)
+        persist_detailed(reciter, meta, entries)
+        persisted = True
+    finally:
+        if not persisted:
+            cache.invalidate_seg_caches(reciter)
 
     ch_union = sorted(affected_chapters)
     _append_revert_record(

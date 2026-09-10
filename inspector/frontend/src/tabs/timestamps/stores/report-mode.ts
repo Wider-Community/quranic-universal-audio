@@ -167,10 +167,20 @@ function seedOwnFlags(
     category: 'timing' | 'tajweed' | 'phonemes' | 'silence',
     subtype?: TajweedSubtype | SilenceSubtype,
 ): void {
+    // The owning word's ref, whichever profile fingerprinted it: a native
+    // snapshot names it `word_ref`, a word-profile one carries the row's own
+    // `ref` (word target) or the ref before the gap (boundary target). Without
+    // the word-profile spellings every seeded flag lands at index -1.
+    const ownerRef = (native: Record<string, unknown> | undefined): string => {
+        for (const key of ['word_ref', 'ref', 'before'] as const) {
+            const value = native?.[key];
+            if (typeof value === 'string' && value) return value;
+        }
+        return '';
+    };
     const displayWordIndex = (report: TsReport): number => {
         const native = report.snapshot?.native as Record<string, unknown> | undefined;
-        const ref = typeof native?.word_ref === 'string' ? native.word_ref : '';
-        const ordinal = Number(ref.split(':')[2]);
+        const ordinal = Number(ownerRef(native).split(':')[2]);
         return Number.isInteger(ordinal) ? ordinal - 1 : -1;
     };
     const m = new Map<CellKey, StagedAnnotation>();

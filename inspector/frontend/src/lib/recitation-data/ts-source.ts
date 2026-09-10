@@ -24,6 +24,7 @@
  */
 
 import { ApiError, fetchArrayBuffer, fetchJson } from '../api';
+import { DEFAULT_RIWAYAH, type InspectorRiwayah } from '../riwayat';
 import type { TsConfigResponse, TsManifestResponse, TsValidationDoc } from '../types/generated/schemas';
 import type {
     TsShardResponse,
@@ -38,6 +39,7 @@ import {
     chapterVerseRefs,
     shardOccasions,
 } from './native-shards';
+import { assembleWord, isWordReading } from './word-shards';
 
 // ---------------------------------------------------------------------------
 // Singleton caches
@@ -254,18 +256,23 @@ interface WbwResponse {
     words: Record<string, string>;
 }
 
-/** Per-(ayahKey|language) cache so re-toggling / re-visiting a verse is free. */
+/** Per-(ayahKey|language|riwayah) cache so re-visiting a verse is free. The
+ *  edition belongs in the key: a Warsh 2:1 and a Hafs 2:1 are different verses
+ *  with different word counts, and the glosses come back keyed accordingly. */
 const _wbwByAyah = new Map<string, Promise<Record<string, string>>>();
 
 async function _fetchAyahTranslation(
     ayahKey: string,
     language: string,
+    riwayah: InspectorRiwayah,
 ): Promise<Record<string, string>> {
-    const cacheKey = `${ayahKey}|${language}`;
+    const cacheKey = `${ayahKey}|${language}|${riwayah}`;
     const hit = _wbwByAyah.get(cacheKey);
     if (hit) return hit;
     const [surah, ayah] = ayahKey.split(':');
-    const url = `/api/qf/content/wbw/${surah}/${ayah}?language=${encodeURIComponent(language)}`;
+    const url = `/api/qf/content/wbw/${surah}/${ayah}`
+        + `?language=${encodeURIComponent(language)}`
+        + `&riwayah=${encodeURIComponent(riwayah)}`;
     const promise = fetchJson<WbwResponse>(url)
         .then((r) => r.words ?? {})
         .catch((e) => {
@@ -286,7 +293,13 @@ async function _fetchAyahTranslation(
 export async function loadVerseTranslations(
     words: TsWord[],
     language: string,
+    riwayah: InspectorRiwayah | null = DEFAULT_RIWAYAH,
 ): Promise<Record<string, string>> {
+    // `null` is "this build cannot serve the delivery's edition". Glosses are
+    // keyed in Hafs and reverse-projected server-side, so answering with the
+    // Hafs ones would put gloss n on a different word in every renumbered
+    // verse — no glosses is the only honest answer.
+    if (!riwayah) return {};
     const ayahs = new Set<string>();
     for (const w of words) {
         const parts = w.location.split(':');
@@ -295,7 +308,7 @@ export async function loadVerseTranslations(
     const merged: Record<string, string> = {};
     await Promise.all(
         [...ayahs].map((ayahKey) =>
-            _fetchAyahTranslation(ayahKey, language)
+            _fetchAyahTranslation(ayahKey, language, riwayah)
                 .then((map) => Object.assign(merged, map))
                 .catch(() => {
                     /* skip this ayah on failure */
@@ -420,10 +433,18 @@ export async function loadTsValidation(reciter: string): Promise<TsValidationDoc
 }
 
 // ---------------------------------------------------------------------------
-// Native reading assembly
+// Reading assembly — native cells or proxy-timed words, per the shard profile
 // ---------------------------------------------------------------------------
 
 export { chapterVerseRefs, shardOccasions };
+
+/**
+ * True when this occasion carries proxy-timed words rather than phonemizer
+ * cells. Read off the readings rather than the shard so the two assemble
+ * helpers keep their existing signatures — callers hold occasions, not shards.
+ */
+const isWordOccasion = (members: ChapterOccasion[]): boolean =>
+    members.some((member) => member.readings.some((one) => isWordReading(one.reading)));
 
 export function assembleOccasion(
     reciter: string,
@@ -433,15 +454,17 @@ export function assembleOccasion(
     reciterAudio: TsReciterAudio,
     chapterAudioUrl: string,
 ): TsVerseData {
-    return assembleNative({
+    const members = [occasion];
+    const shape = {
         reciter,
-        members: [occasion],
+        members,
         verseRef: occasion.ref,
-        qpc,
-        dk,
         audioCategory: reciterAudio.audio_category,
         audioUrl: chapterAudioUrl,
-    });
+    };
+    return isWordOccasion(members)
+        ? assembleWord(shape)
+        : assembleNative({ ...shape, qpc, dk });
 }
 
 export function assembleWaslGroup(
@@ -453,15 +476,16 @@ export function assembleWaslGroup(
     reciterAudio: TsReciterAudio,
     chapterAudioUrl: string,
 ): TsVerseData {
-    return assembleNative({
+    const shape = {
         reciter,
         members,
         verseRef,
-        qpc,
-        dk,
         audioCategory: reciterAudio.audio_category,
         audioUrl: chapterAudioUrl,
-    });
+    };
+    return isWordOccasion(members)
+        ? assembleWord(shape)
+        : assembleNative({ ...shape, qpc, dk });
 }
 
 // ---------------------------------------------------------------------------

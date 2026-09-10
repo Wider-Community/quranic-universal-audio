@@ -25,7 +25,7 @@ Authoritative spec: ``docs/reference/data-migrations.md`` §5.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -125,6 +125,24 @@ class DetailedSegment(BaseModel):
     wrap_word_ranges: list[list[str]] | None = None
     segment_uid: str | None = None
 
+    # === Coordinate provenance (multi-riwayah) ===
+    # ``matched_ref`` above is the DELIVERY EDITION's coordinate — what the
+    # Segments tab shows and edits. For Hafs that is the identity, so both
+    # fields below stay ``None`` on every existing seg and the serialization
+    # is byte-identical.
+    #
+    # Recognition and DP matching always run against the Hafs reference, so a
+    # non-Hafs alignment carries its Hafs evidence here:
+    #   - ``source_ref``  — the Hafs word span the matcher actually matched.
+    #     The timestamps producer needs it because MFA phonemizes Hafs proxy
+    #     phones; re-alignment needs it because the matcher speaks Hafs.
+    #   - ``projection_support`` — the SDK's ``ProjectionGroup.support``.
+    #     ``"partial"`` means this segment cuts through an N:M relation (e.g.
+    #     one of Hafs ``40:26:13-14`` alone, which maps to a single target
+    #     word), so only the phones that source word supports are timed.
+    source_ref: str | None = None
+    projection_support: Literal["full", "partial"] | None = None
+
     # === Per-seg "ignore this issue" state (see proposal for refactor) ===
     ignored_categories: list[str] | None = None
     ignored: bool | None = None  # legacy pre-categories wildcard
@@ -176,6 +194,14 @@ class DetailedMeta(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     created_at: str | None = None  # ISO-8601 timestamp; informational
+
+    #: Inspector vocabulary slug (``qua_shared.riwayat.SUPPORTED_RIWAYAT``)
+    #: naming the coordinate system every ``matched_ref`` in this document is
+    #: expressed in. ``None`` means Hafs — every pre-multi-riwayah document,
+    #: so no backfill is needed. A reader that renders script or resolves word
+    #: counts MUST consult this rather than assuming Hafs.
+    riwayah: str | None = None
+
     asr_model: str | None = None
     vad_model: str | None = None
     min_silence_ms: int | None = None

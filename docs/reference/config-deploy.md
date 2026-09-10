@@ -107,14 +107,16 @@ Local QF creds live in `inspector/.env` (gitignored), loaded by `app.py`.
 |---|---|---|
 | `INSPECTOR_MFA_SPACE_URL` | `https://hetchyy-quran-phoneme-mfa-dev.hf.space` | MFA Space the cross-verse "Auto Split" calls. |
 | `MISSED_BASMALA_FLAG_MIN_DELETED` | `10` | Min pipeline-stripped basmalas before flagging non-stripped chapters as "missed Basmala". |
+| `INSPECTOR_MULTI_RIWAYAH` | `1` | Kill-switch for the non-Hafs editions (`config.MULTI_RIWAYAH_ENABLED`). `0` makes `services/reference/editions.py` behave as if `qua_domain` were absent — a 60-second rollback via a Space **variable** + restart, where a rebuild is ten minutes. It does NOT render non-Hafs as Hafs; those deliveries fail loudly. |
 
 ## Image build — `inspector/Dockerfile`
 
 Three-stage build, context is the **repo root** (so `qua_shared/` ships alongside `inspector/`):
 
 1. **frontend-build** (`node:20-alpine`) — `npm ci` + `npm run build` → `dist/`.
+1b. **qua-domain-build** (`python:3.11-alpine`) — sparse blobless fetch of `packages/quran-domain` at the pin in `qua_shared/qua_domain_pin.py`, then `pip wheel` → `/wheels`. Needs `--secret id=QUA_DOMAIN_DEPLOY_KEY` (a read-only SSH deploy key on `Hetchy/qua`, the same arrangement as `CELLS_DEPLOY_KEY`). `required=false`: **without the secret the stage produces an empty `/wheels` and the image still builds**, Hafs-only. The stage's `ARG QUA_COMMIT` default IS the pin on an HF Space (Spaces build with no build args) — `qua_shared/tests/test_qua_domain_pin.py` asserts it matches the Python constant.
 2. **ffmpeg-build** (`alpine:3.23`) — compiles a minimal *static* ffmpeg/ffprobe (mp3 decode + `pcm_s16le`/wav for peaks + `libmp3lame`/mp3 muxer for the `segment-clip` route). `libmp3lame 3.100` is built from source `--enable-static` because Alpine ships no static lame archive — without it `clip.py` returns 200/0-bytes and playback hangs. http/https protocols enabled so ffmpeg can decode remote chapters via HTTP Range.
-3. **runtime** (`python:3.11-alpine`) — installs `inspector/requirements.txt`, purges pip/setuptools/wheel, **selective COPY** (`app.py/config.py/constants.py`, `adapters/ domain/ routes/ services/ utils/`, `scripts/__init__.py + qua_shared/ + qua_jobs/`, `.github/config/`, `LICENSE`, the 4 bundled data JSONs, and `frontend/dist` from stage 1). `qua_jobs/` + `.github/config/` + `LICENSE` are read by the HF-Job entrypoints (`config_loader`, cut_release asset upload). Runs as non-root uid/gid 1000. `EXPOSE 7860`. **Adding a `COPY` here needs no staging edit** — the deploy stages the whole tracked tree (see Deploy).
+3. **runtime** (`python:3.11-alpine`) — installs `inspector/requirements.txt` **plus the optional `qua_domain` wheel from stage 1b** (11.7 MB of edition data: four scripts, four fonts, the Hafs→target projection; the install is glob-guarded so an absent wheel is a no-op), purges pip/setuptools/wheel, **selective COPY** (`app.py/config.py/constants.py`, `adapters/ domain/ routes/ services/ utils/`, `scripts/__init__.py + qua_shared/ + qua_jobs/`, `.github/config/`, `LICENSE`, the 4 bundled data JSONs, and `frontend/dist` from stage 1). `qua_jobs/` + `.github/config/` + `LICENSE` are read by the HF-Job entrypoints (`config_loader`, cut_release asset upload). Runs as non-root uid/gid 1000. `EXPOSE 7860`. **Adding a `COPY` here needs no staging edit** — the deploy stages the whole tracked tree (see Deploy).
 
 `CMD`: `gunicorn -k gthread -w 1 --threads 16 --max-requests 5000 --max-requests-jitter 500 --timeout 60 --graceful-timeout 30 --bind 0.0.0.0:7860 --access-logfile - --error-logfile - --chdir /app/inspector app:app`. `-w 1` is load-bearing (asserted at import). `--threads 16` sizes the I/O-bound pool. `--max-requests` recycles the worker to bound slow leaks. The access log (one line per request → stdout) is de-noised by `app._AccessLogFilter`, attached to the `gunicorn.access` + `werkzeug` loggers: it drops static-asset (`/assets/*`), `/healthz`, and 304 lines while always keeping 4xx/5xx and real API/page hits.
 
@@ -154,9 +156,18 @@ codegen'd FE types and committing the result — see `schema-codegen-check` in
 - `INSPECTOR_HF_TOKEN` — new token → update Space secret → restart. Revoke the old after verifying.
 - `INSPECTOR_SESSION_SECRET` — replace the Space secret → restart. **All in-flight cookies invalidate** (everyone logged out).
 - `INSPECTOR_GITHUB_DISPATCH_TOKEN` — mint new PAT → update secret → restart.
+- `QUA_DOMAIN_DEPLOY_KEY` — read-only SSH deploy key on `Hetchy/qua` (**deploy key, not a PAT**: scoped to one repo, read-only, and unaffected by `gh auth refresh`). Lives as a GitHub Actions secret on this repo AND as a Space secret on both Spaces (`upload_inspector.py` pushes it on every deploy; it warns and leaves the Space secret alone when absent from the env, so a deploy from a machine without it can't blank a working Space). Rotate: add a new key on `Hetchy/qua` → update the three secrets → redeploy → delete the old key. Consumed **only at build time** — no key ever lands in the running container.
+
+### Optional dependency: `qua-domain`
+
+Installed from a pinned commit of the private `Hetchy/qua` monorepo, not PyPI. One pin (`qua_shared/qua_domain_pin.py`), three consumers: `scripts/devenv/install_qua_domain.py` (local + CI), the Dockerfile stage, and the boot-time provenance in `/healthz`. Bump it like a lockfile entry — edit `QUA_COMMIT` **and** the Dockerfile `ARG`, run the installer, commit.
+
+Absent (fork, no key, or `INSPECTOR_MULTI_RIWAYAH=0`) the Inspector runs Hafs-only: `services/reference/editions.available()` is `False` and every non-Hafs accessor raises `EditionsUnavailable`. There is deliberately **no Hafs fallback** — rendering one edition's coordinates under another's script would let a reviewer save wrong refs.
 
 ## Health
 
 `GET /healthz` (`routes/auth/health.py`) returns the resolved config + substrate status: `status`, `mode` (deployed iff `INSPECTOR_BUCKET_MOUNT` set), `bucket_mounted` (checks `<mount>/db/inspector.db` exists), `state_loaded`, `reciters_count`, `oauth_configured`, `auto_detect_loop`, `commit`, and a `db` block (`open`, `schema_version`, `last_bucket_upload_ts`, `bucket_lag_seconds`, `last_error`). Returns **503** in deployed mode when degraded so probes fail loud; always 200 in local mode (no mount to check). `GET /livez` is the always-200 liveness probe.
+
+`editions` block: `{available, riwayat, projection_id, projection_sha256, reference_id}` — the state of the optional `qua_domain` package. Degraded **only** when it is unavailable *and* the catalog holds a delivery in a non-Hafs riwayah (then `unservable_riwayat` lists them); a Hafs-only deployment, or a fork built without the deploy key, stays green.
 
 `GET /healthz?deep=1` adds an **opt-in** `sample_validation` block — a bounded external-bucket drift probe (`services/storage/bucket_audit.py::sample_validation`): it round-trips the DB catalog through `repo_catalog.snapshot()` and audits a small reciter-folder sample (default 3, spread across the sorted slug list) against the `qua_shared/schemas` definitions. Shape: `{ok, catalog_ok, sampled, n_reciters, errors}`. The default probe never walks the bucket (latency unchanged); a deep probe that finds drift flips `status` to degraded (503 in deployed mode) so external-file drift surfaces at health-check time instead of mid-request.

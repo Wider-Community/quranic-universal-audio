@@ -106,7 +106,25 @@ def _human_ops_present(backend, slug: str) -> bool:
     return False
 
 
-def guard_target(backend, slug: str, force: bool) -> None:
+def _guard_riwayah(slug: str, manifest) -> None:
+    """Refuse a run whose edition is not the one the catalog claims for the slug."""
+    from qua_shared.riwayat import UnsupportedRiwayah, resolve_sdk_slug
+    from services.reference.delivery_edition import inspector_riwayah_for
+
+    try:
+        catalogued = resolve_sdk_slug(inspector_riwayah_for(slug))
+    except UnsupportedRiwayah as exc:
+        _abort(f"{slug}: {exc}")
+    if catalogued != manifest.inputs.riwayah:
+        _abort(
+            f"{slug}: the run aligned {manifest.inputs.riwayah!r} but the catalog "
+            f"delivery is {catalogued!r} — fix the delivery row or re-run the "
+            "alignment; --force does not cover this."
+        )
+    print(f"  riwayah: {catalogued}")
+
+
+def guard_target(backend, slug: str, force: bool, manifest) -> None:
     """Refuse a promote that would overwrite reviewed or already-published work.
 
     A slug past ``AWAITING_ALIGNMENT`` needs ``--force``, and ``--force`` is
@@ -114,6 +132,11 @@ def guard_target(backend, slug: str, force: bool) -> None:
     new run instead. The two remote checks mirror the retiring uploader's: an
     A/B's ``<slug>`` / ``<slug>-bnd`` pair is exactly the mistyped-slug hazard
     they guard.
+
+    The riwayah check is not overridable by ``--force``: publishing an alignment
+    made against one edition under a catalog row claiming another gives every
+    downstream reader — script, word counts, timestamps, releases — the wrong
+    edition, and no later edit can tell which half was wrong.
     """
     from services import db as _db
     from services.db import sync as _db_sync
@@ -121,6 +144,7 @@ def guard_target(backend, slug: str, force: bool) -> None:
 
     _db_sync.pull()
     _db.init_db()
+    _guard_riwayah(slug, manifest)
     row = state_svc.get_row(slug)
     if row is not None and row.state.value not in _PROMOTABLE_STATES:
         if not force:
@@ -358,7 +382,7 @@ def main() -> int:
             print("\n--dry-run: nothing written.")
             return 0
 
-        guard_target(backend, slug, args.force)
+        guard_target(backend, slug, args.force, manifest)
         n_chapters = publish(bucket_id, backend, slug, run_dir, built)
         print(f"  published {n_chapters} chapter(s); sentinel written last")
         clear_staging(backend, slug, run_id, manifest)

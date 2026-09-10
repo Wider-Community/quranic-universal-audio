@@ -489,3 +489,35 @@ Publish actions fire events into
 [activity_classification.py](../../inspector/services/activity/activity_classification.py): the
 in-app publish milestone `reciter.published` (TS-gen completion → `released` state) is public on
 the rail; `released` / dataset-publish events (HF push + GH cut) are hidden operator infrastructure.
+
+## Multi-riwayah
+
+A delivery's tiers follow its shard profile, not its catalog row — the row could
+be edited after alignment, and the release must describe what the timings
+actually contain.
+
+| Profile | Tiers emitted | `content_hash` over |
+|---|---|---|
+| native (Hafs) | verse, word, letter | `letter_timestamps.json.gz` + `catalog.json` |
+| word (non-Hafs) | verse, word | `word_timestamps.json.gz` + `catalog.json` |
+
+The letter tier is **absent**, not empty, so a consumer can tell "this recitation
+has no letter timings" from "this verse happened to have none". The shallower
+tiers are exact prefixes of the deeper ones, so hashing the deepest emitted tier
+still detects any timing change.
+
+- `manifest.json` — each recitation carries `tiers` and `riwayah`; the new
+  top-level `editions` block carries `edition_id`, `words_sha256`,
+  `script_asset_sha256`, `font_family`, `projection_sha256` per non-Hafs edition.
+  A tier file's `script_sha256` is the edition's **`words_sha256`** — the digest of
+  the index its text came from; `script_asset_sha256` digests the QPC script asset
+  and is a different value.
+- Tier `_meta.script` names the edition index id instead of `digital_khatt_v2`.
+- Verse gating and boundary validation run against the delivery edition's own
+  counting profile (`word_counts_for` / `surah_info_for`) — Warsh and Qalun
+  renumber 50 of the 114 surahs, so the Hafs map would gate the wrong verses.
+- The CHANGELOG gains a **Timings** column and a note explaining proxy timings.
+- `RELEASE_FORMAT_MAJOR` -> v4.0.0 is cut only when the first non-Hafs reciter is
+  actually publishable, not with the schema work.
+
+Full detail: [`editions.md`](editions.md).

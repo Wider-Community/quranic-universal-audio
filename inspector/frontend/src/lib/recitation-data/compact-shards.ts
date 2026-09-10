@@ -1,19 +1,46 @@
-/** Decode compact schema-v13 storage into the Inspector's timing view. */
+/**
+ * Decode stored shard storage into the Inspector's timing view.
+ *
+ * Two profiles share the path, discriminated by `_meta.profile`:
+ * native (schema 13/14, full phonemizer cells — Hafs only) and word
+ * (schema 14, proxy-timed word intervals for another riwayah).
+ */
 
 import {
     decodeCompact,
     type CompactCellPayload,
 } from '@quranic-phonemizer/cells';
 
-import type { TsShardMeta } from '../types/generated/schemas';
+import type { TsShardMeta, TsWordShardMeta } from '../types/generated/schemas';
 import type {
     TsBoundaryTiming,
     TsShardPart,
     TsShardReading,
     TsShardResponse,
+    TsWordShardReading,
 } from '../types/ts-client';
 
+/** Schema versions a native document may declare. 13 is never restamped. */
+const NATIVE_SCHEMA_VERSIONS: readonly number[] = [13, 14];
+
+/** Index order must match `TS_WORD_BOUNDARY_STATES` in the Pydantic schema. */
+const WORD_BOUNDARY_STATES = ['start', 'join', 'sakt', 'stop'] as const;
+
 type StoredPart = [string, number, number, number, number];
+type StoredWordRow = [string, string, number, number];
+type StoredWordBoundary = [number, number | null];
+
+interface StoredWordReading {
+    id: string;
+    parts: StoredPart[];
+    words: StoredWordRow[];
+    boundaries: StoredWordBoundary[];
+}
+
+interface StoredWordShard {
+    _meta: TsWordShardMeta;
+    readings: StoredWordReading[];
+}
 type StoredAnimation = [number | null, number | null];
 type StoredAnimationMeta = [number, number[], number[], number[], string, number[], 0 | 1 | 2, number | null];
 type StoredColumn = [string | number, number | null, number | null];
@@ -102,7 +129,13 @@ function readingOf(raw: StoredReading): TsShardReading {
     };
 }
 
-function stitchInterReadingPauses(readings: TsShardReading[]): void {
+/** Structural subset both profiles share — all the stitch actually reads. */
+interface StitchableReading {
+    parts: TsShardPart[];
+    timing: { words: { start_ms: number }[]; boundaries: TsBoundaryTiming[] };
+}
+
+function stitchInterReadingPauses(readings: StitchableReading[]): void {
     const ordered = [...readings].sort((a, b) =>
         (a.parts[0]?.t[0] ?? 0) - (b.parts[0]?.t[0] ?? 0),
     );
@@ -119,7 +152,9 @@ function stitchInterReadingPauses(readings: TsShardReading[]): void {
 function storedShard(raw: unknown): StoredShard {
     if (!raw || typeof raw !== 'object') throw new Error('Timestamp shard is not an object');
     const shard = raw as StoredShard;
-    if (shard._meta?.schema_version !== 13) throw new Error('Timestamp shard is not schema v13');
+    if (!NATIVE_SCHEMA_VERSIONS.includes(shard._meta?.schema_version)) {
+        throw new Error(`Timestamp shard schema ${String(shard._meta?.schema_version)} is unsupported`);
+    }
     if (shard._meta.native_schema_version !== 2) throw new Error('Native schema is not v2');
     if (shard._meta.renderer_codec_version !== 1) {
         throw new Error(`Renderer codec ${String(shard._meta.renderer_codec_version)} is unsupported`);
@@ -128,7 +163,57 @@ function storedShard(raw: unknown): StoredShard {
     return shard;
 }
 
+function wordReadingOf(raw: StoredWordReading): TsWordShardReading {
+    const parts = partsOf(raw.parts);
+    if (raw.boundaries.length !== raw.words.length) {
+        throw new Error(`${raw.id}: word and boundary counts differ`);
+    }
+    const wordSpans = raw.words.map(([, , start, end]) => [start, end] as [number, number]);
+    return {
+        id: raw.id,
+        parts,
+        words: raw.words.map(([ref, text, start_ms, end_ms]) => ({ ref, text, start_ms, end_ms })),
+        states: raw.boundaries.map(([code]) => {
+            const state = WORD_BOUNDARY_STATES[code];
+            if (!state) throw new Error(`${raw.id}: invalid boundary state ${code}`);
+            return state;
+        }),
+        verseEnds: raw.boundaries.map(([, verseEnd]) => verseEnd),
+        timing: {
+            words: wordSpans.map(([start_ms, end_ms], word_id) => ({ word_id, start_ms, end_ms })),
+            // Same derivation as the native profile — pause geometry is
+            // phoneme-free, so the two profiles agree on boundary timing.
+            boundaries: boundariesOf(parts, wordSpans),
+        },
+    };
+}
+
+function storedWordShard(raw: unknown): StoredWordShard {
+    const shard = raw as StoredWordShard;
+    if (shard._meta.schema_version !== 14) {
+        throw new Error(`Word shard schema ${String(shard._meta.schema_version)} is unsupported`);
+    }
+    if (!Array.isArray(shard.readings)) throw new Error('Word shard has no readings');
+    return shard;
+}
+
+/**
+ * Decode a stored shard of either profile.
+ *
+ * `_meta.profile` is the discriminator. It is absent on every schema-13 object
+ * — those predate the word profile — so absent means native.
+ */
 export function decodeTimestampShard(raw: unknown): TsShardResponse {
+    if (!raw || typeof raw !== 'object') throw new Error('Timestamp shard is not an object');
+    const profile = (raw as { _meta?: { profile?: string } })._meta?.profile ?? 'native';
+
+    if (profile === 'word') {
+        const shard = storedWordShard(raw);
+        const readings = shard.readings.map(wordReadingOf);
+        stitchInterReadingPauses(readings);
+        return { _meta: shard._meta, readings };
+    }
+
     const shard = storedShard(raw);
     const readings = shard.readings.map(readingOf);
     stitchInterReadingPauses(readings);

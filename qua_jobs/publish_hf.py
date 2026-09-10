@@ -49,6 +49,13 @@ from qua_shared.mp3_frames import (  # noqa: E402
     slice_frames,
     slice_frames_multi,
 )
+from qua_shared.riwayat import (  # noqa: E402
+    DEFAULT_RIWAYAH,
+    DEFAULT_SDK_RIWAYAH,
+    UnsupportedRiwayah,
+    from_sdk_slug,
+    resolve_sdk_slug,
+)
 from qua_shared.verse_layout import (  # noqa: E402
     build_verse_layouts,
     load_canonical_verses,
@@ -499,7 +506,12 @@ def _iter_hf_records(rows: list[dict], audio_bytes: list[bytes | None]):
 
 
 def _push_to_hf(slug: str, riwayah: str, rows: list[dict], audio_bytes: list[bytes | None]) -> str:
-    """Build the parquet split and push to HF. Returns the dataset commit SHA."""
+    """Build the parquet split and push to HF. Returns the dataset commit SHA.
+
+    ``riwayah`` is the INSPECTOR slug. It becomes ``config_name``, which is the
+    dataset's top-level parquet folder — every published split already lives
+    under ``hafs_an_asim/``, and switching vocabularies here would strand them.
+    """
     from datasets import Audio, Dataset, Features, Sequence, Value
     from huggingface_hub import HfApi
 
@@ -624,14 +636,42 @@ def _sync_dataset_catalog_and_card(repo_id: str) -> None:
 
 
 def _riwayah_for(audio_manifest: dict | None, detailed: dict) -> str:
-    """Find the riwayah slug. Audio manifest ``_meta.riwayah`` is canonical;
-    detailed.json ``_meta`` is the legacy fallback."""
-    if audio_manifest:
-        riw = (audio_manifest.get("_meta") or {}).get("riwayah")
-        if riw:
-            return riw
-    riw = (detailed.get("_meta") or {}).get("riwayah")
-    return riw or "hafs_an_asim"
+    """Find the riwayah slug — it becomes the HF dataset config name.
+
+    ``detailed.json``'s ``_meta.riwayah`` is the source in practice: it records
+    the coordinate system ``matched_ref`` is expressed in, and it is what the
+    promoter writes. The audio manifest's ``_meta.riwayah`` takes precedence
+    when present, and the two must agree — but nothing writes it today, so that
+    guard is a contract for a future manifest producer rather than a path this
+    job currently takes.
+
+    Falls back to Hafs only when neither source names a riwayah, which is every
+    pre-multi-riwayah reciter.
+    """
+    manifest_riw = (audio_manifest or {}).get("_meta", {}).get("riwayah")
+    detailed_riw = (detailed.get("_meta") or {}).get("riwayah")
+    if manifest_riw and detailed_riw and manifest_riw != detailed_riw:
+        raise ValueError(
+            f"riwayah mismatch: audio manifest says {manifest_riw!r}, "
+            f"detailed.json says {detailed_riw!r} — publishing would file the "
+            f"rows under a config whose coordinates they are not in"
+        )
+    return manifest_riw or detailed_riw or DEFAULT_RIWAYAH
+
+
+def _config_riwayah(audio_manifest: dict | None, detailed: dict) -> tuple[str, str]:
+    """``(sdk slug, inspector slug)`` for a delivery about to be published.
+
+    The Inspector slug is the HF **config name**, which is the dataset's
+    top-level parquet folder: every split published so far lives under
+    ``hafs_an_asim/<slug>-*``. Emitting the SDK slug there would open a second
+    ``hafs/`` folder, duplicate the config in the card frontmatter and orphan
+    the existing split. The SDK slug is what the shard `_meta` is compared
+    against. Normalising through both spellings also collapses a legacy row
+    that stored the short form onto the folder its edition already uses.
+    """
+    sdk = resolve_sdk_slug(_riwayah_for(audio_manifest, detailed))
+    return sdk, from_sdk_slug(sdk)
 
 
 # ---------------------------------------------------------------------------
@@ -803,14 +843,39 @@ def publish_slug(
     surah_info = json.loads((refs_dir / "surah_info.json").read_bytes())
     digital_khatt_words = json.loads((refs_dir / "digital_khatt_v2_script.json").read_bytes())
 
+    # The shards name the edition their coordinates are in; the delivery's own
+    # records (the audio manifest, else detailed.json) must agree with them or
+    # the rows would be filed under a config whose verse numbering they do not
+    # follow.
+    shard_riwayah = (canonical.pop("_meta", {}) or {}).get("riwayah", DEFAULT_SDK_RIWAYAH)
+    # ``publish_slug`` owes its caller a result dict, never an exception — a
+    # raise here leaves the Inspector's job row running forever with no webhook.
+    try:
+        delivery_riwayah, config_riwayah = _config_riwayah(audio_manifest, detailed)
+    except (ValueError, UnsupportedRiwayah) as exc:
+        log.error("riwayah unusable for %s: %s", slug, exc)
+        return _result(slug, "failed", error=str(exc), exit_code=17)
+    if delivery_riwayah != shard_riwayah:
+        log.error("riwayah mismatch: delivery says %s, shards are %s", config_riwayah, shard_riwayah)
+        return _result(
+            slug,
+            "failed",
+            error=f"delivery riwayah {config_riwayah!r} but shards are {shard_riwayah!r}",
+            exit_code=17,
+        )
+    # Every consumer below walks `surah_info` to enumerate verses and to size
+    # them, so it has to be this edition's counting profile, not Hafs's.
+    from qua_shared.surah_words import surah_info_for, word_counts_for
+
+    surah_info = surah_info_for(shard_riwayah, surah_info)
+
     # 2b. Gate incomplete verses: any verse missing a reference word index (never
     # recited) is dropped — no row, no audio slice. Coverage falls by that count.
     # The editor/TS tab still shows these (only the published artifacts gate).
-    from qua_shared.surah_words import word_counts_from_surah_info
     from qua_shared.timestamps_native import select_complete_verses
 
     canonical, dropped_incomplete = select_complete_verses(
-        canonical, word_counts_from_surah_info(surah_info)
+        canonical, word_counts_for(shard_riwayah, surah_info)
     )
     if dropped_incomplete:
         log.info(
@@ -981,8 +1046,7 @@ def publish_slug(
         )
 
     # 6. Push to HF — gets us a commit sha to record as ``version``.
-    riwayah = _riwayah_for(audio_manifest, detailed)
-    version_sha = _push_to_hf(slug, riwayah, rows, audio_bytes)
+    version_sha = _push_to_hf(slug, config_riwayah, rows, audio_bytes)
 
     repo_id = _resolve_dataset_repo_id()
     if sync_card:

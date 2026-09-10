@@ -58,6 +58,8 @@
         loadShapedGlyphs,
         type ShapedGlyphFixture,
     } from '../../recitation-animation/shaped-glyphs';
+    import { editionFontStack, ensureEditionFont } from '../../refs/edition-font';
+    import { DEFAULT_SDK_RIWAYAH, toInspectorSlug, verseMarkerPrefix } from '../../riwayat';
     import { accentVarText } from '../../utils/accent-override';
     import { theme$ } from '../../stores/theme.svelte';
     import {
@@ -76,6 +78,8 @@
     let units = $state<AnimUnit[]>([]);
     let ayahs = $state<AyahBoundary[]>([]);
     let coverage = $state<ChapterCoverage | undefined>(undefined);
+    /** SDK riwayah slug of the loaded chapter — its script, font and marker. */
+    let riwayah = $state<string>(DEFAULT_SDK_RIWAYAH);
     let shapedGlyphs = $state<ShapedGlyphFixture | undefined>(undefined);
     let rootH = $state(0);
     // The verse currently under the playhead + its coverage status, reported by
@@ -91,7 +95,24 @@
     let section = $state<{ refresh: () => void } | undefined>(undefined);
     let filmstrip = $state<{ refresh: () => void; showFirstAyah: () => void } | undefined>(undefined);
 
-    const config = $derived($recitationConfigStore);
+    const rawConfig = $derived($recitationConfigStore);
+
+    // Word-level-only timings (a projected non-Hafs recitation) carry no letter
+    // spans, so character granularity has nothing to animate — LineAnimation
+    // already falls back to whole words, but offering the toggle would present
+    // a control that visibly does nothing. Read off the DATA rather than the
+    // delivery's riwayah: this component is shared with the Dashboard player and
+    // must not know about tab-level stores.
+    const charsAvailable = $derived(units.some((u) => u.letters.length > 0));
+    // The delivery's own script must be typeset in the font it was drawn for —
+    // Digital Khatt and the packaged QPC faces disagree on ligature and mark
+    // placement, so a Warsh word rendered in the Hafs font comes out wrong.
+    const editionSlug = $derived(toInspectorSlug(riwayah));
+    const config = $derived({
+        ...rawConfig,
+        ...(charsAvailable ? {} : { granularity: 'word' as const }),
+        fontFamily: editionFontStack(editionSlug),
+    });
     // Recitation-correct cell geometry + per-verse word fractions, rebuilt once
     // per chapter. Duration-weighted: the cell bar fills to the recited word's
     // share of the verse's spoken time. `coverage` inserts placeholder cells for
@@ -204,10 +225,24 @@
         ])
             .then(async ([res, glyphs]) => {
                 if (controller.signal.aborted) return;
-                shapedGlyphs = glyphs;
+                // Shaped outlines are DigitalKhatt geometry keyed on the HAFS
+                // word text, and another edition's words collide with it on
+                // every string the two spell identically — 8 of surah 112's 15
+                // Warsh words. Keeping them would draw those words as Hafs
+                // outlines (LineAnimation takes the SVG branch before any
+                // granularity check), bypassing `config.fontFamily` and mixing
+                // two typefaces inside one verse. The fetch itself still runs
+                // in parallel with the recitation, because the delivery's
+                // edition is not known until that response lands.
+                shapedGlyphs =
+                    (res?.riwayah ?? DEFAULT_SDK_RIWAYAH) === DEFAULT_SDK_RIWAYAH
+                        ? glyphs
+                        : undefined;
                 units = res?.units ?? [];
                 ayahs = res?.ayahs ?? [];
                 coverage = res?.coverage;
+                riwayah = res?.riwayah ?? DEFAULT_SDK_RIWAYAH;
+                ensureEditionFont(editionSlug);
                 activeCell = null;
                 recitationAyahs.set(ayahs);
                 await tick();
@@ -287,12 +322,14 @@
                             onclick={toggleSilentOmit}
                         ><ControlIcon name={$recitationSilentOmit ? 'silent-omit' : 'silent-cohighlight'} /></button>
                     {/if}
-                    <button
-                        type="button" class="nr-btn"
-                        aria-label={m.common_player_granularity_toggle_label()}
-                        title={config.granularity === 'char' ? m.common_player_granularity_char_title() : m.common_player_granularity_word_title()}
-                        onclick={toggleGranularity}
-                    ><ControlIcon name={granIconName(config)} /></button>
+                    {#if charsAvailable}
+                        <button
+                            type="button" class="nr-btn"
+                            aria-label={m.common_player_granularity_toggle_label()}
+                            title={config.granularity === 'char' ? m.common_player_granularity_char_title() : m.common_player_granularity_word_title()}
+                            onclick={toggleGranularity}
+                        ><ControlIcon name={granIconName(config)} /></button>
+                    {/if}
                     <button
                         type="button" class="nr-btn"
                         aria-label={m.common_player_upcoming_visibility_label()}
@@ -346,6 +383,7 @@
                 {playing}
                 {shapedGlyphs}
                 omitSilentHighlights={$recitationSilentOmit}
+                ayahMarker={verseMarkerPrefix(riwayah)}
                 open={true}
                 showHeader={false}
                 onSeekToWord={seek}

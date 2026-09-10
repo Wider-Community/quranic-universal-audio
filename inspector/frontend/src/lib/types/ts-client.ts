@@ -7,7 +7,7 @@
  */
 
 import type { WirePayload } from '@quranic-phonemizer/cells';
-import type { TsShardMeta } from './generated/schemas';
+import type { TsShardMeta, TsWordShardMeta } from './generated/schemas';
 import type { VerseRef } from './view-models';
 
 // ---------------------------------------------------------------------------
@@ -48,6 +48,43 @@ export interface TsWord {
     letters: Letter[];
 }
 
+/** Pause state of the gap that follows a word-profile word. */
+export type WordPauseState = 'start' | 'join' | 'sakt' | 'stop';
+
+/** The gap after a word-profile word — the only sub-word geometry it has. */
+export interface WordProfileBoundary {
+    id: number;
+    start: number; // seconds, offset-adjusted like TsWord
+    end: number;
+    state: WordPauseState;
+    /** Ayah number that ends at this gap, else null. */
+    verseEnd: number | null;
+}
+
+/** One word-profile word as `WordTimedRow` renders it. */
+export interface WordProfileWord {
+    /** Index within the reading — also the `timing.words[].word_id`. */
+    id: number;
+    /**
+     * Position of this word in `TsVerseData.words`, which is what every
+     * `loopTarget.wordIndex` means. Not the same number as `id`: `id` counts
+     * from the reading's first word (the chapter's), this counts from the
+     * verse's, and they coincide only in a chapter's first verse.
+     */
+    displayIndex: number;
+    location: string;
+    text: string;
+    start: number; // seconds, offset-adjusted
+    end: number;
+    boundary: WordProfileBoundary | null;
+}
+
+/** One word-profile reading, carrying the report-target reading id. */
+export interface WordProfileReading {
+    id: string;
+    words: WordProfileWord[];
+}
+
 /** Full verse data for the timestamps tab. */
 export interface TsVerseData {
     reciter: string;
@@ -62,6 +99,13 @@ export interface TsVerseData {
     words: TsWord[];
     /** Native schema-v2 readings rendered by quran-cells, in audio order. */
     native: TsShardReading[];
+    /**
+     * Word-profile readings, in audio order — populated INSTEAD of `native`
+     * when the shard carries proxy-timed words. Exactly one of the two is
+     * non-empty; a consumer that reads cells must check `native.length` (or
+     * narrow the shard with `isWordShard`) before assuming geometry exists.
+     */
+    wordReadings: WordProfileReading[];
 }
 
 // ---------------------------------------------------------------------------
@@ -171,10 +215,53 @@ export interface TsShardReading {
     };
 }
 
-export interface TsShardResponse {
+export interface TsNativeShardResponse {
     _meta: TsShardMeta;
     readings: TsShardReading[];
 }
+
+/** One proxy-timed word: the delivery edition's ref and its exact text. */
+export interface TsWordRow {
+    ref: string;
+    text: string;
+    start_ms: number;
+    end_ms: number;
+}
+
+/**
+ * A reading in a word-profile shard. Deliberately narrower than
+ * `TsShardReading`: there is no `wire` (no cells to decode), no
+ * `animationTokens`, no sound or column timing. `boundaries` is derived by the
+ * same rule the native profile uses, so pause geometry is identical.
+ */
+export interface TsWordShardReading {
+    id: string;
+    parts: TsShardPart[];
+    words: TsWordRow[];
+    /** Boundary semantic state per word, aligned to `timing.boundaries[i + 1]`. */
+    states: Array<'start' | 'join' | 'sakt' | 'stop'>;
+    /** Ayah that ends at word `i`, else null. */
+    verseEnds: Array<number | null>;
+    timing: {
+        words: TsWordTiming[];
+        boundaries: TsBoundaryTiming[];
+    };
+}
+
+export interface TsWordShardResponse {
+    _meta: TsWordShardMeta;
+    readings: TsWordShardReading[];
+}
+
+export type TsShardResponse = TsNativeShardResponse | TsWordShardResponse;
+
+/**
+ * Narrow a shard to the word profile. Gate every letter/phoneme/tajweed
+ * surface on this rather than on the manifest riwayah — the manifest is a
+ * pre-fetch hint, the shard is the truth about what timing actually exists.
+ */
+export const isWordShard = (shard: TsShardResponse): shard is TsWordShardResponse =>
+    (shard._meta as { profile?: string }).profile === 'word';
 
 export const nativePayload = (reading: TsShardReading): WirePayload => ({
     analysis: reading.wire.analysis,

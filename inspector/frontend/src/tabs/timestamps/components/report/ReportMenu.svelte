@@ -18,6 +18,7 @@
         REPORT_CATEGORIES,
         type ReportCategoryDef,
     } from '../../domain/report-categories';
+    import { wordProfile } from '../../stores/display';
     import ReportComposer from './ReportComposer.svelte';
     import ReportIcon from './ReportIcon.svelte';
 
@@ -63,7 +64,12 @@
 
     let expandedId = $state<string | null>(null);
 
+    /** Tajweed + phonemes ask about cells a word-profile shard does not have. */
+    const unavailable = (cat: ReportCategoryDef): boolean =>
+        Boolean(cat.nativeOnly) && $wordProfile;
+
     function onRow(cat: ReportCategoryDef): void {
+        if (unavailable(cat)) return;
         if (cat.entersMode === 'timing' || cat.entersMode === 'phonemes') {
             onenterMode(cat.entersMode);
             return;
@@ -85,13 +91,16 @@
     <div class="rows">
         {#each REPORT_CATEGORIES as cat (cat.id)}
             {@const count = openByCategory.get(cat.id) ?? 0}
-            {@const expandable = cat.flow === 'comment' || cat.id === 'tajweed' || cat.id === 'silence'}
+            {@const off = unavailable(cat)}
+            {@const expandable = !off && (cat.flow === 'comment' || cat.id === 'tajweed' || cat.id === 'silence')}
             {@const open = expandedId === cat.id}
             <div class="group" class:open>
                 <button
                     type="button"
                     class="cat-row"
                     class:reported={count > 0}
+                    disabled={off}
+                    title={off ? m.ts_footer_word_profile_disabled_title() : undefined}
                     aria-expanded={expandable ? open : undefined}
                     onclick={() => onRow(cat)}
                 >
@@ -201,6 +210,11 @@
         transition: background var(--t-fast), border-color var(--t-fast);
     }
     .cat-row:hover { background: var(--panel-2); }
+    .cat-row:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+    }
+    .cat-row:disabled:hover { background: transparent; }
     .cat-ic {
         display: inline-flex;
         flex: 0 0 auto;

@@ -15,20 +15,35 @@ Two routes share one blueprint:
 
 - ``GET /livez``  — liveness signal. Always 200 with a tiny body; use it when
   a probe should not touch the bucket.
+
+``/healthz`` also reports an ``editions`` block: whether the optional
+``qua_domain`` edition package is installed, and which riwayat it can serve. A
+runtime without it serves Hafs and fails loudly on anything else — degraded ONLY
+if the catalog actually holds a non-Hafs delivery, so a Hafs-only deployment (or
+a fork built without the deploy key) stays green.
 """
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 
 from flask import Blueprint, jsonify, request
 
+from qua_shared.riwayat import (
+    DEFAULT_SDK_RIWAYAH,
+    UnsupportedRiwayah,
+    resolve_sdk_slug,
+)
 from services import auth as auth_service
 from services import auto_detect as auto_detect_service
 from services import state as state_service
+from services.reference import editions as editions_service
 
 health_bp = Blueprint("health", __name__)
+
+log = logging.getLogger("inspector")
 
 
 def _bucket_mounted() -> bool:
@@ -47,6 +62,50 @@ def _bucket_mounted() -> bool:
     if not root.is_dir():
         return False
     return (root / "db" / "inspector.db").is_file()
+
+
+def _unservable(counts: dict[str, int]) -> list[str]:
+    """Riwayat the catalog holds deliveries for that a Hafs-only runtime cannot serve.
+
+    ``deliveries.riwayah`` is a plain string and older/fixture rows can carry
+    the short SDK form, so compare on the resolved SDK slug: matching the long
+    Inspector spelling alone would read a row saying ``"hafs"`` as unservable
+    and take a healthy Hafs-only deployment to 503. A slug in neither
+    vocabulary is unservable by definition — nothing can render it.
+    """
+    out: set[str] = set()
+    for slug, count in counts.items():
+        if not count:
+            continue
+        try:
+            if resolve_sdk_slug(slug) != DEFAULT_SDK_RIWAYAH:
+                out.add(slug)
+        except UnsupportedRiwayah:
+            out.add(slug)
+    return sorted(out)
+
+
+def _editions_health() -> tuple[dict, bool]:
+    """``(payload block, healthy)`` for the optional multi-riwayah dependency."""
+    from services.db import repo_catalog
+
+    available = editions_service.available()
+    try:
+        counts = repo_catalog.deliveries_per_riwayah()
+    except Exception:
+        # A probe before the DB opens; the db block below already reports that.
+        # Logged rather than swallowed so a real query fault is not invisible.
+        log.warning("healthz: delivery riwayah counts unavailable", exc_info=True)
+        counts = {}
+    unservable = _unservable(counts)
+    block: dict = {
+        "available": available,
+        "riwayat": editions_service.all_riwayat(),
+        **editions_service.provenance(),
+    }
+    if not available and unservable:
+        block["unservable_riwayat"] = unservable
+    return block, available or not unservable
 
 
 @health_bp.route("/healthz")
@@ -71,6 +130,9 @@ def healthz():
         # via a state-vs-wip mismatch hours/days later.
         "auto_detect_loop": auto_detect_service.is_background_loop_running(),
     }
+
+    payload["editions"], editions_ok = _editions_health()
+    healthy = healthy and editions_ok
 
     # SQLite substrate status (the source of truth post-cutover). Surfaces db
     # open state + bucket-upload lag so a stuck sync is visible from /healthz.

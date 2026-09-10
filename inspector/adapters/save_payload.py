@@ -103,6 +103,13 @@ def make_seg(
     if existing_flag:
         result["flag"] = existing_flag
 
+    # Coordinate provenance (multi-riwayah) is deliberately NOT carried here.
+    # The FE never sends it — the editor works in the delivery edition's
+    # coordinates and knows nothing about the Hafs source span — and inheriting
+    # it would keep a value the new ``matched_ref`` has invalidated. It is
+    # re-derived from the ref by ``services.segments.stamping.stamp_segment``,
+    # which every save path already runs and which knows the riwayah.
+
     return result
 
 

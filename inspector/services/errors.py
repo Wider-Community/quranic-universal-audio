@@ -55,6 +55,12 @@ class Codes:
     # Storage
     READ_ONLY = "READ_ONLY"
 
+    # Editions (multi-riwayah)
+    RIWAYAH_MISMATCH = "RIWAYAH_MISMATCH"
+    UNSUPPORTED_RIWAYAH = "UNSUPPORTED_RIWAYAH"
+    EDITIONS_UNAVAILABLE = "EDITIONS_UNAVAILABLE"
+    REF_NOT_IN_EDITION = "REF_NOT_IN_EDITION"
+
 
 def error_body(
     message: str,

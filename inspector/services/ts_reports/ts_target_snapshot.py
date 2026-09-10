@@ -1,4 +1,16 @@
-"""Resolve native v13 report targets and recheck their staleness."""
+"""Resolve report targets and recheck their staleness.
+
+Two profiles, one entry point. A native shard fingerprints cells, sounds,
+columns, bridges and boundaries; both native schema versions are accepted, since
+a re-stamped Hafs delivery moves from 13 to 14 without changing a single native
+identity and pinning one version would 409 every report on it.
+
+A word-profile shard has none of those, but it does have verses, words and the
+gaps between them — the three kinds the Timestamps tab still offers on a
+non-Hafs delivery. Those go to ``ts_word_snapshot``. Refusing them outright
+409'd every report on such a delivery, including the ``audio`` and ``other``
+comment flows, which are not native-specific at all.
+"""
 
 from __future__ import annotations
 
@@ -9,21 +21,38 @@ from typing import Any
 
 from config import TS_REPORT_BOUNDARY_STALE_MS
 from qua_shared.timestamps_codec import decode_document
+from qua_shared.timestamps_shards import NATIVE_SHARD_SCHEMA_VERSIONS
 from services.storage import data_dir
+from services.ts_reports.ts_word_snapshot import is_word_document, resolve_word_target
 
 logger = logging.getLogger(__name__)
 
 
 def _load_shard(slug: str, chapter: int) -> dict[str, Any] | None:
+    """The chapter's shard, decoded for whichever profile it is.
+
+    A word document is already flat — ``decode_document`` expands the compact
+    native codec and would raise on it — so it is returned as stored.
+    """
     try:
         raw = data_dir.read_timestamps_chapter(slug, chapter)
         doc = json.loads(raw) if raw is not None else None
     except Exception:  # noqa: BLE001 - storage lookup is best effort during recheck
-        logger.warning("native report shard read failed %s ch%s", slug, chapter)
+        logger.warning("report shard read failed %s ch%s", slug, chapter)
         return None
-    if not isinstance(doc, dict) or doc.get("_meta", {}).get("schema_version") != 13:
+    if not isinstance(doc, dict):
         return None
-    return decode_document(doc)
+    if is_word_document(doc):
+        return doc
+    return decode_document(doc) if _is_native(doc) else None
+
+
+def _is_native(doc: dict[str, Any]) -> bool:
+    """True for a native shard of any accepted schema version."""
+    meta = doc.get("_meta") or {}
+    if meta.get("profile", "native") != "native":
+        return False
+    return meta.get("schema_version") in NATIVE_SHARD_SCHEMA_VERSIONS
 
 
 def _same_id(value: Any, target_id: str) -> bool:
@@ -157,7 +186,9 @@ def resolve_target(
     doc: dict[str, Any], verse_key: str, target: dict[str, Any]
 ) -> dict[str, Any] | None:
     """Return the exact native/timing fingerprint for ``target``."""
-    if doc.get("_meta", {}).get("schema_version") != 13:
+    if is_word_document(doc):
+        return resolve_word_target(doc, verse_key, target)
+    if not _is_native(doc):
         return None
     reading = _reading(doc, target)
     if reading is None:
@@ -196,7 +227,8 @@ def resolve_target(
     span = _timing_span(reading, kind, target_id, native)
     return {
         "native_schema_version": 2,
-        "shard_schema_version": 13,
+        "shard_schema_version": int(doc["_meta"]["schema_version"]),
+        "shard_profile": "native",
         "native": native,
         "timing": None if span is None else {"start_ms": span[0], "end_ms": span[1]},
     }

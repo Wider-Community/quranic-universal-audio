@@ -23,6 +23,7 @@
 import { get, writable } from 'svelte/store';
 
 import { fetchCatalogVersion, fetchPublicReciters, fetchPublicStats } from '../../../lib/api/public-reciters';
+import { DEFAULT_RIWAYAH, type InspectorRiwayah, isSupportedRiwayah } from '../../../lib/riwayat';
 import type { BucketCounts, PublicDelivery, PublicReciter } from '../../../lib/types/generated/schemas';
 import { visiblePoll } from '../../../lib/utils/visible-poll';
 
@@ -219,4 +220,20 @@ export function resolveDeliverySlug(
         if (delivery) return { reciter, delivery };
     }
     return null;
+}
+
+/**
+ * The riwayah a delivery is recited in, for picking its script, font, verse
+ * geometry and verse-marker glyph.
+ *
+ * Falls back to Hafs only when the catalog has no row yet (first paint, or a
+ * slug the roster hasn't loaded) — a delivery whose row says an unsupported
+ * riwayah returns `null`, because rendering it as Hafs would put one edition's
+ * coordinates under another's script and let a reviewer save wrong refs.
+ */
+export function deliveryRiwayah(slug: string | null | undefined): InspectorRiwayah | null {
+    if (!slug) return DEFAULT_RIWAYAH;
+    const found = resolveDeliverySlug(slug);
+    if (!found) return DEFAULT_RIWAYAH;
+    return isSupportedRiwayah(found.delivery.riwayah) ? found.delivery.riwayah : null;
 }

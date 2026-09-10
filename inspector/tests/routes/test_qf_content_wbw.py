@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import pytest
 
+from services.reference import editions
+
 
 class _FakeResp:
     def __init__(self, payload, ok=True, status=200):
@@ -162,6 +164,88 @@ def test_token_failure_trips_cooldown_and_fast_fails(monkeypatch, _clear_qf_cach
     assert calls["n"] == 1
 
 
+# ---- reverse projection (D9) ----
+
+
+has_editions = pytest.mark.skipif(
+    not editions.available(), reason="qua-domain not installed (Hafs-only runtime)"
+)
+
+
+@has_editions
+def test_a_warsh_verse_is_glossed_from_its_hafs_source_verse(monkeypatch, _clear_qf_cache):
+    """Warsh 1:1 is al-Hamd, which is Hafs 1:2 — Warsh does not number the
+    Basmala. The glosses must come from 1:2 and come back keyed to 1:1."""
+    from services.quran_foundation import content
+    from services.storage import cache
+
+    cache.set_qf_content_token({"access_token": "tok", "expires_at": 2**31})
+    asked = []
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        asked.append(url.rsplit("/", 1)[-1])
+        return _FakeResp(
+            {
+                "verse": {
+                    "words": [
+                        {"location": f"1:2:{i}", "char_type_name": "word",
+                         "translation": {"text": f"g{i}"}}
+                        for i in range(1, 5)
+                    ]
+                }
+            }
+        )
+
+    monkeypatch.setattr(content.requests, "get", fake_get)
+    out = content.word_by_word("1:1", "en", "warsh")
+
+    assert asked == ["1:2"]
+    assert out == {"1:1:1": "g1", "1:1:2": "g2", "1:1:3": "g3", "1:1:4": "g4"}
+
+
+@has_editions
+def test_the_edition_is_part_of_the_gloss_cache_key(monkeypatch, _clear_qf_cache):
+    """Hafs 1:1 (the Basmala) and Warsh 1:1 (al-Hamd) are different verses;
+    caching them under one key would serve one edition's glosses as the
+    other's."""
+    from services.quran_foundation import content
+    from services.storage import cache
+
+    cache.set_qf_content_token({"access_token": "tok", "expires_at": 2**31})
+    payloads = {
+        "1:1": {"verse": {"words": [
+            {"location": "1:1:1", "char_type_name": "word",
+             "translation": {"text": "In the name"}},
+        ]}},
+        "1:2": {"verse": {"words": [
+            {"location": f"1:2:{i}", "char_type_name": "word",
+             "translation": {"text": "praise"}}
+            for i in range(1, 5)
+        ]}},
+    }
+    monkeypatch.setattr(
+        content.requests,
+        "get",
+        lambda url, **k: _FakeResp(payloads[url.rsplit("/", 1)[-1]]),
+    )
+
+    hafs = content.word_by_word("1:1", "en", "hafs")
+    warsh = content.word_by_word("1:1", "en", "warsh")
+    assert hafs == {"1:1:1": "In the name"}
+    assert warsh["1:1:1"] == "praise"
+    assert len(warsh) == 4
+
+
+@has_editions
+def test_a_verse_absent_from_the_edition_raises(_clear_qf_cache):
+    """Warsh ends al-Baqarah at 285; asking for 2:286 is a caller bug, not an
+    empty answer to render."""
+    from services.quran_foundation import content
+
+    with pytest.raises(content.QfContentError, match="does not exist"):
+        content.word_by_word("2:286", "en", "warsh")
+
+
 # ---- routes ----
 
 
@@ -185,13 +269,50 @@ def test_route_wbw_returns_words(flask_client, monkeypatch, _clear_qf_cache):
     from services.quran_foundation import content
 
     monkeypatch.setattr(route.qf_config, "content_is_configured", lambda: True)
-    monkeypatch.setattr(content, "word_by_word", lambda vk, lang: {"2:255:1": "Allah"})
+    monkeypatch.setattr(
+        content, "word_by_word", lambda vk, lang, riw: {"2:255:1": "Allah"}
+    )
     resp = flask_client.get("/api/qf/content/wbw/2/255?language=en")
     assert resp.status_code == 200
     body = resp.get_json()
     assert body["verse_key"] == "2:255"
     assert body["language"] == "en"
+    assert body["riwayah"] == "hafs"
     assert body["words"] == {"2:255:1": "Allah"}
+
+
+def test_route_wbw_passes_the_requested_edition_through(
+    flask_client, monkeypatch, _clear_qf_cache
+):
+    """The wire carries the Inspector slug; the service takes the SDK one."""
+    from routes import qf_content as route
+
+    from services.quran_foundation import content
+
+    monkeypatch.setattr(route.qf_config, "content_is_configured", lambda: True)
+    seen = {}
+
+    def fake(verse_key, lang, riwayah):
+        seen["riwayah"] = riwayah
+        return {"2:255:1": "Allah"}
+
+    monkeypatch.setattr(content, "word_by_word", fake)
+    resp = flask_client.get(
+        "/api/qf/content/wbw/2/255?language=en&riwayah=warsh_an_nafi"
+    )
+    assert resp.status_code == 200
+    assert seen["riwayah"] == "warsh"
+    assert resp.get_json()["riwayah"] == "warsh"
+
+
+def test_route_wbw_400s_on_an_unsupported_edition(flask_client, monkeypatch):
+    """Never a silent Hafs fallback — the glosses would be keyed to the wrong
+    words and the reader would have no way to tell."""
+    from routes import qf_content as route
+
+    monkeypatch.setattr(route.qf_config, "content_is_configured", lambda: True)
+    resp = flask_client.get("/api/qf/content/wbw/2/255?riwayah=duri_an_abi_amr")
+    assert resp.status_code == 400
 
 
 def test_route_wbw_503_when_not_configured(flask_client, monkeypatch):

@@ -5,6 +5,7 @@ functions.  No other module uses ``global`` for cache variables.
 """
 
 import threading
+import time as _time
 from collections import OrderedDict
 from typing import Generic, TypeVar
 
@@ -117,12 +118,37 @@ _seg_validate_result: _KeyedCache[dict] = _KeyedCache()
 _seg_stats_result: _KeyedCache[dict] = _KeyedCache()
 
 
+#: How long a "there is no detailed.json" answer is trusted. The absence is
+#: cached to stop the Reviews drawer doing a bucket round-trip per slug per
+#: request, which is a burst-scoped problem — but a delivery can gain the file
+#: out of band (a promote run), and the invalidation hooks only fire for a
+#: delivery still awaiting alignment. Without a lapse such a slug 404s until the
+#: process restarts, and the escape hatch (a save) is unreachable because the
+#: editor cannot load. Seconds, so the burst is still absorbed.
+_SEG_ABSENT_TTL_S = 30.0
+
+#: ``{reciter: monotonic stamp}`` for the entries above that are empty because
+#: the file is MISSING, as opposed to empty because the delivery has no segments.
+_seg_absent_at: dict[str, float] = {}
+
+
 def get_seg_cache(reciter: str) -> list[dict] | None:
-    return _seg.get(reciter)
+    entries = _seg.get(reciter)
+    stamped_at = _seg_absent_at.get(reciter)
+    if stamped_at is not None and _time.monotonic() - stamped_at > _SEG_ABSENT_TTL_S:
+        _seg_absent_at.pop(reciter, None)
+        _seg.pop(reciter)
+        return None
+    return entries
 
 
-def set_seg_cache(reciter: str, entries: list[dict]) -> None:
+def set_seg_cache(reciter: str, entries: list[dict], *, absent: bool = False) -> None:
+    """Cache *reciter*'s entries. ``absent=True`` marks them as a missing file."""
     _seg.set(reciter, entries)
+    if absent:
+        _seg_absent_at[reciter] = _time.monotonic()
+    else:
+        _seg_absent_at.pop(reciter, None)
 
 
 def get_seg_meta(reciter: str) -> dict:
@@ -928,7 +954,6 @@ def invalidate_automation_config_cache() -> None:
 # doesn't collide with a future call filtered to a single kind.
 # ---------------------------------------------------------------------------
 
-import time as _time
 
 _jobs_in_flight_lock = _threading.Lock()
 _jobs_in_flight: "tuple[float, tuple[str, ...], list[dict]] | None" = None
@@ -1017,3 +1042,96 @@ def invalidate_all_jobs_cache() -> None:
     global _all_jobs
     with _all_jobs_lock:
         _all_jobs = None
+
+
+# ---------------------------------------------------------------------------
+# Editions (multi-riwayah)
+# ---------------------------------------------------------------------------
+# Keyed on the SDK riwayah slug, never the Inspector slug, so one edition's
+# script can never be served for another. Immutable for the life of the
+# process: the data comes from a pinned ``qua-domain`` wheel, not the bucket,
+# so there is no invalidation hook — a new pin means a new image.
+#
+# At most four editions exist, so these are unbounded by slug but tiny:
+# a word map is ~77k entries, a font ~0.9 MB.
+
+_edition_word_map: _KeyedCache[dict[str, str]] = _KeyedCache()
+_edition_word_counts: _KeyedCache[dict[tuple[int, int], int]] = _KeyedCache()
+_edition_projection: _KeyedCache[object] = _KeyedCache()
+_edition_font: _KeyedCache[tuple[bytes, object]] = _KeyedCache()
+_edition_tables: _KeyedCache[dict[str, object]] = _KeyedCache()
+#: Serialised ``/api/static/quran-refs.json`` body + its 12-char digest, per
+#: edition. Built from the caches above, but kept separately because the digest
+#: is the asset's ETag and cache-buster — recomputing it would change nothing
+#: yet cost a 3 MB serialise per request.
+_edition_refs_payload: _KeyedCache[tuple[bytes, str]] = _KeyedCache()
+
+
+def get_edition_word_map(riwayah: str) -> dict[str, str] | None:
+    return _edition_word_map.get(riwayah)
+
+
+def set_edition_word_map(riwayah: str, value: dict[str, str]) -> None:
+    _edition_word_map.set(riwayah, value)
+
+
+def get_edition_word_counts(riwayah: str) -> dict[tuple[int, int], int] | None:
+    return _edition_word_counts.get(riwayah)
+
+
+def set_edition_word_counts(riwayah: str, value: dict[tuple[int, int], int]) -> None:
+    _edition_word_counts.set(riwayah, value)
+
+
+def get_edition_projection(riwayah: str):
+    return _edition_projection.get(riwayah)
+
+
+def set_edition_projection(riwayah: str, value) -> None:
+    _edition_projection.set(riwayah, value)
+
+
+def get_edition_font(riwayah: str) -> tuple[bytes, object] | None:
+    return _edition_font.get(riwayah)
+
+
+def set_edition_font(riwayah: str, value: tuple[bytes, object]) -> None:
+    _edition_font.set(riwayah, value)
+
+
+def get_edition_tables(riwayah: str) -> dict[str, object] | None:
+    return _edition_tables.get(riwayah)
+
+
+def set_edition_tables(riwayah: str, value: dict[str, object]) -> None:
+    _edition_tables.set(riwayah, value)
+
+
+def get_edition_refs_payload(riwayah: str) -> tuple[bytes, str] | None:
+    return _edition_refs_payload.get(riwayah)
+
+
+def set_edition_refs_payload(riwayah: str, value: tuple[bytes, str]) -> None:
+    _edition_refs_payload.set(riwayah, value)
+
+
+def clear_edition_refs_payloads() -> None:
+    """Drop only the serialised refs bundles, keeping the maps they were built
+    from. Used by the test-only ``quran_refs.reset_cache``."""
+    _edition_refs_payload.clear()
+
+
+def clear_edition_caches() -> None:
+    """Drop the edition-derived caches held *here*.
+
+    Callers almost always want ``services.reference.editions.clear_caches()``
+    instead: the accessor keeps its own ``lru_cache`` layer (the imported
+    module, metadata, stop signs, special texts) which this function cannot
+    reach without importing it back.
+    """
+    _edition_word_map.clear()
+    _edition_word_counts.clear()
+    _edition_projection.clear()
+    _edition_font.clear()
+    _edition_tables.clear()
+    _edition_refs_payload.clear()

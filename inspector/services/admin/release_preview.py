@@ -11,6 +11,18 @@ from qua_shared.schemas.wire.release import RELEASE_FORMAT_MAJOR
 from services.db import get_conn, repo_releases
 
 
+def _tiers_for(riwayah_slug: str | None) -> list[str]:
+    """The timing depths a delivery in this riwayah can ship.
+
+    Only the reference edition is timed natively; every other one is aligned
+    against Hafs proxy phones and keeps word boundaries alone, so the preview
+    must not promise a letter tier the cut will not emit.
+    """
+    from qua_shared.riwayat import is_hafs
+
+    return ["verse", "word", "letter"] if is_hafs(riwayah_slug) else ["verse", "word"]
+
+
 def build_release_preview() -> AdminReleasePreviewResponse:
     """Compute the dry-run GH release preview without building assets."""
     conn = get_conn()
@@ -20,6 +32,7 @@ def build_release_preview() -> AdminReleasePreviewResponse:
                r.name_en AS name_en,
                r.name_ar AS name_ar,
                rw.name AS riwayah,
+               d.riwayah AS riwayah_slug,
                st.name AS style,
                c.name AS channel,
                d.chapter_count AS coverage_surahs
@@ -56,6 +69,7 @@ def build_release_preview() -> AdminReleasePreviewResponse:
             "channel": row["channel"],
             "coverage_surahs": row["coverage_surahs"],
             "ts_version": ts_version,
+            "tiers": _tiers_for(row["riwayah_slug"]),
         }
         if prior_member is None:
             row_payload["change_kind"] = "added"

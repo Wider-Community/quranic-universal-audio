@@ -23,6 +23,8 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+from qua_shared.riwayat import DEFAULT_SDK_RIWAYAH
+
 # SHA-256 of empty bytes — the audio part is always absent (bucket-mount I/O).
 _EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 _ROUTE = "/internal/v1/timestamps"
@@ -108,12 +110,18 @@ def start_run(
     *,
     chapters: list[int] | None = None,
     beams: list[int] | None = None,
+    riwayah: str = DEFAULT_SDK_RIWAYAH,
 ) -> str:
     """POST a signed timestamps run for ``slug``; return the Space ``run_id``.
 
     Raises :class:`TsSpaceError` on a non-2xx (a saturated pool 4xx included) or
     a malformed accept payload. The Space writes the ``running`` run-log record
     before it returns, so the caller can poll immediately.
+
+    ``riwayah`` is the SDK slug the delivery is recited in. It is omitted from
+    the body for Hafs on purpose: the canonicaliser sorts keys, so every
+    existing Hafs preimage stays byte-identical and the Space-side change need
+    only ship before the first non-Hafs run, not in lockstep with this one.
     """
     from huggingface_hub import get_token
 
@@ -126,6 +134,8 @@ def start_run(
         body["chapters"] = list(chapters)
     if beams:
         body["beams"] = list(beams)
+    if riwayah != DEFAULT_SDK_RIWAYAH:
+        body["riwayah"] = riwayah
 
     raw, headers = _sign_headers(body, _secret(), get_token())
 
