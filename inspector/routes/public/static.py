@@ -26,7 +26,7 @@ from pathlib import Path
 import orjson
 from flask import Blueprint, Response, abort, jsonify, request, send_file
 
-from qua_shared.riwayat import DEFAULT_RIWAYAH, UnsupportedRiwayah, to_sdk_slug
+from routes._riwayah_param import sdk_riwayah_param
 from services import auth as auth_service
 from services import catalog as catalog_service
 from services import permissions
@@ -48,20 +48,6 @@ _QURAN_REFS_CACHE_CONTROL = "public, max-age=31536000, immutable"
 # Edition fonts are ~0.9 MB and keyed by a content digest, so they cache the
 # same way. The extension is fixed by the packaged asset, not the request.
 _EDITION_FONT_CACHE_CONTROL = "public, max-age=31536000, immutable"
-
-
-def _sdk_riwayah(value: str | None) -> str:
-    """Resolve an Inspector riwayah slug to its SDK slug, or 400.
-
-    An absent param means Hafs, which keeps the FE's existing unparameterised
-    request working. An unrecognised one is a 400 rather than a silent Hafs
-    fallback — serving Hafs coordinates under another edition's name would let
-    the Segments tab render, and a reviewer save, the wrong refs.
-    """
-    try:
-        return to_sdk_slug(value or DEFAULT_RIWAYAH)
-    except UnsupportedRiwayah as exc:
-        abort(400, str(exc))
 
 
 @static_bp.route("/catalog.json")
@@ -88,7 +74,7 @@ def catalog_json() -> Response:
 @static_bp.route("/quran-refs/version")
 def quran_refs_version() -> Response:
     """Return the current Quran-refs payload hash for cache busting."""
-    riwayah = _sdk_riwayah(request.args.get("riwayah"))
+    riwayah = sdk_riwayah_param(request.args.get("riwayah"))
     response = jsonify({"version": quran_refs_service.payload_hash(riwayah)})
     response.headers["Cache-Control"] = "no-cache, must-revalidate"
     return response
@@ -102,7 +88,7 @@ def quran_refs_json() -> Response:
     ``services/reference/quran_refs.py``); each request just hands them back
     with immutable cache headers + an ETag matching the version endpoint.
     """
-    riwayah = _sdk_riwayah(request.args.get("riwayah"))
+    riwayah = sdk_riwayah_param(request.args.get("riwayah"))
     body = quran_refs_service.build_payload(riwayah)
     digest = quran_refs_service.payload_hash(riwayah)
     response = Response(body, mimetype="application/json")
@@ -123,7 +109,7 @@ def edition_font(riwayah: str) -> Response:
     fallback font would render the edition's script with the wrong ligatures
     and stop marks.
     """
-    slug = _sdk_riwayah(riwayah)
+    slug = sdk_riwayah_param(riwayah)
     try:
         payload, asset = editions_service.font(slug)
     except editions_service.HafsNotRoutedHere:

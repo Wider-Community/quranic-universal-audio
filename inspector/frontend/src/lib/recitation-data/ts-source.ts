@@ -24,6 +24,7 @@
  */
 
 import { ApiError, fetchArrayBuffer, fetchJson } from '../api';
+import { DEFAULT_RIWAYAH, type InspectorRiwayah } from '../riwayat';
 import type { TsConfigResponse, TsManifestResponse, TsValidationDoc } from '../types/generated/schemas';
 import type {
     TsShardResponse,
@@ -255,18 +256,23 @@ interface WbwResponse {
     words: Record<string, string>;
 }
 
-/** Per-(ayahKey|language) cache so re-toggling / re-visiting a verse is free. */
+/** Per-(ayahKey|language|riwayah) cache so re-visiting a verse is free. The
+ *  edition belongs in the key: a Warsh 2:1 and a Hafs 2:1 are different verses
+ *  with different word counts, and the glosses come back keyed accordingly. */
 const _wbwByAyah = new Map<string, Promise<Record<string, string>>>();
 
 async function _fetchAyahTranslation(
     ayahKey: string,
     language: string,
+    riwayah: InspectorRiwayah,
 ): Promise<Record<string, string>> {
-    const cacheKey = `${ayahKey}|${language}`;
+    const cacheKey = `${ayahKey}|${language}|${riwayah}`;
     const hit = _wbwByAyah.get(cacheKey);
     if (hit) return hit;
     const [surah, ayah] = ayahKey.split(':');
-    const url = `/api/qf/content/wbw/${surah}/${ayah}?language=${encodeURIComponent(language)}`;
+    const url = `/api/qf/content/wbw/${surah}/${ayah}`
+        + `?language=${encodeURIComponent(language)}`
+        + `&riwayah=${encodeURIComponent(riwayah)}`;
     const promise = fetchJson<WbwResponse>(url)
         .then((r) => r.words ?? {})
         .catch((e) => {
@@ -287,6 +293,7 @@ async function _fetchAyahTranslation(
 export async function loadVerseTranslations(
     words: TsWord[],
     language: string,
+    riwayah: InspectorRiwayah = DEFAULT_RIWAYAH,
 ): Promise<Record<string, string>> {
     const ayahs = new Set<string>();
     for (const w of words) {
@@ -296,7 +303,7 @@ export async function loadVerseTranslations(
     const merged: Record<string, string> = {};
     await Promise.all(
         [...ayahs].map((ayahKey) =>
-            _fetchAyahTranslation(ayahKey, language)
+            _fetchAyahTranslation(ayahKey, language, riwayah)
                 .then((map) => Object.assign(merged, map))
                 .catch(() => {
                     /* skip this ayah on failure */

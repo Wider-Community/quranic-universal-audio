@@ -20,6 +20,7 @@ from typing import Final
 
 import requests
 
+from qua_shared.riwayat import DEFAULT_SDK_RIWAYAH
 from services.storage import cache
 
 from . import config
@@ -183,24 +184,78 @@ def chapter_audio_urls(qf_reciter_id: int) -> dict[str, str]:
     return out
 
 
-def word_by_word(verse_key: str, language: str = "en") -> dict[str, str]:
+def word_by_word(
+    verse_key: str, language: str = "en", riwayah: str = DEFAULT_SDK_RIWAYAH
+) -> dict[str, str]:
     """Return ``{location: gloss}`` for one ayah's word-by-word translation.
 
-    ``verse_key`` is ``"surah:ayah"`` (e.g. ``"2:255"``); ``location`` keys are
-    ``"surah:ayah:word"`` — the same join key the Timestamps tab carries on
-    each ``TsWord``. Unknown ``language`` codes fall back to English. The
-    ayah-number glyph (``char_type_name == "end"``) is filtered out. Result is
-    cached per ``(verse_key, language)`` — content is immutable.
+    ``verse_key`` is ``"surah:ayah"`` (e.g. ``"2:255"``) in ``riwayah``'s own
+    coordinates; ``location`` keys are ``"surah:ayah:word"`` — the same join key
+    the Timestamps tab carries on each ``TsWord``. Unknown ``language`` codes
+    fall back to English. Result is cached per ``(verse_key, language,
+    riwayah)`` — content is immutable.
+
+    Quran.Foundation keys its glosses in Hafs/Uthmani coordinates, so a
+    non-Hafs request is served by reverse-projecting each target word to the
+    Hafs word(s) it came from, fetching those verses, and re-keying the answer
+    to the target coordinates. Doing it here rather than in the browser keeps
+    the FE's join key untouched (D9).
     """
     if not _VERSE_KEY_RE.match(verse_key):
         raise QfContentError(f"invalid verse_key: {verse_key!r}")
     lang = language if language in _WBW_LANG_CODES else "en"
 
-    cache_key = f"{verse_key}|{lang}"
+    cache_key = f"{verse_key}|{lang}|{riwayah}"
     cached = cache.get_qf_wbw(cache_key)
     if cached is not None:
         return cached
 
+    out = (
+        _fetch_word_by_word(verse_key, lang)
+        if riwayah == DEFAULT_SDK_RIWAYAH
+        else _projected_word_by_word(verse_key, lang, riwayah)
+    )
+    cache.set_qf_wbw(cache_key, out)
+    return out
+
+
+def _projected_word_by_word(verse_key: str, lang: str, riwayah: str) -> dict[str, str]:
+    """Glosses for a non-Hafs verse, re-keyed from its Hafs source words.
+
+    A target word can come from several source words (an edition that writes
+    two Hafs words as one) or from none at all (an unnumbered opener), so the
+    glosses are joined and a word with no source gets an empty string rather
+    than a neighbour's meaning.
+    """
+    from services.reference import editions
+
+    projection = editions.projection(riwayah)
+    surah, ayah = (int(part) for part in verse_key.split(":"))
+    word_count = editions.word_counts(riwayah).get((surah, ayah))
+    if word_count is None:
+        raise QfContentError(f"{verse_key} does not exist in riwayah {riwayah!r}")
+
+    sources: dict[str, tuple[str, ...]] = {}
+    for index in range(1, word_count + 1):
+        target = f"{verse_key}:{index}"
+        sources[target] = tuple(projection.reverse_ref(target))
+
+    glosses: dict[str, str] = {}
+    source_verses = {
+        ":".join(ref.split(":")[:2]) for refs in sources.values() for ref in refs
+    }
+    for source_verse in sorted(source_verses):
+        glosses.update(_fetch_word_by_word(source_verse, lang))
+
+    return {
+        target: " ".join(filter(None, (glosses.get(ref, "") for ref in refs)))
+        for target, refs in sources.items()
+    }
+
+
+def _fetch_word_by_word(verse_key: str, lang: str) -> dict[str, str]:
+    """One uncached QF call for one HAFS verse. The ayah-number glyph
+    (``char_type_name == "end"``) is filtered out."""
     token = get_content_token()
     url = f"{config.CONTENT_API_BASE}/verses/by_key/{verse_key}"
     try:
@@ -234,5 +289,4 @@ def word_by_word(verse_key: str, language: str = "en") -> dict[str, str]:
         tr = w.get("translation")
         text = tr.get("text") if isinstance(tr, dict) else None
         out[loc] = text or ""
-    cache.set_qf_wbw(cache_key, out)
     return out

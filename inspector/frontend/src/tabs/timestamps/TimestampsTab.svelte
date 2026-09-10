@@ -81,7 +81,7 @@
     } from './services/ts_client';
     import { isWordShard } from '../../lib/types/ts-client';
     import { editionFontStack, ensureEditionFont } from '../../lib/refs/edition-font';
-    import { DEFAULT_SDK_RIWAYAH, toInspectorSlug } from '../../lib/riwayat';
+    import { DEFAULT_RIWAYAH, DEFAULT_SDK_RIWAYAH, toInspectorSlug } from '../../lib/riwayat';
     import type { ChapterOccasion } from '../../lib/recitation-data/occasions';
     import { isInWaslGroup, waslGroupOf } from '../../lib/recitation-data/wasl';
     import { findTsEntryBySlug, isTsCapable, resolveTsDeliveries } from './services/ts-published';
@@ -176,6 +176,10 @@
     // the `$:` below recomputes the analysis vars on a theme flip.
     let curTheme = themeStore.current;
     $: hlVars = resolveHighlightVars($recitationConfigStore.highlightColor, modelForTheme(curTheme));
+    // Glosses are keyed in Hafs upstream; the server reverse-projects them when
+    // this names another edition (D9).
+    $: glossRiwayah = toInspectorSlug($deliveryRiwayah) ?? DEFAULT_RIWAYAH;
+
     $: hlVarsText = Object.entries(hlVars)
         .map(([k, v]) => `${k}: ${v}`)
         .join('; ');
@@ -810,7 +814,9 @@
                     warmEndMs,
                 );
                 if (get(showTranslations) && data.words.length) {
-                    void loadVerseTranslations(data.words, get(translationLanguage)).catch(() => {});
+                    void loadVerseTranslations(
+                        data.words, get(translationLanguage), glossRiwayah,
+                    ).catch(() => {});
                 }
             }
         } catch { /* seek 0 is an acceptable fallback */ }
@@ -956,7 +962,7 @@
             return;
         }
         const token = ++_trReq;
-        loadVerseTranslations(lv.data.words, lang)
+        loadVerseTranslations(lv.data.words, lang, glossRiwayah)
             .then((map) => { if (token === _trReq) verseTranslations.set(map); })
             .catch(() => { if (token === _trReq) verseTranslations.set({}); });
     }
@@ -982,7 +988,7 @@
             Math.round(next.endMs),
         );
         if (transOn && next.lv.data.words.length) {
-            void loadVerseTranslations(next.lv.data.words, lang).catch(() => {});
+            void loadVerseTranslations(next.lv.data.words, lang, glossRiwayah).catch(() => {});
         }
     }
 

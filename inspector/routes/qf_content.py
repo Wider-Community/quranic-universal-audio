@@ -10,8 +10,10 @@ import logging
 
 from flask import Blueprint, jsonify, request
 
+from routes._riwayah_param import sdk_riwayah_param
 from services.quran_foundation import config as qf_config
 from services.quran_foundation import content as qf_content
+from services.reference.editions import EditionsUnavailable
 
 logger = logging.getLogger(__name__)
 
@@ -34,14 +36,26 @@ def wbw_languages():
 
 @qf_content_bp.route("/wbw/<int:surah>/<int:ayah>")
 def wbw(surah: int, ayah: int):
-    """Return ``{location: gloss}`` word-by-word translation for one ayah."""
+    """Return ``{location: gloss}`` word-by-word translation for one ayah.
+
+    ``?riwayah=`` names the edition the coordinates belong to (Inspector slug;
+    absent means Hafs). Glosses live in Hafs coordinates upstream, so a
+    non-Hafs request is reverse-projected server-side and comes back keyed to
+    the requested edition — the FE joins on ``TsWord.location`` either way.
+    """
     if not qf_config.content_is_configured():
         return jsonify({"error": "content api not configured"}), 503
     lang = (request.args.get("language") or "en").strip()
+    riwayah = sdk_riwayah_param(request.args.get("riwayah"))
     verse_key = f"{surah}:{ayah}"
     try:
-        words = qf_content.word_by_word(verse_key, lang)
+        words = qf_content.word_by_word(verse_key, lang, riwayah)
+    except EditionsUnavailable as e:
+        logger.warning("qf-wbw: %s riwayah=%s unavailable: %s", verse_key, riwayah, e)
+        return jsonify({"error": str(e)}), 503
     except qf_content.QfContentError as e:
         logger.warning("qf-wbw: %s lang=%s failed: %s", verse_key, lang, e)
         return jsonify({"error": str(e)}), 502
-    return jsonify({"verse_key": verse_key, "language": lang, "words": words})
+    return jsonify(
+        {"verse_key": verse_key, "language": lang, "riwayah": riwayah, "words": words}
+    )
