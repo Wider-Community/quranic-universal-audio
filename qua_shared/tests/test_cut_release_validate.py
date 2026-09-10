@@ -81,13 +81,16 @@ def _layouts(verses: dict) -> dict:
     return build_verse_layouts(reshape_canonical(projected, digital_khatt), **_ZERO_PADS)
 
 
-def _tiers(verses: dict) -> dict:
+def _tiers(verses: dict, *, with_letters: bool = True) -> dict:
     return cut_release._build_tier_files(
         "example_reciter",
         _layouts(verses),
         delivery_meta={"audio_category": "by_surah"},
+        script_id="digital_khatt_v2",
         script_sha256="0" * 64,
+        with_letters=with_letters,
     )
+
 
 
 def test_verse_start_zero_with_leading_word_gap():
@@ -130,6 +133,37 @@ def test_release_timestamp_tiers_preserve_verse_order():
     ):
         doc = json.loads(gzip.decompress(files[name]).decode("utf-8"))
         assert [row[0] for row in doc["rows"]] == ["1:1", "2:1", "10:1", "100:1"]
+
+
+def test_a_word_profile_delivery_ships_no_letter_tier():
+    """A proxy-timed recitation has no letter geometry at all, so the tier is
+    absent rather than emitted empty — a consumer must be able to tell "this
+    recitation has no letter timings" from "this verse happened to have none"."""
+    verses = {"1:1": {"words": [[1, 0, 100]]}, "1:2": {"words": [[1, 100, 200]]}}
+    files = _tiers(verses, with_letters=False)
+
+    assert set(files) == {"verse_timestamps.json.gz", "word_timestamps.json.gz"}
+    word_doc = json.loads(gzip.decompress(files["word_timestamps.json.gz"]).decode("utf-8"))
+    assert [row[0] for row in word_doc["rows"]] == ["1:1", "1:2"]
+
+
+def test_a_word_profile_tier_names_the_editions_script():
+    """The `_meta.script` of a non-Hafs delivery must not claim Digital Khatt —
+    a reader would then typeset the words in the wrong font."""
+    verses = {"1:1": {"words": [[1, 0, 100]]}}
+    files = cut_release._build_tier_files(
+        "example_reciter",
+        _layouts(verses),
+        delivery_meta={"audio_category": "by_surah"},
+        script_id="qaloon-v21+sdk-words-v1",
+        script_sha256="a" * 64,
+        riwayah="qalun",
+        with_letters=False,
+    )
+    doc = json.loads(gzip.decompress(files["word_timestamps.json.gz"]).decode("utf-8"))
+    assert doc["_meta"]["script"] == "qaloon-v21+sdk-words-v1"
+    assert doc["_meta"]["script_sha256"] == "a" * 64
+    assert doc["_meta"]["riwayah"] == "qalun"
 
 
 def test_letter_tier_keeps_digital_khatt_text_and_scalar_paint_ranges():
@@ -191,6 +225,7 @@ def test_release_verse_bound_is_audible_span_not_hf_clip_window():
         "example_reciter",
         layouts,
         delivery_meta={"audio_category": "by_surah"},
+        script_id="digital_khatt_v2",
         script_sha256="0" * 64,
     )
     verse_doc = json.loads(gzip.decompress(files["verse_timestamps.json.gz"]).decode("utf-8"))

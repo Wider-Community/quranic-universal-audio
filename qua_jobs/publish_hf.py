@@ -42,7 +42,11 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from qua_shared.catalog_visibility import is_everyayah_channel  # noqa: E402
-from qua_shared.riwayat import DEFAULT_RIWAYAH  # noqa: E402
+from qua_shared.riwayat import (  # noqa: E402
+    DEFAULT_RIWAYAH,
+    DEFAULT_SDK_RIWAYAH,
+    to_sdk_slug,
+)
 from qua_shared.mp3_frames import (  # noqa: E402
     FrameIndex,
     MultiFrameSlice,
@@ -817,14 +821,34 @@ def publish_slug(
     surah_info = json.loads((refs_dir / "surah_info.json").read_bytes())
     digital_khatt_words = json.loads((refs_dir / "digital_khatt_v2_script.json").read_bytes())
 
+    # The shards name the edition their coordinates are in; the catalog row and
+    # detailed.json must agree with them or the rows would be filed under a
+    # config whose verse numbering they do not follow.
+    shard_riwayah = (canonical.pop("_meta", {}) or {}).get("riwayah", DEFAULT_SDK_RIWAYAH)
+    config_riwayah = _riwayah_for(audio_manifest, detailed)
+    if to_sdk_slug(config_riwayah) != shard_riwayah:
+        log.error(
+            "riwayah mismatch: catalog says %s, shards are %s", config_riwayah, shard_riwayah
+        )
+        return _result(
+            slug,
+            "failed",
+            error=f"catalog riwayah {config_riwayah!r} but shards are {shard_riwayah!r}",
+            exit_code=17,
+        )
+    # Every consumer below walks `surah_info` to enumerate verses and to size
+    # them, so it has to be this edition's counting profile, not Hafs's.
+    from qua_shared.surah_words import surah_info_for, word_counts_for
+
+    surah_info = surah_info_for(shard_riwayah, surah_info)
+
     # 2b. Gate incomplete verses: any verse missing a reference word index (never
     # recited) is dropped — no row, no audio slice. Coverage falls by that count.
     # The editor/TS tab still shows these (only the published artifacts gate).
-    from qua_shared.surah_words import word_counts_from_surah_info
     from qua_shared.timestamps_native import select_complete_verses
 
     canonical, dropped_incomplete = select_complete_verses(
-        canonical, word_counts_from_surah_info(surah_info)
+        canonical, word_counts_for(shard_riwayah, surah_info)
     )
     if dropped_incomplete:
         log.info(
@@ -995,8 +1019,7 @@ def publish_slug(
         )
 
     # 6. Push to HF — gets us a commit sha to record as ``version``.
-    riwayah = _riwayah_for(audio_manifest, detailed)
-    version_sha = _push_to_hf(slug, riwayah, rows, audio_bytes)
+    version_sha = _push_to_hf(slug, config_riwayah, rows, audio_bytes)
 
     repo_id = _resolve_dataset_repo_id()
     if sync_card:

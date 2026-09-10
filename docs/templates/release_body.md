@@ -54,6 +54,8 @@ The `ayah` layout needs the verse tier file; run it from the unzipped reciter zi
 
 The files are split and gzipped for storage, speed, and network efficiency. Download only the level you need.
 
+Not every recitation ships all three. `manifest.json` lists each recitation's `tiers`, and the CHANGELOG table shows them per reciter. A recitation that is **not in Hafs** ships `verse` and `word` only: its audio was aligned against Hafs as a proxy and the result projected onto that riwayah's own words, which places word boundaries but produces no letter, phoneme or tajweed timings. Those recitations carry their own script — `_meta.script` names the edition (e.g. `warsh-v21+sdk-words-v1`) instead of `digital_khatt_v2`, and the manifest's `editions` block gives that edition's word digest, script digest, font family and projection digest.
+
 Use `shard.py` when your app prefers per-surah files locally:
 
 ```bash

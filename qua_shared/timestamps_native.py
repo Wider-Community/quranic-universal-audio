@@ -1,10 +1,18 @@
-"""Canonical timing projection from native timestamp shard v13 documents."""
+"""Canonical timing projection from timestamp shard documents.
+
+Both profiles land in the same canonical shape — one occasion per verse, words
+with source-relative times — so every downstream adapter (release tiers, HF
+dataset, coverage) reads one structure. The difference is depth: a native shard
+projects letters as well, a word-profile shard has none to project and emits
+``letters: []`` on every word.
+"""
 
 from __future__ import annotations
 
 from collections import defaultdict
 
 from qua_shared.timestamps_codec import decode_document
+from qua_shared.timestamps_shards import NATIVE_SHARD_SCHEMA_VERSIONS, shard_profile
 
 
 def _index(ref: str) -> int:
@@ -135,12 +143,8 @@ def _project(segments: list[dict]) -> dict:
     }
 
 
-def project_native_shard(shard: dict) -> dict[str, dict]:
-    """Select one canonical timing occasion per verse from a v13 shard."""
-    if (shard.get("_meta") or {}).get("schema_version") != 13:
-        raise ValueError("timestamp shard must use schema version 13")
-    decoded = decode_document(shard)
-    segments = [row for reading in decoded["readings"] for row in _reading_segments(reading)]
+def _select_occasions(segments: list[dict]) -> dict[str, dict]:
+    """One canonical occasion per verse, from every segment in audio order."""
     segments.sort(key=lambda row: row["t"][0])
     by_ref: dict[str, list[dict]] = defaultdict(list)
     for segment in segments:
@@ -152,6 +156,66 @@ def project_native_shard(shard: dict) -> dict[str, dict]:
         target = set(range(1, max(_coverage(rows), default=0) + 1))
         out[ref] = _project(_canonical(_split_occasions(rows, foreign), target))
     return out
+
+
+def project_native_shard(shard: dict) -> dict[str, dict]:
+    """Select one canonical timing occasion per verse from a native shard."""
+    version = (shard.get("_meta") or {}).get("schema_version")
+    if version not in NATIVE_SHARD_SCHEMA_VERSIONS:
+        raise ValueError(
+            f"native timestamp shard must use schema version "
+            f"{' or '.join(map(str, NATIVE_SHARD_SCHEMA_VERSIONS))}, got {version!r}"
+        )
+    decoded = decode_document(shard)
+    segments = [row for reading in decoded["readings"] for row in _reading_segments(reading)]
+    return _select_occasions(segments)
+
+
+def _word_reading_segments(reading: dict) -> list[dict]:
+    """Parts of one word-profile reading, as canonical timed segments.
+
+    ``words`` rows are positional ``(ref, text, start_ms, end_ms)`` and a part
+    addresses them by ``(first_word_index, word_count)`` — the same contiguous
+    slice the native profile expresses as ``word_ids``.
+    """
+    rows = reading["words"]
+    out = []
+    for ref, start, end, first, count in reading["parts"]:
+        timed_words = []
+        for word_id in range(first, first + count):
+            word_ref, text, word_start, word_end = rows[word_id]
+            timed_words.append(
+                {
+                    "word_id": word_id,
+                    "index": _index(word_ref),
+                    "ref": word_ref,
+                    "source_text": text,
+                    "start_ms": int(word_start),
+                    "end_ms": int(word_end),
+                    # A proxy-timed shard owns no sub-word geometry. Empty is
+                    # the honest answer; a consumer that needs letters must
+                    # check the profile rather than find a plausible guess.
+                    "letters": [],
+                }
+            )
+        out.append({"ref": ref, "t": [int(start), int(end)], "words": timed_words})
+    return out
+
+
+def project_word_shard(shard: dict) -> dict[str, dict]:
+    """Select one canonical timing occasion per verse from a word shard."""
+    version = (shard.get("_meta") or {}).get("schema_version")
+    if version != 14:
+        raise ValueError(f"word timestamp shard must use schema version 14, got {version!r}")
+    segments = [row for reading in shard["readings"] for row in _word_reading_segments(reading)]
+    return _select_occasions(segments)
+
+
+def project_shard(shard: dict) -> dict[str, dict]:
+    """Project a shard of either profile — the discriminator decides which."""
+    if shard_profile(shard) == "word":
+        return project_word_shard(shard)
+    return project_native_shard(shard)
 
 
 def select_complete_verses(
@@ -170,4 +234,9 @@ def select_complete_verses(
     return kept, sorted(dropped)
 
 
-__all__ = ["project_native_shard", "select_complete_verses"]
+__all__ = [
+    "project_native_shard",
+    "project_shard",
+    "project_word_shard",
+    "select_complete_verses",
+]

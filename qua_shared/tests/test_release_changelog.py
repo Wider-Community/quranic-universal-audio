@@ -174,7 +174,7 @@ def test_no_missing_callout_when_all_complete():
     )
     assert "About missing verses" not in md
     # Column header still present; every cell is an em dash.
-    assert "| Coverage | Missing |" in md
+    assert "| Coverage | Timings | Missing |" in md
 
 
 def test_schema_sections_are_collapsed():
@@ -191,3 +191,29 @@ def test_schema_sections_are_collapsed():
     assert '"tier": "word"' in md
     assert '"tier": "letter"' in md
     assert "type ReleaseManifest" in md
+
+
+def test_a_hafs_only_release_says_nothing_about_proxy_timings():
+    md = render_changelog(
+        version="v1.0.0",
+        previous_version=None,
+        release_date="d",
+        members=[_member("R")],
+    )
+    assert "aligning the audio against Hafs as a proxy" not in md
+    assert "letter · word · verse" in md
+
+
+def test_a_proxy_timed_recitation_is_called_out_and_shows_its_tiers():
+    """A consumer must not have to download the zip to discover there are no
+    letter timings, nor guess why."""
+    member = {**_member("R"), "tiers": ["verse", "word"]}
+    md = render_changelog(
+        version="v1.0.0",
+        previous_version=None,
+        release_date="d",
+        members=[member],
+    )
+    assert "aligning the audio against Hafs as a proxy" in md
+    assert "word · verse" in md
+    assert "letter · word · verse" not in md

@@ -38,6 +38,7 @@ from typing import TypedDict
 import brotli
 
 from qua_shared.digital_khatt import project_word
+from qua_shared.riwayat import DEFAULT_SDK_RIWAYAH
 
 
 class PadParams(TypedDict):
@@ -97,13 +98,26 @@ def _fit_boundary(
 
 
 def load_canonical_verses(ts_dir: Path) -> dict[str, dict]:
-    """Project every native-v13 chapter shard into canonical verse timings."""
-    from qua_shared.timestamps_native import project_native_shard
+    """Project every chapter shard in ``ts_dir`` into canonical verse timings.
+
+    The result carries a ``"_meta"`` entry naming the profile and edition every
+    shard agreed on. Downstream adapters already skip ``_``-prefixed keys, and
+    they need that fact: the deepest tier a delivery can emit, and which script
+    its words are written in, both follow from it.
+
+    A directory mixing profiles or editions is a corrupt delivery, not something
+    to merge — the tiers and the script would differ per chapter.
+    """
+    from qua_shared.timestamps_native import project_shard
+    from qua_shared.timestamps_shards import shard_profile
     from qua_shared.timestamps_v13_audit import audit_v13_document
+    from qua_shared.timestamps_word_audit import audit_word_document
 
     out: dict[str, dict] = {}
     if not ts_dir.exists():
         return out
+    profiles: set[str] = set()
+    riwayat: set[str] = set()
     for path in sorted(
         ts_dir.iterdir(),
         key=lambda p: int(p.name.split(".", 1)[0]) if p.name.split(".", 1)[0].isdigit() else 0,
@@ -115,8 +129,25 @@ def load_canonical_verses(ts_dir: Path) -> dict[str, dict]:
         if name.endswith(".br"):
             raw = brotli.decompress(raw)
         document = json.loads(raw)
-        audit_v13_document(document)
-        out.update(project_native_shard(document))
+        profile = shard_profile(document)
+        profiles.add(profile)
+        if profile == "word":
+            audit_word_document(document)
+            riwayat.add(document["_meta"]["riwayah"])
+        else:
+            audit_v13_document(document)
+            riwayat.add(DEFAULT_SDK_RIWAYAH)
+        out.update(project_shard(document))
+    if len(profiles) > 1 or len(riwayat) > 1:
+        raise ValueError(
+            f"{ts_dir} mixes shard profiles {sorted(profiles)} / editions {sorted(riwayat)} — "
+            "one delivery is one edition"
+        )
+    if out:
+        out["_meta"] = {
+            "profile": next(iter(profiles)),
+            "riwayah": next(iter(riwayat)),
+        }
     return out
 
 
@@ -153,6 +184,14 @@ def reshape_canonical(canonical: dict, digital_khatt_words: dict) -> dict[str, d
         word_texts: list[str] = []
         tokens_by_word: list[list[dict]] = []
         for word in words:
+            if not word.get("letters"):
+                # Word-profile: the shard carries the edition's exact text and
+                # there is no letter geometry to project onto it. Looking the
+                # ref up in the Hafs Digital Khatt map would render another
+                # edition's spelling under these coordinates.
+                word_texts.append(word["source_text"])
+                tokens_by_word.append([])
+                continue
             entry = digital_khatt_words.get(word["ref"])
             if not isinstance(entry, dict) or not isinstance(entry.get("text"), str):
                 raise ValueError(f"DigitalKhatt word {word['ref']} is missing")

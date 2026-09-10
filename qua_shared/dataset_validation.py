@@ -175,8 +175,19 @@ def validate_verse(ref: str, verse: dict, *, expected_words: int | None = None) 
     return out
 
 
-def validate_dataset(verses: dict[str, dict], *, surah_info: dict | None = None) -> dict:
+def validate_dataset(
+    verses: dict[str, dict],
+    *,
+    surah_info: dict | None = None,
+    expected_words: dict[str, int] | None = None,
+) -> dict:
     """Run every check on every verse.
+
+    Word counts come from ``expected_words`` (``{"surah:ayah": count}``) when
+    given, else from ``surah_info``. A non-Hafs edition has to pass the former:
+    ``surah_info`` is the Hafs counting profile, and Warsh/Qalun renumber 50 of
+    the 114 surahs, so every verse past a renumbering would be checked against
+    another verse's word count.
 
     Returns a ``validation_summary`` with the failure list + per-check counts:
 
@@ -189,7 +200,9 @@ def validate_dataset(verses: dict[str, dict], *, surah_info: dict | None = None)
         "dropped_verses": [],  # caller fills if coverage_gap → drop
       }
     """
-    expected_by_ref = _expected_words_index(surah_info) if surah_info else {}
+    expected_by_ref = expected_words if expected_words is not None else (
+        _expected_words_index(surah_info) if surah_info else {}
+    )
     violations: list[Violation] = []
     for ref, verse in verses.items():
         if ref.startswith("_"):

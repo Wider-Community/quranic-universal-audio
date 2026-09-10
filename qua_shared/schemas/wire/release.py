@@ -54,6 +54,35 @@ class ReleaseManifestRecitation(BaseModel):
     change_kind: ChangeKind
     ts_version: str
 
+    #: Timestamp tiers this recitation actually ships, shallowest first. Every
+    #: Hafs recitation carries all three; a recitation timed by aligning against
+    #: Hafs as a proxy and projecting has no letter geometry and ships
+    #: ``["verse", "word"]``. ``content_hash`` is taken over the deepest tier
+    #: named here.
+    tiers: list[TimestampTier] = Field(default_factory=lambda: ["verse", "word", "letter"])
+
+    #: SDK riwayah slug the coordinates and text belong to. Absent on every
+    #: release cut before multi-riwayah support, which were all Hafs.
+    riwayah: str = "hafs"
+
+
+class ReleaseEdition(BaseModel):
+    """Provenance for one non-Hafs edition present in a release.
+
+    A consumer rendering these timings needs the exact index revision the words
+    were taken from and the font that script was typeset for; the Digital Khatt
+    entries in ``static_refs`` answer that for Hafs only.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    edition_id: str = Field(..., min_length=1)
+    words_sha256: str = Field(..., min_length=1)
+    script_sha256: str = Field(..., min_length=1)
+    font_family: str = Field(..., min_length=1)
+    #: Digest of the Hafs->edition word projection the timings were placed with.
+    projection_sha256: str | None = None
+
 
 class ReleaseManifest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -64,6 +93,8 @@ class ReleaseManifest(BaseModel):
     previous_version: str | None = None
     recitation_count: int = Field(..., ge=0)
     static_refs: dict[str, FileDigest] = Field(default_factory=dict)
+    #: Keyed by SDK riwayah slug; empty for a Hafs-only release.
+    editions: dict[str, ReleaseEdition] = Field(default_factory=dict)
     recitations: dict[str, ReleaseManifestRecitation] = Field(default_factory=dict)
     license: str = "CC-BY-4.0"
 
@@ -168,9 +199,18 @@ class TimestampMeta(BaseModel):
     occurrence_count: int = Field(..., ge=0)
     tier: TimestampTier
     layout: str
-    script: Literal["digital_khatt_v2"]
+    #: The script the row text is written in. ``digital_khatt_v2`` for Hafs;
+    #: another edition names its own index id (e.g. ``warsh-v21+sdk-words-v1``),
+    #: whose digest is ``script_sha256`` and whose font is in the manifest's
+    #: ``editions`` block. Free text rather than a closed union so a new edition
+    #: revision does not need a schema bump to be publishable.
+    script: str = Field(..., min_length=1)
     script_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     unicode_indexing: Literal["scalar"] = "scalar"
+
+    #: SDK riwayah slug. Absent on every tier file cut before multi-riwayah
+    #: support, which were all Hafs.
+    riwayah: str = "hafs"
 
 
 class _TimestampDoc(BaseModel):
