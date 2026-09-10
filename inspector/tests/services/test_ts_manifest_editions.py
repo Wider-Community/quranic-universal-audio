@@ -28,7 +28,7 @@ def _clean_caches():
     from services.storage import cache
 
     quran_refs.reset_cache()
-    cache.clear_edition_caches()
+    editions.clear_caches()
 
 
 def test_a_hafs_only_manifest_advertises_no_editions():
@@ -80,8 +80,6 @@ def test_an_unservable_edition_is_omitted_when_the_package_is_missing(monkeypatc
     # Degrading to a Hafs entry would make the FE render Warsh coordinates in
     # the Hafs script; an omitted entry makes it fail visibly instead.
     monkeypatch.setattr(editions, "_module", lambda: None)
-    from services.storage import cache
-
-    cache.clear_edition_caches()
+    editions.clear_caches()
     assert _edition_blocks(_reciters("warsh_an_nafi")) == {}
     assert "warsh_an_nafi" in caplog.text

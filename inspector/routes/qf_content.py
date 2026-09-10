@@ -53,9 +53,12 @@ def wbw(surah: int, ayah: int):
     except EditionsUnavailable as e:
         logger.warning("qf-wbw: %s riwayah=%s unavailable: %s", verse_key, riwayah, e)
         return jsonify({"error": str(e)}), 503
+    except qf_content.VerseNotInEdition as e:
+        # A coordinate this edition does not have is the caller's error, not the
+        # upstream API's — 502 would send an operator hunting a healthy service.
+        logger.info("qf-wbw: %s riwayah=%s: %s", verse_key, riwayah, e)
+        return jsonify({"error": str(e)}), 404
     except qf_content.QfContentError as e:
         logger.warning("qf-wbw: %s lang=%s failed: %s", verse_key, lang, e)
         return jsonify({"error": str(e)}), 502
-    return jsonify(
-        {"verse_key": verse_key, "language": lang, "riwayah": riwayah, "words": words}
-    )
+    return jsonify({"verse_key": verse_key, "language": lang, "riwayah": riwayah, "words": words})

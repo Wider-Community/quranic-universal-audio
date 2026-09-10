@@ -16,7 +16,10 @@ from services.storage import cache
 @pytest.fixture(autouse=True)
 def _clean_seg_meta():
     yield
+    # Both halves: the meta AND the entries cache, whose presence is what tells
+    # `data_loader.seg_meta` the file has already been read.
     cache.set_seg_meta("slug-a", {})
+    cache.invalidate_seg_caches("slug-a")
 
 
 @pytest.fixture
@@ -99,3 +102,26 @@ def test_an_unsupported_riwayah_on_disk_is_a_mismatch(catalog_riwayah):
     cache.set_seg_meta("slug-a", {"riwayah": "duri"})
     with pytest.raises(RiwayahMismatch, match="unsupported riwayah"):
         sdk_riwayah_for("slug-a")
+
+
+def test_a_cold_cache_still_reads_the_alignment_off_disk(catalog_riwayah, monkeypatch):
+    # Reading ``cache.get_seg_meta`` directly answers "no meta" before anything
+    # has loaded detailed.json, which silently skipped the cross-check on the
+    # first request a process served — exactly when it matters.
+    from services.storage import data_loader
+
+    loaded: list[str] = []
+
+    def _load_detailed(reciter: str):
+        loaded.append(reciter)
+        cache.set_seg_meta(reciter, {"riwayah": "qalun"})
+        return []
+
+    monkeypatch.setattr(data_loader, "load_detailed", _load_detailed)
+    catalog_riwayah("warsh_an_nafi")
+    cache.set_seg_meta("slug-a", {})
+    cache.invalidate_seg_caches("slug-a")
+
+    with pytest.raises(RiwayahMismatch, match="aligned against"):
+        sdk_riwayah_for("slug-a")
+    assert loaded == ["slug-a"]

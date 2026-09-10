@@ -18,9 +18,7 @@ def _clean_payload_cache():
     quran_refs.reset_cache()
     yield
     quran_refs.reset_cache()
-    from services.storage import cache
-
-    cache.clear_edition_caches()
+    editions.clear_caches()
 
 
 @pytest.fixture

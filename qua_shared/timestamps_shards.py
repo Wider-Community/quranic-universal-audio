@@ -8,10 +8,10 @@ import tempfile
 from pathlib import Path
 
 MANIFEST_SCHEMA_VERSION = 1
-#: The version a freshly written shard stamps. Objects written before the word
-#: profile existed stamp 13 and are never restamped — readers accept both.
-TIMESTAMP_SHARD_SCHEMA_VERSION = 14
-#: Versions a reader accepts for a native document.
+#: Versions a reader accepts for a native document. Objects written before the
+#: word profile existed stamp 13 and are never restamped, so both are current.
+#: There is no "version to write" constant here — the SDK builders stamp it, and
+#: a second copy in this tree could only ever disagree with them.
 NATIVE_SHARD_SCHEMA_VERSIONS = (13, 14)
 
 

@@ -115,6 +115,18 @@ export function loadQuranRefs(riwayah: InspectorRiwayah = DEFAULT_RIWAYAH): Prom
     return _inflight;
 }
 
+/**
+ * Drop the loaded bundle. Called when the delivery names an edition this build
+ * cannot serve: leaving the previous delivery's words in the store renders one
+ * edition's coordinates under another's, which is the whole failure this
+ * feature exists to prevent.
+ */
+export function clearQuranRefs(): void {
+    _loaded = null;
+    _inflight = null;
+    _store.set(null);
+}
+
 /** Test-only: drop the store + in-flight state so each case starts clean. */
 export function _resetQuranRefs(): void {
     _store.set(null);

@@ -21,6 +21,7 @@ from qua_shared.timestamps_shards import (
 )
 from qua_shared.timestamps_word_audit import WordAuditError, audit_word_document
 
+
 def _installed_edition() -> dict:
     """Real ids + digests when ``qua_domain`` is installed, else placeholders.
 
@@ -50,6 +51,26 @@ def _installed_edition() -> dict:
     }
 
 
+_REFS = ("112:1:1", "112:1:2", "112:1:3", "112:1:4")
+
+
+def _installed_text() -> tuple[str, ...]:
+    """Qalun's own spelling of 112:1, or placeholders without the package.
+
+    The audit compares every row's text against the edition index, so inventing
+    it here would exercise only the rejection. Qalun writes ``الله`` differently
+    from Hafs — that difference is the whole reason the field exists.
+    """
+    try:
+        from qua_domain import load_edition_index
+    except ImportError:
+        return tuple(f"w{n}" for n in range(1, len(_REFS) + 1))
+    index = {word.ref: word.text for word in load_edition_index("qalun").words}
+    return tuple(index[ref] for ref in _REFS)
+
+
+_TEXT = _installed_text()
+
 WORD_SHARD: dict = {
     "_meta": {
         "schema_version": 14,
@@ -66,10 +87,10 @@ WORD_SHARD: dict = {
             "id": "r1",
             "parts": [["112:1", 0, 3000, 0, 4]],
             "words": [
-                ["112:1:1", "w1", 0, 700],
-                ["112:1:2", "w2", 700, 1500],
-                ["112:1:3", "w3", 1500, 2200],
-                ["112:1:4", "w4", 2200, 3000],
+                [_REFS[0], _TEXT[0], 0, 700],
+                [_REFS[1], _TEXT[1], 700, 1500],
+                [_REFS[2], _TEXT[2], 1500, 2200],
+                [_REFS[3], _TEXT[3], 2200, 3000],
             ],
             "boundaries": [[1, None], [1, None], [1, None], [3, 1]],
         }
@@ -271,3 +292,31 @@ def test_validated_brotli_shard_refuses_a_bad_word_shard():
     raw["readings"][0]["words"][0] = ["112:1:1", "w1", 0, 9999]
     with pytest.raises(WordAuditError):
         validated_brotli_shard(raw)
+
+
+# -- The text check ---------------------------------------------------------
+
+
+@pytest.mark.skipif(
+    _TEXT[0].startswith("w"), reason="qua_domain absent — the audit skips the text check"
+)
+def test_audit_rejects_a_row_whose_text_is_not_the_editions():
+    """``words_sha256`` pins the index revision, not that a row came from it."""
+    doc = copy.deepcopy(WORD_SHARD)
+    doc["readings"][0]["words"][2][1] = "ٱللَّهُ"  # Hafs's spelling, under Qalun coordinates
+
+    with pytest.raises(WordAuditError, match="does not write"):
+        audit_word_document(doc)
+
+
+@pytest.mark.skipif(
+    _TEXT[0].startswith("w"), reason="qua_domain absent — the audit skips the text check"
+)
+def test_audit_rejects_a_word_profile_that_claims_to_be_hafs():
+    """Hafs is timed natively; a word profile would discard its cells."""
+    doc = _shard(riwayah="hafs")
+
+    # The schema refuses it first, but the audit is the single door every
+    # caller catches on — so it must still surface as a WordAuditError.
+    with pytest.raises(WordAuditError, match="riwayah"):
+        audit_word_document(doc)

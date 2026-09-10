@@ -86,9 +86,7 @@ def all_riwayat() -> list[str]:
 def _require(riwayah: str) -> Any:
     module = _module()
     if module is None:
-        raise EditionsUnavailable(
-            f"riwayah {riwayah!r} needs qua_domain, which is not available"
-        )
+        raise EditionsUnavailable(f"riwayah {riwayah!r} needs qua_domain, which is not available")
     return module
 
 
@@ -227,3 +225,20 @@ def provenance() -> dict[str, str]:
         "projection_sha256": info.sha256,
         "reference_id": module.REFERENCE_ID,
     }
+
+
+def clear_caches() -> None:
+    """Drop every edition-derived cache — this module's and ``cache``'s.
+
+    ``cache.clear_edition_caches()`` on its own leaves this module's
+    ``lru_cache`` layer warm, so a test that swaps ``qua_domain`` for a fake would still be
+    served the real module, its metadata and its stop signs. Clear both here so
+    a caller cannot get half of it.
+    """
+    for cached in (_module, metadata, stop_signs, special):
+        # A test may have swapped one of these for a plain stub, which has no
+        # ``cache_clear``; clearing the rest still has to happen.
+        clear = getattr(cached, "cache_clear", None)
+        if clear is not None:
+            clear()
+    cache.clear_edition_caches()

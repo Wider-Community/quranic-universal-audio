@@ -57,9 +57,12 @@ WORKDIR /build
 # QUA_COMMIT must match qua_shared/qua_domain_pin.py — HF Spaces build with no
 # build args, so this literal IS the pin on the Space. A test asserts they agree.
 ARG QUA_COMMIT=29e073322f8197f2af5ecdb95d09780d6655bec7
+# -s, not -f on the secret: buildx mounts a secret that resolved to "" as an
+# EMPTY FILE THAT EXISTS, so -f is true on a fork PR and the build dies on git
+# auth instead of degrading to the Hafs-only image.
 RUN --mount=type=secret,id=QUA_DOMAIN_DEPLOY_KEY,required=false \
     mkdir -p -m 700 /root/.ssh && \
-    if [ -f /run/secrets/QUA_DOMAIN_DEPLOY_KEY ]; then \
+    if [ -s /run/secrets/QUA_DOMAIN_DEPLOY_KEY ]; then \
       cp /run/secrets/QUA_DOMAIN_DEPLOY_KEY /root/.ssh/id_ed25519 && \
       chmod 600 /root/.ssh/id_ed25519 && \
       ssh-keyscan -H github.com >> /root/.ssh/known_hosts && \
@@ -71,7 +74,7 @@ RUN --mount=type=secret,id=QUA_DOMAIN_DEPLOY_KEY,required=false \
       pip wheel --no-deps --no-cache-dir --wheel-dir /wheels ./packages/quran-domain && \
       cd / && rm -rf /root/.ssh /build/src; \
     else \
-      echo "QUA_DOMAIN_DEPLOY_KEY absent — building Hafs-only (no qua-domain)"; \
+      echo "QUA_DOMAIN_DEPLOY_KEY absent or empty — building Hafs-only (no qua-domain)"; \
     fi && \
     mkdir -p /wheels
 
@@ -167,14 +170,17 @@ COPY --from=ffmpeg-build /ff/bin/ffmpeg /ff/bin/ffprobe /usr/local/bin/
 # Python deps — single source of truth in inspector/requirements.txt.
 # pip/setuptools/wheel are purged — not needed at runtime.
 COPY inspector/requirements.txt ./inspector/requirements.txt
-# The qua-domain wheel (stage 1b) is an OPTIONAL 11.7 MB of edition data. The
-# glob is unquoted so it expands to nothing when the build had no deploy key,
-# and `|| true` keeps that a no-op rather than a build failure.
+# The qua-domain wheel (stage 1b) is an OPTIONAL 11.7 MB of edition data. Stage
+# 1b always creates /wheels, so this directory copy succeeds whether or not the
+# build had a deploy key. An absent wheel is a Hafs-only image; a wheel that is
+# present and will not install is a build failure, not a silent downgrade.
 COPY --from=qua-domain-build /wheels/ /tmp/wheels/
 RUN pip install --no-cache-dir -r ./inspector/requirements.txt && \
-    (ls /tmp/wheels/qua_domain-*.whl >/dev/null 2>&1 && \
-       pip install --no-cache-dir --no-deps /tmp/wheels/qua_domain-*.whl || \
-       echo "no qua-domain wheel — Hafs-only image") && \
+    if ls /tmp/wheels/qua_domain-*.whl >/dev/null 2>&1; then \
+      pip install --no-cache-dir --no-deps /tmp/wheels/qua_domain-*.whl; \
+    else \
+      echo "no qua-domain wheel — Hafs-only image"; \
+    fi && \
     rm -rf /tmp/wheels && \
     pip uninstall -y pip setuptools wheel && \
     find /usr/local/lib/python3.11 -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true

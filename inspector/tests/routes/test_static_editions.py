@@ -26,7 +26,7 @@ def _clean_caches():
     from services.storage import cache
 
     quran_refs.reset_cache()
-    cache.clear_edition_caches()
+    editions.clear_caches()
 
 
 @pytest.mark.parametrize(("inspector_slug", "sdk_slug"), RIWAYAT)
@@ -74,9 +74,7 @@ def test_a_runtime_without_the_package_refuses_rather_than_substituting_a_font(
     # A fallback font would render the edition's script with the wrong
     # ligatures and stop marks — worse than no page at all.
     monkeypatch.setattr(editions, "_module", lambda: None)
-    from services.storage import cache
-
-    cache.clear_edition_caches()
+    editions.clear_caches()
     assert flask_client.get("/api/static/edition/warsh_an_nafi/font").status_code == 503
 
 

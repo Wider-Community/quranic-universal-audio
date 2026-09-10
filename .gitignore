@@ -42,3 +42,11 @@ inspector/dev_fixtures/
 
 # diacritic-cell sizing playground — a local hand-tuned calibration prototype, not shipped
 inspector/frontend/design/prototypes/haraka-cells/
+
+# Private keys — the qua-domain deploy key is written here by
+# scripts/devenv/install_qua_domain.py and must never be committed.
+*.pem
+*_key
+*_key.pub
+id_ed25519*
+id_rsa*

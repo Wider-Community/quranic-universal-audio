@@ -1097,7 +1097,13 @@ def clear_edition_refs_payloads() -> None:
 
 
 def clear_edition_caches() -> None:
-    """Drop every edition-derived cache (tests that swap the accessor)."""
+    """Drop the edition-derived caches held *here*.
+
+    Callers almost always want ``services.reference.editions.clear_caches()``
+    instead: the accessor keeps its own ``lru_cache`` layer (the imported
+    module, metadata, stop signs, special texts) which this function cannot
+    reach without importing it back.
+    """
     _edition_word_map.clear()
     _edition_word_counts.clear()
     _edition_projection.clear()

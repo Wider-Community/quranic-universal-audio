@@ -39,3 +39,8 @@ const _defaults: SegConfig = {
 };
 
 export const segConfig = writable<SegConfig>({ ..._defaults });
+
+/** Back to the neutral defaults — every edition-specific vocabulary empty. */
+export function resetSegConfig(): void {
+    segConfig.set({ ..._defaults });
+}

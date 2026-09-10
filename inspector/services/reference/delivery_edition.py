@@ -58,9 +58,11 @@ def sdk_riwayah_for(slug: str) -> str:
     catalog_slug = inspector_riwayah_for(slug)
     sdk_slug = resolve_sdk_slug(catalog_slug)
 
-    from services.storage import cache
+    # Via ``data_loader`` rather than the cache: a direct cache read answers
+    # "no meta" on a cold process and would skip the cross-check entirely.
+    from services.storage import data_loader
 
-    aligned = (cache.get_seg_meta(slug) or {}).get("riwayah")
+    aligned = (data_loader.seg_meta(slug) or {}).get("riwayah")
     if aligned:
         try:
             aligned_sdk = resolve_sdk_slug(aligned)

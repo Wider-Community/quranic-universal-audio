@@ -24,9 +24,7 @@ has_editions = pytest.mark.skipif(
 @pytest.fixture
 def _clear_edition_caches():
     yield
-    from services.storage import cache
-
-    cache.clear_edition_caches()
+    editions.clear_caches()
 
 
 @pytest.fixture
@@ -123,9 +121,7 @@ def test_word_counts_agree_with_the_packages_own_per_ayah_lookup(riwayah):
     for surah in (1, 2, 57, 114):
         last = editions.surah(surah, riwayah).ayah_count
         for ayah in (1, last):
-            assert counts[(surah, ayah)] == qua_domain.get_ayah_word_count(
-                surah, ayah, riwayah
-            )
+            assert counts[(surah, ayah)] == qua_domain.get_ayah_word_count(surah, ayah, riwayah)
 
 
 @has_editions
@@ -137,8 +133,7 @@ def test_warsh_renumbers_fifty_surahs_so_a_hafs_verse_ref_can_be_out_of_range():
     renumbered = [
         surah
         for surah in range(1, 115)
-        if editions.surah(surah, "warsh").ayah_count
-        != editions.surah(surah, "hafs").ayah_count
+        if editions.surah(surah, "warsh").ayah_count != editions.surah(surah, "hafs").ayah_count
     ]
     assert len(renumbered) == 50
     assert (2, 286) in editions.word_counts("shuba")

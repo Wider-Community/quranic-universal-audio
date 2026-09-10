@@ -5,7 +5,7 @@ import {
     SCROLL_ANIM_MODES,
     type ScrollAnimMode,
 } from '../../../../lib/utils/constants';
-import { segConfig } from '../../stores/config';
+import { resetSegConfig, segConfig } from '../../stores/config';
 
 type SegConfigApiResponse = {
     seg_font_size?: string;
@@ -22,6 +22,7 @@ type SegConfigApiResponse = {
     standalone_words?: string[];
     muqattaat_words?: Array<[number, number, number]>;
     accordion_context?: Record<string, string>;
+    riwayah?: string;
 };
 
 const _validAnim = new Set<string>(Object.values(SCROLL_ANIM_MODES));
@@ -34,15 +35,28 @@ const _validAnim = new Set<string>(Object.values(SCROLL_ANIM_MODES));
  * The coordinate vocabularies are edition-specific — the muqattaat openings,
  * the standalone allow-lists and their skeletons all move between riwayat — so
  * a reciter switch across editions must re-fetch, not reuse.
+ *
+ * Responses are not last-write-wins: the backend echoes the edition it answered
+ * for, and a stale one is discarded. Two fetches race on every tab open, and on
+ * a single-worker backend the Hafs one can land after the Warsh one.
  */
+let _wanted: InspectorRiwayah = DEFAULT_RIWAYAH;
+
+export function clearSegConfig(): void {
+    _wanted = DEFAULT_RIWAYAH;
+    resetSegConfig();
+}
+
 export async function loadSegConfig(
     riwayah: InspectorRiwayah = DEFAULT_RIWAYAH,
 ): Promise<{ fontSize: string; wordSpacing: string }> {
+    _wanted = riwayah;
     try {
         const cfg = await fetchJsonOrNull<SegConfigApiResponse>(
             `/api/seg/config?riwayah=${encodeURIComponent(riwayah)}`,
         );
         if (!cfg) return { fontSize: '', wordSpacing: '' };
+        if (_wanted !== riwayah) return { fontSize: '', wordSpacing: '' };
         segConfig.set({
             validationCategories: cfg.validation_categories ?? null,
             muqattaatVerses: cfg.muqattaat_verses ? new Set(cfg.muqattaat_verses.map(([s, a]) => `${s}:${a}`)) : null,

@@ -38,7 +38,8 @@ from services.data_loader import (
     resolve_pad,
 )
 from services.reference import edition_tables
-from services.reference.delivery_edition import inspector_riwayah_for
+from services.reference.delivery_edition import RiwayahMismatch, sdk_riwayah_for
+from services.reference.editions import EditionsUnavailable
 from services.segments.flags import flag_view
 from services.segments_query import get_chapter_data
 from services.state import catalog as catalog_service
@@ -67,7 +68,22 @@ def seg_config():
         riwayah = to_sdk_slug(request.args.get("riwayah") or DEFAULT_RIWAYAH)
     except UnsupportedRiwayah as exc:
         abort(400, str(exc))
-    model = SegConfigResponse(
+    try:
+        model = _seg_config_model(riwayah)
+    except EditionsUnavailable as exc:
+        # A Hafs-only build serves Hafs and refuses the rest. That is a
+        # documented state, not a fault, and the client can act on a 503.
+        abort(503, str(exc))
+    return orjson_response(
+        model.model_dump(**_DUMP),
+        # Static config keyed off process restart — minute-long client cache
+        # is safe (changing a constant requires a restart anyway).
+        headers={"Cache-Control": "private, max-age=60"},
+    )
+
+
+def _seg_config_model(riwayah: str) -> SegConfigResponse:
+    return SegConfigResponse(
         seg_font_size=SEG_FONT_SIZE,
         seg_word_spacing=SEG_WORD_SPACING,
         seg_scroll_anim_mode=SEG_SCROLL_ANIM_MODE,
@@ -84,12 +100,6 @@ def seg_config():
         muqattaat_words=sorted(edition_tables.muqattaat_words(riwayah)),
         low_confidence_threshold=LOW_CONFIDENCE_THRESHOLDS[riwayah],
         accordion_context=ACCORDION_CONTEXT,
-    )
-    return orjson_response(
-        model.model_dump(**_DUMP),
-        # Static config keyed off process restart — minute-long client cache
-        # is safe (changing a constant requires a restart anyway).
-        headers={"Cache-Control": "private, max-age=60"},
     )
 
 
@@ -176,6 +186,22 @@ def seg_auto_split_map(reciter):
     from services.auto_split import load_auto_split_map
 
     return orjson_cached_response({"by_uid": load_auto_split_map(reciter)})
+
+
+def _delivery_riwayah(reciter: str) -> str:
+    """The edition this payload's coordinates are in, cross-checked.
+
+    The catalog row is the authority and ``detailed.json`` is the evidence;
+    ``sdk_riwayah_for`` raises when they disagree. It is a 409 rather than a
+    Hafs default because the frontend keys its script, font, word counts and
+    verse totals off this one string — answering "hafs" for a Warsh delivery
+    whose catalog row is missing renders Warsh coordinates in DigitalKhatt and
+    lets a reviewer save against them.
+    """
+    try:
+        return from_sdk_slug(sdk_riwayah_for(reciter))
+    except (RiwayahMismatch, UnsupportedRiwayah) as exc:
+        abort(409, str(exc))
 
 
 @seg_data_bp.route("/all/<reciter>")
@@ -280,7 +306,7 @@ def seg_all(reciter):
     # SegAllResponse is asserted at the test boundary (test_wire_seg_models) and
     # the bytes frozen by test_seg_all_snapshot; bucket data is validated at write.
     payload = {
-        "riwayah": inspector_riwayah_for(reciter),
+        "riwayah": _delivery_riwayah(reciter),
         "segments": segments,
         "audio_by_chapter": audio_by_chapter,
         "chapter_duration_ms_by_chapter": chapter_duration_ms_by_chapter,

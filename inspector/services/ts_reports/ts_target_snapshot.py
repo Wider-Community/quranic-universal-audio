@@ -1,4 +1,11 @@
-"""Resolve native v13 report targets and recheck their staleness."""
+"""Resolve native report targets and recheck their staleness.
+
+Only a native shard resolves here: the fingerprint is a cell/sound/boundary
+identity, and a word-profile shard has none of those. Both native schema
+versions are accepted — a re-stamped Hafs delivery moves from 13 to 14 without
+changing a single native identity, and pinning one version would 409 every
+report on it.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +16,7 @@ from typing import Any
 
 from config import TS_REPORT_BOUNDARY_STALE_MS
 from qua_shared.timestamps_codec import decode_document
+from qua_shared.timestamps_shards import NATIVE_SHARD_SCHEMA_VERSIONS
 from services.storage import data_dir
 
 logger = logging.getLogger(__name__)
@@ -21,9 +29,17 @@ def _load_shard(slug: str, chapter: int) -> dict[str, Any] | None:
     except Exception:  # noqa: BLE001 - storage lookup is best effort during recheck
         logger.warning("native report shard read failed %s ch%s", slug, chapter)
         return None
-    if not isinstance(doc, dict) or doc.get("_meta", {}).get("schema_version") != 13:
+    if not isinstance(doc, dict) or not _is_native(doc):
         return None
     return decode_document(doc)
+
+
+def _is_native(doc: dict[str, Any]) -> bool:
+    """True for a native shard of any accepted schema version."""
+    meta = doc.get("_meta") or {}
+    if meta.get("profile", "native") != "native":
+        return False
+    return meta.get("schema_version") in NATIVE_SHARD_SCHEMA_VERSIONS
 
 
 def _same_id(value: Any, target_id: str) -> bool:
@@ -157,7 +173,7 @@ def resolve_target(
     doc: dict[str, Any], verse_key: str, target: dict[str, Any]
 ) -> dict[str, Any] | None:
     """Return the exact native/timing fingerprint for ``target``."""
-    if doc.get("_meta", {}).get("schema_version") != 13:
+    if not _is_native(doc):
         return None
     reading = _reading(doc, target)
     if reading is None:
@@ -196,7 +212,7 @@ def resolve_target(
     span = _timing_span(reading, kind, target_id, native)
     return {
         "native_schema_version": 2,
-        "shard_schema_version": 13,
+        "shard_schema_version": int(doc["_meta"]["schema_version"]),
         "native": native,
         "timing": None if span is None else {"start_ms": span[0], "end_ms": span[1]},
     }

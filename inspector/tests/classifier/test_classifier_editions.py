@@ -23,9 +23,7 @@ pytestmark = pytest.mark.skipif(
 @pytest.fixture(autouse=True)
 def _clear_edition_caches():
     yield
-    from services.storage import cache
-
-    cache.clear_edition_caches()
+    editions.clear_caches()
 
 
 def seg(ref: str, confidence: float = 1.0) -> dict:
@@ -87,8 +85,12 @@ def test_a_muqattaat_verse_exempts_words_past_its_opening_letters():
 def test_a_renumbered_standalone_ref_is_recognised_at_its_warsh_coordinate():
     # Hafs 43:35:1 is Warsh 43:34:1. Under the Hafs table the Warsh coordinate
     # is unknown and the segment would be flagged as needing adjustment.
-    assert compute_is_boundary_adj(seg("43:34:1-43:34:1"), 43, 34, 1, 1, set(), None, "warsh") is False
-    assert compute_is_boundary_adj(seg("43:34:1-43:34:1"), 43, 34, 1, 1, set(), None, "hafs") is True
+    assert (
+        compute_is_boundary_adj(seg("43:34:1-43:34:1"), 43, 34, 1, 1, set(), None, "warsh") is False
+    )
+    assert (
+        compute_is_boundary_adj(seg("43:34:1-43:34:1"), 43, 34, 1, 1, set(), None, "hafs") is True
+    )
 
 
 def test_the_respelled_standalone_skeleton_matches_in_its_own_script():
@@ -98,9 +100,7 @@ def test_the_respelled_standalone_skeleton_matches_in_its_own_script():
     # table is projected rather than shared.
     ref, position = "37:138:1-37:138:1", (37, 138, 1, 1)
     for riwayah in ("hafs", "warsh", "qalun", "shuba"):
-        assert (
-            compute_is_boundary_adj(seg(ref), *position, set(), None, riwayah) is False
-        ), riwayah
+        assert compute_is_boundary_adj(seg(ref), *position, set(), None, riwayah) is False, riwayah
 
     from services.reference import edition_tables
 

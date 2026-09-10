@@ -293,8 +293,13 @@ async function _fetchAyahTranslation(
 export async function loadVerseTranslations(
     words: TsWord[],
     language: string,
-    riwayah: InspectorRiwayah = DEFAULT_RIWAYAH,
+    riwayah: InspectorRiwayah | null = DEFAULT_RIWAYAH,
 ): Promise<Record<string, string>> {
+    // `null` is "this build cannot serve the delivery's edition". Glosses are
+    // keyed in Hafs and reverse-projected server-side, so answering with the
+    // Hafs ones would put gloss n on a different word in every renumbered
+    // verse — no glosses is the only honest answer.
+    if (!riwayah) return {};
     const ayahs = new Set<string>();
     for (const w of words) {
         const parts = w.location.split(':');

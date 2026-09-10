@@ -54,9 +54,12 @@ def surah_info_for(riwayah: str, surah_info: dict) -> dict:
     Warsh publish enumerate verses that do not exist and clip segments against
     another verse's length.
 
-    Only the ``verses`` list is rebuilt; nothing downstream of this reads the
-    other keys, and inventing per-edition surah names here would be a second,
-    unverified source for them.
+    ``verses`` and ``num_verses`` are rebuilt — the latter because
+    ``qua_shared.coverage.verse_counts_from_surah_info`` reads it, and an
+    edition's ayah count is exactly what differs (al-Baqarah ends at 285 in
+    Warsh and Qalun, 286 in Hafs). Nothing downstream reads the other keys, and
+    inventing per-edition surah names here would be a second, unverified source
+    for them.
     """
     from qua_shared.riwayat import DEFAULT_SDK_RIWAYAH
 
@@ -69,4 +72,6 @@ def surah_info_for(riwayah: str, surah_info: dict) -> dict:
         out.setdefault(str(surah), {"verses": []})["verses"].append(
             {"verse": ayah, "num_words": num_words}
         )
+    for info in out.values():
+        info["num_verses"] = len(info["verses"])
     return out

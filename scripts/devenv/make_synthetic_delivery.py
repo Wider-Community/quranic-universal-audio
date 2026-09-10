@@ -45,7 +45,11 @@ sys.path.insert(0, str(_REPO_ROOT / "scripts" / "bucket"))
 
 from _bootstrap import add_bucket_args, batch_write, confirm_mutation, resolve  # noqa: E402
 
-from qua_shared.riwayat import SUPPORTED_RIWAYAT, from_sdk_slug  # noqa: E402
+from qua_shared.riwayat import (  # noqa: E402
+    DEFAULT_SDK_RIWAYAH,
+    SUPPORTED_RIWAYAT,
+    from_sdk_slug,
+)
 
 # A short, public, CORS-reachable chapter file. Anything the audio proxy can
 # stream works; the timings below are laid out inside ``--duration-ms``, not
@@ -91,21 +95,50 @@ def _spans(count: int, duration_ms: int, gap_ms: int) -> list[tuple[int, int]]:
     return [(index * slot, index * slot + slot - gap_ms) for index in range(count)]
 
 
+def _source_refs(first_source: str, last_source: str) -> list[str]:
+    """Every Hafs word ref from ``first_source`` to ``last_source`` inclusive.
+
+    A target verse can draw on two Hafs verses (Qalun 1:1 merges Hafs 1:1 and
+    1:2), so walk whole ayahs rather than assuming one.
+    """
+    import qua_domain
+
+    surah, first_ayah, first_word = (int(part) for part in first_source.split(":"))
+    _, last_ayah, last_word = (int(part) for part in last_source.split(":"))
+    refs: list[str] = []
+    for ayah in range(first_ayah, last_ayah + 1):
+        start = first_word if ayah == first_ayah else 1
+        end = (
+            last_word if ayah == last_ayah else qua_domain.get_ayah_word_count(surah, ayah, "hafs")
+        )
+        refs.extend(f"{surah}:{ayah}:{word}" for word in range(start, end + 1))
+    return refs
+
+
 def _source_span(projection, first_ref: str, last_ref: str) -> tuple[str, str]:
     """The Hafs span a target verse came from, plus its projection support.
 
     Recognition and DP matching always run against Hafs, so a non-Hafs seg
-    records the source words the matcher would have matched. ``partial`` marks a
-    seg that cuts through an N:M relation.
+    records the source words the matcher would have matched. ``support`` mirrors
+    the alignment engine's own rule (``_projection_support``): ``partial`` when a
+    source word in the span reaches no target word at all, or sits in an N:M
+    relation the projection could only partly carry.
+
+    The question has to be asked of the SOURCE words. ``relation_for_target``
+    answers ``full`` for every word of every edition — a target word is covered
+    by definition — so a target-side check would leave the ``partial`` branch
+    permanently dead and the fixture would never exercise it.
     """
     first = projection.reverse_ref(first_ref)
     last = projection.reverse_ref(last_ref)
     if not first or not last:
         raise SystemExit(f"{first_ref}..{last_ref} has no Hafs source — projection is incomplete")
     support = "full"
-    for ref in (first_ref, last_ref):
-        if projection.relation_for_target(ref).support != "full":
+    for source_ref in _source_refs(first[0], last[-1]):
+        group = projection.relation_for_source(source_ref)
+        if group.kind == "target_absent" or (group.kind == "mapped" and group.support != "full"):
             support = "partial"
+            break
     return f"{first[0]}-{last[-1]}", support
 
 
@@ -177,9 +210,7 @@ def _word_shard(riwayah: str, chapter: int, verses: list, spans: list) -> dict:
             "projection_id": projection.projection_id,
             "projection_sha256": projection.projection_sha256,
         },
-        "readings": [
-            {"id": "r1", "parts": parts, "words": rows, "boundaries": boundaries}
-        ],
+        "readings": [{"id": "r1", "parts": parts, "words": rows, "boundaries": boundaries}],
     }
 
 
@@ -206,8 +237,12 @@ def main() -> int:
     parser.add_argument(
         "--riwayah",
         required=True,
-        choices=sorted(SUPPORTED_RIWAYAT.values()),
-        help="SDK riwayah slug the fixture is written in",
+        # Hafs is excluded: its deliveries come from the real pipeline, and a
+        # Hafs word-profile shard is a contradiction (Hafs has a native profile
+        # with cells, sounds and letter timings). The projection would also be
+        # the identity, so the fixture would prove nothing about projection.
+        choices=sorted(set(SUPPORTED_RIWAYAT.values()) - {DEFAULT_SDK_RIWAYAH}),
+        help="SDK riwayah slug the fixture is written in (non-Hafs)",
     )
     parser.add_argument("--chapter", type=int, default=112)
     parser.add_argument(

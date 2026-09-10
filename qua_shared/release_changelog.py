@@ -159,7 +159,7 @@ def _recitation_changes(
         "",
     ]
     if _has_proxy_timings(added + refreshed + carried):
-        out.extend([f"> [!NOTE]", f"> {PROXY_TIMING_NOTE}", ""])
+        out.extend(["> [!NOTE]", f"> {PROXY_TIMING_NOTE}", ""])
     # Removed the missing callout extension here
     if added:
         out.extend(

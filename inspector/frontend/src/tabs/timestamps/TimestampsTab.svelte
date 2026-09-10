@@ -177,8 +177,10 @@
     let curTheme = themeStore.current;
     $: hlVars = resolveHighlightVars($recitationConfigStore.highlightColor, modelForTheme(curTheme));
     // Glosses are keyed in Hafs upstream; the server reverse-projects them when
-    // this names another edition (D9).
-    $: glossRiwayah = toInspectorSlug($deliveryRiwayah) ?? DEFAULT_RIWAYAH;
+    // this names another edition (D9). `null` (a slug this build does not know)
+    // means no glosses rather than Hafs ones: gloss n would land on a different
+    // word for every renumbered verse.
+    $: glossRiwayah = toInspectorSlug($deliveryRiwayah);
 
     $: hlVarsText = Object.entries(hlVars)
         .map(([k, v]) => `${k}: ${v}`)
@@ -340,6 +342,19 @@
         if (active) armVerseLock();
     }
 
+    /**
+     * Forget which edition and profile the last shard carried.
+     *
+     * Both stores are module-level and outlive one delivery. Left set, a Hafs
+     * delivery whose shard never loads keeps the previous Warsh one's proxy
+     * badge, its disabled letter/tajweed controls, its font — and renders the
+     * word row against an empty reading, i.e. a blank analysis grid.
+     */
+    function resetShardEdition(): void {
+        wordProfile.set(false);
+        deliveryRiwayah.set(DEFAULT_SDK_RIWAYAH);
+    }
+
     async function syncChapter(slug: string, chapter: number): Promise<void> {
         if (!slug || !chapter) return;
         if (!manifestSlugs.has(slug)) return; // non-published reciter on dashboard
@@ -352,9 +367,13 @@
         // audio and re-runs this reactive. Cheap: manifest is a warm singleton.
         const manifest = await loadManifest();
         const block = manifest.reciters?.[slug];
-        if (!block) return;
+        if (!block) {
+            resetShardEdition();
+            return;
+        }
         const blockChapters = block.ts_chapters ?? [];
         if (!blockChapters.includes(chapter)) {
+            resetShardEdition();
             const valid = blockChapters[0];
             if (valid && valid !== chapter) {
                 pendingSeekRef = null;
@@ -1131,6 +1150,7 @@
         // Don't leak this tab's last focus to other surfaces (Dashboard's
         // NowReciting subscribes to it).
         recitationFocus.set(null);
+        resetShardEdition();
     });
 </script>
 

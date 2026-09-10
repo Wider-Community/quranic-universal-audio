@@ -65,6 +65,7 @@ def test_healthz_reports_the_optional_edition_package(client):
 
 def test_healthz_degrades_when_a_non_hafs_delivery_cannot_be_served(client, monkeypatch):
     from routes.auth import health
+
     from services.reference import editions
 
     monkeypatch.setattr(editions, "available", lambda: False)
@@ -80,6 +81,7 @@ def test_healthz_degrades_when_a_non_hafs_delivery_cannot_be_served(client, monk
 
 def test_healthz_stays_healthy_on_a_hafs_only_catalog_without_the_package(monkeypatch):
     from routes.auth import health
+
     from services.reference import editions
 
     monkeypatch.setattr(editions, "available", lambda: False)

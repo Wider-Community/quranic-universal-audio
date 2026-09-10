@@ -25,18 +25,25 @@ a fork built without the deploy key) stays green.
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 
 from flask import Blueprint, jsonify, request
 
-from qua_shared.riwayat import DEFAULT_RIWAYAH
+from qua_shared.riwayat import (
+    DEFAULT_SDK_RIWAYAH,
+    UnsupportedRiwayah,
+    resolve_sdk_slug,
+)
 from services import auth as auth_service
 from services import auto_detect as auto_detect_service
 from services import state as state_service
 from services.reference import editions as editions_service
 
 health_bp = Blueprint("health", __name__)
+
+log = logging.getLogger("inspector")
 
 
 def _bucket_mounted() -> bool:
@@ -57,6 +64,27 @@ def _bucket_mounted() -> bool:
     return (root / "db" / "inspector.db").is_file()
 
 
+def _unservable(counts: dict[str, int]) -> list[str]:
+    """Riwayat the catalog holds deliveries for that a Hafs-only runtime cannot serve.
+
+    ``deliveries.riwayah`` is a plain string and older/fixture rows can carry
+    the short SDK form, so compare on the resolved SDK slug: matching the long
+    Inspector spelling alone would read a row saying ``"hafs"`` as unservable
+    and take a healthy Hafs-only deployment to 503. A slug in neither
+    vocabulary is unservable by definition — nothing can render it.
+    """
+    out: set[str] = set()
+    for slug, count in counts.items():
+        if not count:
+            continue
+        try:
+            if resolve_sdk_slug(slug) != DEFAULT_SDK_RIWAYAH:
+                out.add(slug)
+        except UnsupportedRiwayah:
+            out.add(slug)
+    return sorted(out)
+
+
 def _editions_health() -> tuple[dict, bool]:
     """``(payload block, healthy)`` for the optional multi-riwayah dependency."""
     from services.db import repo_catalog
@@ -66,10 +94,10 @@ def _editions_health() -> tuple[dict, bool]:
         counts = repo_catalog.deliveries_per_riwayah()
     except Exception:
         # A probe before the DB opens; the db block below already reports that.
+        # Logged rather than swallowed so a real query fault is not invisible.
+        log.warning("healthz: delivery riwayah counts unavailable", exc_info=True)
         counts = {}
-    unservable = sorted(
-        slug for slug, n in counts.items() if n and slug != DEFAULT_RIWAYAH
-    )
+    unservable = _unservable(counts)
     block: dict = {
         "available": available,
         "riwayat": editions_service.all_riwayat(),

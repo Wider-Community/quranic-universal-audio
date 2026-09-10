@@ -20,6 +20,7 @@ the payload is the published Quranic text, identical for every viewer.
 from __future__ import annotations
 
 import re
+from contextlib import contextmanager
 from io import BytesIO
 from pathlib import Path
 
@@ -71,11 +72,28 @@ def catalog_json() -> Response:
     return response
 
 
+@contextmanager
+def _edition_available():
+    """503 rather than 500 when the edition package is absent from this build.
+
+    A Hafs-only image serves Hafs from its own data and raises for every other
+    edition. Letting that reach the catch-all answers a documented, expected
+    state with "internal server error" and no way for the client to tell it
+    from a real fault.
+    """
+    try:
+        yield
+    except editions_service.EditionsUnavailable as exc:
+        abort(503, str(exc))
+
+
 @static_bp.route("/quran-refs/version")
 def quran_refs_version() -> Response:
     """Return the current Quran-refs payload hash for cache busting."""
     riwayah = sdk_riwayah_param(request.args.get("riwayah"))
-    response = jsonify({"version": quran_refs_service.payload_hash(riwayah)})
+    with _edition_available():
+        version = quran_refs_service.payload_hash(riwayah)
+    response = jsonify({"version": version})
     response.headers["Cache-Control"] = "no-cache, must-revalidate"
     return response
 
@@ -89,8 +107,9 @@ def quran_refs_json() -> Response:
     with immutable cache headers + an ETag matching the version endpoint.
     """
     riwayah = sdk_riwayah_param(request.args.get("riwayah"))
-    body = quran_refs_service.build_payload(riwayah)
-    digest = quran_refs_service.payload_hash(riwayah)
+    with _edition_available():
+        body = quran_refs_service.build_payload(riwayah)
+        digest = quran_refs_service.payload_hash(riwayah)
     response = Response(body, mimetype="application/json")
     response.headers["Cache-Control"] = _QURAN_REFS_CACHE_CONTROL
     response.headers["ETag"] = f'"{digest}"'

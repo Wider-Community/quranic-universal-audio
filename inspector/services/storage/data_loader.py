@@ -167,6 +167,10 @@ def load_detailed(reciter: str) -> list[dict]:
             return cached
         raw = data_dir.read_detailed_bytes(reciter)
         if raw is None:
+            # Remember the absence too. Every caller re-reading a missing file
+            # is a bucket round-trip per request, and `invalidate_seg_caches`
+            # already drops this the moment a save creates one.
+            cache.set_seg_cache(reciter, [])
             return []
         meta, entries = _load_detailed_entries_from_bytes(raw)
         if meta:
@@ -178,6 +182,25 @@ def load_detailed(reciter: str) -> list[dict]:
             if seg_doc and "_meta" in seg_doc:
                 cache.set_seg_meta(reciter, seg_doc["_meta"])
         return entries
+
+
+def seg_meta(reciter: str) -> dict:
+    """The delivery's ``detailed.json`` ``_meta``, loading the file if needed.
+
+    ``cache.get_seg_meta`` answers ``{}`` for both "the file carries no meta"
+    and "nothing has read the file in this process yet". A caller that reads
+    the cache directly therefore gets a silent pass on a cold process — which
+    is precisely when a cross-check against ``_meta`` matters. Going through
+    :func:`load_detailed` makes the answer mean what it says; the load is
+    cached, and every Segments path warms it anyway.
+    """
+    meta = cache.get_seg_meta(reciter)
+    if meta or cache.get_seg_cache(reciter) is not None:
+        # Entries cached with no meta is a real answer (a file written before
+        # the field existed), not a cold process — do not re-read for it.
+        return meta
+    load_detailed(reciter)
+    return cache.get_seg_meta(reciter)
 
 
 def load_probe_v2(reciter: str) -> tuple[set[str], dict | None]:

@@ -42,17 +42,18 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from qua_shared.catalog_visibility import is_everyayah_channel  # noqa: E402
-from qua_shared.riwayat import (  # noqa: E402
-    DEFAULT_RIWAYAH,
-    DEFAULT_SDK_RIWAYAH,
-    to_sdk_slug,
-)
 from qua_shared.mp3_frames import (  # noqa: E402
     FrameIndex,
     MultiFrameSlice,
     build_frame_index,
     slice_frames,
     slice_frames_multi,
+)
+from qua_shared.riwayat import (  # noqa: E402
+    DEFAULT_RIWAYAH,
+    DEFAULT_SDK_RIWAYAH,
+    UnsupportedRiwayah,
+    to_sdk_slug,
 )
 from qua_shared.verse_layout import (  # noqa: E402
     build_verse_layouts,
@@ -825,11 +826,15 @@ def publish_slug(
     # detailed.json must agree with them or the rows would be filed under a
     # config whose verse numbering they do not follow.
     shard_riwayah = (canonical.pop("_meta", {}) or {}).get("riwayah", DEFAULT_SDK_RIWAYAH)
-    config_riwayah = _riwayah_for(audio_manifest, detailed)
-    if to_sdk_slug(config_riwayah) != shard_riwayah:
-        log.error(
-            "riwayah mismatch: catalog says %s, shards are %s", config_riwayah, shard_riwayah
-        )
+    # ``publish_slug`` owes its caller a result dict, never an exception — a
+    # raise here leaves the Inspector's job row running forever with no webhook.
+    try:
+        config_riwayah = to_sdk_slug(_riwayah_for(audio_manifest, detailed))
+    except (ValueError, UnsupportedRiwayah) as exc:
+        log.error("riwayah unusable for %s: %s", slug, exc)
+        return _result(slug, "failed", error=str(exc), exit_code=17)
+    if config_riwayah != shard_riwayah:
+        log.error("riwayah mismatch: catalog says %s, shards are %s", config_riwayah, shard_riwayah)
         return _result(
             slug,
             "failed",

@@ -2281,7 +2281,7 @@ export interface TsReportTarget {
  */
 export interface TsReportSnapshot {
   native_schema_version?: 2;
-  shard_schema_version?: 12 | 13;
+  shard_schema_version?: 12 | 13 | 14;
   native?: {
     [k: string]: unknown;
   };

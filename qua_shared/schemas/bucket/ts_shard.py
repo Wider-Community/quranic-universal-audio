@@ -21,7 +21,15 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from qua_shared.riwayat import DEFAULT_SDK_RIWAYAH, SUPPORTED_RIWAYAT
+
+#: SDK slugs a word profile may name. Hafs is excluded on purpose: it has a
+#: native profile carrying cells, sounds and letter timings, so a word-profile
+#: document claiming Hafs is a producer bug that would silently downgrade
+#: every reader from letters to words.
+_WORD_PROFILE_RIWAYAT = frozenset(SUPPORTED_RIWAYAT.values()) - {DEFAULT_SDK_RIWAYAH}
 
 TS_SHARD_SCHEMA_VERSION = 14
 TsShardProfile = Literal["native", "word"]
@@ -167,6 +175,24 @@ class TsWordShardMeta(BaseModel):
     #: coordinates and this text belong to.
     riwayah: str = Field(min_length=1)
     edition_id: str = Field(min_length=1)
+
+    @field_validator("riwayah")
+    @classmethod
+    def _a_non_hafs_edition(cls, value: str) -> str:
+        if value not in _WORD_PROFILE_RIWAYAT:
+            raise ValueError(
+                f"word-profile riwayah must be one of "
+                f"{sorted(_WORD_PROFILE_RIWAYAT)}, got {value!r}"
+            )
+        return value
+
+    @field_validator("reference_riwayah")
+    @classmethod
+    def _a_known_reference(cls, value: str) -> str:
+        if value not in SUPPORTED_RIWAYAT.values():
+            raise ValueError(f"unknown reference riwayah {value!r}")
+        return value
+
     #: Digest of the edition word index the text was taken from; the audit
     #: refuses a shard whose text came from a different index revision.
     words_sha256: str = Field(min_length=64, max_length=64)

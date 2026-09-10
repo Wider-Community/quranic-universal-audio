@@ -48,12 +48,16 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from qua_shared.riwayat import DEFAULT_SDK_RIWAYAH  # noqa: E402
 from qua_shared.digital_khatt import (  # noqa: E402
     DIGITAL_KHATT_FONT_FILENAME,
     DIGITAL_KHATT_SCRIPT_FILENAME,
     DIGITAL_KHATT_SCRIPT_ID,
     UNICODE_INDEXING,
+)
+from qua_shared.riwayat import (  # noqa: E402
+    DEFAULT_SDK_RIWAYAH,
+    UnsupportedRiwayah,
+    resolve_sdk_slug,
 )
 from qua_shared.schemas import (  # noqa: E402
     DigitalKhattDoc,
@@ -62,13 +66,13 @@ from qua_shared.schemas import (  # noqa: E402
     ReleaseCatalog,
     ReleaseCatalogAudio,
     ReleaseCoverage,
+    ReleaseEdition,  # noqa: E402
     ReleaseManifest,
     ReleaseManifestRecitation,
     ReleaseRecitationCatalog,
     VerseTimestampsDoc,
     WordTimestampsDoc,
 )
-from qua_shared.schemas import ReleaseEdition  # noqa: E402
 from qua_shared.schemas.wire.release import (  # noqa: E402
     RELEASE_FORMAT_MAJOR,
     SCHEMA_VERSION,
@@ -284,7 +288,10 @@ def _build_tier_files(
         "occurrence_count": len(verse_rows),
         "script": script_id,
         "script_sha256": script_sha256,
-        "riwayah": riwayah,
+        # Omitted on the reference edition: a tier file is content-hashed into
+        # the release, so adding a key that says "hafs" would re-cut every
+        # published Hafs recitation as a refresh with no timing change.
+        **({} if riwayah == DEFAULT_SDK_RIWAYAH else {"riwayah": riwayah}),
         "unicode_indexing": UNICODE_INDEXING,
     }
     letter_doc = {
@@ -620,6 +627,10 @@ def _build_changelog(
             "coverage_ayahs": m.get("coverage_ayahs"),
             "missing_surahs": m.get("missing_surahs"),
             "missing_verses": m.get("missing_verses"),
+            # Which timing depths this recitation actually ships. Dropping it
+            # made every proxy-timed delivery advertise letter timings it has
+            # not got, which is the whole point of the column.
+            "tiers": m.get("tiers"),
         }
         for m in members
     ]
@@ -808,16 +819,58 @@ def _hash_static_refs(refs_dir: Path, digital_khatt_assets: dict[str, bytes]) ->
     return out
 
 
+def _assert_riwayat_agree(slug: str, shard_riwayah: str, catalog_riwayah: str | None) -> None:
+    """Refuse to cut a delivery whose shards and catalog row name different editions.
+
+    The shards stay authoritative for what the release *contains* (see the cut
+    loop), but a row that disagrees is not a labelling nit: the row is what the
+    HF dataset config, the request form and the manifest's ``riwayah_name`` key
+    on, so publishing would ship one edition's timings filed under another's
+    name. A row that is simply absent is Hafs by construction and no evidence.
+    """
+    if not catalog_riwayah:
+        return
+    try:
+        catalog_sdk = resolve_sdk_slug(catalog_riwayah)
+    except UnsupportedRiwayah:
+        raise ValueError(
+            f"{slug}: catalog row names unsupported riwayah {catalog_riwayah!r}"
+        ) from None
+    if catalog_sdk != shard_riwayah:
+        raise ValueError(
+            f"{slug}: shards are {shard_riwayah!r} but the catalog row says "
+            f"{catalog_riwayah!r} — the delivery is mislabelled, not releasable"
+        )
+
+
+def _qua_domain():
+    """The edition package, or a loud failure naming what is missing.
+
+    The wheel is optional in the job image — a build without the deploy key is
+    Hafs-only. A cut that reached a non-Hafs delivery on such a build cannot
+    proceed (guessing Hafs would publish one edition's text under another
+    edition's coordinates), so name the cause instead of surfacing a bare
+    ImportError traceback from halfway down the manifest builder.
+    """
+    try:
+        import qua_domain
+    except ImportError as exc:
+        raise ValueError(
+            "qua-domain is not installed in this job image — a non-Hafs "
+            "delivery cannot be released from a Hafs-only build"
+        ) from exc
+    return qua_domain
+
+
 def _release_editions(editions: set[str]) -> dict[str, dict]:
     """Provenance for every non-Hafs edition this release contains."""
     out: dict[str, dict] = {}
     for riwayah in sorted(editions):
         if riwayah == DEFAULT_SDK_RIWAYAH:
             continue
-        from qua_domain import get_edition, load_edition_projection
-
-        edition = get_edition(riwayah)
-        projection = load_edition_projection(riwayah, reference_riwayah=DEFAULT_SDK_RIWAYAH)
+        domain = _qua_domain()
+        edition = domain.get_edition(riwayah)
+        projection = domain.load_edition_projection(riwayah, reference_riwayah=DEFAULT_SDK_RIWAYAH)
         out[riwayah] = {
             "edition_id": edition.edition_id,
             "words_sha256": edition.words_sha256,
@@ -838,9 +891,7 @@ def _edition_script(riwayah: str, digital_khatt_sha256: str) -> tuple[str, str]:
     if riwayah == DEFAULT_SDK_RIWAYAH:
         return DIGITAL_KHATT_SCRIPT_ID, digital_khatt_sha256
 
-    from qua_domain import get_edition
-
-    edition = get_edition(riwayah)
+    edition = _qua_domain().get_edition(riwayah)
     return edition.edition_id, edition.words_sha256
 
 
@@ -925,10 +976,20 @@ def main() -> int:
     refs_dir = _code_root() / "data"
     surah_info = json.loads((refs_dir / "surah_info.json").read_bytes())
     from qua_shared.coverage import missing_coverage, verse_counts_from_surah_info
-    from qua_shared.surah_words import word_counts_for
+    from qua_shared.surah_words import surah_info_for, word_counts_for
     from qua_shared.timestamps_native import select_complete_verses
 
-    surah_verse_counts = verse_counts_from_surah_info(surah_info)
+    # Per-edition, resolved once per riwayah below: Warsh and Qalun renumber 50
+    # of the 114 surahs, so Hafs counts would advertise phantom gaps.
+    verse_counts_by_riwayah: dict[str, dict[int, int]] = {}
+
+    def _verse_counts(riwayah: str) -> dict[int, int]:
+        if riwayah not in verse_counts_by_riwayah:
+            verse_counts_by_riwayah[riwayah] = verse_counts_from_surah_info(
+                surah_info_for(riwayah, surah_info)
+            )
+        return verse_counts_by_riwayah[riwayah]
+
     # SDK slugs seen across this release's shards — drives the per-edition
     # entries in ``static_refs``.
     release_editions: set[str] = set()
@@ -971,9 +1032,12 @@ def main() -> int:
         # catalog row is not consulted here so a mislabelled row cannot make the
         # release claim letter timings a proxy-timed delivery does not have.
         shard_meta = verses.pop("_meta", {})
-        riwayah = shard_meta.get("riwayah", DEFAULT_SDK_RIWAYAH)
-        release_editions.add(riwayah)
         with_letters = shard_meta.get("profile", "native") == "native"
+        if not with_letters and not shard_meta.get("riwayah"):
+            raise ValueError(f"{slug}: word-profile shards name no riwayah")
+        riwayah = shard_meta.get("riwayah") or DEFAULT_SDK_RIWAYAH
+        _assert_riwayat_agree(slug, riwayah, rec.get("riwayah"))
+        release_editions.add(riwayah)
         tiers = ["verse", "word", "letter"] if with_letters else ["verse", "word"]
 
         # Gate incomplete verses: any verse missing a reference word index (never
@@ -1052,7 +1116,7 @@ def main() -> int:
         present_refs = {
             (int(k.split(":")[0]), int(k.split(":")[1])) for k in verses if not k.startswith("_")
         }
-        missing_surahs, missing_verses = missing_coverage(present_refs, surah_verse_counts)
+        missing_surahs, missing_verses = missing_coverage(present_refs, _verse_counts(riwayah))
         catalog_bytes = _build_catalog_json(
             rec,
             audio_manifest,

@@ -65,6 +65,7 @@ def test_launch_posts_space_and_links_run(monkeypatch):
     from services.admin import ts_space_client
     from services.state import state as state_service
     from services.storage import cache as _cache
+    from services.storage import data_loader
 
     monkeypatch.setattr(state_service, "get_row", lambda slug: object())
     posted = {}
@@ -77,6 +78,10 @@ def test_launch_posts_space_and_links_run(monkeypatch):
     linked = []
     monkeypatch.setattr(state_service, "record_timestamps_job", lambda s, j: linked.append((s, j)))
     monkeypatch.setattr(_cache, "invalidate_in_flight_jobs_cache", lambda: None)
+    # The launch resolves the delivery's edition, which cross-checks the catalog
+    # row against detailed.json's `_meta` — reading it off the bucket for a slug
+    # this test never wrote. Answer "no meta", which is what a fixture has.
+    monkeypatch.setattr(data_loader, "seg_meta", lambda slug: {})
 
     out = timestamps_jobs.launch("r", settings=TsJobSettings(beams=[50, 5], chapters=[108]))
 

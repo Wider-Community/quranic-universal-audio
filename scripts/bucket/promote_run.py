@@ -124,7 +124,7 @@ def _guard_riwayah(slug: str, manifest) -> None:
     print(f"  riwayah: {catalogued}")
 
 
-def guard_target(backend, slug: str, force: bool, manifest=None) -> None:
+def guard_target(backend, slug: str, force: bool, manifest) -> None:
     """Refuse a promote that would overwrite reviewed or already-published work.
 
     A slug past ``AWAITING_ALIGNMENT`` needs ``--force``, and ``--force`` is
@@ -144,8 +144,7 @@ def guard_target(backend, slug: str, force: bool, manifest=None) -> None:
 
     _db_sync.pull()
     _db.init_db()
-    if manifest is not None:
-        _guard_riwayah(slug, manifest)
+    _guard_riwayah(slug, manifest)
     row = state_svc.get_row(slug)
     if row is not None and row.state.value not in _PROMOTABLE_STATES:
         if not force:

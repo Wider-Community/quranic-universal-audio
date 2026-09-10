@@ -73,6 +73,14 @@ class QfContentError(RuntimeError):
     """Raised on transport / protocol failure talking to the Content API."""
 
 
+class VerseNotInEdition(QfContentError):
+    """The verse key does not exist in the requested edition's numbering.
+
+    A subclass so existing handlers keep catching it, but distinguishable: this
+    is a bad coordinate from the caller, not an upstream failure.
+    """
+
+
 def _ua_headers(extra: dict | None = None) -> dict:
     headers = {"User-Agent": config.USER_AGENT, "Accept": "application/json"}
     if extra:
@@ -233,7 +241,7 @@ def _projected_word_by_word(verse_key: str, lang: str, riwayah: str) -> dict[str
     surah, ayah = (int(part) for part in verse_key.split(":"))
     word_count = editions.word_counts(riwayah).get((surah, ayah))
     if word_count is None:
-        raise QfContentError(f"{verse_key} does not exist in riwayah {riwayah!r}")
+        raise VerseNotInEdition(f"{verse_key} does not exist in riwayah {riwayah!r}")
 
     sources: dict[str, tuple[str, ...]] = {}
     for index in range(1, word_count + 1):
@@ -241,9 +249,7 @@ def _projected_word_by_word(verse_key: str, lang: str, riwayah: str) -> dict[str
         sources[target] = tuple(projection.reverse_ref(target))
 
     glosses: dict[str, str] = {}
-    source_verses = {
-        ":".join(ref.split(":")[:2]) for refs in sources.values() for ref in refs
-    }
+    source_verses = {":".join(ref.split(":")[:2]) for refs in sources.values() for ref in refs}
     for source_verse in sorted(source_verses):
         glosses.update(_fetch_word_by_word(source_verse, lang))
 

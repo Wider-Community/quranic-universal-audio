@@ -92,7 +92,6 @@ def _tiers(verses: dict, *, with_letters: bool = True) -> dict:
     )
 
 
-
 def test_verse_start_zero_with_leading_word_gap():
     # verse_start_ms is a real 0; first word's audio starts at 60 ms. With zero
     # pads the clip window is [0, 24095] — the real 0 is respected (not coerced
@@ -399,3 +398,33 @@ def test_empty_audio_urls_are_fatal_for_catalog_build():
 
     with pytest.raises(RuntimeError, match="no usable audio URLs"):
         cut_release._build_catalog_json(rec, sidecar, verses)
+
+
+# ---------------------------------------------------------------------------
+# Shards vs the catalog row.
+# ---------------------------------------------------------------------------
+
+
+def test_a_row_that_agrees_across_the_two_vocabularies_cuts():
+    # The delivery FK holds the long Inspector slug; the shard `_meta` holds the
+    # SDK one. Same edition, so this must not be read as a mismatch.
+    cut_release._assert_riwayat_agree("slug", "warsh", "warsh_an_nafi")
+    cut_release._assert_riwayat_agree("slug", "warsh", "warsh")
+
+
+def test_an_absent_row_riwayah_is_not_evidence():
+    # Rows written before the column existed are Hafs by construction.
+    cut_release._assert_riwayat_agree("slug", "hafs", None)
+
+
+def test_shards_disagreeing_with_the_row_abort_the_cut():
+    # The row is what the HF dataset config, the request form and the manifest's
+    # `riwayah_name` key on — cutting anyway files one edition's timings under
+    # another edition's name.
+    with pytest.raises(ValueError, match="mislabelled"):
+        cut_release._assert_riwayat_agree("slug", "qalun", "warsh_an_nafi")
+
+
+def test_an_unsupported_row_riwayah_aborts_the_cut():
+    with pytest.raises(ValueError, match="unsupported riwayah"):
+        cut_release._assert_riwayat_agree("slug", "hafs", "duri_an_abi_amr")

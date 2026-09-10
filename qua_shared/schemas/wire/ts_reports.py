@@ -182,7 +182,7 @@ class TsReportSnapshot(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     native_schema_version: Literal[2] = 2
-    shard_schema_version: Literal[12, 13] = 13
+    shard_schema_version: Literal[12, 13, 14] = 13
     native: dict[str, object] = Field(default_factory=dict)
     timing: TsReportTimingSnapshot | None = None
 

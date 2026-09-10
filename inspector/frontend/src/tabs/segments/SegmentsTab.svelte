@@ -16,7 +16,7 @@
     import { getReciterTaskStore, type ReciterTask,refreshReciterTask } from '../../lib/api/reciter-task';
     import { localeStore, tr } from '../../lib/i18n/locale-store';
     import * as m from '../../lib/paraglide/messages';
-    import { loadQuranRefs } from '../../lib/refs/quran-refs';
+    import { clearQuranRefs, loadQuranRefs } from '../../lib/refs/quran-refs';
     import { currentUser, loadCurrentUser } from '../../lib/stores/current-user';
     import { setEditingMode, syncEditingMode } from '../../lib/stores/editing-mode';
     import { openGuidesGate } from '../../lib/stores/guides-gate';
@@ -70,7 +70,7 @@
     import { savePreviewVisible } from './stores/save';
     import { accordionViewActive, valUiOpenCategory } from './stores/validation';
     import { loadChapterData } from './utils/data/chapter-actions';
-    import { loadSegConfig } from './utils/data/config-loader';
+    import { clearSegConfig, loadSegConfig } from './utils/data/config-loader';
     import { reloadCurrentReciter } from './utils/data/reciter-actions';
     import { handleSegmentsKey } from './utils/keyboard';
     import { playFromSegment } from './utils/playback/playback';
@@ -424,8 +424,9 @@
     // The edition everything on this tab is rendered in. `segAllData.riwayah` is
     // the server's authoritative answer for the loaded delivery; the catalog is
     // the fast path used before that payload lands. `null` means the delivery
-    // names a riwayah this build cannot serve — the tab then keeps the Hafs
-    // fallback stack rather than rendering another edition's coordinates in it.
+    // names a riwayah this build cannot serve — the tab then shows nothing
+    // edition-specific rather than the previous delivery's words under this
+    // one's coordinates.
     $: tabRiwayah = $segAllData?.riwayah ?? deliveryRiwayah($selectedReciter);
     $: editionRiwayah = isSupportedRiwayah(tabRiwayah) ? tabRiwayah : null;
     $: fontStack = editionFontStack(editionRiwayah);
@@ -433,7 +434,9 @@
 
     // A cross-edition switch invalidates the coordinate vocabularies (muqattaat
     // openings, standalone allow-lists) the accordion and ref editor read, so
-    // re-fetch them — and the reference bundle — for the new edition.
+    // re-fetch them — and the reference bundle — for the new edition. An
+    // unservable edition clears both instead: stale tables answer questions
+    // ("is this one-word segment legitimate?") for a different mushaf.
     let _configRiwayah: string | null = null;
     $: if (editionRiwayah && editionRiwayah !== _configRiwayah) {
         _configRiwayah = editionRiwayah;
@@ -442,6 +445,10 @@
             cssFontSize = cfg.fontSize;
             cssWordSpacing = cfg.wordSpacing;
         });
+    } else if (!editionRiwayah && _configRiwayah !== null) {
+        _configRiwayah = null;
+        clearQuranRefs();
+        clearSegConfig();
     }
 
     onMount(async () => {
@@ -450,11 +457,18 @@
         // Idempotent — reciter-actions awaits this same promise before
         // hydrating per-segment matched_text, and the reactive block above
         // supersedes it once the delivery's own edition is known.
-        void loadQuranRefs(deliveryRiwayah($selectedReciter) ?? undefined);
-        await surahInfoReady;
-        const cfg = await loadSegConfig(deliveryRiwayah($selectedReciter) ?? undefined);
-        cssFontSize = cfg.fontSize;
-        cssWordSpacing = cfg.wordSpacing;
+        // `null` means unservable, not "use Hafs" — the reactive block above
+        // fetches for the real edition once the delivery is known.
+        const known = deliveryRiwayah($selectedReciter);
+        if (known) {
+            void loadQuranRefs(known);
+            await surahInfoReady;
+            const cfg = await loadSegConfig(known);
+            cssFontSize = cfg.fontSize;
+            cssWordSpacing = cfg.wordSpacing;
+        } else {
+            await surahInfoReady;
+        }
         await loadReciters();
         stopCatalogPoll = startCatalogPolling();
     });

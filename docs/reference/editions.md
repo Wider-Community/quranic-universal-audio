@@ -89,7 +89,7 @@ proxy phones**. The result is *projected* onto the delivery's edition. So:
 |---|---|
 | Coordinates a reviewer sees and edits (`matched_ref`) | the delivery's edition |
 | The Hafs span the matcher actually matched (`source_ref`) | Hafs, recorded on the seg |
-| `projection_support` | `full` / `partial` — `partial` means the seg cuts an N:M relation |
+| `projection_support` | `full` / `partial` — `partial` means a source word in the span reached no target word, or sat in an N:M relation the projection could only partly carry |
 | Display text + font | the delivery's edition |
 | Verse word counts, ayah counts, stop signs | the delivery's edition |
 
@@ -280,6 +280,13 @@ their Hafs `source_ref`, `segments.json`, `pipeline_meta.json`, an audio
 manifest, and optionally a word-profile shard written through the real producer
 audit. It deliberately writes no `low_confidence_v2.json` / `ts_validation.json`,
 so the absent-sidecar degradation is part of what the fixture proves.
+
+`--riwayah` offers the three non-Hafs slugs only: a Hafs fixture would be the
+identity projection and a Hafs word-profile shard is a contradiction (Hafs has a
+native profile carrying cells, sounds and letter timings). Surah 112 — the
+default `--chapter` — projects cleanly, so use a chapter that carries a real
+relation to exercise `partial`: Warsh/Qalun `57:23` draws on Hafs `57:24`, whose
+word 10 the target edition does not write.
 
 ---
 

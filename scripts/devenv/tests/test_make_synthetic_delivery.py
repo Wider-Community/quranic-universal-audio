@@ -9,9 +9,8 @@ real producer audit.
 
 from __future__ import annotations
 
-import pytest
-
 import make_synthetic_delivery as msd
+import pytest
 
 editions = pytest.importorskip("qua_domain", reason="qua-domain not installed")
 

@@ -29,6 +29,7 @@ from qua_shared.riwayat import (
     DEFAULT_RIWAYAH,
     DEFAULT_SDK_RIWAYAH,
     UnsupportedRiwayah,
+    from_sdk_slug,
     resolve_sdk_slug,
 )
 from qua_shared.schemas import ReciterCatalog, TsManifestResponse
@@ -130,14 +131,18 @@ def _edition_blocks(reciters_block: dict[str, dict]) -> dict[str, dict]:
         except (UnsupportedRiwayah, EditionsUnavailable) as exc:
             log.warning("ts manifest: riwayah %s cannot be served (%s)", slug, exc)
             continue
-        blocks[slug] = {
+        # The catalog column is free text and older rows hold the short SDK
+        # form, but both routes below parse strictly — so the URLs are built
+        # from the canonical Inspector slug, not from whatever the row said.
+        key = from_sdk_slug(sdk_slug)
+        blocks[key] = {
             "riwayah": sdk_slug,
             "edition_id": metadata.edition_id,
             "words_sha256": metadata.words_sha256,
-            "font_url": f"/api/static/edition/{slug}/font",
+            "font_url": f"/api/static/edition/{key}/font",
             "font_family": metadata.font_family,
             "font_sha256": asset.sha256,
-            "refs_url": f"/api/static/quran-refs.json?riwayah={slug}",
+            "refs_url": f"/api/static/quran-refs.json?riwayah={key}",
             "refs_version": quran_refs_service.payload_hash(sdk_slug),
         }
     return blocks

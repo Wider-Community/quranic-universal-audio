@@ -29,9 +29,7 @@ has_editions = pytest.mark.skipif(
 @pytest.fixture(autouse=True)
 def _clear_edition_caches():
     yield
-    from services.storage import cache
-
-    cache.clear_edition_caches()
+    editions.clear_caches()
 
 
 # ---------------------------------------------------------------------------

@@ -4,9 +4,14 @@
  *
  * Al-Ikhlas in Qalun: four words, a waṣl into the next verse and one real stop
  * with a verse end — enough geometry to exercise every branch the word row has.
+ *
+ * The words are the QALUN index's own spelling, taken from `qua_domain`, not
+ * Hafs text under a Qalun label: the row renderer's whole job is to show the
+ * delivery's edition, so a fixture spelled in Hafs would pass while the real
+ * thing rendered the wrong script.
  */
 
-const AR = ['قُلْ', 'هُوَ', 'ٱللَّهُ', 'أَحَدٌ'];
+const AR = ['قُلْ', 'هُوَ', 'اَ۬للَّهُ', 'أَحَدٌۖ'];
 
 /** Raw stored shape — feed to `decodeTimestampShard`, never to the assemblers. */
 export const WORD_SHARD = {
