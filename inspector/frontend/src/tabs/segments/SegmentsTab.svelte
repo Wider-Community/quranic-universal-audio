@@ -270,6 +270,20 @@
                 localStorage.removeItem(LS_KEYS.SEG_RECITER);
             }
             if (validSaved) {
+                // The catalog FIRST, and awaited. `onReciterChange` resolves
+                // the delivery's edition to pick its refs bundle, and
+                // `deliveryRiwayah` answers Hafs for a slug whose roster has
+                // not loaded — so kicking this after the await hydrated every
+                // segment's `matched_text` from the HAFS script on a Warsh
+                // delivery, and left those strings in the client model for the
+                // session (the reactive block below moves the store, not the
+                // rows already hydrated). Segments is the tab that mounts
+                // without DashboardTab, so nothing else has fetched it.
+                // Tolerated on failure: a Hafs guess renders wrong, an empty
+                // tab renders nothing.
+                await loadCatalog().catch((e) =>
+                    console.error('catalog fetch failed before reciter bind:', e),
+                );
                 // Mark this slug as handled before updating the store so the
                 // out-of-band reactive subscription below skips it (we run
                 // _bindTask + onReciterChange imperatively right here).
@@ -277,9 +291,6 @@
                 selectedReciter.set(validSaved);
                 _bindTask(isSampleSlug(validSaved) ? null : validSaved);
                 await onReciterChange(validSaved);
-                // Kick the shared catalog fetch; the footer chip's identity +
-                // bucket derive reactively from `$catalogData` once it lands.
-                void loadCatalog();
             }
         } catch (e) { console.error('Error loading seg reciters:', e); }
     }

@@ -412,14 +412,29 @@ def undo_batch(reciter: str, target_batch_id: str, *, actor: Actor) -> dict | tu
     for rec in matching:
         affected_chapters.update(_get_affected_chapters(rec))
 
+    # ``entries`` IS the process cache — ``load_detailed`` returns
+    # ``cache.get_seg_cache(reciter)`` by reference — and the reverse ops below
+    # mutate it before anything is written. An undo that stops partway (a patch
+    # claiming chapters outside the batch, a ref ``_restamp`` refuses) would
+    # otherwise leave those never-persisted changes visible to every later
+    # request, and the next save would write them out. Same guard as the save
+    # path; see ``segments/save.py``.
+    persisted = False
     try:
-        for op in reversed(operations):
-            apply_reverse_op(entries, op, affected_chapters, riwayah)
-    except ValueError as e:
-        return {"error": str(e)}, 409
-
-    _restamp(entries, affected_chapters, riwayah)
-    persist_detailed(reciter, meta, entries)
+        try:
+            for op in reversed(operations):
+                apply_reverse_op(entries, op, affected_chapters, riwayah)
+        except ValueError as e:
+            return {"error": str(e)}, 409
+        # Outside the inner ``except``: a ``RefNotInEdition`` from here is a 400
+        # about the ref, not a 409 about the batch, and a write-time
+        # ValidationError is a fault rather than a conflict.
+        _restamp(entries, affected_chapters, riwayah)
+        persist_detailed(reciter, meta, entries)
+        persisted = True
+    finally:
+        if not persisted:
+            cache.invalidate_seg_caches(reciter)
 
     ch_union = sorted(affected_chapters)
     _append_revert_record(
@@ -508,14 +523,29 @@ def undo_ops(
     for rec in matching:
         affected_chapters.update(_get_affected_chapters(rec))
 
+    # ``entries`` IS the process cache — ``load_detailed`` returns
+    # ``cache.get_seg_cache(reciter)`` by reference — and the reverse ops below
+    # mutate it before anything is written. An undo that stops partway (a patch
+    # claiming chapters outside the batch, a ref ``_restamp`` refuses) would
+    # otherwise leave those never-persisted changes visible to every later
+    # request, and the next save would write them out. Same guard as the save
+    # path; see ``segments/save.py``.
+    persisted = False
     try:
-        for op in reversed(ops_to_undo):
-            apply_reverse_op(entries, op, affected_chapters, riwayah)
-    except ValueError as e:
-        return {"error": str(e)}, 409
-
-    _restamp(entries, affected_chapters, riwayah)
-    persist_detailed(reciter, meta, entries)
+        try:
+            for op in reversed(ops_to_undo):
+                apply_reverse_op(entries, op, affected_chapters, riwayah)
+        except ValueError as e:
+            return {"error": str(e)}, 409
+        # Outside the inner ``except``: a ``RefNotInEdition`` from here is a 400
+        # about the ref, not a 409 about the batch, and a write-time
+        # ValidationError is a fault rather than a conflict.
+        _restamp(entries, affected_chapters, riwayah)
+        persist_detailed(reciter, meta, entries)
+        persisted = True
+    finally:
+        if not persisted:
+            cache.invalidate_seg_caches(reciter)
 
     ch_union = sorted(affected_chapters)
     _append_revert_record(

@@ -137,6 +137,14 @@ Two consequences worth stating outright:
   `matched_ref` and breaks the shard builder. The timestamps runner's pre-flight
   guard therefore tests `build_mfa_ref(seg)` (i.e. `source_ref`), not
   `matched_ref`; such a segment has to be split before it can be timed.
+
+  > **Known limitation.** Auto-Split cannot yet offer a cut for these 77 verses
+  > per edition: it dispatches on `matched_ref`, which is single-verse here, so
+  > `cross_verse_sections` answers `None`. The remedy is a manual split in the
+  > Segments editor at the word where the Hafs verse changes — the guard's error
+  > names the source span, so the cut point is `reverse_ref` of each target word
+  > until the Hafs ayah advances. Teaching `candidate_of` to dispatch on the
+  > source span too is tracked as follow-up work.
 - **A `by_ayah` chapter entry's ref is the delivery's verse, and MFA's word
   locations are Hafs.** They do not match for a renumbered surah, so the word
   filter reads the segment's `source_ref` span (`raw_v2._source_verse_keys`).

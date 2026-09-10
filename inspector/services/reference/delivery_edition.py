@@ -13,13 +13,23 @@ record of what it *aligned* against — evidence, not authority. When the two
 disagree the delivery is genuinely broken (a row edited after alignment, or a
 file copied between deliveries), so :func:`sdk_riwayah_for` raises rather than
 picking a side.
+
+An ALIGNED document that names no riwayah is evidence too, and it says Hafs:
+promote omits the key only for Hafs. That direction is the one with teeth,
+because `riwayah` is an editable catalog column and every published delivery
+today is a Hafs one whose `_meta` has no such key.
 """
 
 from __future__ import annotations
 
 import logging
 
-from qua_shared.riwayat import DEFAULT_RIWAYAH, UnsupportedRiwayah, resolve_sdk_slug
+from qua_shared.riwayat import (
+    DEFAULT_RIWAYAH,
+    DEFAULT_SDK_RIWAYAH,
+    UnsupportedRiwayah,
+    resolve_sdk_slug,
+)
 
 log = logging.getLogger("inspector")
 
@@ -75,4 +85,21 @@ def sdk_riwayah_for(slug: str) -> str:
                 f"{slug}: catalog says {catalog_slug!r} but detailed.json was "
                 f"aligned against {aligned!r}"
             )
+    elif sdk_slug != DEFAULT_SDK_RIWAYAH and data_loader.load_detailed(slug):
+        # An ALIGNED delivery with no ``_meta.riwayah`` is Hafs, not unknown:
+        # ``_promote_artifacts.meta_riwayah`` omits the key only for Hafs, so
+        # every non-Hafs promote stamps it. Without this branch the mismatch
+        # check is dead for the direction that matters — ``riwayah`` is an
+        # admin-editable catalog column, so relabelling any of the published
+        # Hafs deliveries would silently render its refs in another edition's
+        # script and word counts, and the next save would stamp that edition's
+        # provenance onto them for good.
+        #
+        # Scoped to a delivery whose ``detailed.json`` exists: before alignment
+        # there is nothing to contradict, which is exactly when an admin sets
+        # the field.
+        raise RiwayahMismatch(
+            f"{slug}: catalog says {catalog_slug!r} but detailed.json declares no "
+            f"riwayah, which means it was aligned as Hafs"
+        )
     return sdk_slug

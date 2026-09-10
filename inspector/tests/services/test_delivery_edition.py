@@ -108,6 +108,37 @@ def test_detailed_json_without_a_riwayah_is_not_evidence(catalog_riwayah):
     assert sdk_riwayah_for("slug-a") == "hafs"
 
 
+def test_relabelling_an_aligned_hafs_delivery_is_a_mismatch(catalog_riwayah, monkeypatch):
+    """The direction with teeth, and the one with no other guard.
+
+    ``riwayah`` is an editable catalog column, and promote omits
+    ``_meta.riwayah`` for Hafs — so every published delivery today is one column
+    edit away from being read in another edition's script and word counts, and
+    from having that edition's provenance stamped onto its segments by the next
+    save. An aligned document that names no riwayah is not silent: it says Hafs.
+    """
+    from services.storage import data_loader
+
+    monkeypatch.setattr(data_loader, "load_detailed", lambda reciter: [{"ref": "112"}])
+    catalog_riwayah("warsh_an_nafi")
+    cache.set_seg_meta("slug-a", {"audio_source": "by_surah"})
+
+    with pytest.raises(RiwayahMismatch, match="declares no riwayah"):
+        sdk_riwayah_for("slug-a")
+
+
+def test_a_non_hafs_delivery_that_has_not_been_aligned_yet_resolves(catalog_riwayah):
+    """The window the guard above must not close.
+
+    An admin sets the riwayah at intake, long before any ``detailed.json``
+    exists; there is nothing for it to contradict then.
+    """
+    catalog_riwayah("warsh_an_nafi")
+    cache.set_seg_meta("slug-a", {})
+
+    assert sdk_riwayah_for("slug-a") == "warsh"
+
+
 def test_an_unsupported_riwayah_on_disk_is_a_mismatch(catalog_riwayah):
     catalog_riwayah("hafs_an_asim")
     cache.set_seg_meta("slug-a", {"riwayah": "duri"})

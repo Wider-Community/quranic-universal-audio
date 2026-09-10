@@ -5,6 +5,7 @@ functions.  No other module uses ``global`` for cache variables.
 """
 
 import threading
+import time as _time
 from collections import OrderedDict
 from typing import Generic, TypeVar
 
@@ -117,12 +118,37 @@ _seg_validate_result: _KeyedCache[dict] = _KeyedCache()
 _seg_stats_result: _KeyedCache[dict] = _KeyedCache()
 
 
+#: How long a "there is no detailed.json" answer is trusted. The absence is
+#: cached to stop the Reviews drawer doing a bucket round-trip per slug per
+#: request, which is a burst-scoped problem — but a delivery can gain the file
+#: out of band (a promote run), and the invalidation hooks only fire for a
+#: delivery still awaiting alignment. Without a lapse such a slug 404s until the
+#: process restarts, and the escape hatch (a save) is unreachable because the
+#: editor cannot load. Seconds, so the burst is still absorbed.
+_SEG_ABSENT_TTL_S = 30.0
+
+#: ``{reciter: monotonic stamp}`` for the entries above that are empty because
+#: the file is MISSING, as opposed to empty because the delivery has no segments.
+_seg_absent_at: dict[str, float] = {}
+
+
 def get_seg_cache(reciter: str) -> list[dict] | None:
-    return _seg.get(reciter)
+    entries = _seg.get(reciter)
+    stamped_at = _seg_absent_at.get(reciter)
+    if stamped_at is not None and _time.monotonic() - stamped_at > _SEG_ABSENT_TTL_S:
+        _seg_absent_at.pop(reciter, None)
+        _seg.pop(reciter)
+        return None
+    return entries
 
 
-def set_seg_cache(reciter: str, entries: list[dict]) -> None:
+def set_seg_cache(reciter: str, entries: list[dict], *, absent: bool = False) -> None:
+    """Cache *reciter*'s entries. ``absent=True`` marks them as a missing file."""
     _seg.set(reciter, entries)
+    if absent:
+        _seg_absent_at[reciter] = _time.monotonic()
+    else:
+        _seg_absent_at.pop(reciter, None)
 
 
 def get_seg_meta(reciter: str) -> dict:
@@ -928,7 +954,6 @@ def invalidate_automation_config_cache() -> None:
 # doesn't collide with a future call filtered to a single kind.
 # ---------------------------------------------------------------------------
 
-import time as _time
 
 _jobs_in_flight_lock = _threading.Lock()
 _jobs_in_flight: "tuple[float, tuple[str, ...], list[dict]] | None" = None

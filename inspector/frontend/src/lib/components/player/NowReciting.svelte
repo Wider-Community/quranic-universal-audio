@@ -225,7 +225,19 @@
         ])
             .then(async ([res, glyphs]) => {
                 if (controller.signal.aborted) return;
-                shapedGlyphs = glyphs;
+                // Shaped outlines are DigitalKhatt geometry keyed on the HAFS
+                // word text, and another edition's words collide with it on
+                // every string the two spell identically — 8 of surah 112's 15
+                // Warsh words. Keeping them would draw those words as Hafs
+                // outlines (LineAnimation takes the SVG branch before any
+                // granularity check), bypassing `config.fontFamily` and mixing
+                // two typefaces inside one verse. The fetch itself still runs
+                // in parallel with the recitation, because the delivery's
+                // edition is not known until that response lands.
+                shapedGlyphs =
+                    (res?.riwayah ?? DEFAULT_SDK_RIWAYAH) === DEFAULT_SDK_RIWAYAH
+                        ? glyphs
+                        : undefined;
                 units = res?.units ?? [];
                 ayahs = res?.ayahs ?? [];
                 coverage = res?.coverage;

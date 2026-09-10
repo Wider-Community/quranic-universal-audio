@@ -100,6 +100,25 @@ def _build_manifest_dict(reciters_block: dict[str, dict]) -> dict:
     return manifest.model_dump(mode="json", by_alias=True)
 
 
+def _servable(slug: str | None) -> bool:
+    """Can this deployment render *slug*'s script and coordinates?
+
+    Hafs always: its script is inlined and its coordinates are the constants.
+    Anything else needs the ``qua_domain`` wheel, which a Hafs-only image does
+    not carry.
+    """
+    from services.reference import editions as editions_service
+
+    if not slug:
+        return True
+    try:
+        if resolve_sdk_slug(slug) == DEFAULT_SDK_RIWAYAH:
+            return True
+    except UnsupportedRiwayah:
+        return False
+    return editions_service.available()
+
+
 def _edition_blocks(reciters_block: dict[str, dict]) -> dict[str, dict]:
     """Display assets for every non-Hafs edition an advertised reciter uses.
 
@@ -289,8 +308,24 @@ def _ensure_built(*, include_everyayah: bool = False) -> None:
                 )
                 continue
             block = _bucket_reciter_block(slug, chapters, catalog, delivery)
-            if block is not None:
-                reciters_block[slug] = block
+            if block is None:
+                continue
+            if not _servable(block.get("riwayah")):
+                # A build without ``qua_domain`` (no deploy key, or
+                # INSPECTOR_MULTI_RIWAYAH=0) cannot serve this delivery's script
+                # or coordinates, and advertising it anyway is worse than
+                # omitting it: the font endpoint 503s, ``font-display: swap``
+                # leaves the text in the DigitalKhatt fallback, and the reader
+                # is shown one edition's words in another's typeface with no
+                # indication anything is wrong. Omit is the documented
+                # degradation.
+                log.warning(
+                    "timestamps: skipping %s — this build cannot serve riwayah %s",
+                    slug,
+                    block.get("riwayah"),
+                )
+                continue
+            reciters_block[slug] = block
 
         served = set(reciters_block)
         manifest = _build_manifest_dict(reciters_block)

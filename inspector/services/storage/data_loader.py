@@ -169,10 +169,13 @@ def load_detailed(reciter: str) -> list[dict]:
         if raw is None:
             # Remember the absence too: without it every caller re-reads a
             # missing file, a bucket round-trip per request, on exactly the
-            # slugs the Reviews drawer sweeps. `invalidate_seg_caches` drops it
-            # when the file appears — a save, a discard, and the auto-detect
-            # reconciler, which is what notices an out-of-band promote.
-            cache.set_seg_cache(reciter, [])
+            # slugs the Reviews drawer sweeps. Marked `absent` so it lapses on
+            # its own: `invalidate_seg_caches` drops it when a save, a discard
+            # or the auto-detect reconciler notices the file, but the reconciler
+            # only looks at deliveries still awaiting alignment — a promote run
+            # against any other slug would otherwise 404 it until restart, with
+            # no way in, because the editor cannot load to save.
+            cache.set_seg_cache(reciter, [], absent=True)
             return []
         meta, entries = _load_detailed_entries_from_bytes(raw)
         if meta:
