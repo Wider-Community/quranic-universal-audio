@@ -108,8 +108,11 @@ jobs:
           # by a Dockerfile stage from the private monorepo. `required=false` at
           # the mount, so a missing secret yields a Hafs-only image, not a
           # failed build.
+          # Quoted: docker/build-push-action splits the `secrets` input on
+          # newlines, so an unquoted multi-line value delivers only its first
+          # line and the container gets an unparseable key.
           secrets: |
-            QUA_DOMAIN_DEPLOY_KEY=${{ secrets.QUA_DOMAIN_DEPLOY_KEY }}
+            "QUA_DOMAIN_DEPLOY_KEY=${{ secrets.QUA_DOMAIN_DEPLOY_KEY }}"
 
       - name: Boot smoke test (/healthz)
         run: python scripts/deploy/smoke_boot.py --skip-build --tag inspector-smoke:latest

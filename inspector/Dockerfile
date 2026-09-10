@@ -60,10 +60,17 @@ ARG QUA_COMMIT=29e073322f8197f2af5ecdb95d09780d6655bec7
 # -s, not -f on the secret: buildx mounts a secret that resolved to "" as an
 # EMPTY FILE THAT EXISTS, so -f is true on a fork PR and the build dies on git
 # auth instead of degrading to the Hafs-only image.
+#
+# The key is normalised rather than copied: OpenSSH refuses a private key with
+# CRLF endings or no trailing newline ("error in libcrypto: unsupported"),
+# offers no identity, and the fetch then fails as "Permission denied
+# (publickey)" — which reads like an unauthorized key rather than a mangled
+# one. A CI secret round-trip is exactly where that mangling happens.
 RUN --mount=type=secret,id=QUA_DOMAIN_DEPLOY_KEY,required=false \
     mkdir -p -m 700 /root/.ssh && \
     if [ -s /run/secrets/QUA_DOMAIN_DEPLOY_KEY ]; then \
-      cp /run/secrets/QUA_DOMAIN_DEPLOY_KEY /root/.ssh/id_ed25519 && \
+      tr -d '\r' < /run/secrets/QUA_DOMAIN_DEPLOY_KEY > /root/.ssh/id_ed25519 && \
+      printf '\n' >> /root/.ssh/id_ed25519 && \
       chmod 600 /root/.ssh/id_ed25519 && \
       ssh-keyscan -H github.com >> /root/.ssh/known_hosts && \
       git init --quiet src && cd src && \

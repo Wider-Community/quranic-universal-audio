@@ -249,6 +249,35 @@ def _stage(repo: Path, stage_root: Path, env: str, branch: str) -> None:
     _assert_no_lfs_pointers(stage_root)
 
 
+def _whole_private_key(value: str) -> str:
+    """A private key normalised for OpenSSH, or a loud failure.
+
+    A secret that lost its body — the usual cause is a CI input that split the
+    multi-line value on newlines and kept only the first — is still present and
+    non-empty, so the Space builds, the qua-domain fetch fails as "Permission
+    denied (publickey)", and the image quietly ships Hafs-only. That surfaces
+    days later as a Warsh delivery that will not render, so check it here while
+    the cause is still visible.
+
+    CRLF and a missing trailing newline are the other two ways a round-trip
+    breaks a key, and both make OpenSSH refuse it outright ("error in libcrypto:
+    unsupported"). Repairing them costs nothing; the Dockerfile does the same to
+    its own copy, because the Space's build reads the secret directly.
+    """
+    text = value.replace("\r\n", "\n").replace("\r", "\n").strip("\n")
+    head, _, body = text.partition("\n")
+    if not (head.startswith("-----BEGIN ") and head.endswith("-----")):
+        raise SystemExit("QUA_DOMAIN_DEPLOY_KEY does not begin with a PEM header")
+    if not body.strip():
+        raise SystemExit(
+            "QUA_DOMAIN_DEPLOY_KEY is a header with no body — the secret was "
+            "truncated in transit; check that the workflow quotes it"
+        )
+    if not text.endswith("-----"):
+        raise SystemExit("QUA_DOMAIN_DEPLOY_KEY does not end with a PEM footer")
+    return text + "\n"
+
+
 def _retry_on_429(label: str, fn, *args, **kwargs):
     """Call ``fn``, retrying on HTTP 429 with a Retry-After honoring backoff.
 
@@ -312,7 +341,7 @@ def _upload(
             api.add_space_secret,
             repo_id=repo_id,
             key="QUA_DOMAIN_DEPLOY_KEY",
-            value=qua_domain_deploy_key,
+            value=_whole_private_key(qua_domain_deploy_key),
         )
     else:
         print(
