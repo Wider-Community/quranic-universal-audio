@@ -48,6 +48,36 @@ export interface TsWord {
     letters: Letter[];
 }
 
+/** Pause state of the gap that follows a word-profile word. */
+export type WordPauseState = 'start' | 'join' | 'sakt' | 'stop';
+
+/** The gap after a word-profile word — the only sub-word geometry it has. */
+export interface WordProfileBoundary {
+    id: number;
+    start: number; // seconds, offset-adjusted like TsWord
+    end: number;
+    state: WordPauseState;
+    /** Ayah number that ends at this gap, else null. */
+    verseEnd: number | null;
+}
+
+/** One word-profile word as `WordTimedRow` renders it. */
+export interface WordProfileWord {
+    /** Index within the reading — also the `timing.words[].word_id`. */
+    id: number;
+    location: string;
+    text: string;
+    start: number; // seconds, offset-adjusted
+    end: number;
+    boundary: WordProfileBoundary | null;
+}
+
+/** One word-profile reading, carrying the report-target reading id. */
+export interface WordProfileReading {
+    id: string;
+    words: WordProfileWord[];
+}
+
 /** Full verse data for the timestamps tab. */
 export interface TsVerseData {
     reciter: string;
@@ -62,6 +92,13 @@ export interface TsVerseData {
     words: TsWord[];
     /** Native schema-v2 readings rendered by quran-cells, in audio order. */
     native: TsShardReading[];
+    /**
+     * Word-profile readings, in audio order — populated INSTEAD of `native`
+     * when the shard carries proxy-timed words. Exactly one of the two is
+     * non-empty; a consumer that reads cells must check `native.length` (or
+     * narrow the shard with `isWordShard`) before assuming geometry exists.
+     */
+    wordReadings: WordProfileReading[];
 }
 
 // ---------------------------------------------------------------------------

@@ -149,6 +149,7 @@ export function assembleNative(options: AssembleOptions): TsVerseData {
         time_end_ms: endMs,
         ...timed,
         native: readings,
+        wordReadings: [],
     };
 }
 

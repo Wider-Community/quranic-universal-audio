@@ -25,6 +25,8 @@
         playing: boolean;
         shapedGlyphs?: ShapedGlyphFixture;
         omitSilentHighlights?: boolean;
+        /** Verse-number ornament for the delivery's edition; see LineAnimation. */
+        ayahMarker?: string;
         /** Short context line, e.g. "Surah 36 · Al-Fatihah". Omit to hide. */
         context?: string;
         /** Header eyebrow label; '' hides it (slim chrome — just the caret). */
@@ -47,6 +49,7 @@
         playing,
         shapedGlyphs,
         omitSilentHighlights = false,
+        ayahMarker,
         context,
         eyebrow = 'Now reciting',
         onSeekToWord,
@@ -96,6 +99,7 @@
                 {playing}
                 {shapedGlyphs}
                 {omitSilentHighlights}
+                {ayahMarker}
                 {onSeekToWord}
             />
         </div>

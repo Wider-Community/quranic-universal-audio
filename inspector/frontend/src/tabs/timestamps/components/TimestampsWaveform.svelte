@@ -42,9 +42,9 @@
     import { ensureChapterPeaks, ensureSegmentPeaks, pickChapterPeaks } from '../../../lib/utils/peaks-fetch';
     import { drawWaveformPeaks } from '../../../lib/utils/waveform-draw';
     import {
-        granularity,
-        showLetters,
-        showPhonemes,
+        effectiveGranularity,
+        lettersVisible,
+        phonemesVisible,
         TS_GRANULARITIES,
         TS_VIEW_MODES,
         tsHoveredElement,
@@ -137,9 +137,10 @@
 
     // ---- Active-tier flags (drive marker + hover behavior) ----
     $: lettersActive =
-        ($viewMode === TS_VIEW_MODES.ANALYSIS && $showLetters)
-        || ($viewMode === TS_VIEW_MODES.ANIMATION && $granularity === TS_GRANULARITIES.CHARACTERS);
-    $: phonemesActive = $viewMode === TS_VIEW_MODES.ANALYSIS && $showPhonemes;
+        ($viewMode === TS_VIEW_MODES.ANALYSIS && $lettersVisible)
+        || ($viewMode === TS_VIEW_MODES.ANIMATION
+            && $effectiveGranularity === TS_GRANULARITIES.CHARACTERS);
+    $: phonemesActive = $viewMode === TS_VIEW_MODES.ANALYSIS && $phonemesVisible;
     // Waveform overlay colors derive from the SHARED recitation accent so the
     // word/letter/phoneme bands + boundary strokes match the analysis display
     // and the now-reciting animation (one analogous family).

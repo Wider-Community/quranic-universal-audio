@@ -27,7 +27,9 @@
 
 .timed-analysis {
     --qc-arabic: 'SilenceMark', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
-    --qc-connected: 'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
+    /* Set per edition on the tab root by `editionFontStack()`; the literal is
+       the Hafs stack, which every Hafs delivery keeps. */
+    --qc-connected: var(--font-quran, 'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif);
     --qc-cell-rest: var(--hl-cell-rest);
     --qc-cell-hover: color-mix(in srgb, var(--anim-highlight-color) 15%, transparent);
     --qc-idle-fg: var(--text-secondary);

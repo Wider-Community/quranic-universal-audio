@@ -21,6 +21,7 @@
      * so the throwaway playground can tune it live.
      */
     import { isCombiningMark, toArabicNumeral, ZWSP } from '../utils/arabic-text';
+    import { AYAH_END_ORNAMENT } from '../riwayat';
     import { ayahUnitRanges } from './chapter-words';
     import { themeStore } from '../stores/theme.svelte';
     import { cssVarText, type RecitationAnimConfig } from './config';
@@ -39,8 +40,6 @@
         type ShapedGlyphFixture,
     } from './shaped-glyphs';
 
-    /** U+06DD ARABIC END OF AYAH — the same glyph segment cards use. */
-    const AYAH_END = '۝';
 
     /** Standalone Quranic marks are already isolated as shaped SVG paths. A
      * drop-shadow around such a tiny path can overlap its seat/host and make
@@ -74,6 +73,13 @@
         omitSilentHighlights?: boolean;
         /** Click-to-seek: receives the clicked word's chapter-absolute ms. */
         onSeekToWord?: (_ms: number) => void;
+        /**
+         * Glyph placed before an ayah's Arabic-Indic number. Defaults to the
+         * Hafs ornament, which Digital Khatt expects to be sent alongside the
+         * digits; the three packaged QPC fonts decorate the digits themselves,
+         * so a non-Hafs edition passes `''` (D7).
+         */
+        ayahMarker?: string;
     }
 
     let {
@@ -84,6 +90,7 @@
         shapedGlyphs = EMPTY_SHAPED_GLYPHS,
         omitSilentHighlights = false,
         onSeekToWord,
+        ayahMarker = AYAH_END_ORNAMENT,
     }: Props = $props();
 
     // ---- paging state (reactive — drives the rendered page) ----
@@ -633,7 +640,7 @@
                 >{/each}</span
         >{#if config.showAyahMarker && u && ayahRanges.get(u.ayahKey)?.[1] === pageStart + i + 1}{' '}<span
                 class="ra-ayah-marker"
-                data-after-word={i}>{AYAH_END}{toArabicNumeral(u.ayah)}</span
+                data-after-word={i}>{ayahMarker}{toArabicNumeral(u.ayah)}</span
             >{/if}
     {/each}
 </div>

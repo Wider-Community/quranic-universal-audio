@@ -45,3 +45,34 @@ export function isHafs(slug: string | null | undefined): boolean {
 export function toSdkSlug(slug: string | null | undefined): SdkRiwayah | null {
     return isSupportedRiwayah(slug) ? SUPPORTED_RIWAYAT[slug] : null;
 }
+
+const SDK_TO_INSPECTOR = Object.fromEntries(
+    Object.entries(SUPPORTED_RIWAYAT).map(([inspector, sdk]) => [sdk, inspector]),
+) as Record<SdkRiwayah, InspectorRiwayah>;
+
+/**
+ * The Inspector slug for an SDK slug, or `null` when unsupported.
+ *
+ * Needed because the two vocabularies meet in the browser: a shard's
+ * `_meta.riwayah` is the SDK slug, while the font and reference-bundle routes
+ * are keyed by the Inspector slug (the `riwayahs.slug` column).
+ */
+export function toInspectorSlug(slug: string | null | undefined): InspectorRiwayah | null {
+    return slug && slug in SDK_TO_INSPECTOR ? SDK_TO_INSPECTOR[slug as SdkRiwayah] : null;
+}
+
+/** U+06DD ARABIC END OF AYAH — the ornament Digital Khatt expects around a number. */
+export const AYAH_END_ORNAMENT = '۝';
+
+/**
+ * Glyph to put before an Arabic-Indic verse number, keyed by **SDK** slug.
+ *
+ * Mirrors the server's `services.reference.quran_refs.verse_marker_prefix`, and
+ * exists separately because the Timestamps tab reads its edition off the shard
+ * rather than off the Segments reference bundle that carries the same field.
+ * The three packaged QPC fonts decorate the digits themselves, so sending the
+ * ornament as well renders two nested circles.
+ */
+export function verseMarkerPrefix(sdkSlug: string | null | undefined): string {
+    return !sdkSlug || sdkSlug === DEFAULT_SDK_RIWAYAH ? AYAH_END_ORNAMENT : '';
+}

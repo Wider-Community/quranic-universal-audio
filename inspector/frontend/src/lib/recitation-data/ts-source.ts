@@ -38,6 +38,7 @@ import {
     chapterVerseRefs,
     shardOccasions,
 } from './native-shards';
+import { assembleWord, isWordReading } from './word-shards';
 
 // ---------------------------------------------------------------------------
 // Singleton caches
@@ -420,10 +421,18 @@ export async function loadTsValidation(reciter: string): Promise<TsValidationDoc
 }
 
 // ---------------------------------------------------------------------------
-// Native reading assembly
+// Reading assembly — native cells or proxy-timed words, per the shard profile
 // ---------------------------------------------------------------------------
 
 export { chapterVerseRefs, shardOccasions };
+
+/**
+ * True when this occasion carries proxy-timed words rather than phonemizer
+ * cells. Read off the readings rather than the shard so the two assemble
+ * helpers keep their existing signatures — callers hold occasions, not shards.
+ */
+const isWordOccasion = (members: ChapterOccasion[]): boolean =>
+    members.some((member) => member.readings.some((one) => isWordReading(one.reading)));
 
 export function assembleOccasion(
     reciter: string,
@@ -433,15 +442,17 @@ export function assembleOccasion(
     reciterAudio: TsReciterAudio,
     chapterAudioUrl: string,
 ): TsVerseData {
-    return assembleNative({
+    const members = [occasion];
+    const shape = {
         reciter,
-        members: [occasion],
+        members,
         verseRef: occasion.ref,
-        qpc,
-        dk,
         audioCategory: reciterAudio.audio_category,
         audioUrl: chapterAudioUrl,
-    });
+    };
+    return isWordOccasion(members)
+        ? assembleWord(shape)
+        : assembleNative({ ...shape, qpc, dk });
 }
 
 export function assembleWaslGroup(
@@ -453,15 +464,16 @@ export function assembleWaslGroup(
     reciterAudio: TsReciterAudio,
     chapterAudioUrl: string,
 ): TsVerseData {
-    return assembleNative({
+    const shape = {
         reciter,
         members,
         verseRef,
-        qpc,
-        dk,
         audioCategory: reciterAudio.audio_category,
         audioUrl: chapterAudioUrl,
-    });
+    };
+    return isWordOccasion(members)
+        ? assembleWord(shape)
+        : assembleNative({ ...shape, qpc, dk });
 }
 
 // ---------------------------------------------------------------------------
