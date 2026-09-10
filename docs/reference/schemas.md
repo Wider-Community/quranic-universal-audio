@@ -103,3 +103,24 @@ The steady-state drift gate for the external bucket — validates on-disk files 
 - **`scripts/diagnostics/validate_bucket.py`** — the whole-bucket CLI over that engine. Three passes: every reciter folder (via `audit`), the DB catalog (`repo_catalog.snapshot()` re-validates `ReciterCatalog` from rows), and every `catalog/audio_manifest/<slug>.json` sidecar (via `AudioManifestSidecar`). Exits non-zero on any hard error; `--strict` also fails on unknown-field warnings. The dead `catalog/reciter_catalog.json` backup is never validated (no app reads it). `--bucket prod|dev` (default dev; prod needs `INSPECTOR_ALLOW_PROD_BUCKET=1`).
 - **`.github/workflows/bucket-validate.yml`** — runs `validate_bucket.py` nightly (~06:00 UTC) + on demand against both buckets, read-only. A non-zero exit fails the job and alerts.
 - **`/healthz?deep=1`** — `bucket_audit.sample_validation()` runs a bounded probe (DB-catalog round-trip + a small spread sample of reciter folders, default 3). Opt-in: the default `/healthz` never walks the bucket, so its latency is unchanged. A deep probe finding drift flips the response to degraded (503 in deployed mode) so misconfiguration surfaces at health-check time, not mid-request.
+
+
+## Multi-riwayah fields
+
+Additive and Hafs-invisible by construction — every one of these is optional
+with a Hafs default, so an existing document round-trips byte-identically:
+
+| Model | Field | Meaning |
+|---|---|---|
+| `DetailedMeta` | `riwayah` | Inspector slug the `matched_ref`s are in; `None` = Hafs |
+| `DetailedSegment` | `source_ref`, `projection_support` | the Hafs span the matcher matched, and whether the seg cuts an N:M relation |
+| `PipelineMeta` | `riwayah` | the edition extraction ran under; must agree with `DetailedMeta` |
+| `TsWordShardMeta` | whole model | the word-profile shard (schema 14, `profile: "word"`) |
+| `TimestampMeta` | `script`, `riwayah` | `script` widened from `Literal["digital_khatt_v2"]` to the edition index id |
+| `ReleaseManifestRecitation` | `tiers`, `riwayah` | which tiers ship, and in which edition |
+| `ReleaseManifest` | `editions` | per non-Hafs edition: word/script/projection digests + font family |
+
+`qua_shared/schemas/config/riwayat.py` generates the two slug unions the FE types
+are built from, so `SUPPORTED_RIWAYAT` has exactly one definition.
+
+Full detail: [`editions.md`](editions.md).

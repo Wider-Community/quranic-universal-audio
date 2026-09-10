@@ -279,3 +279,31 @@ These components stay Svelte-4 legacy by design (`docs/planning/svelte-migration
 ## Build outputs
 
 `frontend/dist/` is gitignored. `npm run build` = `tsc --noEmit && vite build` → hashed JS + CSS, Chart.js in a separate `charts` chunk. Run before launching Flask in production mode.
+
+
+## Multi-riwayah
+
+`lib/riwayat.ts` mirrors the backend slug table and is typed off the codegen'd
+union, so a backend change that adds a riwayah breaks `npm run check` rather
+than shipping a stale list. Two vocabularies meet in the browser: the shard's
+`_meta.riwayah` is the **SDK** slug (`warsh`), while the font and reference
+routes are keyed by the **Inspector** slug (`warsh_an_nafi`) —
+`toInspectorSlug()` is the bridge.
+
+- `lib/refs/quran-refs.ts` — the per-edition reference bundle. One edition in the
+  store at a time, cleared on switch, one bundle in `sessionStorage`.
+- `lib/refs/edition-font.ts` — `--font-quran` per edition; Hafs keeps the bundled
+  Digital Khatt stack (its font is inlined because HF Spaces do not smudge
+  Git-LFS at build time).
+- `tabs/timestamps/stores/display.ts` — `wordProfile` + `deliveryRiwayah`, set
+  from the **shard**, and the derived `lettersVisible` / `phonemesVisible` /
+  `wipeActive` / `effectiveGranularity` that every view renders from. The raw
+  writables stay the user's persisted preference.
+- `tabs/timestamps/components/WordTimedRow.svelte` — the word-profile analysis
+  row, reusing the `.timed-analysis` class so every `--qc-*` token and
+  report-mode rule applies unchanged.
+- Shared `lib/` components must not import a tab store: `NowReciting.svelte`
+  locks granularity off the DATA (`units.some(u => u.letters.length)`), not off
+  the delivery's riwayah.
+
+Full detail: [`editions.md`](editions.md).

@@ -4,10 +4,28 @@ Timestamp shards store a compact, renderer-neutral projection of native
 phonemizer readings plus audio timing. Full native documents are generation
 and audit inputs; they are not repeated in every reciter's runtime shards.
 
+## Two profiles
+
+Each object at `reciters/<slug>/timestamps/<chapter>.json.br` is one of two
+profiles, discriminated by `_meta.profile`:
+
+| Profile | Schema | Contains | Produced for |
+|---|---|---|---|
+| `native` | 13 or 14 | full phonemizer cells, sounds, animation tokens | Hafs |
+| `word` | 14 | proxy-timed words + pause boundaries, nothing below | the other three riwayat |
+
+**Absent `profile` reads as `native`.** Every v13 object predates the
+discriminator, and existing Hafs shards are never restamped, so a reader must
+branch on `shard_profile()` / `isWordShard()` and never on `schema_version`.
+
+The word profile is documented in full in
+[`editions.md`](editions.md#5-the-word-profile-shard); the rest of this page is
+the native profile.
+
 ## Contract
 
-Each object at `reciters/<slug>/timestamps/<chapter>.json.br` is a closed
-schema-v13 JSON document compressed with deterministic Brotli quality 6:
+A native object is a closed schema-v13/v14 JSON document compressed with
+deterministic Brotli quality 6:
 
 ```json
 {

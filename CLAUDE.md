@@ -112,6 +112,7 @@ Deep, agent-facing reference docs live in `docs/reference/` (flat). **Read the o
 | [`catalog.md`](docs/reference/catalog.md) | reciter catalog — layers, slug convention, audio manifests, naming guide |
 | [`audio-metadata-pipeline.md`](docs/reference/audio-metadata-pipeline.md) | audio metadata generation/probing/auditing/backfill — VBR & phantom-tail caveats, source-probe pitfalls, bucket/mount, the diagnostics+backfills tooling, new-source/channel runbook |
 | [`segments-editor.md`](docs/reference/segments-editor.md) | command grammar, normalized state, identity, save flow, edit_history, undo |
+| [`editions.md`](docs/reference/editions.md) | multi-riwayah — the four editions, slug vocabularies, the `qua-domain` dependency, coordinate projection, per-surface changes, the word-profile shard |
 | [`validation.md`](docs/reference/validation.md) | validation engine, categories, persisted classifier fields, drift gates |
 | [`frontend.md`](docs/reference/frontend.md) | Svelte 5 SPA — dashboard/timestamps/segments tabs, lib, stores, charts |
 | [`theming.md`](docs/reference/theming.md) | light/dark themes — token contract (`tokens.css` + `theme-light.css`), flash-free init, `themeStore`+toggle, `canvas-theme.ts` resolver, theme-conditional accent-derivation, the no-raw-color rule |
