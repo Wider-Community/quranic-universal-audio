@@ -14,6 +14,8 @@ from collections import defaultdict
 from typing import Any
 
 from config import LOW_CONFIDENCE_DETAIL_THRESHOLD, MISSED_BASMALA_FLAG_MIN_DELETED
+from qua_shared.riwayat import DEFAULT_SDK_RIWAYAH
+from services.reference import edition_tables
 from services.reference.quran_refs import dk_text_for_ref
 from services.storage.data_loader import load_detailed
 from services.validation.classifier import (
@@ -167,6 +169,7 @@ def _build_detail_lists(
     hidden_pause_map: dict[str, dict] | None = None,
     false_split_map: dict[str, dict] | None = None,
     unmarked_wasl_map: dict[str, dict] | None = None,
+    riwayah: str = DEFAULT_SDK_RIWAYAH,
 ) -> dict:
     """Iterate entries and build all detail lists + verse_segments map.
 
@@ -262,7 +265,7 @@ def _build_detail_lists(
                             "seg_index": i,
                             "segment_uid": seg_uid,
                             "time": f"{format_ms(t_start)}-{format_ms(t_end)}",
-                            "classified_issues": classify_segment(seg),
+                            "classified_issues": classify_segment(seg, riwayah=riwayah),
                         }
                     )
                 continue
@@ -308,7 +311,7 @@ def _build_detail_lists(
                             "display_ref": matched_ref,
                             "confidence": round(confidence, 4),
                             "time": f"{format_ms(t_start)}-{format_ms(t_end)}",
-                            "text": dk_text_for_ref(matched_ref),
+                            "text": dk_text_for_ref(matched_ref, riwayah),
                             "classified_issues": ["repetitions"],
                         }
                     )
@@ -375,6 +378,7 @@ def _build_detail_lists(
                 hidden_pause_uids=hidden_pause_map,
                 false_split_uids=false_split_map,
                 unmarked_wasl_uids=unmarked_wasl_map,
+                riwayah=riwayah,
             )
             classified = _classified_issues_from_flags(flags, detail=True)
 
@@ -414,7 +418,7 @@ def _build_detail_lists(
                         "display_ref": display_ref,
                         "confidence": round(confidence, 4),
                         "time": f"{format_ms(t_start)}-{format_ms(t_end)}",
-                        "text": dk_text_for_ref(matched_ref),
+                        "text": dk_text_for_ref(matched_ref, riwayah),
                         "classified_issues": classified,
                     }
                 )
@@ -532,12 +536,20 @@ def _build_detail_lists(
                     }
                 )
 
-            if surah == 1 and (s_ayah <= 1 <= e_ayah or s_ayah <= 7 <= e_ayah):
-                # Suppression is applied at the output gate (below), not at
-                # candidate collection. If a user resolves the canonical
-                # candidate (first 1:1 or last 1:7), the card should
-                # disappear -- NOT promote a neighbouring seg, which would
-                # be whack-a-mole.
+            # Two independent sub-checks on al-Fatiha, and only the second
+            # applies to every edition.
+            #
+            # The sounded-Basmala check asks "is the Basmala at 1:1 covered by a
+            # segment?", which is a question only where the Basmala IS verse 1:1
+            # — Hafs and Shu'bah. Warsh and Qalun render it as an unnumbered
+            # opener that the offline pipeline strips, so there is no 1:1 to
+            # cover and flagging one would be permanent, unresolvable noise.
+            #
+            # The Amin check asks about the verse AFTER al-Fatiha's last, which
+            # every edition has. Warsh's al-Fatiha still ends at 7 (it drops the
+            # numbered Basmala and splits a later verse), but the number is read
+            # from the edition rather than assumed.
+            if surah == 1:
                 item = {
                     "chapter": chapter,
                     "seg_index": i,
@@ -545,10 +557,16 @@ def _build_detail_lists(
                     "ref": matched_ref,
                     "classified_issues": classified,
                 }
+                # Suppression is applied at the output gate (below), not at
+                # candidate collection. If a user resolves the canonical
+                # candidate (first 1:1 or last 1:<fatiha_last>), the card should
+                # disappear -- NOT promote a neighbouring seg, which would
+                # be whack-a-mole.
                 suppressed = is_suppressed_for(seg, "basmala_amin")
-                if s_ayah <= 1 <= e_ayah:
+                fatiha_last = edition_tables.fatiha_last_ayah(riwayah)
+                if edition_tables.basmala_is_numbered(riwayah) and s_ayah <= 1 <= e_ayah:
                     basmala_11.append((item, suppressed))
-                if s_ayah <= 7 <= e_ayah:
+                if s_ayah <= fatiha_last <= e_ayah:
                     basmala_amin_17.append((item, suppressed))
 
             # Accumulate verse coverage (3-tuple: word_from, word_to, seg_index)

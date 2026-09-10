@@ -7,8 +7,10 @@ from datetime import UTC, datetime
 
 from constants import HISTORY_SCHEMA_VERSION
 from domain.command import apply_inverse_patch
+from qua_shared.riwayat import DEFAULT_SDK_RIWAYAH
 from qua_shared.schemas import Actor
 from services.activity.history_query import parse_history_for_reciter
+from services.reference.delivery_edition import sdk_riwayah_for
 from services.segments.save import persist_detailed
 from services.storage import cache, data_dir
 from services.storage.data_loader import load_detailed
@@ -223,7 +225,9 @@ def _reverse_ignore(entries: list[dict], op: dict, chapter_set: set[int]) -> Non
 # ---------------------------------------------------------------------------
 
 
-def _reverse_via_patch(entries: list[dict], op: dict, chapter_set: set[int]) -> None:
+def _reverse_via_patch(
+    entries: list[dict], op: dict, chapter_set: set[int], riwayah: str = DEFAULT_SDK_RIWAYAH
+) -> None:
     """Apply the inverse of an op by running the patch in reverse.
 
     Validates that the patch's affectedChapterIds are within the batch's
@@ -242,13 +246,19 @@ def _reverse_via_patch(entries: list[dict], op: dict, chapter_set: set[int]) -> 
             chapter_set,
         )
         raise ValueError(f"patch claims chapters {outside} outside the batch scope {chapter_set}")
-    apply_inverse_patch(entries, patch)
+    apply_inverse_patch(entries, patch, riwayah)
 
 
-def apply_reverse_op(entries: list[dict], op: dict, chapter_set: set[int]) -> None:
-    """Apply the reverse of a single operation.  Raises ``ValueError`` on conflict."""
+def apply_reverse_op(
+    entries: list[dict], op: dict, chapter_set: set[int], riwayah: str = DEFAULT_SDK_RIWAYAH
+) -> None:
+    """Apply the reverse of a single operation.  Raises ``ValueError`` on conflict.
+
+    ``riwayah`` only reaches the patch path, which is the one that re-derives a
+    snapshot's ``matched_text`` — every other reverse restores stored text.
+    """
     if "patch" in op:
-        _reverse_via_patch(entries, op, chapter_set)
+        _reverse_via_patch(entries, op, chapter_set, riwayah)
         return
     op_type = op.get("op_type", "")
     if op_type in ("trim_segment", "auto_fix_missing_word"):
@@ -372,13 +382,14 @@ def undo_batch(reciter: str, target_batch_id: str, *, actor: Actor) -> dict | tu
         return {"error": "Reciter data not found"}, 404
 
     meta = cache.get_seg_meta(reciter)
+    riwayah = sdk_riwayah_for(reciter)
     affected_chapters: set[int] = set()
     for rec in matching:
         affected_chapters.update(_get_affected_chapters(rec))
 
     try:
         for op in reversed(operations):
-            apply_reverse_op(entries, op, affected_chapters)
+            apply_reverse_op(entries, op, affected_chapters, riwayah)
     except ValueError as e:
         return {"error": str(e)}, 409
 
@@ -466,13 +477,14 @@ def undo_ops(
         return {"error": "Reciter data not found"}, 404
 
     meta = cache.get_seg_meta(reciter)
+    riwayah = sdk_riwayah_for(reciter)
     affected_chapters: set[int] = set()
     for rec in matching:
         affected_chapters.update(_get_affected_chapters(rec))
 
     try:
         for op in reversed(ops_to_undo):
-            apply_reverse_op(entries, op, affected_chapters)
+            apply_reverse_op(entries, op, affected_chapters, riwayah)
     except ValueError as e:
         return {"error": str(e)}, 409
 

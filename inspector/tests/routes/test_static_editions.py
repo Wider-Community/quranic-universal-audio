@@ -78,3 +78,21 @@ def test_a_runtime_without_the_package_refuses_rather_than_substituting_a_font(
 
     cache.clear_edition_caches()
     assert flask_client.get("/api/static/edition/warsh_an_nafi/font").status_code == 503
+
+
+def test_seg_config_serves_each_editions_own_coordinate_vocabulary(flask_client, tmp_reciter_dir):
+    hafs = flask_client.get("/api/seg/config").get_json()
+    warsh = flask_client.get("/api/seg/config?riwayah=warsh_an_nafi").get_json()
+
+    assert hafs["riwayah"] == "hafs_an_asim"
+    assert warsh["riwayah"] == "warsh_an_nafi"
+    # 30 muqattaat words in both, but Warsh merges two of them into one verse.
+    assert len(warsh["muqattaat_words"]) == len(hafs["muqattaat_words"]) == 30
+    assert len(warsh["muqattaat_verses"]) == 29
+    assert len(hafs["muqattaat_verses"]) == 30
+    assert warsh["standalone_refs"] != hafs["standalone_refs"]
+    assert warsh["standalone_words"] != hafs["standalone_words"]
+
+
+def test_seg_config_rejects_an_unsupported_riwayah(flask_client, tmp_reciter_dir):
+    assert flask_client.get("/api/seg/config?riwayah=duri_an_abi_amr").status_code == 400

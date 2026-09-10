@@ -10,6 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from qua_shared.riwayat import DEFAULT_SDK_RIWAYAH
+
 
 @dataclass(frozen=True)
 class SegmentPatch:
@@ -66,7 +68,9 @@ def validate_patch_dict(d: Any) -> str | None:
     return None
 
 
-def apply_inverse_patch(entries: list[dict], patch: dict) -> list[dict]:
+def apply_inverse_patch(
+    entries: list[dict], patch: dict, riwayah: str = DEFAULT_SDK_RIWAYAH
+) -> list[dict]:
     """Apply the inverse of *patch* to *entries* and return the mutated list.
 
     The inverse transformation:
@@ -79,7 +83,9 @@ def apply_inverse_patch(entries: list[dict], patch: dict) -> list[dict]:
     Snapshots are hydrated with a derived ``matched_text`` when missing so the
     written ``detailed.json`` segment keeps the documented schema. New
     snapshots stopped carrying ``matched_text`` (derivable from ``matched_ref``
-    via ``dk_words``); legacy snapshots that do carry it pass through unchanged.
+    via the word map); legacy snapshots that do carry it pass through unchanged.
+    The text is derived in ``riwayah``'s own script, so an undo cannot write
+    Hafs glyphs into another edition's segments.
 
     The entries list is mutated in place and returned for convenience.
     """
@@ -91,7 +97,7 @@ def apply_inverse_patch(entries: list[dict], patch: dict) -> list[dict]:
     def _hydrate(snap: dict) -> dict:
         out = dict(snap)
         if not out.get("matched_text") and out.get("matched_ref"):
-            out["matched_text"] = dk_text_for_ref(out.get("matched_ref"))
+            out["matched_text"] = dk_text_for_ref(out.get("matched_ref"), riwayah)
         return out
 
     patch_obj = patch_from_dict(patch)

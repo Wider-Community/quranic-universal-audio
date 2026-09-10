@@ -9,11 +9,14 @@ from __future__ import annotations
 
 import statistics as _statistics
 
+from qua_shared.riwayat import DEFAULT_SDK_RIWAYAH
 from services.storage.data_loader import get_word_counts, load_seg_verses
 from utils.references import chapter_from_ref
 
 
-def _check_structural_errors(reciter: str, entries: list[dict]) -> tuple[list, list, dict | None]:
+def _check_structural_errors(
+    reciter: str, entries: list[dict], riwayah: str = DEFAULT_SDK_RIWAYAH
+) -> tuple[list, list, dict | None]:
     """Check structural integrity of segments.json.
 
     Returns ``(errors, missing_verses, stats)`` where:
@@ -31,7 +34,7 @@ def _check_structural_errors(reciter: str, entries: list[dict]) -> tuple[list, l
     if not verses:
         return errors, missing_verses, stats
 
-    word_counts = get_word_counts()
+    word_counts = get_word_counts(riwayah)
 
     total_segments = 0
     single_seg = 0

@@ -977,7 +977,8 @@ def _h_marked_ready(slug, before, actor, payload, reason):
         # The FE applies the same gate as a UX layer, but the server is the
         # source of truth — a race against unsaved edits or a stale snapshot
         # in the browser can mean the FE's view diverges.
-        from config import LOW_CONFIDENCE_THRESHOLD
+        from config import LOW_CONFIDENCE_THRESHOLDS
+        from services.reference.delivery_edition import sdk_riwayah_for
         from services.validation import validate_reciter_segments
 
         result = validate_reciter_segments(slug)
@@ -1000,8 +1001,11 @@ def _h_marked_ready(slug, before, actor, payload, reason):
         # in the 80–100% band — i.e. essentially all of them.
         counts = dict(result.get("category_counts") or {})
         lc_items = result.get("low_confidence") or []
+        # The cutoff is per edition (config.LOW_CONFIDENCE_THRESHOLDS); the gate
+        # has to use the same one the reviewer's accordion badge showed.
+        cutoff = LOW_CONFIDENCE_THRESHOLDS[sdk_riwayah_for(slug)]
         counts["low_confidence"] = sum(
-            1 for it in lc_items if (it.get("confidence") or 0.0) < LOW_CONFIDENCE_THRESHOLD
+            1 for it in lc_items if (it.get("confidence") or 0.0) < cutoff
         )
         nonzero = {
             k: int(counts.get(k, 0)) for k in BLOCKING_COUNT_KEYS if int(counts.get(k, 0)) > 0

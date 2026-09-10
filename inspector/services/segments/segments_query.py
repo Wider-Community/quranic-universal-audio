@@ -6,6 +6,7 @@ No Flask imports -- functions accept parameters and return plain dicts/lists.
 import statistics
 
 from config import LOW_CONFIDENCE_RED, LOW_CONFIDENCE_THRESHOLD
+from services.reference.delivery_edition import sdk_riwayah_for
 from services.audio.audio_meta import (
     chapter_bitrate_kbps_for_reciter,
     is_vbr,
@@ -95,7 +96,10 @@ def get_chapter_data(reciter: str, chapter: int, verse_filter: str | None = None
 
     # Missing verses
     missing_verses = []
-    wc = get_word_counts()
+    # The chapter's verse list under THIS edition's counting profile: Warsh's
+    # al-Baqarah ends at 285, so a Hafs-derived expectation would report 2:286
+    # missing on every Warsh delivery, forever.
+    wc = get_word_counts(sdk_riwayah_for(reciter))
     expected_verses = {v for (s, v) in wc if s == chapter}
     if expected_verses:
         found_verses = set()

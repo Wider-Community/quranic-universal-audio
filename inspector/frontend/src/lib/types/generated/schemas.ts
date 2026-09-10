@@ -1556,6 +1556,10 @@ export interface FlagComment {
  * ``seg_font_size`` / ``seg_word_spacing`` are CSS dimension STRINGS
  * (``"1.8rem"`` / ``"0.2em"``), not numbers. ``accordion_context`` maps a
  * validation category to a default reveal state (``"shown"`` / ``"hidden"``).
+ *
+ * The three coordinate vocabularies are EDITION-SPECIFIC — the route takes
+ * ``?riwayah=`` and echoes which edition it answered for, so the FE cannot
+ * render one edition's tables against another's script.
  */
 export interface SegConfigResponse {
   seg_font_size: string;
@@ -1566,10 +1570,13 @@ export interface SegConfigResponse {
   trim_dim_alpha: number;
   low_conf_default_threshold: number;
   validation_categories: string[];
+  riwayah: string;
   muqattaat_verses: [unknown, unknown][];
   qalqala_letters: string[];
   standalone_refs: [unknown, unknown, unknown][];
   standalone_words: string[];
+  muqattaat_words: [unknown, unknown, unknown][];
+  low_confidence_threshold: number;
   accordion_context: {
     [k: string]: string;
   };

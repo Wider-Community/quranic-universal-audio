@@ -1,10 +1,11 @@
 """Segments tab data routes (/api/seg/ — read-only data endpoints)."""
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, abort, jsonify, request
 
 from config import (
     ACCORDION_CONTEXT,
     LOW_CONF_DEFAULT_THRESHOLD,
+    LOW_CONFIDENCE_THRESHOLDS,
     SEG_FONT_SIZE,
     SEG_SCROLL_ANIM_MODE,
     SEG_WORD_SPACING,
@@ -13,16 +14,13 @@ from config import (
     TRIM_PAD_RIGHT,
 )
 from constants import (
-    MUQATTAAT_VERSES as _MUQATTAAT_VERSES,
-)
-from constants import (
     QALQALA_LETTERS as _QALQALA_LETTERS,
 )
-from constants import (
-    STANDALONE_REFS as _STANDALONE_REFS,
-)
-from constants import (
-    STANDALONE_WORDS as _STANDALONE_WORDS,
+from qua_shared.riwayat import (
+    DEFAULT_RIWAYAH,
+    UnsupportedRiwayah,
+    from_sdk_slug,
+    to_sdk_slug,
 )
 from qua_shared.schemas.wire._envelopes import ErrorEnvelope
 from qua_shared.schemas.wire.seg import (
@@ -39,6 +37,7 @@ from services.data_loader import (
     load_detailed,
     resolve_pad,
 )
+from services.reference import edition_tables
 from services.segments.flags import flag_view
 from services.segments_query import get_chapter_data
 from services.state import catalog as catalog_service
@@ -55,7 +54,18 @@ seg_data_bp = Blueprint("seg_data", __name__, url_prefix="/api/seg")
 
 @seg_data_bp.route("/config")
 def seg_config():
-    """Return display configuration for Segments tab."""
+    """Return display configuration + coordinate vocabularies for Segments.
+
+    ``?riwayah=`` selects the edition (an Inspector slug; default Hafs, whose
+    response is byte-identical to the pre-multi-riwayah one apart from the two
+    new fields). 400 on an unsupported riwayah rather than a Hafs fallback: the
+    FE uses these tables to decide whether a one-word segment is legitimate,
+    and the wrong edition's tables give the wrong answer silently.
+    """
+    try:
+        riwayah = to_sdk_slug(request.args.get("riwayah") or DEFAULT_RIWAYAH)
+    except UnsupportedRiwayah as exc:
+        abort(400, str(exc))
     model = SegConfigResponse(
         seg_font_size=SEG_FONT_SIZE,
         seg_word_spacing=SEG_WORD_SPACING,
@@ -65,10 +75,13 @@ def seg_config():
         trim_dim_alpha=TRIM_DIM_ALPHA,
         low_conf_default_threshold=LOW_CONF_DEFAULT_THRESHOLD,
         validation_categories=list(ALL_CATEGORIES),
-        muqattaat_verses=sorted(_MUQATTAAT_VERSES),
+        riwayah=from_sdk_slug(riwayah),
+        muqattaat_verses=sorted(edition_tables.muqattaat_verses(riwayah)),
         qalqala_letters=sorted(_QALQALA_LETTERS),
-        standalone_refs=sorted(_STANDALONE_REFS),
-        standalone_words=sorted(_STANDALONE_WORDS),
+        standalone_refs=sorted(edition_tables.standalone_refs(riwayah)),
+        standalone_words=sorted(edition_tables.standalone_words(riwayah)),
+        muqattaat_words=sorted(edition_tables.muqattaat_words(riwayah)),
+        low_confidence_threshold=LOW_CONFIDENCE_THRESHOLDS[riwayah],
         accordion_context=ACCORDION_CONTEXT,
     )
     return orjson_response(

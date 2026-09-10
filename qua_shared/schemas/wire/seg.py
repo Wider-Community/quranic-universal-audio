@@ -72,6 +72,10 @@ class SegConfigResponse(BaseModel):
     ``seg_font_size`` / ``seg_word_spacing`` are CSS dimension STRINGS
     (``"1.8rem"`` / ``"0.2em"``), not numbers. ``accordion_context`` maps a
     validation category to a default reveal state (``"shown"`` / ``"hidden"``).
+
+    The three coordinate vocabularies are EDITION-SPECIFIC — the route takes
+    ``?riwayah=`` and echoes which edition it answered for, so the FE cannot
+    render one edition's tables against another's script.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -84,10 +88,20 @@ class SegConfigResponse(BaseModel):
     trim_dim_alpha: float
     low_conf_default_threshold: int
     validation_categories: list[str]
+    #: Inspector slug of the edition the vocabularies below describe.
+    riwayah: str
+    #: Verses that OPEN with the disconnected letters. Verse-keyed because the
+    #: boundary-adjustment exemption covers the whole verse, not just the
+    #: opening word (13:1 runs on past the letters).
     muqattaat_verses: list[tuple[int, int]]
     qalqala_letters: list[str]
     standalone_refs: list[tuple[int, int, int]]
     standalone_words: list[str]
+    #: Word refs that ARE a disconnected-letters opening. Distinct from
+    #: ``muqattaat_verses``: a Warsh verse can hold two of them.
+    muqattaat_words: list[tuple[int, int, int]]
+    #: Confidence below which a segment is flagged; per edition (D19).
+    low_confidence_threshold: float
     accordion_context: dict[str, str]
 
 
