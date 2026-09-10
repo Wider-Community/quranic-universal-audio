@@ -98,7 +98,7 @@
                 if (cell) {
                     const entity: WordEntity = {
                         kind: 'word', readingId: reading.id, id: word.id, element: cell,
-                        start: word.start, end: word.end, wordIndex: word.id,
+                        start: word.start, end: word.end, wordIndex: word.displayIndex,
                     };
                     entities.push(entity);
                     entityByElement.set(cell, entity);
@@ -113,7 +113,7 @@
                 if (!tile) continue;
                 const entity: WordEntity = {
                     kind: 'boundary', readingId: reading.id, id: gap.id, element: tile,
-                    start: gap.start, end: gap.end, wordIndex: word.id,
+                    start: gap.start, end: gap.end, wordIndex: word.displayIndex,
                 };
                 entities.push(entity);
                 entityByElement.set(tile, entity);

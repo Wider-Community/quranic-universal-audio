@@ -36,6 +36,7 @@
   "errors_read_only": "This instance is read-only; changes aren't saved.",
   "errors_riwayah_mismatch": "This recitation's catalog entry and its aligned data name different riwayat, so it can't be shown safely.",
   "errors_unsupported_riwayah": "That riwayah isn't one this site can serve.",
+  "errors_ref_not_in_edition": "That reference doesn't name a word in this recitation's riwayah.",
   "errors_editions_unavailable": "This deployment can only serve Hafs; the edition data for other riwayat isn't installed.",
   "errors_status_401": "Please sign in to continue.",
   "errors_status_403": "You don't have permission for this action.",

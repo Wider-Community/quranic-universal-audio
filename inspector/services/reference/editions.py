@@ -47,6 +47,18 @@ class EditionsUnavailable(RuntimeError):
     """A non-Hafs edition was requested but ``qua_domain`` is not usable."""
 
 
+class RefNotInEdition(ValueError):
+    """A ``matched_ref`` that does not name a word of the delivery's edition.
+
+    ``reverse_range`` raises rather than returning an empty span, and it raises
+    two unrelated types: ``InvalidQuranReferenceError`` for a malformed ref and
+    a bare ``KeyError`` for a well-formed ref whose coordinates the edition does
+    not have (Warsh and Qalun renumber 50 surahs, so a Hafs ref can be perfectly
+    valid and still name nothing here). Both mean the same thing to a caller and
+    both are the client's ref, so they arrive as one 400 rather than a 500.
+    """
+
+
 class HafsNotRoutedHere(RuntimeError):
     """Hafs text was requested from the edition accessor.
 

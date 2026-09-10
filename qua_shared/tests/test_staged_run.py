@@ -70,9 +70,15 @@ def test_golden_projected_candidate_carries_its_edition_and_its_evidence():
 
     segments = [seg for entry in candidate.entries for seg in entry.segments]
     merged = next(seg for seg in segments if seg["projection_support"] == "partial")
-    # Warsh writes Hafs 40:26:13 + 40:26:14 as one word.
+    # Warsh writes Hafs 40:26:13 + 40:26:14 as one word, and the aligner matched
+    # only the first of the two — so the staged span is one word wide and the
+    # support says so. This is evidence, not a derivation: it records the text
+    # the matcher actually had. Promote then widens it to the whole projection
+    # group (``stamp_projection``), because that is the span the timing engine
+    # must align a merged word's audio against; ``test_projection_stamp`` pins
+    # that side. The two records disagree by design and each says so.
     assert merged["matched_ref"] == "40:26:13-40:26:13"
-    assert merged["source_ref"] == "40:26:13-40:26:14"
+    assert merged["source_ref"] == "40:26:13-40:26:13"
 
     for seg in segments:
         parsed = DetailedSegment.model_validate(seg)

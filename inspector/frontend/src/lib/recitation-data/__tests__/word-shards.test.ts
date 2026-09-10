@@ -75,5 +75,20 @@ describe('word-profile assembly', () => {
         );
         expect(data.words.map((word) => word.location)).toEqual(['112:1:2', '112:1:3']);
         expect(data.wordReadings[0]!.words.map((word) => word.id)).toEqual([1, 2]);
+        // …and the row's `displayIndex` follows `data.words`, not the reading.
+        // The two only coincide for a chapter's first verse, which is the whole
+        // reason a partial selection is the case that pins this down: a loop
+        // target built from `id` here would address `data.words[1]` and
+        // `data.words[2]`, the second of which does not exist.
+        expect(data.wordReadings[0]!.words.map((word) => word.displayIndex)).toEqual([0, 1]);
+    });
+
+    it('numbers every rendered word by its position in the flat word list', () => {
+        const data = assemble();
+        const flat = data.wordReadings.flatMap((reading) => reading.words);
+        expect(flat.map((word) => word.displayIndex)).toEqual(data.words.map((_, i) => i));
+        for (const word of flat) {
+            expect(data.words[word.displayIndex]!.location).toBe(word.location);
+        }
     });
 });

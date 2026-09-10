@@ -874,7 +874,7 @@ def _release_editions(editions: set[str]) -> dict[str, dict]:
         out[riwayah] = {
             "edition_id": edition.edition_id,
             "words_sha256": edition.words_sha256,
-            "script_sha256": edition.script_sha256,
+            "script_asset_sha256": edition.script_sha256,
             "font_family": edition.font_family,
             "projection_sha256": projection.projection_sha256,
         }
@@ -887,6 +887,9 @@ def _edition_script(riwayah: str, digital_khatt_sha256: str) -> tuple[str, str]:
     Hafs keeps the Digital Khatt pair every existing release names. Another
     edition names its own index revision — the same digest the shard's
     ``words_sha256`` pins, so a reader can prove the two came from one revision.
+    The manifest surfaces that digest as ``editions[<riwayah>].words_sha256``;
+    the edition's own script-asset digest lives beside it under a different key
+    precisely so nobody verifies a tier file against the wrong one.
     """
     if riwayah == DEFAULT_SDK_RIWAYAH:
         return DIGITAL_KHATT_SCRIPT_ID, digital_khatt_sha256

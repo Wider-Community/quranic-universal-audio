@@ -11,6 +11,7 @@ from __future__ import annotations
 import pytest
 
 from services.reference import editions
+from services.reference.editions import RefNotInEdition
 from services.segments.projection_stamp import stamp_projection
 
 has_editions = pytest.mark.skipif(
@@ -91,3 +92,25 @@ def test_a_transition_segment_carries_no_provenance(ref):
 
     assert "source_ref" not in seg
     assert "projection_support" not in seg
+
+
+@has_editions
+@pytest.mark.parametrize(
+    ("ref", "why"),
+    [
+        ("2:286:1-2:286:1", "Qalun's al-Baqarah ends at 285 — this verse is not in it"),
+        ("112:2:1-112:2:9", "the verse exists but has nowhere near nine words"),
+        ("999:1:1-999:1:1", "no such surah in any edition"),
+    ],
+)
+def test_a_ref_this_edition_does_not_have_is_the_clients_error(ref, why):
+    """``reverse_range`` raises, it never returns an empty span.
+
+    Two different types, at that — a malformed ref is an
+    ``InvalidQuranReferenceError`` and an out-of-edition one is a bare
+    ``KeyError`` — so letting them through gave a 500 for what is a bad ref in
+    the request. Warsh and Qalun renumber 50 surahs, which makes this ordinary:
+    a ref that is perfectly valid in Hafs can name nothing here.
+    """
+    with pytest.raises(RefNotInEdition, match="qalun"):
+        stamp_projection({"matched_ref": ref}, "qalun")

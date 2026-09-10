@@ -11,10 +11,10 @@ exist and they do NOT agree:
 This module is deliberately an explicit table rather than a call to
 ``qua_domain.normalize_riwayah``, for two reasons:
 
-1. ``normalize_riwayah`` raises ``ValueError`` on ``qalon_an_nafi`` and
-   ``shubah_an_asim`` today — its alias table has ``qaloonannafi`` and
-   ``shubah`` but not those spellings. The upstream fix is separate; the
-   Inspector must not be blocked on it.
+1. ``normalize_riwayah``'s alias table is upstream's to change. The pinned
+   revision happens to accept all four Inspector spellings, but the mapping
+   this repo's catalog rows depend on has to be pinned where those rows live,
+   not inherited from a dependency that can drop an alias in any revision.
 2. ``qua_domain`` is an optional dependency (see
    ``services/reference/editions.py``). Slug support must be answerable on a
    Hafs-only deployment where the package is not installed.

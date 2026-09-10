@@ -90,17 +90,56 @@ proxy phones**. The result is *projected* onto the delivery's edition. So:
 | Coordinates a reviewer sees and edits (`matched_ref`) | the delivery's edition |
 | The Hafs span the matcher actually matched (`source_ref`) | Hafs, recorded on the seg |
 | `projection_support` | `full` / `partial` — `partial` means a source word in the span reached no target word, or sat in an N:M relation the projection could only partly carry |
+| Display text + font | the delivery's edition |
+| Verse word counts, ayah counts, stop signs | the delivery's edition |
 
 Both provenance fields are **derived, never sent by the client**: the editor
 works in the delivery edition's coordinates and knows nothing about Hafs.
 `services/segments/stamping.py` re-derives them from `matched_ref` on every
-save (`projection_stamp.stamp_projection`), so a reviewer's re-reference moves
-the Hafs span with it. Inheriting the old value would align the wrong audio;
-dropping it would make the timestamps engine refuse the delivery, which it
-does — `assert_projected_segments_are_sourced` runs before any alignment.
-Support is computed from the SOURCE side by `qua_shared/projection_support.py`.
-| Display text + font | the delivery's edition |
-| Verse word counts, ayah counts, stop signs | the delivery's edition |
+write — save (`save.py`) *and* undo (`undo._restamp`), because the frontend's
+before-snapshot carries neither field and restoring it verbatim would drop
+them. Inheriting the old value would align the wrong audio; dropping it would
+make the timestamps engine refuse the delivery, which it does —
+`assert_projected_segments_are_sourced` runs before any alignment. Support is
+computed from the SOURCE side by `qua_shared/projection_support.py`.
+
+`source_ref` is always the **whole projection group** `matched_ref` closes over:
+Warsh writes Hafs `40:26:13`+`14` as one word, and a segment ending on it hands
+MFA both Hafs words or gets half the phones of the word it is timing. The staged
+run's own `source_ref` can be narrower — there it is evidence, the text the
+matcher actually had — and promote widens it. The two records disagree by design;
+`qua_shared/tests/test_staged_run.py` and `tests/services/test_projection_stamp.py`
+pin the two sides.
+
+A `matched_ref` that names no word of the delivery's edition raises
+`RefNotInEdition` → **400 `REF_NOT_IN_EDITION`**. `reverse_range` never returns
+an empty span; it raises, and with two unrelated types (a malformed ref is
+`InvalidQuranReferenceError`, an out-of-edition one a bare `KeyError`), so both
+are caught at the stamp and reported as the client error they are.
+
+### Verse numbering does not line up
+
+**Warsh and Qalun renumber 50 of the 114 surahs**, and that is the fact most of
+this document rests on. It is not only an offset — verses merge and split:
+
+| | warsh / qalun |
+|---|---|
+| Source verses whose words reach **two** target verses | 59 |
+| Target verses fed by **two** source verses | 77 |
+| Ayah count | 6214 (Hafs and Shu'bah: 6236) |
+
+Shu'bah renumbers nothing — it is Hafs's numbering with a different word text.
+
+Two consequences worth stating outright:
+
+- **One occurrence, one verse — in the coordinates it is *aligned* in.** Warsh
+  `2:1` is a single Warsh verse and two Hafs verses, so it looks clean in
+  `matched_ref` and breaks the shard builder. The timestamps runner's pre-flight
+  guard therefore tests `build_mfa_ref(seg)` (i.e. `source_ref`), not
+  `matched_ref`; such a segment has to be split before it can be timed.
+- **A `by_ayah` chapter entry's ref is the delivery's verse, and MFA's word
+  locations are Hafs.** They do not match for a renumbered surah, so the word
+  filter reads the segment's `source_ref` span (`raw_v2._source_verse_keys`).
 
 The hardcoded classifier tables are projected through `qua_domain`, never
 duplicated per edition — see `services/reference/edition_tables.py`. Hafs is the
@@ -270,7 +309,8 @@ letter timings" from "this verse happened to have none".
   `content_hash` is taken over the **deepest emitted tier** (the shallower tiers
   are exact prefixes, so it still detects any timing change).
 - `manifest.json.editions` — per non-Hafs edition: `edition_id`,
-  `words_sha256`, `script_sha256`, `font_family`, `projection_sha256`.
+  `words_sha256`, `script_asset_sha256`, `font_family`, `projection_sha256`. A tier
+  file's `script_sha256` carries `words_sha256`, not `script_asset_sha256`.
 - Tier `_meta.script` names the edition index id (e.g. `warsh-v21+sdk-words-v1`)
   instead of `digital_khatt_v2`, with the matching digest.
 - The CHANGELOG gains a **Timings** column and a note explaining proxy timings.

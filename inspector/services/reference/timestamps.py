@@ -117,11 +117,14 @@ def _edition_blocks(reciters_block: dict[str, dict]) -> dict[str, dict]:
     blocks: dict[str, dict] = {}
     for block in reciters_block.values():
         slug = block.get("riwayah")
-        if not slug or slug in blocks:
+        if not slug:
             continue
         try:
             # Accepts either vocabulary: the field is a plain catalog string and
-            # older rows / fixtures can carry the short SDK form.
+            # older rows / fixtures can carry the short SDK form. The dedupe
+            # below has to happen on the canonical slug for the same reason —
+            # ``blocks`` is keyed canonically, so a row holding ``warsh`` and a
+            # row holding ``warsh_an_nafi`` are one edition, not two.
             sdk_slug = resolve_sdk_slug(slug)
             if sdk_slug == DEFAULT_SDK_RIWAYAH:
                 continue

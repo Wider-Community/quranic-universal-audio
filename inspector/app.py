@@ -95,7 +95,7 @@ from services.admin import visitors as visitor_analytics
 from services.data_loader import load_surah_info_lite
 from services.errors import Codes, error_body
 from services.reference.delivery_edition import RiwayahMismatch
-from services.reference.editions import EditionsUnavailable
+from services.reference.editions import EditionsUnavailable, RefNotInEdition
 
 # Phonemizer was eagerly initialized here. It's now imported lazily inside
 # scripts/backfills/backfill_boundary_adj.py (the only remaining consumer).
@@ -567,6 +567,18 @@ def _handle_riwayah_mismatch(e: RiwayahMismatch):
 @app.errorhandler(UnsupportedRiwayah)
 def _handle_unsupported_riwayah(e: UnsupportedRiwayah):
     return jsonify(error_body(str(e), code=Codes.UNSUPPORTED_RIWAYAH)), 409
+
+
+@app.errorhandler(RefNotInEdition)
+def _handle_ref_not_in_edition(e: RefNotInEdition):
+    """A saved ``matched_ref`` that names no word of the delivery's edition.
+
+    The ref comes from the client, so this is a 400 — and a specific one:
+    Warsh and Qalun renumber 50 surahs, so a ref that is perfectly valid in
+    Hafs can name nothing here, and "internal server error" would send the
+    reviewer looking for a fault instead of at their ref.
+    """
+    return jsonify(error_body(str(e), code=Codes.REF_NOT_IN_EDITION)), 400
 
 
 @app.errorhandler(EditionsUnavailable)

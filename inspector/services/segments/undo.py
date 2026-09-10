@@ -12,8 +12,9 @@ from qua_shared.schemas import Actor
 from services.activity.history_query import parse_history_for_reciter
 from services.reference.delivery_edition import sdk_riwayah_for
 from services.segments.save import persist_detailed
+from services.segments.stamping import stamp_segment
 from services.storage import cache, data_dir
-from services.storage.data_loader import load_detailed
+from services.storage.data_loader import get_single_word_verses, load_detailed
 from utils.references import chapter_from_ref
 from utils.uuid7 import uuid7
 
@@ -292,6 +293,30 @@ def _get_affected_chapters(batch: dict) -> set[int]:
     return affected
 
 
+def _restamp(entries: list[dict], chapters: set[int], riwayah: str) -> None:
+    """Re-derive the backend-owned stamped fields on every entry an undo touched.
+
+    An undo is a write like any other, and two of its paths move a segment's
+    coordinates: ``_reverse_ref_edit`` rewrites ``matched_ref`` outright, and
+    the patch path replaces the whole segment dict with the frontend's
+    before-snapshot. That snapshot carries only what the editor can change --
+    ``snapshotSeg`` never sees ``source_ref``, ``projection_support``,
+    ``qalqala_letter`` or ``is_boundary_adj``, because none of them are on the
+    wire model -- so restoring it drops them.
+
+    For a projected delivery that is not cosmetic: the timestamps engine refuses
+    a run whose projected segments have no ``source_ref``
+    (``assert_projected_segments_are_sourced``), so one undo would block the
+    next alignment until every touched segment was re-saved by hand.
+    """
+    single_word_verses = get_single_word_verses(riwayah)
+    for entry in entries:
+        if chapters and chapter_from_ref(entry.get("ref", "")) not in chapters:
+            continue
+        for seg in entry.get("segments", []):
+            stamp_segment(seg, single_word_verses, riwayah)
+
+
 def _append_revert_record(
     reciter: str,
     target_batch_id: str,
@@ -393,6 +418,7 @@ def undo_batch(reciter: str, target_batch_id: str, *, actor: Actor) -> dict | tu
     except ValueError as e:
         return {"error": str(e)}, 409
 
+    _restamp(entries, affected_chapters, riwayah)
     persist_detailed(reciter, meta, entries)
 
     ch_union = sorted(affected_chapters)
@@ -488,6 +514,7 @@ def undo_ops(
     except ValueError as e:
         return {"error": str(e)}, 409
 
+    _restamp(entries, affected_chapters, riwayah)
     persist_detailed(reciter, meta, entries)
 
     ch_union = sorted(affected_chapters)

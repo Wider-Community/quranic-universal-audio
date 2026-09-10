@@ -77,8 +77,13 @@ class ReleaseEdition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     edition_id: str = Field(..., min_length=1)
+    #: Digest of the word index the tier files' text was taken from — the same
+    #: value each of this edition's tier files carries as ``script_sha256``.
     words_sha256: str = Field(..., min_length=1)
-    script_sha256: str = Field(..., min_length=1)
+    #: Digest of the QPC script asset the edition is typeset for. Deliberately
+    #: NOT called ``script_sha256``: that name is taken, on every tier file, by
+    #: the word-index digest above, and the two are different hex strings.
+    script_asset_sha256: str = Field(..., min_length=1)
     font_family: str = Field(..., min_length=1)
     #: Digest of the Hafs->edition word projection the timings were placed with.
     projection_sha256: str | None = None
@@ -201,10 +206,13 @@ class TimestampMeta(BaseModel):
     layout: str
     #: The script the row text is written in. ``digital_khatt_v2`` for Hafs;
     #: another edition names its own index id (e.g. ``warsh-v21+sdk-words-v1``),
-    #: whose digest is ``script_sha256`` and whose font is in the manifest's
-    #: ``editions`` block. Free text rather than a closed union so a new edition
-    #: revision does not need a schema bump to be publishable.
+    #: whose font is in the manifest's ``editions`` block. Free text rather than
+    #: a closed union so a new edition revision does not need a schema bump to
+    #: be publishable.
     script: str = Field(..., min_length=1)
+    #: Digest of the script named above: the Digital Khatt file for Hafs, the
+    #: edition's word index otherwise — matching ``editions[<riwayah>]``'s
+    #: ``words_sha256``, not its ``script_asset_sha256``.
     script_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     unicode_indexing: Literal["scalar"] = "scalar"
 

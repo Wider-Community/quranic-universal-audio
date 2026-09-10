@@ -667,36 +667,48 @@ def save_seg_data(reciter: str, chapter: int, updates: dict, *, actor: Actor) ->
     # one place a wrong edition becomes permanent on disk.
     riwayah = sdk_riwayah_for(reciter)
 
-    if updates.get("full_replace"):
-        err = _apply_full_replace(matching, updates, existing_by_time, existing_by_uid, riwayah)
-        if err is not None:
-            return err
-    else:
-        _apply_patch(matching, updates, riwayah)
+    # ``entries`` IS the process cache — ``load_detailed`` hands back
+    # ``cache.get_seg_cache(reciter)`` by reference — so the apply steps below
+    # mutate it before anything is written. A save that bails after them (a
+    # rejected patch envelope, a ref that is not in the delivery's edition)
+    # would otherwise leave those never-persisted edits visible to every later
+    # request, so the cache is dropped on any exit that is not a persist.
+    persisted = False
+    try:
+        if updates.get("full_replace"):
+            err = _apply_full_replace(matching, updates, existing_by_time, existing_by_uid, riwayah)
+            if err is not None:
+                return err
+        else:
+            _apply_patch(matching, updates, riwayah)
 
-    # Flag ops carry their payload in the operation envelope, not in
-    # ``segments`` — applied here with a server-authoritative actor + clock.
-    flag_err, flag_replies, flag_owner_activity = _apply_flag_ops(
-        matching, updates.get("operations") or [], actor=actor
-    )
-    if flag_err is not None:
-        return flag_err
+        # Flag ops carry their payload in the operation envelope, not in
+        # ``segments`` — applied here with a server-authoritative actor + clock.
+        flag_err, flag_replies, flag_owner_activity = _apply_flag_ops(
+            matching, updates.get("operations") or [], actor=actor
+        )
+        if flag_err is not None:
+            return flag_err
 
-    # ``ignored_categories`` is mutated only when the payload explicitly
-    # carries it (Ignore action, or explicit ``[]`` clear -- MUST-7).
-    # Edits dispatched from validation accordion cards no longer write to
-    # ``ignored_categories``: that contract is reserved for explicit Ignore.
-    # Card dismissal for soft-rule categories is purely a frontend
-    # session-state concern.
-    result = _persist_and_record(
-        reciter,
-        chapter,
-        entries,
-        meta,
-        updates,
-        actor=actor,
-        riwayah=riwayah,
-    )
+        # ``ignored_categories`` is mutated only when the payload explicitly
+        # carries it (Ignore action, or explicit ``[]`` clear -- MUST-7).
+        # Edits dispatched from validation accordion cards no longer write to
+        # ``ignored_categories``: that contract is reserved for explicit Ignore.
+        # Card dismissal for soft-rule categories is purely a frontend
+        # session-state concern.
+        result = _persist_and_record(
+            reciter,
+            chapter,
+            entries,
+            meta,
+            updates,
+            actor=actor,
+            riwayah=riwayah,
+        )
+        persisted = not isinstance(result, tuple)
+    finally:
+        if not persisted:
+            cache.invalidate_seg_caches(reciter)
 
     # Notify after the save persisted — best-effort (own durable txn), never
     # affects the save. Two audiences: the original flagger on a reply to their

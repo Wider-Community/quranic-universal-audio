@@ -47,15 +47,16 @@ def stamp_projection(seg: dict, riwayah: str = DEFAULT_SDK_RIWAYAH) -> None:
     from services.reference import editions
 
     projection = editions.projection(riwayah)
-    reverse = projection.reverse_range(matched_ref)
-    if not reverse.source_ref:
-        # Every target word has a source, so a whole span reaching none means
-        # the ref is not this edition's — refuse rather than write a segment the
-        # engine would align as Hafs.
-        raise ValueError(
-            f"{matched_ref!r} reverse-projects to no Hafs span in {riwayah} — "
-            f"the ref is not in this edition's coordinates"
-        )
+    try:
+        reverse = projection.reverse_range(matched_ref)
+    except Exception as exc:
+        # Refuse rather than write a segment the engine would align as Hafs.
+        # Bare ``Exception``: ``reverse_range`` signals a malformed ref with
+        # ``InvalidQuranReferenceError`` and an out-of-edition one with a plain
+        # ``KeyError``, and the two share no base class.
+        raise editions.RefNotInEdition(
+            f"{matched_ref!r} is not a word range in {riwayah}"
+        ) from exc
     seg["source_ref"] = reverse.source_ref
     seg["projection_support"] = support_for(projection, reverse.source_ref)
 

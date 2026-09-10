@@ -638,12 +638,12 @@ def _sync_dataset_catalog_and_card(repo_id: str) -> None:
 def _riwayah_for(audio_manifest: dict | None, detailed: dict) -> str:
     """Find the riwayah slug — it becomes the HF dataset config name.
 
-    The audio manifest's ``_meta.riwayah`` is canonical. ``detailed.json``'s
-    ``_meta.riwayah`` is the secondary source: it records the coordinate system
-    ``matched_ref`` is expressed in, so for a non-Hafs delivery the two MUST
-    agree. (Before the multi-riwayah schema change this branch was unreachable
-    — ``DetailedMeta`` is ``extra="forbid"`` and had no such field, so no
-    writer could emit one and no reader could load one.)
+    ``detailed.json``'s ``_meta.riwayah`` is the source in practice: it records
+    the coordinate system ``matched_ref`` is expressed in, and it is what the
+    promoter writes. The audio manifest's ``_meta.riwayah`` takes precedence
+    when present, and the two must agree — but nothing writes it today, so that
+    guard is a contract for a future manifest producer rather than a path this
+    job currently takes.
 
     Falls back to Hafs only when neither source names a riwayah, which is every
     pre-multi-riwayah reciter.
@@ -843,23 +843,24 @@ def publish_slug(
     surah_info = json.loads((refs_dir / "surah_info.json").read_bytes())
     digital_khatt_words = json.loads((refs_dir / "digital_khatt_v2_script.json").read_bytes())
 
-    # The shards name the edition their coordinates are in; the catalog row and
-    # detailed.json must agree with them or the rows would be filed under a
-    # config whose verse numbering they do not follow.
+    # The shards name the edition their coordinates are in; the delivery's own
+    # records (the audio manifest, else detailed.json) must agree with them or
+    # the rows would be filed under a config whose verse numbering they do not
+    # follow.
     shard_riwayah = (canonical.pop("_meta", {}) or {}).get("riwayah", DEFAULT_SDK_RIWAYAH)
     # ``publish_slug`` owes its caller a result dict, never an exception — a
     # raise here leaves the Inspector's job row running forever with no webhook.
     try:
-        catalog_riwayah, config_riwayah = _config_riwayah(audio_manifest, detailed)
+        delivery_riwayah, config_riwayah = _config_riwayah(audio_manifest, detailed)
     except (ValueError, UnsupportedRiwayah) as exc:
         log.error("riwayah unusable for %s: %s", slug, exc)
         return _result(slug, "failed", error=str(exc), exit_code=17)
-    if catalog_riwayah != shard_riwayah:
-        log.error("riwayah mismatch: catalog says %s, shards are %s", config_riwayah, shard_riwayah)
+    if delivery_riwayah != shard_riwayah:
+        log.error("riwayah mismatch: delivery says %s, shards are %s", config_riwayah, shard_riwayah)
         return _result(
             slug,
             "failed",
-            error=f"catalog riwayah {config_riwayah!r} but shards are {shard_riwayah!r}",
+            error=f"delivery riwayah {config_riwayah!r} but shards are {shard_riwayah!r}",
             exit_code=17,
         )
     # Every consumer below walks `surah_info` to enumerate verses and to size

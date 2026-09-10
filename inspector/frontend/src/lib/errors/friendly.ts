@@ -74,6 +74,7 @@ const CODE_COPY: Record<string, CopyEntry> = {
     RIWAYAH_MISMATCH: m.errors_riwayah_mismatch,
     UNSUPPORTED_RIWAYAH: m.errors_unsupported_riwayah,
     EDITIONS_UNAVAILABLE: m.errors_editions_unavailable,
+    REF_NOT_IN_EDITION: m.errors_ref_not_in_edition,
 };
 
 const STATUS_FALLBACK: Record<number, () => string> = {

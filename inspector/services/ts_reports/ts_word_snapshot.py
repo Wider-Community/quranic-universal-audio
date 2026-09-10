@@ -8,7 +8,7 @@ Timestamps tab still offers on such a delivery:
 ``verse``     the reading's parts for that ayah — what the ``audio`` and
               ``other`` comment composers target.
 ``word``      one row: its target ref and the edition's own text.
-``boundary``  the gap after a word — its state and the ayah it ends, if any.
+``boundary``  a gap between two words — its state and the ayah it ends, if any.
 
 ``tajweed`` and ``phonemes`` are refused here as they are hidden in the FE
 (``nativeOnly`` in ``domain/report-categories.ts``): there is no per-letter fact

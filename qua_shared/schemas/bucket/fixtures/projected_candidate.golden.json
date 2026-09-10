@@ -17,7 +17,7 @@
           "confidence": 0.81,
           "matched_ref": "40:26:13-40:26:13",
           "projection_support": "partial",
-          "source_ref": "40:26:13-40:26:14",
+          "source_ref": "40:26:13-40:26:13",
           "time_end": 8100,
           "time_start": 5200,
           "wrap_word_ranges": null

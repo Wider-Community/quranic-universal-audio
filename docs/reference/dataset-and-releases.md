@@ -508,7 +508,10 @@ still detects any timing change.
 
 - `manifest.json` — each recitation carries `tiers` and `riwayah`; the new
   top-level `editions` block carries `edition_id`, `words_sha256`,
-  `script_sha256`, `font_family`, `projection_sha256` per non-Hafs edition.
+  `script_asset_sha256`, `font_family`, `projection_sha256` per non-Hafs edition.
+  A tier file's `script_sha256` is the edition's **`words_sha256`** — the digest of
+  the index its text came from; `script_asset_sha256` digests the QPC script asset
+  and is a different value.
 - Tier `_meta.script` names the edition index id instead of `digital_khatt_v2`.
 - Verse gating and boundary validation run against the delivery edition's own
   counting profile (`word_counts_for` / `surah_info_for`) — Warsh and Qalun

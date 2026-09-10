@@ -99,6 +99,10 @@ function buildReadingViews(
     selected: Map<TsWordShardReading, Set<number>>,
     offset: number,
 ): WordProfileReading[] {
+    // Counts across readings, not within one, because `buildWordRows` walks the
+    // same readings in the same order with the same filter — so the nth word it
+    // emits is the nth row of `data.words`, whichever reading it came from.
+    let displayIndex = 0;
     return readings.map((reading) => {
         const ids = selected.get(reading);
         const gaps = new Map(reading.timing.boundaries.map((row) => [row.boundary_id, row]));
@@ -109,6 +113,7 @@ function buildReadingViews(
             const state = reading.states[index];
             words.push({
                 id: index,
+                displayIndex: displayIndex++,
                 location: row.ref,
                 text: row.text,
                 start: row.start_ms / 1000 - offset,

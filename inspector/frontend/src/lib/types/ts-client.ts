@@ -65,6 +65,13 @@ export interface WordProfileBoundary {
 export interface WordProfileWord {
     /** Index within the reading — also the `timing.words[].word_id`. */
     id: number;
+    /**
+     * Position of this word in `TsVerseData.words`, which is what every
+     * `loopTarget.wordIndex` means. Not the same number as `id`: `id` counts
+     * from the reading's first word (the chapter's), this counts from the
+     * verse's, and they coincide only in a chapter's first verse.
+     */
+    displayIndex: number;
     location: string;
     text: string;
     start: number; // seconds, offset-adjusted
