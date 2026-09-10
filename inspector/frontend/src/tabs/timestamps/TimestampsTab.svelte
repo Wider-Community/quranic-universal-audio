@@ -227,6 +227,15 @@
             console.error('TS: catalog/manifest load failed', e);
         }
 
+        // The `syncChapter` reactive already fired once, at mount, while
+        // `manifestSlugs` was still empty — so it bailed at the published-set
+        // gate. Nothing re-triggers it when the continuity path below keeps
+        // `playerContext` as-is, which is exactly the cold-load case (the tab
+        // opens on a delivery restored from the last session). Kick it here,
+        // now that the gate is open; it is idempotent via `loadedChapterKey`.
+        const restored = get(playerContext);
+        void syncChapter(restored.delivery?.slug ?? '', restored.surahNum ?? 0);
+
         // A bookmark deep-link owns the first load — let its consumer run.
         if (navHandled || get(pendingTsNavigation)) return;
         await resolveEntry(getActiveTab() === TAB_NAMES.TIMESTAMPS);
