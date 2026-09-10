@@ -201,11 +201,20 @@ def launch(slug: str, *, settings: TsJobSettings, webhook_base: str | None = Non
     ``running_job_for`` first.
     """
     from services.admin import ts_space_client
+    from services.reference.delivery_edition import sdk_riwayah_for
 
     if state_service.get_row(slug) is None:
         raise ValueError(f"unknown slug {slug}")
 
-    run_id = ts_space_client.start_run(slug, chapters=settings.chapters, beams=settings.beams)
+    # The Space aligns against Hafs and projects, so it has to be told which
+    # edition the delivery is in — a Hafs-proxy run stamped as Hafs would ship
+    # the wrong coordinates into the shard.
+    run_id = ts_space_client.start_run(
+        slug,
+        chapters=settings.chapters,
+        beams=settings.beams,
+        riwayah=sdk_riwayah_for(slug),
+    )
     state_service.record_timestamps_job(slug, run_id)
     # Bust the in-flight cache so the next /releases/status fetch shows the
     # running job immediately (the Releases tab watches the ``timestamps`` kind).
