@@ -105,7 +105,7 @@ _PROFILE = {
 }
 
 
-def _staged_files() -> dict[str, bytes]:
+def _staged_files(run_riwayah: str = "hafs") -> dict[str, bytes]:
     """The staged run's payloads, keyed by run-relative path."""
     candidate = {
         "chapter": CHAPTER,
@@ -113,6 +113,7 @@ def _staged_files() -> dict[str, bytes]:
         "source_url": SOURCE_URL,
         "source_offset_ms": 0,
         "trim_span_ms": None,
+        "riwayah": run_riwayah,
     }
     return {
         f"candidates/{CHAPTER}.json": json.dumps(candidate).encode("utf-8"),
@@ -126,7 +127,7 @@ def _staged_files() -> dict[str, bytes]:
     }
 
 
-def _manifest_doc(files: dict[str, bytes]) -> dict:
+def _manifest_doc(files: dict[str, bytes], run_riwayah: str = "hafs") -> dict:
     return {
         "run_id": RUN_ID,
         "slug": SLUG,
@@ -142,6 +143,7 @@ def _manifest_doc(files: dict[str, bytes]) -> dict:
             "slug": SLUG,
             "chapters": [CHAPTER],
             "audio_source": "https://example.invalid/playlist",
+            "riwayah": run_riwayah,
         },
         "artifacts": [
             {"path": p, "sha256": hashlib.sha256(b).hexdigest(), "bytes": len(b)}
@@ -197,11 +199,18 @@ def _hd_peaks(_source: str) -> dict:
 class Harness:
     """One promote run: the fake bucket, the recorded batch, the event order."""
 
-    def __init__(self, staged: dict[str, bytes], published: dict[str, bytes] | None = None):
+    def __init__(
+        self,
+        staged: dict[str, bytes],
+        published: dict[str, bytes] | None = None,
+        run_riwayah: str = "hafs",
+    ):
         self.events: list[str] = []
         prefix = f"staging/{SLUG}/{RUN_ID}"
         bucket = {f"{prefix}/{p}": b for p, b in staged.items()}
-        bucket[f"{prefix}/manifest.json"] = json.dumps(_manifest_doc(staged)).encode("utf-8")
+        bucket[f"{prefix}/manifest.json"] = json.dumps(
+            _manifest_doc(staged, run_riwayah)
+        ).encode("utf-8")
         bucket.update(published or {})
         self.backend = FakeBackend(bucket, self.events)
         self.written: dict[str, object] = {}
@@ -218,20 +227,29 @@ class _Row:
 
 @pytest.fixture
 def harness(monkeypatch):
-    def build(staged=None, published=None, row=None):
+    def build(staged=None, published=None, row=None, riwayah=None, run_riwayah="hafs"):
         import services.db as db
         from services.audio import peaks as peaks_mod
         from services.db import sync as db_sync
+        from services.state import catalog as catalog_service
         from services.state import state as state_svc
         from services.storage import bucket_audit, hf_bucket
 
-        h = Harness(staged if staged is not None else _staged_files(), published)
+        h = Harness(
+            staged if staged is not None else _staged_files(run_riwayah),
+            published,
+            run_riwayah,
+        )
         monkeypatch.setattr(hf_bucket, "get_backend", lambda: h.backend)
         monkeypatch.setattr(peaks_mod, "compute_audio_peaks", _hd_peaks)
         monkeypatch.setattr(promote_run.bs, "batch_write", h.record_batch)
         monkeypatch.setattr(db_sync, "pull", lambda *a, **k: True)
         monkeypatch.setattr(db, "init_db", lambda: 1)
         monkeypatch.setattr(state_svc, "get_row", lambda slug: row)
+        # The catalog delivery row is what promote checks the run's riwayah
+        # against; ``None`` is the no-row case, which is Hafs by construction.
+        delivery = None if riwayah is None else type("D", (), {"riwayah": riwayah})()
+        monkeypatch.setattr(catalog_service, "find_delivery", lambda slug: delivery)
         monkeypatch.setattr(
             bucket_audit,
             "audit",
@@ -468,8 +486,8 @@ def test_compare_reports_a_differing_published_reciter(monkeypatch, harness, cap
 # ---------------------------------------------------------------------------
 
 
-def _manifest_model(profile=_PROFILE) -> RunManifestDoc:
-    doc = _manifest_doc(_staged_files())
+def _manifest_model(profile=_PROFILE, run_riwayah="hafs") -> RunManifestDoc:
+    doc = _manifest_doc(_staged_files(run_riwayah), run_riwayah)
     doc["profile"] = profile
     return RunManifestDoc.model_validate(doc)
 
@@ -500,3 +518,56 @@ def test_both_artifacts_carry_the_same_meta_value(monkeypatch, harness):
     h = harness()
     _run(monkeypatch)
     assert _published(h, "detailed.json")["_meta"] == _published(h, "segments.json")["_meta"]
+
+
+# ---------------------------------------------------------------------------
+# Which edition the run was made against
+# ---------------------------------------------------------------------------
+
+
+def test_a_hafs_run_publishes_no_riwayah_key_at_all():
+    """A key that says nothing is a key every pre-multi-riwayah reciter lacks."""
+    assert "riwayah" not in pa.build_meta(_manifest_model())
+
+
+def test_a_projected_run_publishes_the_inspector_vocabulary_slug():
+    """The producer speaks ``warsh``; the catalog and every reader speak
+    ``warsh_an_nafi``, so the boundary is crossed once, here."""
+    assert pa.build_meta(_manifest_model(run_riwayah="warsh"))["riwayah"] == "warsh_an_nafi"
+
+
+def test_a_projected_run_stamps_its_edition_on_both_artifacts_and_the_sidecar(
+    monkeypatch, harness
+):
+    h = harness(riwayah="warsh_an_nafi", run_riwayah="warsh")
+    assert _run(monkeypatch) == 0
+
+    assert _published(h, "detailed.json")["_meta"]["riwayah"] == "warsh_an_nafi"
+    assert _published(h, "segments.json")["_meta"]["riwayah"] == "warsh_an_nafi"
+    assert _published(h, "pipeline_meta.json")["riwayah"] == "warsh_an_nafi"
+
+
+def test_a_hafs_run_leaves_the_pipeline_sidecar_bytes_alone(monkeypatch, harness):
+    h = harness()
+    _run(monkeypatch)
+    assert "riwayah" not in _published(h, "pipeline_meta.json")
+
+
+def test_a_run_whose_edition_is_not_the_catalogs_is_refused(monkeypatch, harness, capsys):
+    """The alignment and the catalog row disagree — no --force covers that."""
+    harness(riwayah=None, run_riwayah="warsh")
+    with pytest.raises(SystemExit):
+        _run(monkeypatch, "--force")
+    assert "warsh" in capsys.readouterr().err
+
+
+def test_a_candidate_from_another_edition_stops_the_build(monkeypatch, harness):
+    """One candidate file copied in from a different run is otherwise invisible."""
+    staged = _staged_files("warsh")
+    doc = json.loads(staged[f"candidates/{CHAPTER}.json"])
+    doc["riwayah"] = "qalun"
+    staged[f"candidates/{CHAPTER}.json"] = json.dumps(doc).encode("utf-8")
+    harness(staged=staged, riwayah="warsh_an_nafi", run_riwayah="warsh")
+
+    with pytest.raises(SystemExit):
+        _run(monkeypatch)

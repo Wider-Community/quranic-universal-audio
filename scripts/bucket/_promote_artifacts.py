@@ -127,6 +127,7 @@ def build_meta(manifest: RunManifestDoc) -> dict[str, Any]:
     knobs = _segmentation_knobs(manifest.profile)
     return DetailedMeta(
         created_at=manifest.created_at,
+        riwayah=meta_riwayah(manifest),
         asr_model=manifest.model_revisions.get("asr"),
         vad_model=manifest.model_revisions.get("vad"),
         min_silence_ms=knobs.get("min_silence_ms"),
@@ -136,6 +137,21 @@ def build_meta(manifest: RunManifestDoc) -> dict[str, Any]:
         min_silence_floor_ms=knobs.get("min_silence_floor_ms"),
         audio_source=manifest.inputs.audio_source,
     ).model_dump(exclude_none=True)
+
+
+def meta_riwayah(manifest: RunManifestDoc) -> str | None:
+    """The run's riwayah as an Inspector slug, or ``None`` when it is Hafs.
+
+    ``None`` rather than ``"hafs_an_asim"`` on purpose: ``exclude_none=True``
+    then drops the key, so a Hafs promote publishes byte-identical ``_meta`` to
+    every run that came before multi-riwayah and no backfill is owed.
+    """
+    from qua_shared.riwayat import DEFAULT_SDK_RIWAYAH, from_sdk_slug
+
+    sdk_slug = manifest.inputs.riwayah
+    if sdk_slug == DEFAULT_SDK_RIWAYAH:
+        return None
+    return from_sdk_slug(sdk_slug)
 
 
 # ---------------------------------------------------------------------------
@@ -157,6 +173,11 @@ def read_entries(run_dir: Path, manifest: RunManifestDoc) -> tuple[list[dict], d
     for chapter in sorted(manifest.inputs.chapters):
         path = run_dir / "candidates" / f"{chapter}.json"
         doc = ChapterCandidateDoc.model_validate(json.loads(path.read_bytes()))
+        if doc.riwayah != manifest.inputs.riwayah:
+            raise ValueError(
+                f"candidates/{chapter}.json is {doc.riwayah!r} but the run is "
+                f"{manifest.inputs.riwayah!r} — refs from two editions in one delivery"
+            )
         for entry in doc.entries:
             key = int(str(entry.ref).split(":")[0])
             if key in by_chapter:
@@ -387,7 +408,10 @@ def build_artifacts(run_dir: Path, manifest: RunManifestDoc, slug: str) -> dict[
 
     entries, by_chapter = read_entries(run_dir, manifest)
     n_segs = sum(len(e["segments"]) for e in entries)
-    n_stamped = stamping.stamp_entries(entries)
+    # The classifier stamps read word counts and script from the delivery's own
+    # edition; stamping a Warsh delivery against Hafs counts marks real segments
+    # as over-length and misses its qalqala letters.
+    n_stamped = stamping.stamp_entries(entries, riwayah=manifest.inputs.riwayah)
     if n_stamped != n_segs:
         raise ValueError(f"stamped {n_stamped} of {n_segs} segments")
 
@@ -414,7 +438,10 @@ def build_artifacts(run_dir: Path, manifest: RunManifestDoc, slug: str) -> dict[
                 # The run's stamp, not promote's clock — one run, one timestamp.
                 generated_at=manifest.created_at,
                 deleted_basmala_chapters=sorted(manifest.deleted_basmala_chapters),
-            ).model_dump(mode="json")
+                riwayah=meta_riwayah(manifest),
+                # exclude_none so a Hafs run's sidecar keeps the bytes it has always
+                # had — the key appears only where it says something.
+            ).model_dump(mode="json", exclude_none=True)
         ),
         "chapter_sources.json": (run_dir / "chapter_sources.json").read_bytes(),
     }

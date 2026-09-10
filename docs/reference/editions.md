@@ -114,6 +114,37 @@ identity there (it returns the constants and never touches the package).
 
 ## 4. Which surfaces change
 
+### Ingestion — offline alignment and promote
+
+The batch pipeline lives in the `qua` monorepo; what crosses into this repo is the
+staged run (`qua_shared/schemas/bucket/staged_run.py`) and
+`scripts/bucket/promote_run.py`.
+
+The riwayah is **declared, never inferred**. It rides `inputs.json`'s
+`_meta.riwayah` (or `--riwayah`) into the run, lands on `RunManifest.inputs.riwayah`
+*and* on every `candidates/<ch>.json`, and promote checks all three against each
+other and against the catalog delivery row:
+
+| Check | Where | On failure |
+|---|---|---|
+| Candidate file vs run manifest | `_promote_artifacts.read_entries` | build aborts |
+| Run manifest vs `deliveries.riwayah` | `promote_run._guard_riwayah` | promote aborts — **`--force` does not cover it** |
+
+Promote then stamps the Inspector-vocabulary slug onto `detailed.json` `_meta`,
+`segments.json` `_meta` and `pipeline_meta.json`, and stamps the classifier fields
+with `stamping.stamp_entries(..., riwayah=…)` so word counts and qalqala letters
+come from the delivery's own edition. On Hafs every one of those keys is **absent**
+— `None` is dropped by `exclude_none`, so a Hafs promote publishes the bytes it
+always did and no backfill is owed.
+
+The two MFA sidecars follow the same rule from the other side: they align against
+each row's `source_ref` (Hafs), and `low_confidence_v2.json` is not produced at all
+for a non-Hafs delivery (**D12**). `auto_split_v1.json` publishes the delivery's own
+section refs while measuring their word counts in Hafs — the space the aligner's
+word list lives in.
+
+The extraction runbook is `.claude/skills/segments-extraction/` in the `qua` repo.
+
 ### Segments tab
 
 Renders in the delivery's own script and font, with the edition's coordinates.

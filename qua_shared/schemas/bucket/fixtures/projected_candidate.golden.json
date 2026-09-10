@@ -1,0 +1,32 @@
+{
+  "chapter": 40,
+  "entries": [
+    {
+      "ref": "40",
+      "segments": [
+        {
+          "confidence": 0.94,
+          "matched_ref": "40:26:1-40:26:12",
+          "projection_support": "full",
+          "source_ref": "40:26:1-40:26:12",
+          "time_end": 5200,
+          "time_start": 0,
+          "wrap_word_ranges": null
+        },
+        {
+          "confidence": 0.81,
+          "matched_ref": "40:26:13-40:26:13",
+          "projection_support": "partial",
+          "source_ref": "40:26:13-40:26:14",
+          "time_end": 8100,
+          "time_start": 5200,
+          "wrap_word_ranges": null
+        }
+      ]
+    }
+  ],
+  "riwayah": "warsh",
+  "source_offset_ms": 0,
+  "source_url": "https://example.invalid/media/040.mp3",
+  "trim_span_ms": null
+}
