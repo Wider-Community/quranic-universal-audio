@@ -15,15 +15,22 @@
  * the user, so playing them directly is both faster and off the Space.
  *
  * Contract:
- * - `probeDirectPlayable(url)` asks the CDN once per host (`Range: bytes=0-0`,
- *   CORS mode) and caches the verdict. Direct requires a 206 — Range support
- *   is what makes seeking work — and a CORS-readable response (a missing
- *   ACAO rejects the fetch, which is exactly the case where the element
- *   would play silence).
+ * - `probeDirectPlayable(url)` fetches the head of the file once per URL
+ *   (`Range: bytes=0-65535`, CORS mode) and caches two verdicts:
+ *     · per HOST — the CDN answered 206 to a CORS request (Range support is
+ *       what makes seeking work; a missing ACAO rejects the fetch, which is
+ *       exactly the case where the element would play silence). A failed
+ *       host short-circuits every later URL on it without a fetch.
+ *     · per URL — the first MPEG frame does NOT carry a `Xing` VBR tag
+ *       (`mp3-header.ts`). Chrome seeks a `Xing`-tagged file through its
+ *       1/256-quantised TOC and lands seconds off while still reporting the
+ *       requested `currentTime`; the bucket copy the proxy serves is
+ *       remuxed with an `Info` tag and seeks exactly. Direct requires both.
  * - `playUrl(reciter, url)` is the SYNC decision used at `setSource` time:
- *   direct when the host is known-good, proxy otherwise (unknown hosts stay
- *   on the proxy — never silence). Callers that can `await` should probe
- *   first (chapter load, shuffle prime) so the first play already goes direct.
+ *   direct when the URL is known-good, proxy otherwise (unknown URLs stay
+ *   on the proxy — never silence, never drift). Callers that can `await`
+ *   should probe first (chapter load, shuffle prime, dashboard hover) so
+ *   the first play already goes direct.
  * - Same-origin (`/api/...`) and non-http (`qua-sample://`) URLs always pass
  *   through the proxy wrapper unchanged / wrapped, respectively.
  *
@@ -31,8 +38,12 @@
  * keep treating proxied and direct forms of one chapter as the same resource.
  */
 
+import { isNativelySeekable, MP3_SNIFF_BYTES } from './mp3-header';
+
 /** host → true when the CDN answered a CORS Range probe with 206. */
 const _hostDirect = new Map<string, boolean>();
+/** url → true when the host is direct-capable AND the file seeks natively. */
+const _urlDirect = new Map<string, boolean>();
 const _inflight = new Map<string, Promise<boolean>>();
 
 /** Build the same-origin proxy URL for a chapter MP3. Already-proxied
@@ -56,46 +67,57 @@ function _crossOriginHost(url: string): string | null {
     }
 }
 
-/** True when `url`'s host has already passed the CORS + Range probe. */
+/** True when `url` has already passed both the host (CORS + Range) and the
+ *  file (native-seek) probes. */
 export function isDirectPlayable(url: string): boolean {
-    const host = _crossOriginHost(url);
-    return !!host && _hostDirect.get(host) === true;
+    return _urlDirect.get(url) === true;
 }
 
-/** Probe `url`'s host once (cached, coalesced). Resolves true when the CDN
- *  can be played directly. Never throws — a network / CORS failure is a
- *  `false` verdict and the caller falls back to the proxy. */
-export function probeDirectPlayable(url: string): Promise<boolean> {
-    const host = _crossOriginHost(url);
-    if (!host) return Promise.resolve(false);
-    const known = _hostDirect.get(host);
-    if (known !== undefined) return Promise.resolve(known);
-    const pending = _inflight.get(host);
-    if (pending) return pending;
-
-    const probe = fetch(url, {
+async function _sniff(url: string, host: string): Promise<boolean> {
+    const res = await fetch(url, {
         mode: 'cors',
         credentials: 'omit',
         cache: 'no-store',
-        headers: { Range: 'bytes=0-0' },
-    })
-        .then((res) => {
-            // Drain so the connection is reusable; the body is one byte.
-            void res.body?.cancel().catch(() => {});
-            return res.status === 206;
-        })
+        headers: { Range: `bytes=0-${MP3_SNIFF_BYTES - 1}` },
+    });
+    if (res.status !== 206) {
+        void res.body?.cancel().catch(() => {});
+        _hostDirect.set(host, false);
+        return false;
+    }
+    _hostDirect.set(host, true);
+    const head = new Uint8Array(await res.arrayBuffer());
+    return isNativelySeekable(head);
+}
+
+/** Probe `url` once (cached, coalesced). Resolves true when the chapter can
+ *  be played directly. Never throws — a network / CORS failure is a `false`
+ *  verdict and the caller falls back to the proxy. */
+export function probeDirectPlayable(url: string): Promise<boolean> {
+    const host = _crossOriginHost(url);
+    if (!host) return Promise.resolve(false);
+    const known = _urlDirect.get(url);
+    if (known !== undefined) return Promise.resolve(known);
+    if (_hostDirect.get(host) === false) {
+        _urlDirect.set(url, false);
+        return Promise.resolve(false);
+    }
+    const pending = _inflight.get(url);
+    if (pending) return pending;
+
+    const probe = _sniff(url, host)
         .catch(() => false)
         .then((ok) => {
-            _hostDirect.set(host, ok);
-            _inflight.delete(host);
+            _urlDirect.set(url, ok);
+            _inflight.delete(url);
             return ok;
         });
-    _inflight.set(host, probe);
+    _inflight.set(url, probe);
     return probe;
 }
 
-/** Sync resolution: direct CDN URL when its host is known-good, else the
- *  proxy wrapper. Safe to call before any probe — unknown = proxy. */
+/** Sync resolution: direct CDN URL when it is known-good, else the proxy
+ *  wrapper. Safe to call before any probe — unknown = proxy. */
 export function playUrl(reciter: string, url: string): string {
     return isDirectPlayable(url) ? url : proxyPlayUrl(reciter, url);
 }
@@ -109,5 +131,6 @@ export async function resolvePlayUrl(reciter: string, url: string): Promise<stri
 /** Test hook: forget every probe verdict. */
 export function _resetPlayUrlForTest(): void {
     _hostDirect.clear();
+    _urlDirect.clear();
     _inflight.clear();
 }

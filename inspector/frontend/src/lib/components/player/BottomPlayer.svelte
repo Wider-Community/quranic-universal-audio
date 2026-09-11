@@ -173,8 +173,8 @@
                 ]);
                 urls = nextUrls;
                 vbrChapters = new Set(nextVbrChapters);
-                // One CORS + Range probe per delivery host so the first play
-                // already resolves to the direct CDN URL (see play-url.ts).
+                // Warm the host verdict (CORS + Range) off the first chapter so
+                // the per-chapter probe at play time is a single head fetch.
                 const probeUrl = Object.values(nextUrls)[0]?.url;
                 if (probeUrl) await probeDirectPlayable(probeUrl);
             } catch {
@@ -252,6 +252,9 @@
                 } else if (entry.via === 'qf_fallback') {
                     console.warn('[qf-audio] API unavailable — using our CDN link:', url);
                 }
+                // Per-URL probe (host CORS+Range AND native-seek header check —
+                // see play-url.ts) so a Xing-tagged chapter stays proxied.
+                await probeDirectPlayable(url);
                 const cbrSrc = dashProxyUrl(delivery.slug, url);
                 dashPort.setSource({
                     audioUrl: url,
@@ -300,12 +303,15 @@
      *  settle) so a fast scrub doesn't stack proxy fetches. */
     const POSITION_WARM_DEBOUNCE_MS = 150;
 
-    /** Proxy URL for a given surah's chapter MP3 (current delivery), or null
-     *  when the surah isn't in the loaded set. */
-    function surahProxyUrl(n: number): string | null {
+    /** Play URL for a given surah's chapter MP3 (current delivery), or null
+     *  when the surah isn't in the loaded set. Probes the chapter first so the
+     *  warm src is the same one `reactToContext` will build at play time
+     *  (direct vs proxy) — a mismatched warm is a wasted fetch. */
+    async function surahProxyUrl(n: number): Promise<string | null> {
         const delivery = $playerContext.delivery;
         const entry = urls[String(n)];
         if (!delivery || !entry) return null;
+        await probeDirectPlayable(entry.url);
         return dashProxyUrl(delivery.slug, entry.url);
     }
 
@@ -326,8 +332,9 @@
     /** Speculative: warm a whole surah's start (next/prev button + popover hover). */
     function warmSurah(n: number | null): void {
         if (n === null) return;
-        const proxy = surahProxyUrl(n);
-        if (proxy) primeDashSpeculative(proxy, 0);
+        void surahProxyUrl(n).then((proxy) => {
+            if (proxy) primeDashSpeculative(proxy, 0);
+        });
     }
 
     /** Speculative: warm the CURRENT chapter at a hovered/scrubbed file-ms
@@ -337,11 +344,11 @@
         if (fileMs === null || !Number.isFinite(fileMs)) return;
         const cur = $playerContext.surahNum;
         if (cur === null) return;
-        const proxy = surahProxyUrl(cur);
-        if (!proxy) return;
         if (_warmDebounce) clearTimeout(_warmDebounce);
         _warmDebounce = setTimeout(() => {
-            primeDashSpeculative(proxy, Math.max(0, fileMs / 1000));
+            void surahProxyUrl(cur).then((proxy) => {
+                if (proxy) primeDashSpeculative(proxy, Math.max(0, fileMs / 1000));
+            });
         }, POSITION_WARM_DEBOUNCE_MS);
     }
 
@@ -360,11 +367,13 @@
         const entry = urls[String(nextN)];
         if (!entry) return;
         _nearEndWarmedSurah = cur;
-        primeDashCommitted({
-            deliverySlug: delivery.slug,
-            surahNum: nextN,
-            rawUrl: entry.url,
-            proxyUrl: dashProxyUrl(delivery.slug, entry.url),
+        void probeDirectPlayable(entry.url).then(() => {
+            primeDashCommitted({
+                deliverySlug: delivery.slug,
+                surahNum: nextN,
+                rawUrl: entry.url,
+                proxyUrl: dashProxyUrl(delivery.slug, entry.url),
+            });
         });
     }
 
