@@ -199,6 +199,26 @@ def all_rows() -> list[ReciterRow]:
     return repo_state.all_rows()
 
 
+def has_audio_access(slug: str, viewer=None) -> bool:
+    """Whether a delivery's *audio* (chapter MP3s, manifest durations, peaks)
+    may be served to this viewer.
+
+    Looser than :func:`has_content_access`: the dashboard footer plays any
+    catalogued delivery (CDN stream-through for un-extracted ones), so the
+    audio surfaces only need the slug to be a visible catalog delivery, not a
+    reviewable one. Discarded deliveries have no catalog row, so they still
+    404. Reviewable content (segments / validation / timestamps) keeps the
+    stricter gate.
+    """
+    if slug.startswith("sample--"):
+        return True
+    if not is_delivery_visible(slug, viewer):
+        return False
+    from services.state import catalog as _catalog
+
+    return _catalog.find_delivery(slug) is not None
+
+
 def has_content_access(slug: str, viewer=None) -> bool:
     """Whether a delivery is public and currently backed by reviewable data.
 

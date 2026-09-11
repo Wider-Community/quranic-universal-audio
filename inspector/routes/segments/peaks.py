@@ -72,7 +72,7 @@ def seg_peaks(reciter):
     or backfill not yet run) simply drop out of the response — FE falls
     through to ``/segment-peaks`` POST per-card as a single fallback tier.
     """
-    if not state_service.has_content_access(reciter):
+    if not state_service.has_audio_access(reciter):
         return jsonify(ErrorEnvelope(error="Reciter not found").model_dump(exclude_none=True)), 404
     entries = load_detailed(reciter)
     if not entries:
@@ -168,7 +168,7 @@ def seg_segment_peaks(reciter):
     with nested ``PeakBucket[]`` floats at HD 30 bps. ``pad_ms`` widens the
     decoded range symmetrically for split/scrubber UIs.
     """
-    if not state_service.has_content_access(reciter):
+    if not state_service.has_audio_access(reciter):
         return jsonify(ErrorEnvelope(error="Reciter not found").model_dump(exclude_none=True)), 404
     # Validate per-item so one malformed slice is skipped, not the whole
     # batch — a bad item shouldn't drop the fallback render for its siblings.

@@ -70,7 +70,7 @@ def audio_surahs(category, source, slug):
     ``audio_fetch.read_prefetched_peaks_duration_ms``. Stays ``None`` only
     when peaks are also absent.
     """
-    if not state_service.has_content_access(slug):
+    if not state_service.has_audio_access(slug):
         return jsonify(ErrorEnvelope(error="Reciter not found").model_dump(exclude_none=True)), 404
     key = f"{category}/{source}/{slug}"
     cached = cache.get_audio_url_cache(key)

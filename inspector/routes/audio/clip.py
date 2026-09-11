@@ -56,7 +56,7 @@ def seg_segment_clip(reciter):
     with CORS so the existing WebAudio kill-switch (``MediaElementAudioSourceNode``
     needs CORS, see ``inspector/app.py:serve_audio``) keeps emitting samples.
     """
-    if not state_service.has_content_access(reciter):
+    if not state_service.has_audio_access(reciter):
         return jsonify({"error": "Reciter not found"}), 404
     url = request.args.get("url", "").strip()
     try:
