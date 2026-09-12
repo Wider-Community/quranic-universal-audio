@@ -464,6 +464,19 @@ def _boot_substrate() -> None:
         except Exception as e:  # noqa: BLE001
             logger.warning("release-job poll wiring failed: %s", e)
 
+    # Native align pipeline: resume any pending/running align run's worker thread
+    # (a ``running`` row after a restart means the previous process died
+    # mid-stage; every stage resumes from its staged files). Opt-in via
+    # ``INSPECTOR_ALIGN_PIPELINE=1`` so a local checkout never drives the Spaces.
+    if os.environ.get("INSPECTOR_ALIGN_PIPELINE") == "1":
+        try:
+            from services.admin.align_pipeline import runner as _align_runner
+
+            _align_runner.resume_active()
+            logger.info("align pipeline: workers resumed")
+        except Exception as e:  # noqa: BLE001
+            logger.warning("align pipeline wiring failed: %s", e)
+
     # Release-automation reconciler: a ~60 s loop that fires the release jobs on
     # the owner's schedule/rules (see services/admin/automation/). Opt-in via
     # ``INSPECTOR_AUTOMATIONS=1`` (prod Dockerfile sets it; off in dev) so a local

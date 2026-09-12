@@ -68,6 +68,7 @@ from .wire.admin_permissions import (
     AdminPermissionGroup,
     AdminPermissionsResponse,
 )
+from .wire.align_runs import AlignRunStatus, AlignStartRequest
 from .wire.admin_requests import (
     AdminRequestCounts,
     AdminRequestRow,
@@ -261,6 +262,8 @@ __all__ = [
     "AdminReleasesSummary",
     "AdminPermissionGroup",
     "AdminPermissionsResponse",
+    "AlignRunStatus",
+    "AlignStartRequest",
     "AdminRequestCounts",
     "AdminRequestEvent",
     "AdminRequestRow",

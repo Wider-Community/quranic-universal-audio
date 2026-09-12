@@ -41,11 +41,9 @@ from typing import TypedDict
 
 import numpy as np
 
-# Target density for the slim chapter overview. Decided by the resolution
-# benchmark in docs/peaks_density_viz.html. Do NOT confuse with
-# ``PEAKS_BUCKETS_PER_SEC`` (30) which is the HD density used by
-# ``compute_audio_peaks`` and ``compute_segment_peaks`` -- those stay at 30.
-PEAKS_SLIM_BPS = 10
+from qua_shared.audio.peaks import PEAKS_SLIM_BPS  # noqa: F401 — re-export
+from qua_shared.audio.peaks import decimate as _shared_decimate
+from qua_shared.audio.peaks import pack_slim as _shared_pack_slim
 
 # Pre-v3 files (v1 / v2 float-JSON) are treated as cache misses by
 # ``is_current_schema`` and re-packed by ``scripts/backfill_peaks_slim.py``,
@@ -69,62 +67,10 @@ class SlimPeaksDoc(TypedDict):
     peaks_b64: str  # base64 of n*2 int8s, alternating (min, max)
 
 
-def _decimate(peaks: np.ndarray, src_bps: int, dst_bps: int) -> np.ndarray:
-    """Reduce density by min-of-mins / max-of-maxes over windows of ``factor``.
-
-    Preserves visual envelope — every input min/max contributes to its output
-    bucket, so loud transients stay loud. Handles a non-divisible tail by
-    folding it into a final bucket (cheap; one extra peak at most).
-    """
-    if dst_bps >= src_bps:
-        return peaks
-    factor = src_bps // dst_bps
-    n_full = (len(peaks) // factor) * factor
-    if n_full == 0:
-        return peaks[:0]
-    trimmed = peaks[:n_full].reshape(-1, factor, 2)
-    mn = trimmed[:, :, 0].min(axis=1)
-    mx = trimmed[:, :, 1].max(axis=1)
-    tail = peaks[n_full:]
-    if len(tail):
-        mn = np.concatenate([mn, [tail[:, 0].min()]])
-        mx = np.concatenate([mx, [tail[:, 1].max()]])
-    return np.stack([mn, mx], axis=1)
-
-
-def pack_slim(hd_doc: dict, target_bps: int = PEAKS_SLIM_BPS) -> bytes:
-    """Pack an HD ``compute_audio_peaks`` output into the canonical gzip blob.
-
-    Input shape: ``{"schema_version": 2, "duration_ms": int, "peaks": [[mn, mx], ...]}``
-    at ``PEAKS_BUCKETS_PER_SEC`` density. Output is the bytes that go on the
-    bucket -- one gzip member containing one JSON document.
-
-    Concatenating multiple ``pack_slim`` outputs is valid gzip (RFC 1952) and
-    is what the ``/api/seg/peaks`` route streams back to the FE.
-    """
-    if not isinstance(hd_doc, dict) or "peaks" not in hd_doc or "duration_ms" not in hd_doc:
-        raise ValueError("pack_slim: expected dict with 'peaks' and 'duration_ms'")
-    arr = np.asarray(hd_doc["peaks"], dtype=np.float32)
-    if arr.ndim != 2 or arr.shape[1] != 2:
-        raise ValueError(f"pack_slim: expected peaks shape (N, 2), got {arr.shape}")
-    arr = _decimate(arr, src_bps=30, dst_bps=target_bps)
-    i8 = np.clip(np.round(arr * _INT8_SCALE), -_INT8_SCALE, _INT8_SCALE).astype(np.int8)
-    doc: SlimPeaksDoc = {
-        "schema_version": SLIM_SCHEMA_VERSION,
-        "duration_ms": int(hd_doc["duration_ms"]),
-        "q": "int8",
-        "bps": target_bps,
-        "n": int(i8.shape[0]),
-        "peaks_b64": base64.b64encode(i8.tobytes()).decode("ascii"),
-    }
-    # mtime=0 keeps the gzip member byte-identical for the same input so the
-    # CDN / browser cache key is stable across re-bakes that didn't change
-    # the payload.
-    return gzip.compress(
-        json.dumps(doc, separators=(",", ":")).encode("utf-8"),
-        compresslevel=6,
-        mtime=0,
-    )
+# ``pack_slim`` / ``decimate`` live in ``qua_shared.audio.peaks`` so the acquire
+# HF Job bakes byte-identical blobs; re-exported here for the app's callers.
+_decimate = _shared_decimate
+pack_slim = _shared_pack_slim
 
 
 def unpack_slim(blob: bytes) -> dict | None:

@@ -353,6 +353,7 @@ export interface AdminRequestRow {
   probe?: {
     [k: string]: unknown;
   } | null;
+  align?: AlignRunStatus | null;
   requester_role?: string | null;
   requester_login?: string | null;
   requester_hf_user_id?: string | null;
@@ -372,6 +373,30 @@ export interface RequestChange {
   from?: string | number | null;
   to?: string | number | null;
   [k: string]: unknown;
+}
+/**
+ * One align run as the admin surfaces read it.
+ */
+export interface AlignRunStatus {
+  run_id: string;
+  slug: string;
+  stage: "acquire" | "align" | "sidecars" | "assemble" | "done";
+  status: "pending" | "running" | "failed" | "succeeded" | "canceled";
+  attempt?: number;
+  requested_by?: string | null;
+  model_name?: string | null;
+  chapters_total?: number;
+  chapters_done?: number;
+  chapter_failures?: string[];
+  detail?: {
+    [k: string]: unknown;
+  };
+  acquire_job_id?: string | null;
+  acquire_job_url?: string | null;
+  last_error?: string | null;
+  started_at: string;
+  updated_at: string;
+  ended_at?: string | null;
 }
 export interface AdminRequestsResponse {
   rows?: AdminRequestRow[];
@@ -624,6 +649,12 @@ export interface VisitorDayStat {
   unique_signed_in?: number;
   unique_anon?: number;
   [k: string]: unknown;
+}
+/**
+ * Body of ``POST /api/admin/reciter/<slug>/align``.
+ */
+export interface AlignStartRequest {
+  model_name?: "Base" | "Large";
 }
 /**
  * Public read shape — the fields the notifications rail renders.
@@ -1241,7 +1272,7 @@ export interface JobMember {
 export interface JobRecord {
   schema_version?: number;
   job_id: string;
-  kind?: "timestamps" | "hf_publish" | "hf_publish_batch" | "cut_release" | "refresh_catalog";
+  kind?: "timestamps" | "hf_publish" | "hf_publish_batch" | "cut_release" | "refresh_catalog" | "acquire_audio";
   slug?: string | null;
   status?: string;
   started_at?: string | null;

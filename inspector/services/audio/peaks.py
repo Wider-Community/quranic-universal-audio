@@ -10,15 +10,14 @@ import subprocess
 from typing import TYPE_CHECKING
 
 from config import (
-    FFMPEG_FULL_TIMEOUT,
     FFMPEG_TIMEOUT,
-    MIN_FULL_PEAK_BUCKETS,
     MIN_SEG_PEAK_BUCKETS,
     PEAKS_BUCKETS_PER_SEC,
     PEAKS_FFMPEG_SAMPLE_RATE,
-    PEAKS_PCM_NORMALIZER,
     PEAKS_SCHEMA_VERSION,
 )
+from qua_shared.audio.peaks import bucket_pcm_minmax as _shared_bucket_pcm_minmax
+from qua_shared.audio.peaks import compute_audio_peaks as _shared_compute_audio_peaks
 
 if TYPE_CHECKING:
     from services.audio_source import AudioSource
@@ -49,81 +48,11 @@ def is_current_schema(peaks: dict | None) -> bool:
     return isinstance(peaks, dict) and peaks.get("schema_version") == PEAKS_SCHEMA_VERSION
 
 
-def _bucket_pcm_minmax(samples, num_samples: int, num_buckets: int) -> list[list[float]]:
-    """Bucket a PCM signal into `num_buckets` min/max pairs over `[0, num_samples)`.
-
-    Uses a float stride so the buckets exactly tile the sample range — every
-    sample lands in exactly one bucket and the tail isn't dropped. Returns
-    fewer buckets than requested only when `num_samples < num_buckets` (the
-    per-bucket span rounds to zero), which lets very short clips fall
-    through cleanly.
-    """
-    if num_samples <= 0 or num_buckets <= 0:
-        return []
-    stride = num_samples / num_buckets
-    out: list[list[float]] = []
-    for i in range(num_buckets):
-        start = int(round(i * stride))
-        end = int(round((i + 1) * stride))
-        if start >= num_samples:
-            break
-        if end <= start:
-            continue
-        end = min(end, num_samples)
-        block = samples[start:end]
-        if not block:
-            continue
-        mn = min(block) / PEAKS_PCM_NORMALIZER
-        mx = max(block) / PEAKS_PCM_NORMALIZER
-        out.append([round(mn, 4), round(mx, 4)])
-    return out
-
-
-def compute_audio_peaks(audio_source: str) -> dict | None:
-    """Compute waveform peaks for a local file path or URL.
-
-    Returns ``{schema_version, duration_ms, peaks}`` or ``None``. No caching
-    here and no bucket write — chapter peaks are offline-computed on Katana
-    (``.local/extraction/segments/audio_persist.py``) and the inspector
-    treats the bucket as read-only at runtime (no recompute/re-bake path).
-    """
-    # Decode to raw mono 16-bit PCM via ffmpeg at the configured peaks sample rate
-    try:
-        result = subprocess.run(
-            [
-                "ffmpeg",
-                "-i",
-                audio_source,
-                "-f",
-                "s16le",
-                "-ac",
-                "1",
-                "-ar",
-                str(PEAKS_FFMPEG_SAMPLE_RATE),
-                "-v",
-                "quiet",
-                "-",
-            ],
-            capture_output=True,
-            timeout=FFMPEG_FULL_TIMEOUT,
-        )
-        if result.returncode != 0 or len(result.stdout) < 4:
-            return None
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return None
-
-    raw = result.stdout
-    num_samples = len(raw) // 2
-    if num_samples == 0:
-        return None
-    samples = struct.unpack(f"<{num_samples}h", raw)
-
-    duration_ms = int(num_samples / PEAKS_FFMPEG_SAMPLE_RATE * 1000)
-    duration_sec = num_samples / PEAKS_FFMPEG_SAMPLE_RATE
-    num_buckets = max(MIN_FULL_PEAK_BUCKETS, int(duration_sec * PEAKS_BUCKETS_PER_SEC))
-    peaks = _bucket_pcm_minmax(samples, num_samples, num_buckets)
-
-    return {"schema_version": PEAKS_SCHEMA_VERSION, "duration_ms": duration_ms, "peaks": peaks}
+# Whole-chapter peaks are computed by ``qua_shared.audio.peaks`` (shared with
+# the acquire HF Job so the baked ``peaks/<ch>.json.gz`` match what the runtime
+# would produce); re-exported here for the app's callers.
+_bucket_pcm_minmax = _shared_bucket_pcm_minmax
+compute_audio_peaks = _shared_compute_audio_peaks
 
 
 # ---------------------------------------------------------------------------

@@ -69,7 +69,7 @@ Force-claim columns (`force_assignee_*`, leases) do **not** exist — force-clai
 | `reciter.requested` | (no row) or `catalogued` (`public`) | `awaiting_alignment` | submits pending request (`proposed_edits`, `comments`, `auto_claim`) | contributor+ |
 | `reciter.request_rejected_soft` | `awaiting_alignment` | `catalogued` | archives pending → `requests/returned.json` | owner, reason ≥10 |
 | `reciter.request_rejected_hard` | `awaiting_alignment` | `catalogued` | `visibility=discarded`, `visibility_reason`; archives pending → discarded | owner, reason ≥10 |
-| `reciter.alignment_completed` | `awaiting_alignment` | `awaiting_review` | applies + clears pending catalog edits; if pending had `auto_claim`, folds a `reciter.claimed` into the same txn | system |
+| `reciter.alignment_completed` | `awaiting_alignment` | `awaiting_review` | applies + clears pending catalog edits; if pending had `auto_claim`, folds a `reciter.claimed` into the same txn. Fired by `auto_detect` when `reciters/<slug>/detailed.json` exists (the folder alone is not enough — the native align pipeline persists `audio/`+`peaks/` hours earlier; see [align-pipeline.md](align-pipeline.md)) | system |
 | `reciter.claimed` | `awaiting_review` (`public`) | `under_review` | opens claim: `assignee_*`, `marked_ready=0` | contributor+ |
 | `reciter.released` | `under_review` (`not marked_ready` when actor is claim holder) | `awaiting_review` | closes claim | claim-holder OR maintainer+ |
 | `reciter.marked_ready` | `under_review` (+ all 5 checklist attestations True + 5 blocking validation counts == 0) | (same) | `marked_ready=1`; persists `mark_ready_checklist` + `mark_ready_comment_checks` + `mark_ready_comment_issues` onto the open claim | claim-holder |

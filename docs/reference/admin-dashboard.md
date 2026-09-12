@@ -48,7 +48,7 @@ Full release model: [dataset-and-releases.md](dataset-and-releases.md). TS gen/r
 
 ### Jobs compartment (FE)
 
-`tabs/dashboard/components/admin/jobs/` — the **one** place to see every job kind (`timestamps` · `hf_publish` · `hf_publish_batch` · `cut_release` · `refresh_catalog`), running **and** historical, across all reciters. Replaces the scatter where TS history hid in a per-reciter Past-jobs expand and release/cut/publish jobs only flashed in the Releases in-flight strip.
+`tabs/dashboard/components/admin/jobs/` — the **one** place to see every job kind (`timestamps` · `hf_publish` · `hf_publish_batch` · `cut_release` · `refresh_catalog` · `acquire_audio`), running **and** historical, across all reciters. Replaces the scatter where TS history hid in a per-reciter Past-jobs expand and release/cut/publish jobs only flashed in the Releases in-flight strip.
 
 | File | Role |
 |---|---|

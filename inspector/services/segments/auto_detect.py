@@ -59,13 +59,26 @@ _SCAN_PREFIXES: tuple[str, ...] = (storage_paths.RECITERS_PREFIX,)
 
 
 def _list_candidate_slugs(backend) -> set[str]:
-    """Union of slug folders across the scanned content prefixes."""
+    """Slug folders that carry ``detailed.json`` across the scanned prefixes.
+
+    The folder alone is not enough: the native align pipeline persists
+    ``audio/`` + ``peaks/`` under ``reciters/<slug>/`` hours before the segments
+    exist, and an audio-only folder must not fire ``alignment_completed``.
+    """
     slugs: set[str] = set()
     for prefix in _SCAN_PREFIXES:
         try:
-            slugs.update(backend.list_dir(prefix))
+            names = backend.list_dir(prefix)
         except Exception:  # noqa: BLE001
             logger.exception("auto_detect: list_dir(%r) failed", prefix)
+            continue
+        for name in names:
+            slug = name.rsplit("/", 1)[-1]
+            try:
+                if backend.exists(storage_paths.detailed_path(slug)):
+                    slugs.add(slug)
+            except Exception:  # noqa: BLE001
+                logger.exception("auto_detect: exists(%r) failed", slug)
     return slugs
 
 

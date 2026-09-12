@@ -13,6 +13,7 @@ the current catalog value joined in as the ``from`` side.
 
 from __future__ import annotations
 
+import logging
 from typing import cast
 
 from qua_shared.catalog_visibility import is_everyayah_channel
@@ -22,6 +23,8 @@ from services.state import catalog as catalog_service
 from services.storage import cache
 
 # UI status facet → DB status column value.
+log = logging.getLogger("inspector")
+
 _STATUS_DB = {
     "open": "pending",
     "accepted": "accepted",
@@ -62,6 +65,8 @@ def list_requests(*, status: str, caller_is_owner: bool, caller_hf_id: str) -> d
 
     visible_base = [row for row in base if caller_is_owner or not row.get("_everyayah", False)]
     rows = [_serialize(r, owner=caller_is_owner) for r in visible_base]
+    if db_status == "pending":
+        _overlay_align_runs(rows)
 
     counts: dict[str, int] = {}
     for db_key in _STATUS_DB.values():
@@ -222,6 +227,21 @@ def _conflict(slug, delivery, proposed: dict) -> bool:
         and d.style == proposed_style
         for d in catalog.deliveries
     )
+
+
+def _overlay_align_runs(rows: list[dict]) -> None:
+    """Attach the slug's active native align run to each open slug row."""
+    from services.admin.align_pipeline import runs as align_runs
+
+    try:
+        active = align_runs.active_status_by_slug()
+    except Exception as exc:  # noqa: BLE001 — the queue must render without it
+        log.warning("admin requests: align overlay failed: %s", exc)
+        return
+    for row in rows:
+        run = active.get(row.get("slug") or "")
+        if run is not None:
+            row["align"] = run.model_dump(mode="json")
 
 
 def _serialize(base_row: dict, *, owner: bool) -> dict:

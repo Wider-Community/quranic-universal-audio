@@ -121,7 +121,7 @@ def test_hydrate_initial_seen_catches_up_stuck_awaiting_alignment(auto_detect_en
     """
     svc, state_service, backend = auto_detect_env
     _seed_state(slug="rec_a", state=ReciterState.AWAITING_ALIGNMENT)
-    backend.write_json_atomic("reciters/rec_a/segments.json", {"x": 1})
+    backend.write_json_atomic("reciters/rec_a/detailed.json", {"entries": []})
 
     svc.hydrate_initial_seen()
 
