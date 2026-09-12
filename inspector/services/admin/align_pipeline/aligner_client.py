@@ -29,8 +29,22 @@ CONNECT_TIMEOUT_S = 60
 ITEM_READ_TIMEOUT_S = 4 * 3600
 SIDECARS_READ_TIMEOUT_S = 6 * 3600
 CREATE_TIMEOUT_S = 120
+#: The aligner's "I have no ceiling, send everything" answer — mirrors the
+#: Space's ``BATCH_GPU_UNLIMITED``. Not a count, so it must survive every
+#: falsy-coalescing shortcut between the wire and ``align_concurrency``.
+NO_CAP = 0
 
 ProgressFn = Callable[[dict], None]
+
+
+def _advertised_in_flight(value: object) -> int:
+    """The batch's ``max_in_flight`` as an int, ``NO_CAP`` when it says nothing."""
+    if value is None:
+        return NO_CAP
+    try:
+        return max(NO_CAP, int(value))  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return NO_CAP
 
 
 class AlignerError(RuntimeError):
@@ -66,11 +80,19 @@ class AlignerClient:
     # -- batches -------------------------------------------------------------
 
     def create_batch(self, body: dict) -> tuple[str, int]:
-        """Create an alignment-only batch. Returns ``(batch_id, max_in_flight)``."""
+        """Create an alignment-only batch. Returns ``(batch_id, max_in_flight)``.
+
+        ``max_in_flight`` is the aligner's own ceiling, and **zero means it has
+        none** — a GPU batch leases per request, so it wants every chapter at
+        once (``BATCH_GPU_UNLIMITED``). Zero is falsy, so it must never be
+        coalesced away: ``or 1`` would read the no-cap sentinel as a cap of one
+        and serialise the whole delivery. Only a missing or unparseable field
+        falls back, and it falls back to the same sentinel.
+        """
         resp = self._session.post(f"{self.base_url}/batches", json=body, timeout=CREATE_TIMEOUT_S)
         _raise_for_status(resp)
         doc = resp.json()
-        return doc["batch_id"], int(doc.get("max_in_flight") or 1)
+        return doc["batch_id"], _advertised_in_flight(doc.get("max_in_flight"))
 
     def align_item(
         self, batch_id: str, chapter: int, audio_ref: str, on_progress: ProgressFn | None = None

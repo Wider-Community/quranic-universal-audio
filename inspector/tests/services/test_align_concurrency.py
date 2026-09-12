@@ -135,3 +135,59 @@ def test_cancel_stops_the_pool(monkeypatch, staged):
     finally:
         progress.clear_cancel(RUN)
     assert not staged
+
+
+class _FakeResponse:
+    """Just enough of ``requests.Response`` for ``create_batch``."""
+
+    status_code = 200
+    headers: dict[str, str] = {}
+    text = ""
+
+    def __init__(self, doc: dict):
+        self._doc = doc
+
+    def json(self) -> dict:
+        return self._doc
+
+
+class _FakeSession:
+    def __init__(self, doc: dict):
+        self._doc = doc
+        self.headers: dict[str, str] = {}
+
+    def post(self, *_args, **_kwargs) -> _FakeResponse:
+        return _FakeResponse(self._doc)
+
+
+def _advertised(doc: dict) -> int:
+    from services.admin.align_pipeline.aligner_client import AlignerClient
+
+    client = AlignerClient(base_url="https://aligner.test", session=_FakeSession(doc))
+    _batch_id, in_flight = client.create_batch({})
+    return in_flight
+
+
+@pytest.mark.parametrize(
+    ("doc", "expected"),
+    [
+        ({"batch_id": "b", "max_in_flight": 0}, 0),
+        ({"batch_id": "b", "max_in_flight": 3}, 3),
+        ({"batch_id": "b", "max_in_flight": None}, 0),
+        ({"batch_id": "b"}, 0),
+        ({"batch_id": "b", "max_in_flight": "nonsense"}, 0),
+        ({"batch_id": "b", "max_in_flight": -2}, 0),
+    ],
+)
+def test_create_batch_keeps_the_no_cap_sentinel(doc, expected):
+    """``max_in_flight: 0`` is "no ceiling", not a ceiling of one.
+
+    Zero is falsy, so an ``or 1`` here reads the GPU batch's no-cap answer as a
+    cap of one and serialises the whole delivery — which is exactly what shipped
+    and put 114 chapters on a single worker.
+    """
+    assert _advertised(doc) == expected
+
+
+def test_no_cap_fans_out_every_pending_chapter():
+    assert align_params.align_concurrency(0, 114) == 114
