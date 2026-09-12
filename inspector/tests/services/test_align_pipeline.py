@@ -128,7 +128,7 @@ def test_adapt_chapter_shapes_candidate_and_events():
     assert [e.kind for e in parsed] == ["waqf_sakt", "delete_segment"]
     waqf = parsed[0]
     assert [s.index_at_save for s in waqf.targets_before] == [2, 3]
-    assert waqf.targets_before[0].matched_ref == "112:2:1"
+    assert waqf.targets_before[0].matched_ref == "112:2:1-112:2:1"
     assert waqf.targets_after[0].index_at_save == 2
     assert waqf.targets_after[0].final_index == 1  # one stripped Basmala before it
     assert waqf.targets_after[0].confidence == 1.0
@@ -137,14 +137,31 @@ def test_adapt_chapter_shapes_candidate_and_events():
     assert delete.targets_before[0].matched_ref == "Basmala"
 
 
-def test_adapt_keeps_unmatched_rows_and_single_word_refs():
+def test_adapt_writes_a_one_word_ref_as_a_degenerate_span():
+    """``a-a``, never a bare ``a``: the text resolvers need two endpoints.
+
+    A single coordinate makes ``dk_text_for_ref`` (and its frontend mirror) return
+    no text at all, so the segment renders empty and every text-derived field goes
+    with it. Muqattaat openers and repeated single words are the common case.
+    """
+    from services.admin.align_pipeline import adapt
+    from services.reference.quran_refs import dk_text_for_ref
+
+    result = {"segments": [_row(1, 0, 1, "", ""), _row(2, 1, 2, "68:1:1", "68:1:1")]}
+    candidate, events, basmala = adapt.adapt_chapter(68, result, source_url="u", riwayah="hafs")
+    refs = [s["matched_ref"] for s in candidate["entries"][0]["segments"]]
+    assert refs == ["", "68:1:1-68:1:1"]
+    assert dk_text_for_ref(refs[1]), "the ref the pipeline writes must resolve to text"
+    assert events == [] and basmala is False
+
+
+def test_adapt_spans_a_missing_ref_to_onto_ref_from():
+    """The aligner may send ``ref_to`` empty on a one-word row; still ``a-a``."""
     from services.admin.align_pipeline import adapt
 
-    result = {"segments": [_row(1, 0, 1, "", ""), _row(2, 1, 2, "1:1:1", "1:1:1")]}
-    candidate, events, basmala = adapt.adapt_chapter(1, result, source_url="u", riwayah="hafs")
-    refs = [s["matched_ref"] for s in candidate["entries"][0]["segments"]]
-    assert refs == ["", "1:1:1"]
-    assert events == [] and basmala is False
+    result = {"segments": [_row(1, 0, 1, "7:1:1", "")]}
+    candidate, _, _ = adapt.adapt_chapter(7, result, source_url="u", riwayah="hafs")
+    assert candidate["entries"][0]["segments"][0]["matched_ref"] == "7:1:1-7:1:1"
 
 
 # ---------------------------------------------------------------------------

@@ -39,11 +39,20 @@ def to_conf(value: float | None) -> float:
 
 
 def matched_ref(row: dict) -> str:
-    """``ref_from``/``ref_to`` back to the ``a-b`` span the SDK writes (``""`` if none)."""
+    """``ref_from``/``ref_to`` back to the ``a-b`` span the SDK writes (``""`` if none).
+
+    A one-word segment is ``a-a``, never a bare ``a``. Both text resolvers —
+    ``services/reference/quran_refs.py::dk_text_for_ref`` and its frontend mirror
+    ``dkTextForRef`` — require two dash-separated endpoints and return no text at
+    all for a single coordinate, so a collapsed ref renders as an empty row and
+    silently starves everything derived from the text (qalqala stamping,
+    validation, tajweed). Every reciter written by the offline pipeline stores the
+    degenerate span, muqattaat openers included.
+    """
     a, b = row.get("ref_from") or "", row.get("ref_to") or ""
     if not a:
         return ""
-    return a if a == b or not b else f"{a}-{b}"
+    return f"{a}-{b or a}"
 
 
 def is_special(row: dict) -> bool:
