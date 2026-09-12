@@ -65,9 +65,13 @@ def run(
         "candidates": candidates_for(slug, run_id, chapters, sources, params.riwayah),
     }
     result = _call(run_id, body)
-    staging.write_json(
-        staging.sidecar_path(slug, run_id, LOW_CONFIDENCE_FILE), result["low_confidence_v2"]
-    )
+    # A non-Hafs delivery gets no low-confidence probe (D12 — the Space answers
+    # ``null``): its question is Hafs-only, and the assemble stage publishes
+    # whatever sidecars are staged.
+    if result.get("low_confidence_v2") is not None:
+        staging.write_json(
+            staging.sidecar_path(slug, run_id, LOW_CONFIDENCE_FILE), result["low_confidence_v2"]
+        )
     staging.write_json(staging.sidecar_path(slug, run_id, AUTO_SPLIT_FILE), result["auto_split_v1"])
     log.info("align %s: sidecars staged", run_id)
 

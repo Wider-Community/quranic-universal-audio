@@ -67,7 +67,7 @@ def run(
     with tempfile.TemporaryDirectory(prefix=f"align_{slug}_") as tmp:
         run_dir = Path(tmp)
         deleted_basmala = _materialise(run_dir, docs, chapters, sources, params.riwayah)
-        _materialise_sidecars(run_dir, slug, run_id)
+        _materialise_sidecars(run_dir, slug, run_id, params.riwayah)
         _write_coverage(run_dir, chapters)
         manifest = _manifest(slug, run_id, params, chapters, deleted_basmala, started_at)
         built = promote_build.build_artifacts(
@@ -105,12 +105,23 @@ def _materialise(run_dir, docs, chapters, sources, riwayah) -> list[int]:
     return deleted_basmala
 
 
-def _materialise_sidecars(run_dir: Path, slug: str, run_id: str) -> None:
+def _materialise_sidecars(run_dir: Path, slug: str, run_id: str, riwayah: str | None) -> None:
+    """Copy the staged sidecars into the run dir ``promote_build`` reads.
+
+    ``auto_split_v1`` is always owed. ``low_confidence_v2`` is owed only on Hafs:
+    a non-Hafs delivery never gets the probe (D12 — its question is Hafs-only),
+    so its absence there is the contract, not a stage that failed to stage.
+    """
     (run_dir / "sidecars").mkdir()
+    required = [AUTO_SPLIT_FILE]
+    if (riwayah or DEFAULT_SDK_RIWAYAH) == DEFAULT_SDK_RIWAYAH:
+        required.append(LOW_CONFIDENCE_FILE)
     for name in (LOW_CONFIDENCE_FILE, AUTO_SPLIT_FILE):
         doc = staging.read_json(staging.sidecar_path(slug, run_id, name))
         if doc is None:
-            raise AssembleError(f"staged sidecar {name} missing for {slug}/{run_id}")
+            if name in required:
+                raise AssembleError(f"staged sidecar {name} missing for {slug}/{run_id}")
+            continue
         _dump(run_dir / "sidecars" / name, doc)
 
 

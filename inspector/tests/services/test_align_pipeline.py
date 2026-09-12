@@ -407,3 +407,77 @@ def test_job_command_uses_stock_image_with_system_and_pip_deps():
     assert "pip install -q --root-user-action=ignore huggingface_hub numpy" in cmd[2]
     assert cmd[2].endswith("&& python /aux/code/qua_jobs/acquire_audio.py")
     assert "hf.co/spaces" not in base.JOB_IMAGE
+
+
+# ---------------------------------------------------------------------------
+# D12 — no low-confidence probe off Hafs
+# ---------------------------------------------------------------------------
+
+
+def test_sidecars_stage_skips_a_null_low_confidence(align_env, monkeypatch):
+    """The Space answers ``low_confidence_v2: null`` for a non-Hafs delivery;
+    the stage must not stage a ``null`` file for assemble to trip over."""
+    from services.admin.align_pipeline import runs, stage_sidecars, staging
+    from services.admin.align_pipeline.params import AlignParams
+
+    _backend, _started = align_env
+    run = runs.start(SLUG, OWNER)
+    staging.write_json(staging.chapter_path(SLUG, run.run_id, 112), CH112)
+    monkeypatch.setattr(
+        stage_sidecars,
+        "_call",
+        lambda _run_id, _body: {"low_confidence_v2": None, "auto_split_v1": {"by_uid": {}}},
+    )
+
+    stage_sidecars.run(
+        SLUG, run.run_id, AlignParams(riwayah="warsh"), [112], {112: "https://cdn/112.mp3"}
+    )
+
+    assert staging.read_json(staging.sidecar_path(SLUG, run.run_id, "auto_split_v1.json")) == {
+        "by_uid": {}
+    }
+    assert staging.read_json(staging.sidecar_path(SLUG, run.run_id, "low_confidence_v2.json")) is None
+
+
+def test_assemble_accepts_a_missing_low_confidence_off_hafs(align_env):
+    from services.admin.align_pipeline import runs, stage_assemble, staging
+    from services.admin.align_pipeline.params import AlignParams
+
+    backend, _started = align_env
+    run = runs.start(SLUG, OWNER)
+    staging.write_json(staging.chapter_path(SLUG, run.run_id, 112), CH112)
+    staging.write_json(staging.sidecar_path(SLUG, run.run_id, "auto_split_v1.json"), {"v": 1})
+    backend.write_bytes_atomic(f"reciters/{SLUG}/peaks/112.json.gz", _slim_blob(23000))
+
+    stage_assemble.run(
+        SLUG,
+        run.run_id,
+        AlignParams(riwayah="warsh"),
+        [112],
+        {112: "https://cdn/112.mp3"},
+        started_at="2026-09-13T00:00:00Z",
+    )
+
+    assert backend.exists(f"reciters/{SLUG}/auto_split_v1.json")
+    assert not backend.exists(f"reciters/{SLUG}/low_confidence_v2.json")
+
+
+def test_assemble_still_requires_low_confidence_on_hafs(align_env):
+    from services.admin.align_pipeline import runs, stage_assemble, staging
+    from services.admin.align_pipeline.params import AlignParams
+
+    backend, _started = align_env
+    run = runs.start(SLUG, OWNER)
+    staging.write_json(staging.chapter_path(SLUG, run.run_id, 112), CH112)
+    staging.write_json(staging.sidecar_path(SLUG, run.run_id, "auto_split_v1.json"), {"v": 1})
+    backend.write_bytes_atomic(f"reciters/{SLUG}/peaks/112.json.gz", _slim_blob(23000))
+
+    with pytest.raises(stage_assemble.AssembleError, match="low_confidence_v2"):
+        stage_assemble.run(
+            SLUG,
+            run.run_id,
+            AlignParams(),
+            [112],
+            {112: "https://cdn/112.mp3"},
+            started_at="2026-09-13T00:00:00Z",
+        )
