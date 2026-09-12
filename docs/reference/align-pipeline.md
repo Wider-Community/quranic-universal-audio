@@ -1,0 +1,109 @@
+# Native align pipeline
+
+One click in **Admin → Requests** takes a delivery from `awaiting_alignment` to
+`awaiting_review` on the Spaces that already exist. No Katana, no laptop, no
+new engines. Replaces the offline `segments-extraction` runbook for the
+by_surah / Hafs case.
+
+Where it lives:
+
+| Piece | Path |
+|---|---|
+| Service package | `inspector/services/admin/align_pipeline/` — `runs` (start/retry/cancel/status), `runner` (worker threads), `stage_acquire` · `stage_align` · `stage_sidecars` · `stage_assemble`, `adapt` (aligner rows → staged shapes), `aligner_client` (SSE), `staging` (bucket paths), `progress` (in-memory detail + cancel), `params` (knobs + env) |
+| Durable row | `align_runs` table — `services/db/migrations/0031_align_runs.sql`, `services/db/repo_align_runs.py` |
+| Acquire job | `qua_jobs/acquire_audio.py` (kind `acquire_audio`, shows in the Jobs tab) |
+| Build | `inspector/services/segments/promote_build.py` (shared with `scripts/bucket/promote_run.py`) |
+| Routes | `inspector/routes/admin/align.py` — `POST /api/admin/reciter/<slug>/align`, `GET …/align/status`, `POST …/align/retry`, `POST …/align/cancel` |
+| Capability | `intake.align` (owner + maintainer by default) |
+| Wire | `qua_shared/schemas/wire/align_runs.py` — `AlignRunStatus`, `AlignStartRequest`; `AdminRequestRow.align` overlay |
+| FE | `tabs/dashboard/components/admin/AlignProgress.svelte`, the Align block in `RequestsCompartment.svelte`, `lib/api/admin-requests.ts` |
+| Aligner side | `qua-aligner-app` — `/api/v1/batches` items by `audio_ref`, `/api/v1/extraction/sidecars`; both gated by `X-Extraction-Secret` |
+
+## Stages
+
+```
+acquire   CPU HF Job qua_jobs/acquire_audio.py
+          catalog/audio_manifest/<slug>.json → reciters/<slug>/{audio/<ch>.mp3, peaks/<ch>.json.gz}
+          + reciters/<slug>/chapter_sources.json + staging/<slug>/<run>/acquire.json
+align     per-chapter loop, aligner Space POST /api/v1/batches (alignment-only) +
+          items/<ch>/audio/stream with audio_ref=hf://buckets/<repo>/reciters/<slug>/audio/<ch>.mp3
+          → staging/<slug>/<run>/chapters/<ch>.json (raw aligner result)
+sidecars  one reciter-wide POST /api/v1/extraction/sidecars (SSE) — the aligner runs
+          qua_timing_batch low_confidence + auto_split against the phoneme MFA Space
+          → staging/<slug>/<run>/sidecars/{low_confidence_v2,auto_split_v1}.json
+assemble  in-process: adapt → promote_build.build_artifacts (peaks from the acquired blobs,
+          no ffmpeg) → reciters/<slug>/{detailed,segments,pipeline_meta,chapter_sources,
+          coverage_report,edit_history*.jsonl,low_confidence_v2,auto_split_v1}.json
+          detailed.json written last; staging deleted
+auto_detect  sees detailed.json → reciter.alignment_completed → awaiting_review
+```
+
+Parameters (`params.py`): model `Large` (the same `hetchyy/r7` checkpoint as the
+Katana extraction), `pad_left_ms=100`, `pad_right_ms=100`, `min_silence_floor_ms=50`,
+matcher/thresholds = whatever the Space runs, `include_merge_groups=true`,
+`discard_session=true`, no word timestamps, no split. Times are relative to the
+persisted mp3 (no trim).
+
+## Run lifecycle
+
+- **Single-flight per slug**: a `pending | running | failed` row blocks a second
+  start (partial unique index). `failed` waits for **Retry** (attempt+1, same run,
+  resumes from the failed stage) or **Cancel** (row → `canceled`, staging kept).
+- **DB writes only on stage transitions** (every `durable_transaction` pushes
+  the whole DB to the bucket). Per-chapter progress = the staged files +
+  `progress` (in-memory); `AlignRunStatus.detail` carries the live chapter /
+  aligner stage / HF job status / sidecar beam.
+- **Resume**: `app.py` calls `runner.resume_active()` at boot under
+  `INSPECTOR_ALIGN_PIPELINE=1`; every stage skips what is already staged
+  (acquire skips persisted chapters, align skips staged chapters, sidecars skip
+  when both docs exist).
+- **Aligner resilience**: transport errors retry the chapter (3×, 30 s);
+  `batch_not_found` recreates the batch (the Space keys batches by caller IP
+  hash, in memory); `gpu_quota_exhausted` flips the rest of the run to the CPU
+  lane; the Space writes `: keepalive` SSE comments every 15 s so long silent
+  stages survive the proxy. Sidecars 409 (one run at a time on the Space) waits
+  and retries for up to 6 h.
+- **Assemble guard**: state ∈ {catalogued, awaiting_alignment} and no
+  `detailed.json` — a delivery that got content any other way is never
+  overwritten.
+
+## What `adapt` reproduces from the Katana post-process
+
+The aligner's public rows carry seconds, `ref_from`/`ref_to`, `kind`/`special_type`
+and (when asked) `merge_group_id`/`merge_members`. `adapt.adapt_chapter` mirrors
+`qua_sdk.pipelines.align_postprocess` exactly:
+
+1. every auto-merged row → one `waqf_sakt` event (both halves at pre-strip
+   indices `k`, `k+1`; merged row at `k`, confidence 1.0);
+2. every `kind == "special"` row → one `delete_segment` event at its pre-strip
+   index (`Isti'adha+Basmala` audited as `Basmala`); the row is dropped;
+3. the surviving waqf row gets `final_index = k − removed_before(k)`.
+
+Seconds → integer ms (`round(s*1000)`), confidence → 2 dp, `ref_from == ref_to`
+→ single ref else `a-b`, unmatched rows keep `matched_ref=""`. The resulting
+`ChapterCandidate` + events feed both the sidecars call and `promote_build`,
+so the sidecars index exactly the rows that get published.
+
+## Scope (v1) and what is refused at start
+
+- by_surah deliveries with an audio manifest (one URL per chapter); combined
+  files / playlists / by_ayah are refused (`400`).
+- Hafs only — the aligner's public rows carry no Hafs `source_ref` for a
+  projected delivery, so a Warsh/Qalun/Shu'bah candidate could not be staged
+  faithfully yet (`400`).
+- Missing `INSPECTOR_EXTRACTION_SECRET` / HF token → `503`.
+
+## Env (see `config-deploy.md`)
+
+`INSPECTOR_ALIGN_PIPELINE=1` (enable + resume workers), `INSPECTOR_ALIGNER_URL`
+(default the dev aligner Space), `INSPECTOR_EXTRACTION_SECRET` (must equal the
+aligner Space's `EXTRACTION_SECRET`), `INSPECTOR_ALIGN_KEEP_STAGING=1` (debug),
+`INSPECTOR_ACQUIRE_JOB_FLAVOR` / `INSPECTOR_ACQUIRE_JOB_TIMEOUT`
+(`cpu-upgrade` / `6h`). Bearer for the aligner = the Inspector's own HF token.
+
+## Not built yet
+
+Intake rows ("Ingest & Align" from a `links` submission — today ingest first,
+then Align on the slug row), playlist / combined-file acquire, non-Hafs
+deliveries, Katana runbook removal, prod rollout (`INSPECTOR_ALIGN_PIPELINE`
+stays unset on prod).

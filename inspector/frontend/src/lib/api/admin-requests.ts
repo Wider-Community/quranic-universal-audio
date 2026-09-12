@@ -7,7 +7,11 @@
  * via the My Notifications rail, so there is no unviewed-count / view-mark here.
  */
 
-import type { AdminRequestsResponse, ProbeResponse } from '../types/generated/schemas';
+import type {
+    AdminRequestsResponse,
+    AlignRunStatus,
+    ProbeResponse,
+} from '../types/generated/schemas';
 
 export type RequestStatus = 'open' | 'accepted' | 'returned' | 'discarded';
 
@@ -55,4 +59,31 @@ export async function returnRequest(id: string, reason: string): Promise<void> {
 /** Discard an intake request (≥10-char reason). */
 export async function discardRequest(id: string, reason: string): Promise<void> {
     await _post(`/api/admin/requests/${id}/discard`, { reason });
+}
+
+// ---- Native align pipeline (slug rows awaiting alignment) -------------------
+//
+// One click runs acquire → align → sidecars → assemble on the existing Spaces;
+// the row's ``align`` overlay (and this status call) carry the live progress.
+
+export type AlignModelName = 'Base' | 'Large';
+
+/** Start the native align pipeline for a catalogued slug. */
+export async function startAlign(slug: string, modelName: AlignModelName = 'Large'): Promise<AlignRunStatus> {
+    const json = await _post(`/api/admin/reciter/${encodeURIComponent(slug)}/align`, {
+        model_name: modelName,
+    });
+    return json as unknown as AlignRunStatus;
+}
+
+/** Resume a failed run from the stage it failed at. */
+export async function retryAlign(slug: string): Promise<AlignRunStatus> {
+    const json = await _post(`/api/admin/reciter/${encodeURIComponent(slug)}/align/retry`);
+    return json as unknown as AlignRunStatus;
+}
+
+/** Stop a running (or abandon a failed) run. */
+export async function cancelAlign(slug: string): Promise<AlignRunStatus> {
+    const json = await _post(`/api/admin/reciter/${encodeURIComponent(slug)}/align/cancel`);
+    return json as unknown as AlignRunStatus;
 }

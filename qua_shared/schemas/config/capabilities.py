@@ -294,6 +294,16 @@ CAPABILITIES: tuple[Capability, ...] = (
         contributor=False,
         maintainer=False,
     ),
+    _c(
+        "intake.align",
+        G_REQUESTS,
+        "Run the align pipeline",
+        "Start, retry or cancel the native alignment of a delivery awaiting "
+        "alignment (acquire audio → align on the aligner Space → sidecars → "
+        "assemble). Owner and maintainer by default.",
+        contributor=False,
+        maintainer=True,
+    ),
     # --- D. Claims & review ---
     _c(
         "claim.acquire",

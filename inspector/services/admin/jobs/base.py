@@ -394,6 +394,7 @@ REQUIRED_ENTRYPOINTS = (
     "qua_jobs/shard.py",
     "qua_jobs/check_updates.py",
     "qua_jobs/download_audio.py",
+    "qua_jobs/acquire_audio.py",
 )
 REQUIRED_STATIC_FILES = (
     "data/digital_khatt_v2_script.json",

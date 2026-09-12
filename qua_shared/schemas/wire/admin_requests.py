@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .align_runs import AlignRunStatus
+
 
 class RequestChange(BaseModel):
     """One proposed-edit field, with the current catalog value as ``from``.
@@ -61,6 +63,9 @@ class AdminRequestRow(BaseModel):
     # (None) for slug-based edit requests.
     source: dict | None = None
     probe: dict | None = None
+
+    # Native align pipeline: the slug's active/latest run, for open slug rows.
+    align: AlignRunStatus | None = None
 
     # per-caller overlay
     requester_role: str | None = None

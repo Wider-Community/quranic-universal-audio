@@ -28,6 +28,7 @@ JobKind = Literal[
     "hf_publish_batch",
     "cut_release",
     "refresh_catalog",
+    "acquire_audio",
 ]
 
 #: Terminal vs in-flight statuses, normalized to a small vocabulary the FE

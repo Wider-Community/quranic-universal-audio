@@ -7,14 +7,19 @@
      * Notifications rail, so this tab carries no unviewed badge.
      */
     import {
+        cancelAlign,
         discardRequest,
         fetchRequests,
         probeRequest,
         type RequestStatus,
+        retryAlign,
         returnRequest,
+        startAlign,
     } from '../../../../lib/api/admin-requests';
     import { rejectRequestHard, rejectRequestSoft } from '../../../../lib/api/requests';
+    import { can } from '../../../../lib/stores/capabilities';
     import { isOwner } from '../../../../lib/stores/current-user';
+    import AlignProgress from './AlignProgress.svelte';
     import type {
         AdminRequestRow,
         AdminRequestsResponse,
@@ -47,6 +52,10 @@
     let reason = $state('');
     let busyId = $state<string | null>(null);
     let actionError = $state<string | null>(null);
+
+    // Native align pipeline (slug rows): one in-flight call at a time.
+    const canAlign = can('intake.align');
+    let alignBusyId = $state<string | null>(null);
 
     // Intake-only: reachability probe.
     let probeBusyId = $state<string | null>(null);
@@ -119,6 +128,22 @@
             }
         } finally {
             busyId = null;
+        }
+    }
+
+    async function align(row: AdminRequestRow, action: 'start' | 'retry' | 'cancel'): Promise<void> {
+        if (!row.slug || alignBusyId) return;
+        alignBusyId = row.id;
+        actionError = null;
+        try {
+            if (action === 'start') await startAlign(row.slug);
+            else if (action === 'retry') await retryAlign(row.slug);
+            else await cancelAlign(row.slug);
+            applyResult(await fetchRequests(status));
+        } catch (e) {
+            actionError = (e as Error).message ?? 'Align request failed.';
+        } finally {
+            alignBusyId = null;
         }
     }
 
@@ -392,6 +417,34 @@
                                         </p>
                                     {/if}
 
+                                    {#if status === 'open' && !isIntake(row) && row.slug && $canAlign}
+                                        <div class="align-block">
+                                            {#if row.align}
+                                                <AlignProgress
+                                                    run={row.align}
+                                                    busy={alignBusyId === row.id}
+                                                    onRetry={() => align(row, 'retry')}
+                                                    onCancel={() => align(row, 'cancel')}
+                                                />
+                                            {:else}
+                                                <div class="align-cta">
+                                                    <span class="align-hint">
+                                                        Acquire the audio, align every chapter on the aligner Space,
+                                                        compute the sidecars and publish for review.
+                                                    </span>
+                                                    <button
+                                                        class="btn primary"
+                                                        disabled={alignBusyId === row.id}
+                                                        onclick={() => align(row, 'start')}
+                                                    >{alignBusyId === row.id ? 'Starting…' : 'Align'}</button>
+                                                </div>
+                                            {/if}
+                                            {#if actionError && alignBusyId === null}
+                                                <p class="action-error">{actionError}</p>
+                                            {/if}
+                                        </div>
+                                    {/if}
+
                                     {#if status === 'open'}
                                         {#if $isOwner}
                                             <div class="resolve">
@@ -617,6 +670,11 @@
     .submitted-by strong { color: var(--text-secondary); font-weight: 500; }
     .note { margin: 0; padding: var(--s-3); background: var(--canvas-inset); border: 1px solid var(--border-quiet); border-radius: var(--r-2); font-size: var(--fs-body); color: var(--text-secondary); line-height: var(--lh-normal); }
     .note .note-label { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-faint); margin-bottom: 4px; }
+    .align-block { display: flex; flex-direction: column; gap: var(--s-2); padding-top: var(--s-3); border-top: 1px solid var(--border-quiet); }
+    .align-cta { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); }
+    .align-hint { font-size: var(--fs-meta); color: var(--text-muted); line-height: var(--lh-normal); }
+    .btn.primary { color: var(--accent); border-color: var(--accent); }
+    .btn.primary:hover { background: var(--accent-soft, transparent); }
     .notice { margin: 0; padding: var(--s-3); background: var(--state-requested-bg); color: var(--state-requested-fg); border-radius: var(--r-2); font-size: var(--fs-meta); line-height: var(--lh-normal); }
     .ro-note { margin: 0; font-size: var(--fs-meta); color: var(--text-faint); font-style: italic; }
 

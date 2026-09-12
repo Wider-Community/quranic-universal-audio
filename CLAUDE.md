@@ -120,6 +120,7 @@ Deep, agent-facing reference docs live in `docs/reference/` (flat). **Read the o
 | [`keyboard-shortcuts.md`](docs/reference/keyboard-shortcuts.md) | Segments user-editable, context-scoped keyboard shortcuts — catalogue, binding store, dispatcher, active-row registry, accordion nav/auto-scroll, footer rebind popover |
 | [`accordion-guides.md`](docs/reference/accordion-guides.md) | validation accordion help-modal guide templates |
 | [`dataset-and-releases.md`](docs/reference/dataset-and-releases.md) | dataset releasing — bucket-as-canonical + 3 adapter formats (HF, GH release tiers, future API), `releases` table, publish state model, schema |
+| [`align-pipeline.md`](docs/reference/align-pipeline.md) | the one-click native align pipeline — Requests-tab Align button, `align_runs` + worker threads, acquire HF Job → aligner Space batches → sidecars → in-process assemble, `adapt` parity with the Katana post-process, resume/retry/cancel, env |
 | [`automation.md`](docs/reference/automation.md) | owner-configurable release automations — the opt-in reconciler daemon (auto-gen TS / GH cut / HF batch-publish / stale-TS regen / stale-metadata refresh), config blob + state tables, `release.manage_automation` gate, Releases-tab Automation card |
 | [`config-deploy.md`](docs/reference/config-deploy.md) | env vars, secrets, image build, deploy, healthz |
 | [`data-migrations.md`](docs/reference/data-migrations.md) | one-shot migration/backfill scripts |

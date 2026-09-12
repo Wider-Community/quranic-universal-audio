@@ -19,6 +19,7 @@
         hf_publish_batch: 'HF batch',
         cut_release: 'GH cut',
         refresh_catalog: 'Catalog refresh',
+        acquire_audio: 'Acquire audio',
     };
     const KIND_FILTERS = ['all', ...Object.keys(KIND_LABELS)] as const;
     const STATUS_FILTERS = ['all', 'running', 'succeeded', 'failed'] as const;

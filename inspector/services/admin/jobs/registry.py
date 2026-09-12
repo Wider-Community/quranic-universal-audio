@@ -18,7 +18,14 @@ from . import base, records
 log = logging.getLogger("inspector")
 
 #: Every kind the live HF list is scanned for (label ``task`` values).
-ALL_KINDS = ("timestamps", "hf_publish", "hf_publish_batch", "cut_release", "refresh_catalog")
+ALL_KINDS = (
+    "timestamps",
+    "hf_publish",
+    "hf_publish_batch",
+    "cut_release",
+    "refresh_catalog",
+    "acquire_audio",
+)
 
 
 def list_all_jobs() -> list[JobRecord]:
