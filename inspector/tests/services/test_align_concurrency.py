@@ -1,4 +1,4 @@
-"""The align stage runs chapters concurrently, up to what the batch advertises.
+"""The align stage uses a bounded rolling HTTP pool.
 
 The aligner Space serializes the GPU half of an item internally, so the only
 thing these cover is the client side: how many chapter items the Inspector keeps
@@ -24,8 +24,7 @@ RUN = "run-conc"
 class _StubClient:
     """Counts overlapping ``align_item`` calls and records the peak."""
 
-    def __init__(self, *, max_in_flight: int, expect: int, fail_on: set[int] | None = None):
-        self.max_in_flight = max_in_flight
+    def __init__(self, *, expect: int, fail_on: set[int] | None = None):
         self.expect = expect  # flights this stub waits for before releasing
         self.fail_on = fail_on or set()
         self.peak = 0
@@ -36,10 +35,10 @@ class _StubClient:
         self._gate = threading.Event()
         self.pool_widened_to: int | None = None
 
-    def create_batch(self, body: dict) -> tuple[str, int]:
+    def create_batch(self, body: dict) -> str:
         with self._lock:
             self.batches += 1
-        return "batch-1", self.max_in_flight
+        return "batch-1"
 
     def widen_pool(self, connections: int) -> None:
         self.pool_widened_to = connections
@@ -87,32 +86,21 @@ def _run(monkeypatch, client: _StubClient, chapters: list[int]) -> None:
     stage_align.run(SLUG, RUN, AlignParams(), chapters)
 
 
-def test_a_cpu_batch_keeps_only_the_advertised_flights(monkeypatch, staged):
-    """A CPU batch advertises its admission gate's width; the pool matches it."""
-    client = _StubClient(max_in_flight=3, expect=3)
-    _run(monkeypatch, client, list(range(1, 10)))
-
-    assert sorted(staged) == list(range(1, 10))
-    assert client.peak == 3, "the pool should keep exactly max_in_flight items in flight"
-    assert client.batches == 1, "every worker shares the one batch"
-    assert progress.get_detail(RUN)["chapters_done"] == 9
-
-
-def test_unlimited_batch_fans_out_every_pending_chapter(monkeypatch, staged):
-    """``max_in_flight = 0`` is the Space declining to limit a GPU batch."""
-    chapters = list(range(1, 13))
-    client = _StubClient(max_in_flight=0, expect=len(chapters))
-    assert align_params.align_concurrency(0, len(chapters)) == len(chapters)
+def test_default_pool_rolls_sixteen_chapter_streams(monkeypatch, staged):
+    chapters = list(range(1, 21))
+    client = _StubClient(expect=16)
     _run(monkeypatch, client, chapters)
 
-    assert client.peak == len(chapters), "every chapter should be in flight at once"
-    assert client.pool_widened_to == len(chapters), "the connection pool must match"
     assert sorted(staged) == chapters
+    assert client.peak == 16
+    assert client.pool_widened_to == 16
+    assert client.batches == 1, "every worker shares the one batch"
+    assert progress.get_detail(RUN)["chapters_done"] == len(chapters)
 
 
 def test_env_override_narrows_the_pool(monkeypatch, staged):
     monkeypatch.setenv("INSPECTOR_ALIGN_CONCURRENCY", "1")
-    client = _StubClient(max_in_flight=0, expect=1)
+    client = _StubClient(expect=1)
     _run(monkeypatch, client, [1, 2, 3])
 
     assert client.peak == 1
@@ -121,14 +109,15 @@ def test_env_override_narrows_the_pool(monkeypatch, staged):
 
 
 def test_one_chapter_failure_fails_the_stage(monkeypatch, staged):
-    client = _StubClient(max_in_flight=2, expect=2, fail_on={2})
+    monkeypatch.setenv("INSPECTOR_ALIGN_CONCURRENCY", "2")
+    client = _StubClient(expect=2, fail_on={2})
     with pytest.raises(stage_align.AlignStageError, match="chapter 2"):
         _run(monkeypatch, client, [1, 2, 3, 4])
     assert 2 not in staged
 
 
 def test_cancel_stops_the_pool(monkeypatch, staged):
-    client = _StubClient(max_in_flight=2, expect=2)
+    client = _StubClient(expect=2)
     progress.request_cancel(RUN)
     try:
         with pytest.raises(progress.Canceled):
@@ -161,37 +150,19 @@ class _FakeSession:
         return _FakeResponse(self._doc)
 
 
-def _advertised(doc: dict) -> int:
+def _created_batch(doc: dict) -> str:
     import requests
 
     from services.admin.align_pipeline.aligner_client import AlignerClient
 
     session = cast(requests.Session, _FakeSession(doc))
     client = AlignerClient(base_url="https://aligner.test", session=session)
-    _batch_id, in_flight = client.create_batch({})
-    return in_flight
+    return client.create_batch({})
 
 
-@pytest.mark.parametrize(
-    ("doc", "expected"),
-    [
-        ({"batch_id": "b", "max_in_flight": 0}, 0),
-        ({"batch_id": "b", "max_in_flight": 3}, 3),
-        ({"batch_id": "b", "max_in_flight": None}, 0),
-        ({"batch_id": "b"}, 0),
-        ({"batch_id": "b", "max_in_flight": "nonsense"}, 0),
-        ({"batch_id": "b", "max_in_flight": -2}, 0),
-    ],
-)
-def test_create_batch_keeps_the_no_cap_sentinel(doc, expected):
-    """``max_in_flight: 0`` is "no ceiling", not a ceiling of one.
-
-    Zero is falsy, so an ``or 1`` here reads the GPU batch's no-cap answer as a
-    cap of one and serialises the whole delivery — which is exactly what shipped
-    and put 114 chapters on a single worker.
-    """
-    assert _advertised(doc) == expected
+def test_create_batch_only_needs_the_opaque_id():
+    assert _created_batch({"batch_id": "b"}) == "b"
 
 
-def test_no_cap_fans_out_every_pending_chapter():
-    assert align_params.align_concurrency(0, 114) == 114
+def test_default_transport_pool_does_not_fan_out_all_chapters():
+    assert align_params.align_concurrency(114) == 16

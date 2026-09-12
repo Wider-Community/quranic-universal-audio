@@ -22,6 +22,7 @@ MIN_SILENCE_FLOOR_MS = 50
 #: same ``hetchyy/r7`` checkpoint the Katana extraction used.
 ASR_MODEL_IDS = {"Large": "hetchyy/r7", "Base": "aligner:Base"}
 VAD_MODEL_ID = "hetchyy/qua-bnd-trio-head"
+ALIGN_WORKERS = 16
 
 
 @dataclass(frozen=True)
@@ -73,22 +74,17 @@ def hf_token() -> str:
     return token.strip()
 
 
-def align_concurrency(advertised: int, pending: int) -> int:
-    """Concurrent chapter items: what the batch advertises, or all of them.
+def align_concurrency(pending: int) -> int:
+    """Rolling HTTP worker count; resource admission belongs to the aligner.
 
-    No client ceiling. ``max_in_flight = 0`` is the Space saying it has no limit —
-    a GPU batch leases per request, so every remaining chapter goes at once and the
-    quota decides where it stops; the item that exhausts it falls back to the CPU
-    lane, which the Space admits through its own gate. A CPU batch advertises that
-    gate's width instead. ``INSPECTOR_ALIGN_CONCURRENCY`` is an operator escape
-    hatch in either direction, not a cap.
+    Sixteen keeps bucket reads and network setup moving without reproducing the
+    old 114-request burst. The aligner independently schedules every item by
+    caller and may run fewer of them on either GPU or CPU.
     """
     override = (os.environ.get("INSPECTOR_ALIGN_CONCURRENCY") or "").strip()
     if override.isdigit() and int(override) > 0:
         return min(int(override), pending)
-    if advertised <= 0:
-        return pending
-    return max(1, min(advertised, pending))
+    return max(1, min(ALIGN_WORKERS, pending))
 
 
 def pipeline_enabled() -> bool:

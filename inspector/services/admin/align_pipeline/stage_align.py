@@ -7,12 +7,9 @@ transport failures retry the chapter; a ``batch_not_found`` (the Space restarted
 or its in-memory registry expired) recreates the batch; a ZeroGPU quota refusal
 flips the rest of the run to the CPU lane.
 
-Chapters run **concurrently**, as wide as the batch allows: a GPU batch
-advertises ``max_in_flight = 0`` (no limit) and every remaining chapter goes at
-once. ZeroGPU takes one lease per request, so the items overlap everywhere —
-bucket fetch, decode, and the leased segmentation/ASR/matching itself — and the
-quota decides where that stops. The item that exhausts it falls back to the CPU
-lane, which the Space admits through its own gate, so nothing here needs a cap.
+Chapters use a rolling transport pool. The aligner owns resource admission and
+interleaves both single and batch requests fairly by caller; this pool merely
+avoids opening 114 simultaneous HTTP streams from the Inspector.
 """
 
 from __future__ import annotations
@@ -60,15 +57,12 @@ class _Batch:
         self.params = params
         self.device = "GPU"
         self.batch_id: str | None = None
-        self.max_in_flight = 1
         self._lock = threading.Lock()
 
     def id(self) -> str:
         with self._lock:
             if self.batch_id is None:
-                self.batch_id, self.max_in_flight = self.client.create_batch(
-                    self.params.batch_body(device=self.device)
-                )
+                self.batch_id = self.client.create_batch(self.params.batch_body(device=self.device))
             return self.batch_id
 
     def reset(self, *, cpu: bool = False) -> None:
@@ -129,18 +123,17 @@ def run(slug: str, run_id: str, params: AlignParams, chapters: list[int]) -> Non
     if not pending:
         return
 
-    try:  # create up front: the pool is sized by what the batch advertises
+    try:  # create up front so the first worker does not serialize its siblings
         batch.id()
     except Exception as exc:  # noqa: BLE001 - the per-chapter retry loop owns recovery
-        log.warning("align %s: batch create failed (%s); running serially", run_id, exc)
-    workers = _params.align_concurrency(batch.max_in_flight, len(pending))
+        log.warning("align %s: initial batch create failed (%s); workers will retry", run_id, exc)
+    workers = _params.align_concurrency(len(pending))
     client.widen_pool(workers)
     log.info(
-        "align %s: %d chapter(s) left on %d worker(s) (batch advertised %s)",
+        "align %s: %d chapter(s) left on %d rolling HTTP worker(s)",
         run_id,
         len(pending),
         workers,
-        batch.max_in_flight or "no limit",
     )
     if workers == 1:
         for chapter in pending:
