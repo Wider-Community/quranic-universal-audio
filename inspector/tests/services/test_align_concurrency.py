@@ -9,6 +9,7 @@ failure still fails the stage instead of being swallowed by a worker thread.
 from __future__ import annotations
 
 import threading
+from typing import cast
 
 import pytest
 
@@ -161,9 +162,12 @@ class _FakeSession:
 
 
 def _advertised(doc: dict) -> int:
+    import requests
+
     from services.admin.align_pipeline.aligner_client import AlignerClient
 
-    client = AlignerClient(base_url="https://aligner.test", session=_FakeSession(doc))
+    session = cast(requests.Session, _FakeSession(doc))
+    client = AlignerClient(base_url="https://aligner.test", session=session)
     _batch_id, in_flight = client.create_batch({})
     return in_flight
 
