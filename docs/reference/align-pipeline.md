@@ -54,12 +54,18 @@ Both long stages fan out, because neither is CPU-bound end to end:
   leaving a `cpu-upgrade` flavor idle on one serial chain.
 - **align** keeps as many chapter items in flight as the batch advertises in
   `max_in_flight` (`INSPECTOR_ALIGN_CONCURRENCY` overrides, `MAX_ALIGN_CONCURRENCY`
-  caps at 4). The Space cannot parallelize the GPU half — `src/core/zero_gpu.py`
-  holds one process-wide lock for the whole ZeroGPU lease, so firing a whole
-  delivery at once would only queue on it. What the extra flights overlap is the
-  other half of an item: the bucket audio fetch, the mp3 decode and the matching
-  pass. The Space admits GPU items through its own `BATCH_GPU_CONCURRENCY` gate, so
-  the advertisement is enforced there rather than trusted from the client.
+  caps at 8). ZeroGPU leases per request, so concurrent items overlap *everywhere*,
+  the leased segmentation/ASR/matching included — `model_device_lock` in
+  `src/core/zero_gpu.py` guards threads inside one worker, not requests against each
+  other. Measured on the dev Space with two 60 MB chapters: 36 s for a 2-way burst
+  against 64 s serially, with both leases provably interleaved. Total GPU-seconds
+  are unchanged, so the quota is spent at the same rate, just sooner; an exhausted
+  quota still flips that item to the CPU lane.
+
+  The Space admits GPU items through its own `BATCH_GPU_CONCURRENCY` gate and
+  advertises that number. It exists to bound **Space memory** — every in-flight item
+  holds its decoded chapter — not to ration the GPU, so raise it there (a Space
+  variable, no deploy) rather than in the client.
 
 ## Run lifecycle
 

@@ -9,9 +9,11 @@ flips the rest of the run to the CPU lane.
 
 Chapters run **concurrently**, up to the ``max_in_flight`` the batch advertises
 (``INSPECTOR_ALIGN_CONCURRENCY`` overrides, ``params.MAX_ALIGN_CONCURRENCY``
-caps). The Space serializes the GPU half of every item behind one lease lock, so
-the extra flights buy the overlap of the other half — the bucket audio fetch, the
-mp3 decode and the matching pass — which is what dominates a long chapter.
+caps). ZeroGPU takes one lease per request, so concurrent items overlap
+everywhere that matters: the bucket audio fetch, the decode, and the leased
+segmentation/ASR/matching itself. The quota is spent at the same rate either
+way — the same GPU-seconds, just sooner — and an exhausted quota still flips the
+run to the CPU lane per item.
 """
 
 from __future__ import annotations

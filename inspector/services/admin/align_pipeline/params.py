@@ -73,10 +73,13 @@ def hf_token() -> str:
     return token.strip()
 
 
-#: Hard ceiling on concurrent chapter items, whatever the Space advertises: the
-#: GPU half of an alignment is serialized inside the Space by a process-wide
-#: lease lock, so extra flights only overlap the fetch/decode/matching half.
-MAX_ALIGN_CONCURRENCY = 4
+#: Hard ceiling on concurrent chapter items, whatever the Space advertises.
+#: ZeroGPU leases per request, so concurrent items really do segment and
+#: transcribe at the same time — measured on two 60 MB chapters, a 2-way burst
+#: cost 36 s against 64 s serial, with both leases overlapping. The ceiling is
+#: only here so a client bug cannot fan a whole delivery at the Space at once;
+#: the Space's own advertisement is the real bound.
+MAX_ALIGN_CONCURRENCY = 8
 
 
 def align_concurrency(advertised: int) -> int:
