@@ -16,6 +16,7 @@ import logging
 from collections.abc import Callable
 
 import requests
+from requests.adapters import HTTPAdapter
 
 from . import params as _params
 
@@ -48,6 +49,19 @@ class AlignerClient:
         self._session = session or requests.Session()
         self._session.headers["Authorization"] = f"Bearer {_params.hf_token()}"
         self._secret = _params.extraction_secret()
+
+    def widen_pool(self, connections: int) -> None:
+        """Size the HTTPS connection pool to the fan-out about to hit the Space.
+
+        urllib3 pools 10 per host by default and *discards* the surplus, so a
+        wide align stage would otherwise reconnect per chapter and log a warning
+        for each one.
+        """
+        if connections <= 10:
+            return
+        adapter = HTTPAdapter(pool_connections=connections, pool_maxsize=connections)
+        self._session.mount("https://", adapter)
+        self._session.mount("http://", adapter)
 
     # -- batches -------------------------------------------------------------
 

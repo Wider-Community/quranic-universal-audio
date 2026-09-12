@@ -73,21 +73,22 @@ def hf_token() -> str:
     return token.strip()
 
 
-#: Hard ceiling on concurrent chapter items, whatever the Space advertises.
-#: ZeroGPU leases per request, so concurrent items really do segment and
-#: transcribe at the same time — measured on two 60 MB chapters, a 2-way burst
-#: cost 36 s against 64 s serial, with both leases overlapping. The ceiling is
-#: only here so a client bug cannot fan a whole delivery at the Space at once;
-#: the Space's own advertisement is the real bound.
-MAX_ALIGN_CONCURRENCY = 8
+def align_concurrency(advertised: int, pending: int) -> int:
+    """Concurrent chapter items: what the batch advertises, or all of them.
 
-
-def align_concurrency(advertised: int) -> int:
-    """Concurrent chapter items: the env override, else what the batch advertises."""
+    No client ceiling. ``max_in_flight = 0`` is the Space saying it has no limit —
+    a GPU batch leases per request, so every remaining chapter goes at once and the
+    quota decides where it stops; the item that exhausts it falls back to the CPU
+    lane, which the Space admits through its own gate. A CPU batch advertises that
+    gate's width instead. ``INSPECTOR_ALIGN_CONCURRENCY`` is an operator escape
+    hatch in either direction, not a cap.
+    """
     override = (os.environ.get("INSPECTOR_ALIGN_CONCURRENCY") or "").strip()
     if override.isdigit() and int(override) > 0:
-        return min(int(override), MAX_ALIGN_CONCURRENCY)
-    return max(1, min(advertised, MAX_ALIGN_CONCURRENCY))
+        return min(int(override), pending)
+    if advertised <= 0:
+        return pending
+    return max(1, min(advertised, pending))
 
 
 def pipeline_enabled() -> bool:
