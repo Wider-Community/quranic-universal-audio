@@ -75,7 +75,7 @@ The image bakes the **dev** bucket as default (`INSPECTOR_BUCKET_REPO=hetchyy/qu
 | `INSPECTOR_ALIGNER_URL` | `https://hetchyy-quranic-universal-aligner-dev.hf.space` | Aligner Space the align stage + sidecars call (`/api/v1`). |
 | `INSPECTOR_ALIGN_KEEP_STAGING` | off | `1` keeps `staging/<slug>/<run>/` after assemble (debugging). |
 | `INSPECTOR_ACQUIRE_JOB_FLAVOR` / `INSPECTOR_ACQUIRE_JOB_TIMEOUT` | `cpu-upgrade` / `6h` | The acquire HF Job's hardware + wall clock. |
-| `INSPECTOR_ALIGN_CONCURRENCY` | what the batch advertises | Chapter items the align stage keeps in flight (hard cap 4). |
+| `INSPECTOR_ALIGN_CONCURRENCY` | every pending chapter (what the batch advertises) | Narrows the align stage's fan-out for debugging; there is no cap by default. |
 | `ACQUIRE_WORKERS` (job env) | one per vCPU, max 8 | Chapters the acquire job fetches + encodes at once. |
 | `INSPECTOR_PUBLIC_BASE_URL` | empty | Public https root the daemon threads into job completion webhooks (no `request.url_root` in a thread). Required for automated GH cuts — the cut job is webhook-only. Set as a Space variable per environment. |
 | `INSPECTOR_TS_SPACE_URL` | `https://hetchyy-qua-batch-timing-prod.hf.space` | Persistent production timing Space used for timestamp generation. Override only for an isolated environment. |

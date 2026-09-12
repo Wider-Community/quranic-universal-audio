@@ -7,13 +7,12 @@ transport failures retry the chapter; a ``batch_not_found`` (the Space restarted
 or its in-memory registry expired) recreates the batch; a ZeroGPU quota refusal
 flips the rest of the run to the CPU lane.
 
-Chapters run **concurrently**, up to the ``max_in_flight`` the batch advertises
-(``INSPECTOR_ALIGN_CONCURRENCY`` overrides, ``params.MAX_ALIGN_CONCURRENCY``
-caps). ZeroGPU takes one lease per request, so concurrent items overlap
-everywhere that matters: the bucket audio fetch, the decode, and the leased
-segmentation/ASR/matching itself. The quota is spent at the same rate either
-way — the same GPU-seconds, just sooner — and an exhausted quota still flips the
-run to the CPU lane per item.
+Chapters run **concurrently**, as wide as the batch allows: a GPU batch
+advertises ``max_in_flight = 0`` (no limit) and every remaining chapter goes at
+once. ZeroGPU takes one lease per request, so the items overlap everywhere —
+bucket fetch, decode, and the leased segmentation/ASR/matching itself — and the
+quota decides where that stops. The item that exhausts it falls back to the CPU
+lane, which the Space admits through its own gate, so nothing here needs a cap.
 """
 
 from __future__ import annotations
@@ -134,8 +133,15 @@ def run(slug: str, run_id: str, params: AlignParams, chapters: list[int]) -> Non
         batch.id()
     except Exception as exc:  # noqa: BLE001 - the per-chapter retry loop owns recovery
         log.warning("align %s: batch create failed (%s); running serially", run_id, exc)
-    workers = _params.align_concurrency(batch.max_in_flight)
-    log.info("align %s: %d chapter(s) left on %d worker(s)", run_id, len(pending), workers)
+    workers = _params.align_concurrency(batch.max_in_flight, len(pending))
+    client.widen_pool(workers)
+    log.info(
+        "align %s: %d chapter(s) left on %d worker(s) (batch advertised %s)",
+        run_id,
+        len(pending),
+        workers,
+        batch.max_in_flight or "no limit",
+    )
     if workers == 1:
         for chapter in pending:
             progress.check_cancel(run_id)

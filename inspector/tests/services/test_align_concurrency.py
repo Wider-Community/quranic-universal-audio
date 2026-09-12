@@ -23,9 +23,9 @@ RUN = "run-conc"
 class _StubClient:
     """Counts overlapping ``align_item`` calls and records the peak."""
 
-    def __init__(self, *, max_in_flight: int, fail_on: set[int] | None = None):
+    def __init__(self, *, max_in_flight: int, expect: int, fail_on: set[int] | None = None):
         self.max_in_flight = max_in_flight
-        self.expect = min(max_in_flight, align_params.MAX_ALIGN_CONCURRENCY)
+        self.expect = expect  # flights this stub waits for before releasing
         self.fail_on = fail_on or set()
         self.peak = 0
         self.seen: list[int] = []
@@ -33,11 +33,15 @@ class _StubClient:
         self._active = 0
         self._lock = threading.Lock()
         self._gate = threading.Event()
+        self.pool_widened_to: int | None = None
 
     def create_batch(self, body: dict) -> tuple[str, int]:
         with self._lock:
             self.batches += 1
         return "batch-1", self.max_in_flight
+
+    def widen_pool(self, connections: int) -> None:
+        self.pool_widened_to = connections
 
     def align_item(self, batch_id, chapter, audio_ref, on_progress=None):
         with self._lock:
@@ -82,8 +86,9 @@ def _run(monkeypatch, client: _StubClient, chapters: list[int]) -> None:
     stage_align.run(SLUG, RUN, AlignParams(), chapters)
 
 
-def test_chapters_run_concurrently_up_to_the_advertised_flights(monkeypatch, staged):
-    client = _StubClient(max_in_flight=3)
+def test_a_cpu_batch_keeps_only_the_advertised_flights(monkeypatch, staged):
+    """A CPU batch advertises its admission gate's width; the pool matches it."""
+    client = _StubClient(max_in_flight=3, expect=3)
     _run(monkeypatch, client, list(range(1, 10)))
 
     assert sorted(staged) == list(range(1, 10))
@@ -92,9 +97,21 @@ def test_chapters_run_concurrently_up_to_the_advertised_flights(monkeypatch, sta
     assert progress.get_detail(RUN)["chapters_done"] == 9
 
 
-def test_env_override_caps_the_pool(monkeypatch, staged):
+def test_unlimited_batch_fans_out_every_pending_chapter(monkeypatch, staged):
+    """``max_in_flight = 0`` is the Space declining to limit a GPU batch."""
+    chapters = list(range(1, 13))
+    client = _StubClient(max_in_flight=0, expect=len(chapters))
+    assert align_params.align_concurrency(0, len(chapters)) == len(chapters)
+    _run(monkeypatch, client, chapters)
+
+    assert client.peak == len(chapters), "every chapter should be in flight at once"
+    assert client.pool_widened_to == len(chapters), "the connection pool must match"
+    assert sorted(staged) == chapters
+
+
+def test_env_override_narrows_the_pool(monkeypatch, staged):
     monkeypatch.setenv("INSPECTOR_ALIGN_CONCURRENCY", "1")
-    client = _StubClient(max_in_flight=4)
+    client = _StubClient(max_in_flight=0, expect=1)
     _run(monkeypatch, client, [1, 2, 3])
 
     assert client.peak == 1
@@ -102,24 +119,15 @@ def test_env_override_caps_the_pool(monkeypatch, staged):
     assert sorted(staged) == [1, 2, 3]
 
 
-def test_hard_cap_bounds_a_generous_advertisement(monkeypatch, staged):
-    client = _StubClient(max_in_flight=64)
-    assert align_params.align_concurrency(64) == align_params.MAX_ALIGN_CONCURRENCY
-    _run(monkeypatch, client, list(range(1, 6)))
-
-    assert client.peak <= align_params.MAX_ALIGN_CONCURRENCY
-    assert sorted(staged) == list(range(1, 6))
-
-
 def test_one_chapter_failure_fails_the_stage(monkeypatch, staged):
-    client = _StubClient(max_in_flight=2, fail_on={2})
+    client = _StubClient(max_in_flight=2, expect=2, fail_on={2})
     with pytest.raises(stage_align.AlignStageError, match="chapter 2"):
         _run(monkeypatch, client, [1, 2, 3, 4])
     assert 2 not in staged
 
 
 def test_cancel_stops_the_pool(monkeypatch, staged):
-    client = _StubClient(max_in_flight=2)
+    client = _StubClient(max_in_flight=2, expect=2)
     progress.request_cancel(RUN)
     try:
         with pytest.raises(progress.Canceled):
