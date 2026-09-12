@@ -21,7 +21,7 @@ from pathlib import Path
 
 from qua_shared.riwayat import DEFAULT_SDK_RIWAYAH
 from qua_shared.schemas import ReciterState
-from qua_shared.schemas.bucket.staged_run import RunManifestDoc
+from qua_shared.schemas.bucket.staged_run import RunInputsDoc, RunManifestDoc
 from services.state import state as state_service
 from services.storage import cache, storage_paths
 from services.storage.hf_bucket import StorageNotFound, get_backend
@@ -147,12 +147,12 @@ def _manifest(slug, run_id, params: AlignParams, chapters, deleted_basmala, star
             "asr": _params.ASR_MODEL_IDS.get(params.model_name, params.model_name),
             "vad": _params.VAD_MODEL_ID,
         },
-        inputs={
-            "slug": slug,
-            "chapters": list(chapters),
-            "audio_source": None,
-            "riwayah": params.riwayah or DEFAULT_SDK_RIWAYAH,
-        },
+        inputs=RunInputsDoc(
+            slug=slug,
+            chapters=list(chapters),
+            audio_source=None,
+            riwayah=params.riwayah or DEFAULT_SDK_RIWAYAH,
+        ),
         artifacts=[],
         required=[],
         deleted_basmala_chapters=sorted(deleted_basmala),

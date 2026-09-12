@@ -243,7 +243,7 @@ def replay_events(
         url = source_urls.get(ev.chapter)
         if not url:
             raise ValueError(f"event {n}: chapter {ev.chapter} has no chapter_sources.json url")
-        before_uids = (
+        before_uids: list[str | None] | None = (
             [derive_uid(ev.chapter, s.index_at_save, s.time_start) for s in ev.targets_before]
             if ev.kind == "delete_segment"
             else None

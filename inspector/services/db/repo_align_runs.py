@@ -16,7 +16,7 @@ ACTIVE_STATUSES = ("pending", "running", "failed")
 
 
 def _now() -> str:
-    return _serde.to_iso(datetime.now(UTC))
+    return _serde.to_iso(datetime.now(UTC)) or ""
 
 
 def get(run_id: str) -> dict | None:

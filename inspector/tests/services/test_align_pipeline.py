@@ -27,9 +27,17 @@ from qua_shared.schemas import (
     Vocab,
 )
 from qua_shared.schemas.bucket.staged_run import ChapterCandidateDoc, PipelineAuditEvent
+from qua_shared.schemas.config.pending_requests import ProposedEdits
+from services.state import state as state_service
 
 SLUG = "rec_align"
 OWNER = Actor(hf_user_id="u-owner", login_at_time="owner", role=Role.OWNER)
+
+
+def _state(slug: str) -> ReciterState:
+    row = state_service.get_row(slug)
+    assert row is not None
+    return row.state
 
 
 def _row(seg, t0, t1, ref_from, ref_to, conf=0.9, **extra):
@@ -260,7 +268,7 @@ def test_requests_overlay_carries_active_run(align_env):
     pending_requests_service.submit(
         SLUG,
         requester=Actor(hf_user_id="u-c", login_at_time="c", role=Role.CONTRIBUTOR),
-        edits=None,
+        edits=ProposedEdits(),
         comments=None,
     )
     runs.start(SLUG, OWNER)
@@ -298,7 +306,7 @@ def test_assemble_publishes_reciter_and_auto_detect_fires(align_env):
 
     # An audio-only folder must NOT trip auto_detect before assemble.
     assert auto_detect.reconcile_once() == 0
-    assert state_service.get_row(SLUG).state == ReciterState.AWAITING_ALIGNMENT
+    assert _state(SLUG) == ReciterState.AWAITING_ALIGNMENT
 
     stage_assemble.run(
         SLUG,
@@ -340,7 +348,7 @@ def test_assemble_publishes_reciter_and_auto_detect_fires(align_env):
     assert not backend.exists(staging.chapter_path(SLUG, run.run_id, 112))  # staging torn down
 
     assert auto_detect.reconcile_once() == 1
-    assert state_service.get_row(SLUG).state == ReciterState.AWAITING_REVIEW
+    assert _state(SLUG) == ReciterState.AWAITING_REVIEW
 
     with pytest.raises(stage_assemble.AssembleError):
         stage_assemble.guard(SLUG)  # never overwrite published content

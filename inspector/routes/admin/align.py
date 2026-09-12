@@ -69,6 +69,7 @@ def start_align(slug: str):
     actor, err = _authorize(mutating=True)
     if err is not None:
         return err
+    assert actor is not None
     try:
         body = AlignStartRequest.model_validate(request.get_json(silent=True) or {})
     except ValidationError as exc:
@@ -95,6 +96,7 @@ def retry_align(slug: str):
     actor, err = _authorize(mutating=True)
     if err is not None:
         return err
+    assert actor is not None
     try:
         status = align_runs.retry(slug, actor)
     except align_runs.AlignRunError as exc:
@@ -107,6 +109,7 @@ def cancel_align(slug: str):
     actor, err = _authorize(mutating=True)
     if err is not None:
         return err
+    assert actor is not None
     try:
         status = align_runs.cancel(slug, actor)
     except align_runs.AlignRunError as exc:

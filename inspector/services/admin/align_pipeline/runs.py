@@ -84,7 +84,14 @@ def start(slug: str, actor: Actor, *, model_name: str = _params.MODEL_LARGE) -> 
     from . import runner
 
     runner.ensure_worker(repo_align_runs.get(run_id))
-    return status_for_slug(slug)
+    return _status_required(slug)
+
+
+def _status_required(slug: str) -> AlignRunStatus:
+    status = status_for_slug(slug)
+    if status is None:  # pragma: no cover — the row was just written
+        raise AlignRunError(f"no align run for {slug}", 500)
+    return status
 
 
 def retry(slug: str, actor: Actor) -> AlignRunStatus:
@@ -104,7 +111,7 @@ def retry(slug: str, actor: Actor) -> AlignRunStatus:
     from . import runner
 
     runner.ensure_worker(repo_align_runs.get(run["run_id"]))
-    return status_for_slug(slug)
+    return _status_required(slug)
 
 
 def cancel(slug: str, actor: Actor) -> AlignRunStatus:
@@ -124,7 +131,7 @@ def cancel(slug: str, actor: Actor) -> AlignRunStatus:
         progress.clear_detail(run["run_id"])
         cache.invalidate_admin_requests_cache()
     log.info("align: %s canceled run %s", actor.hf_user_id, run["run_id"])
-    return status_for_slug(slug)
+    return _status_required(slug)
 
 
 # ---------------------------------------------------------------------------

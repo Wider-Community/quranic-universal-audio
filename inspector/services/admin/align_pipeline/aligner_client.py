@@ -99,7 +99,8 @@ def _raise_for_status(resp: requests.Response) -> None:
 def _consume_sse(resp: requests.Response, on_progress: ProgressFn | None) -> dict:
     """Walk an SSE stream to its ``result`` event. Comments (keep-alives) are skipped."""
     event = "message"
-    for raw in resp.iter_lines(decode_unicode=True):
+    for line in resp.iter_lines(decode_unicode=True):
+        raw = line.decode("utf-8") if isinstance(line, bytes) else line
         if not raw or raw.startswith(":"):
             continue
         if raw.startswith("event:"):
