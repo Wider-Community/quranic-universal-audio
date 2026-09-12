@@ -73,6 +73,20 @@ def hf_token() -> str:
     return token.strip()
 
 
+#: Hard ceiling on concurrent chapter items, whatever the Space advertises: the
+#: GPU half of an alignment is serialized inside the Space by a process-wide
+#: lease lock, so extra flights only overlap the fetch/decode/matching half.
+MAX_ALIGN_CONCURRENCY = 4
+
+
+def align_concurrency(advertised: int) -> int:
+    """Concurrent chapter items: the env override, else what the batch advertises."""
+    override = (os.environ.get("INSPECTOR_ALIGN_CONCURRENCY") or "").strip()
+    if override.isdigit() and int(override) > 0:
+        return min(int(override), MAX_ALIGN_CONCURRENCY)
+    return max(1, min(advertised, MAX_ALIGN_CONCURRENCY))
+
+
 def pipeline_enabled() -> bool:
     return os.environ.get("INSPECTOR_ALIGN_PIPELINE", "0") == "1"
 

@@ -51,10 +51,12 @@ class AlignerClient:
 
     # -- batches -------------------------------------------------------------
 
-    def create_batch(self, body: dict) -> str:
+    def create_batch(self, body: dict) -> tuple[str, int]:
+        """Create an alignment-only batch. Returns ``(batch_id, max_in_flight)``."""
         resp = self._session.post(f"{self.base_url}/batches", json=body, timeout=CREATE_TIMEOUT_S)
         _raise_for_status(resp)
-        return resp.json()["batch_id"]
+        doc = resp.json()
+        return doc["batch_id"], int(doc.get("max_in_flight") or 1)
 
     def align_item(
         self, batch_id: str, chapter: int, audio_ref: str, on_progress: ProgressFn | None = None

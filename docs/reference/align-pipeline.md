@@ -22,7 +22,7 @@ Where it lives:
 ## Stages
 
 ```
-acquire   CPU HF Job qua_jobs/acquire_audio.py
+acquire   CPU HF Job qua_jobs/acquire_audio.py (chapters on a thread pool, one per vCPU)
           catalog/audio_manifest/<slug>.json → reciters/<slug>/{audio/<ch>.mp3, peaks/<ch>.json.gz}
           + reciters/<slug>/chapter_sources.json + staging/<slug>/<run>/acquire.json
 align     per-chapter loop, aligner Space POST /api/v1/batches (alignment-only) +
@@ -43,6 +43,23 @@ Katana extraction), `pad_left_ms=100`, `pad_right_ms=100`, `min_silence_floor_ms
 matcher/thresholds = whatever the Space runs, `include_merge_groups=true`,
 `discard_session=true`, no word timestamps, no split. Times are relative to the
 persisted mp3 (no trim).
+
+## Concurrency
+
+Both long stages fan out, because neither is CPU-bound end to end:
+
+- **acquire** runs one chapter per vCPU (`ACQUIRE_WORKERS` overrides, 8 max). Every
+  per-chapter step releases the GIL — the fetch waits on a socket, ffprobe/ffmpeg/peaks
+  are subprocesses — so the pool overlaps CDN latency with encode work instead of
+  leaving a `cpu-upgrade` flavor idle on one serial chain.
+- **align** keeps as many chapter items in flight as the batch advertises in
+  `max_in_flight` (`INSPECTOR_ALIGN_CONCURRENCY` overrides, `MAX_ALIGN_CONCURRENCY`
+  caps at 4). The Space cannot parallelize the GPU half — `src/core/zero_gpu.py`
+  holds one process-wide lock for the whole ZeroGPU lease, so firing a whole
+  delivery at once would only queue on it. What the extra flights overlap is the
+  other half of an item: the bucket audio fetch, the mp3 decode and the matching
+  pass. The Space admits GPU items through its own `BATCH_GPU_CONCURRENCY` gate, so
+  the advertisement is enforced there rather than trusted from the client.
 
 ## Run lifecycle
 
