@@ -55,20 +55,13 @@ Both long stages fan out, because neither is CPU-bound end to end:
   per-chapter step releases the GIL — the fetch waits on a socket, ffprobe/ffmpeg/peaks
   are subprocesses — so the pool overlaps CDN latency with encode work instead of
   leaving a `cpu-upgrade` flavor idle on one serial chain.
-- **align** sends every remaining chapter at once. A GPU batch advertises
-  `max_in_flight = 0`, the Space declining to limit it, because ZeroGPU takes one
-  lease per request and concurrent leases genuinely run together — `model_device_lock`
-  in `src/core/zero_gpu.py` guards threads inside one worker, not requests against
-  each other. Measured on the dev Space with two 60 MB chapters: 36 s for a 2-way
-  burst against 64 s serially, with both leases provably interleaved.
-
-  Nothing caps it on either side. Total GPU-seconds are the same either way, so wide
-  fan-out spends the quota sooner rather than harder, and the item that finally
-  exhausts it falls back to the CPU lane — where `BATCH_ALIGNMENT_CONCURRENCY`
-  (the Space's CPU worker pool) admits it. A CPU batch advertises that gate's width
-  from the start instead. `INSPECTOR_ALIGN_CONCURRENCY` narrows the fan-out for
-  debugging; the stage widens its HTTPS connection pool to match, since urllib3
-  pools 10 per host and discards the surplus.
+- **align** keeps a rolling pool of 16 chapter HTTP streams. When one finishes,
+  the next chapter starts. This overlaps bucket reads and request setup without
+  sending all 114 chapters into Hugging Face's ZeroGPU scheduler at once. The
+  aligner admits at most 16 GPU launches globally and one CPU job by default,
+  rotating newly free slots between caller identities; single requests and batch
+  items are peers. `INSPECTOR_ALIGN_CONCURRENCY` overrides only this transport
+  pool for debugging. The stage widens urllib3's connection pool to match.
 
 ## Run lifecycle
 
