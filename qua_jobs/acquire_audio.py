@@ -8,6 +8,12 @@ fetches every chapter URL, re-encodes it to the canonical chapter mp3
 peaks blob beside it — the same bytes ``inspector/services/audio`` would produce,
 via ``qua_shared.audio.peaks``.
 
+Chapters run **concurrently** on a thread pool (default: one worker per vCPU,
+capped by ``MAX_WORKERS``). Every per-chapter step releases the GIL — the fetch
+waits on a socket, ffprobe/ffmpeg/peaks are subprocesses — so the pool overlaps
+network latency with encode work instead of leaving a multi-core flavor idle on a
+single serial chain. Override with ``ACQUIRE_WORKERS``.
+
 Idempotent per chapter: a chapter whose mp3 AND peaks already exist is skipped, so
 a retried run only pays for what the previous attempt did not finish. Writes:
 
@@ -25,6 +31,7 @@ Env:
   RUN_ID                  (required) align run id (names the staging dir)
   INSPECTOR_BUCKET_MOUNT  bucket mount root (default ``/data``)
   CHANNELS                optional 1|2 override; default = probe the source
+  ACQUIRE_WORKERS         optional concurrent chapter count (default = vCPUs, max 8)
   HF_TOKEN                HF auth (secret) — only for yt-dlp-free direct fetches, unused otherwise
 """
 
@@ -37,7 +44,9 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -55,6 +64,11 @@ _HTTP_TIMEOUT_S = 120
 _FFMPEG_TIMEOUT_S = 1800
 _YTDLP_FORMAT = "bestaudio/best"
 _YTDLP_EXTRACTOR_ARGS = "youtube:player_client=android,web"
+#: Beyond this the source CDN, not the flavor, is the limit — and each worker
+#: holds a raw + an encoded copy of its chapter in the job's ephemeral disk.
+MAX_WORKERS = 8
+
+_log_lock = threading.Lock()
 
 
 def _bucket_root() -> Path:
@@ -63,6 +77,14 @@ def _bucket_root() -> Path:
 
 def _now() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _worker_count(chapters: int) -> int:
+    """Concurrent chapters: the env override, else one per vCPU within the cap."""
+    override = os.environ.get("ACQUIRE_WORKERS", "").strip()
+    if override.isdigit() and int(override) > 0:
+        return min(int(override), chapters)
+    return max(1, min(os.cpu_count() or 1, MAX_WORKERS, chapters))
 
 
 def _atomic_write(dest: Path, src: Path) -> None:
@@ -233,6 +255,32 @@ def _acquire_chapter(slug: str, chapter: int, url: str, channels_override: int |
         }
 
 
+def _acquire_all(
+    slug: str, chapters: dict[int, str], channels_override: int | None, workers: int
+) -> tuple[dict[str, dict], dict[str, str]]:
+    """Run every chapter on the pool. Returns ``(outcomes, failures)`` keyed by chapter."""
+    outcomes: dict[str, dict] = {}
+    failures: dict[str, str] = {}
+    total = len(chapters)
+    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="acq") as pool:
+        futures = {
+            pool.submit(_acquire_chapter, slug, ch, chapters[ch], channels_override): ch
+            for ch in sorted(chapters)
+        }
+        for future in as_completed(futures):
+            chapter = futures[future]
+            try:
+                outcomes[str(chapter)] = future.result()
+                message = f"chapter {chapter}: ok ({chapters[chapter]})"
+            except Exception as exc:  # noqa: BLE001 — recorded per chapter, run continues
+                failures[str(chapter)] = f"{type(exc).__name__}: {exc}"
+                message = f"chapter {chapter}: FAILED {failures[str(chapter)]}"
+            with _log_lock:
+                done = len(outcomes) + len(failures)
+                log.info("[%d/%d] %s", done, total, message)
+    return outcomes, failures
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -249,18 +297,16 @@ def main() -> int:
     channels_override = int(channels_env) if channels_env in ("1", "2") else None
 
     chapters = _read_manifest(slug)
-    log.info("%s: %d chapter(s) to acquire (run %s)", slug, len(chapters), run_id)
+    workers = _worker_count(len(chapters))
+    log.info(
+        "%s: %d chapter(s) to acquire on %d worker(s) (run %s)",
+        slug,
+        len(chapters),
+        workers,
+        run_id,
+    )
 
-    outcomes: dict[str, dict] = {}
-    failures: dict[str, str] = {}
-    for chapter in sorted(chapters):
-        url = chapters[chapter]
-        try:
-            outcomes[str(chapter)] = _acquire_chapter(slug, chapter, url, channels_override)
-            log.info("chapter %d: ok (%s)", chapter, url)
-        except Exception as exc:  # noqa: BLE001 — recorded per chapter, run continues
-            failures[str(chapter)] = f"{type(exc).__name__}: {exc}"
-            log.error("chapter %d: FAILED %s", chapter, failures[str(chapter)])
+    outcomes, failures = _acquire_all(slug, chapters, channels_override, workers)
 
     reciter = _bucket_root() / "reciters" / slug
     sources = {str(ch): {"url": chapters[ch], "offset_ms": 0} for ch in sorted(chapters)}
@@ -272,7 +318,7 @@ def main() -> int:
         "slug": slug,
         "run_id": run_id,
         "created_at": _now(),
-        "chapters": outcomes,
+        "chapters": {ch: outcomes[ch] for ch in sorted(outcomes, key=int)},
         "failures": failures,
     }
     _atomic_write_bytes(
