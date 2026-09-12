@@ -454,8 +454,12 @@ release** ships timestamps relative to source URLs (no embedded audio), so it le
 span in place. Leading/trailing no-match audio is already outside `[clip_start, clip_end]` (the
 window spans first→last kept word), so only **interior** spans stitch.
 
-Post-mark-ready, only in-verse segments exist (the TS job blocks compound cross-verse refs), so there
-are no cross-verse dedup cases.
+Post-mark-ready a compound cross-verse ref that was never split is read by the TS engine as a waṣl:
+`qua_timing_engine.timestamps.items.expand_cross_verse` splits it per verse (per Hafs verse on a
+projected delivery, each piece re-projected), aligns the pieces as one continuous item and stamps
+`wasl` on every verse but the last — the same treatment an editor-split + `is_wasl` pair gets. So the
+shard still holds one verse per occurrence and there are no cross-verse dedup cases; only a span across
+two surahs still blocks the run.
 
 ## Validation at publish
 
