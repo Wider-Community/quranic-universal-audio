@@ -59,14 +59,17 @@ GLOBAL_SLUGS = (None, "_global", "_batch")
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 ALIGNER_BUCKET = os.environ.get("INSPECTOR_ALIGNER_BUCKET", "hetchyy/aligner-bucket")
-JOB_IMAGE = os.environ.get("INSPECTOR_JOB_IMAGE", "hf.co/spaces/hetchyy/quran-ts-job")
-NEEDS_BOOTSTRAP = (
-    os.environ.get(
-        "INSPECTOR_JOB_IMAGE_BOOTSTRAP",
-        "1" if "mambaforge" in JOB_IMAGE else "0",
-    )
-    == "1"
-)
+#: Stock image every job kind runs in. Nothing is prebaked: each launch apt-installs
+#: ffmpeg (acquire encodes with it; torchcodec needs its libs) and pip-installs
+#: the kind's deps — ~40 s per job, no image Space to keep alive.
+JOB_IMAGE = os.environ.get("INSPECTOR_JOB_IMAGE", "python:3.11-slim")
+_APT = "apt-get update -qq >/dev/null && apt-get install -y -qq --no-install-recommends ffmpeg >/dev/null"
+
+
+def job_command(entrypoint: str, deps: str = "") -> list[str]:
+    """The ``bash -lc`` command for a job: system deps, pip deps, then the entrypoint."""
+    pip = f"pip install -q --root-user-action=ignore huggingface_hub {deps}".rstrip()
+    return ["bash", "-lc", f"{_APT} && {pip} && {entrypoint}"]
 
 
 # ---------------------------------------------------------------------------

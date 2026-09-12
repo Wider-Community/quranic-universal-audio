@@ -67,20 +67,7 @@ def launch(*, webhook_base: str | None = None) -> dict:
     # startup is meaningfully lighter than a full publish.
     deps = "datasets orjson pyyaml"
     entrypoint = "python /aux/code/qua_jobs/refresh_hf_catalog.py"
-    if base.NEEDS_BOOTSTRAP:
-        command = [
-            "bash",
-            "-lc",
-            "mamba install -y -c conda-forge python=3.11 "
-            f"&& /opt/conda/bin/pip install -q huggingface_hub {deps} "
-            f"&& {entrypoint}",
-        ]
-    else:
-        command = [
-            "bash",
-            "-lc",
-            f"/env/bin/pip install -q {deps} && conda run -p /env --no-capture-output {entrypoint}",
-        ]
+    command = base.job_command(entrypoint, deps)
 
     job = run_job(
         image=base.JOB_IMAGE,

@@ -50,7 +50,17 @@ def is_special(row: dict) -> bool:
     return row.get("kind") == "special"
 
 
-def _segment(row: dict) -> dict:
+def _segment(row: dict, riwayah: str) -> dict:
+    """One kept row as a ``DetailedSegment`` dict in the delivery edition's coordinates.
+
+    A non-Hafs delivery's rows arrive projected (the aligner matched against
+    Hafs and wrote the edition's refs); the Hafs ``source_ref`` the sidecars and
+    the timestamps engine align against is re-derived here through the same
+    ``qua_domain`` projection the Inspector's own save path uses, so the aligner
+    never has to ship it.
+    """
+    from services.segments.projection_stamp import stamp_projection
+
     seg = {
         "time_start": to_ms(row["time_from"]),
         "time_end": to_ms(row["time_to"]),
@@ -59,6 +69,7 @@ def _segment(row: dict) -> dict:
     }
     if row.get("wrap_word_ranges"):
         seg["wrap_word_ranges"] = row["wrap_word_ranges"]
+    stamp_projection(seg, riwayah)
     return seg
 
 
@@ -143,7 +154,7 @@ def adapt_chapter(
     finalise_indices(events, removed)
     candidate = {
         "chapter": chapter,
-        "entries": [{"ref": str(chapter), "segments": [_segment(r) for r in kept]}],
+        "entries": [{"ref": str(chapter), "segments": [_segment(r, riwayah) for r in kept]}],
         "source_url": source_url,
         "source_offset_ms": 0,
         "trim_span_ms": None,

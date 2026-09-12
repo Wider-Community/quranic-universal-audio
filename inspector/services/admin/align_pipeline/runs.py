@@ -62,12 +62,6 @@ def start(slug: str, actor: Actor, *, model_name: str = _params.MODEL_LARGE) -> 
         riwayah = resolve_sdk_slug(delivery.riwayah or DEFAULT_RIWAYAH)
     except UnsupportedRiwayah as exc:
         raise AlignRunError(f"{slug}: {exc}", 400) from exc
-    if riwayah != "hafs":
-        # The aligner's public rows carry no Hafs source_ref for a projected
-        # delivery, so the staged candidates could not be built faithfully yet.
-        raise AlignRunError(
-            f"{slug}: non-Hafs deliveries are not supported by the native pipeline yet", 400
-        )
 
     params = AlignParams(model_name=model_name, riwayah=riwayah)
     run_id = uuid7()

@@ -70,21 +70,7 @@ def launch(slug: str, *, webhook_base: str | None = None) -> dict:
     # adds ~60-90s to job startup but keeps consumer UX intact
     # (``ds[i]["audio"]["array"]`` returns a waveform).
     deps = "datasets orjson pyyaml torch torchcodec"
-    entrypoint = "python /aux/code/qua_jobs/publish_hf.py"
-    if base.NEEDS_BOOTSTRAP:
-        command = [
-            "bash",
-            "-lc",
-            "mamba install -y -c conda-forge python=3.11 "
-            f"&& /opt/conda/bin/pip install -q huggingface_hub {deps} "
-            f"&& {entrypoint}",
-        ]
-    else:
-        command = [
-            "bash",
-            "-lc",
-            f"/env/bin/pip install -q {deps} && conda run -p /env --no-capture-output {entrypoint}",
-        ]
+    command = base.job_command("python /aux/code/qua_jobs/publish_hf.py", deps)
 
     job = run_job(
         image=base.JOB_IMAGE,

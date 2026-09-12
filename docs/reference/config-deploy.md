@@ -70,6 +70,7 @@ The image bakes the **dev** bucket as default (`INSPECTOR_BUCKET_REPO=hetchyy/qu
 | `INSPECTOR_AUTO_DETECT_INTERVAL_S` | (see `app.py`) | Tick interval for the auto-detect loop. |
 | `INSPECTOR_AUTOMATIONS` | off; `1` (image) | Release-automation reconciler daemon (per-automation enable lives in the owner's config blob; the daemon no-ops while all are off). See [automation.md](automation.md). |
 | `INSPECTOR_AUTOMATIONS_INTERVAL_S` | `60` | Tick cadence for the automation reconciler. |
+| `INSPECTOR_JOB_IMAGE` | `python:3.11-slim` | Docker image every HF Job kind runs in (`services/admin/jobs/base.py`). Stock image; `job_command` installs ffmpeg + the kind's pip deps at launch (~40 s). The former prebuilt `hetchyy/quran-ts-job` Space is gone. |
 | `INSPECTOR_ALIGN_PIPELINE` | off; `1` on the dev Space | Native align pipeline — enables the Requests-tab Align run and resumes any pending/running `align_runs` worker at boot. See [align-pipeline.md](align-pipeline.md). |
 | `INSPECTOR_ALIGNER_URL` | `https://hetchyy-quranic-universal-aligner-dev.hf.space` | Aligner Space the align stage + sidecars call (`/api/v1`). |
 | `INSPECTOR_ALIGN_KEEP_STAGING` | off | `1` keeps `staging/<slug>/<run>/` after assemble (debugging). |

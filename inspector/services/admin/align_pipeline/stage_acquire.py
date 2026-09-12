@@ -49,13 +49,7 @@ def launch(slug: str, run_id: str, *, needs_ytdlp: bool, channels: int | None) -
     }
     if channels in (1, 2):
         env["CHANNELS"] = str(channels)
-    deps = "yt-dlp" if needs_ytdlp else ""
-    if base.NEEDS_BOOTSTRAP:
-        install = "mamba install -y -c conda-forge python=3.11 ffmpeg && /opt/conda/bin/pip install -q numpy huggingface_hub"
-        command = ["bash", "-lc", f"{install} {deps} && {_ENTRYPOINT}"]
-    else:
-        install = f"/env/bin/pip install -q {deps} && " if deps else ""
-        command = ["bash", "-lc", f"{install}conda run -p /env --no-capture-output {_ENTRYPOINT}"]
+    command = base.job_command(_ENTRYPOINT, "numpy" + (" yt-dlp" if needs_ytdlp else ""))
 
     job = run_job(
         image=base.JOB_IMAGE,

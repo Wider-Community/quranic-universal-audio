@@ -96,20 +96,7 @@ def launch(
     # is a no-op when wheels are cached.
     deps = "pyyaml huggingface_hub"
     entrypoint = "python /aux/code/qua_jobs/cut_release.py"
-    if base.NEEDS_BOOTSTRAP:
-        command = [
-            "bash",
-            "-lc",
-            "mamba install -y -c conda-forge python=3.11 "
-            f"&& /opt/conda/bin/pip install -q {deps} "
-            f"&& {entrypoint}",
-        ]
-    else:
-        command = [
-            "bash",
-            "-lc",
-            f"/env/bin/pip install -q {deps} && conda run -p /env --no-capture-output {entrypoint}",
-        ]
+    command = base.job_command(entrypoint, deps)
 
     job = run_job(
         image=base.JOB_IMAGE,

@@ -2,8 +2,8 @@
 
 One click in **Admin → Requests** takes a delivery from `awaiting_alignment` to
 `awaiting_review` on the Spaces that already exist. No Katana, no laptop, no
-new engines. Replaces the offline `segments-extraction` runbook for the
-by_surah / Hafs case.
+new engines. Replaces the offline `segments-extraction` runbook for by_surah
+deliveries in any supported riwayah.
 
 Where it lives:
 
@@ -88,9 +88,11 @@ so the sidecars index exactly the rows that get published.
 
 - by_surah deliveries with an audio manifest (one URL per chapter); combined
   files / playlists / by_ayah are refused (`400`).
-- Hafs only — the aligner's public rows carry no Hafs `source_ref` for a
-  projected delivery, so a Warsh/Qalun/Shu'bah candidate could not be staged
-  faithfully yet (`400`).
+- Any supported riwayah. The aligner is asked for the delivery's edition and
+  returns projected rows; `adapt` re-derives each row's Hafs `source_ref` +
+  `projection_support` through `services/segments/projection_stamp.py` (the
+  same `qua_domain` reverse projection the save path uses), so the aligner
+  ships nothing extra.
 - Missing `INSPECTOR_EXTRACTION_SECRET` / HF token → `503`.
 
 ## Env (see `config-deploy.md`)
@@ -100,10 +102,12 @@ so the sidecars index exactly the rows that get published.
 aligner Space's `EXTRACTION_SECRET`), `INSPECTOR_ALIGN_KEEP_STAGING=1` (debug),
 `INSPECTOR_ACQUIRE_JOB_FLAVOR` / `INSPECTOR_ACQUIRE_JOB_TIMEOUT`
 (`cpu-upgrade` / `6h`). Bearer for the aligner = the Inspector's own HF token.
+The acquire job runs in the stock `INSPECTOR_JOB_IMAGE` (`python:3.11-slim`) like
+every other kind — `services/admin/jobs/base.py::job_command` apt-installs ffmpeg
+and pip-installs the kind's deps at launch; there is no prebuilt image Space.
 
 ## Not built yet
 
 Intake rows ("Ingest & Align" from a `links` submission — today ingest first,
-then Align on the slug row), playlist / combined-file acquire, non-Hafs
-deliveries, Katana runbook removal, prod rollout (`INSPECTOR_ALIGN_PIPELINE`
-stays unset on prod).
+then Align on the slug row), playlist / combined-file acquire, Katana runbook
+removal, prod rollout (`INSPECTOR_ALIGN_PIPELINE` stays unset on prod).

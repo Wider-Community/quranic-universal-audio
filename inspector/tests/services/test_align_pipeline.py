@@ -352,3 +352,33 @@ def test_slim_blob_roundtrip_matches_inspector_reader():
     env = unpack_slim_envelope(_slim_blob(5000))
     assert env and env["schema_version"] == 3 and env["bps"] == 10 and env["duration_ms"] == 5000
     assert gzip.decompress(_slim_blob(5000))[:1] == b"{"
+
+
+def test_adapt_reverse_maps_projected_rows_to_hafs_source():
+    """A Warsh delivery's rows arrive in Warsh coordinates; the Hafs span the
+    sidecars + timestamps engine align against is re-derived here, not shipped
+    by the aligner. Warsh 57:23 IS Hafs 57:24, and Hafs 57:24:10 is a word
+    Warsh does not write, so the support is partial."""
+    from services.admin.align_pipeline import adapt
+    from services.reference import editions
+
+    if not editions.available():
+        pytest.skip("qua-domain not installed (Hafs-only runtime)")
+    result = {"segments": [_row(1, 0, 1, "57:23:1", "57:23:11")]}
+    candidate, _events, _b = adapt.adapt_chapter(57, result, source_url="u", riwayah="warsh")
+    seg = candidate["entries"][0]["segments"][0]
+    assert seg["source_ref"] == "57:24:1-57:24:12"
+    assert seg["projection_support"] == "partial"
+    hafs, _e, _b = adapt.adapt_chapter(57, result, source_url="u", riwayah="hafs")
+    assert "source_ref" not in hafs["entries"][0]["segments"][0]
+
+
+def test_job_command_uses_stock_image_with_system_and_pip_deps():
+    from services.admin.jobs import base
+
+    cmd = base.job_command("python /aux/code/qua_jobs/acquire_audio.py", "numpy")
+    assert cmd[:2] == ["bash", "-lc"]
+    assert "apt-get install -y -qq --no-install-recommends ffmpeg" in cmd[2]
+    assert "pip install -q --root-user-action=ignore huggingface_hub numpy" in cmd[2]
+    assert cmd[2].endswith("&& python /aux/code/qua_jobs/acquire_audio.py")
+    assert "hf.co/spaces" not in base.JOB_IMAGE
